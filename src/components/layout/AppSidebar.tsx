@@ -1,17 +1,18 @@
 import {
   LayoutDashboard, Users, FolderKanban, UserCog, Receipt,
-  ShieldCheck, BarChart3, Settings, LogOut
+  ShieldCheck, BarChart3, Settings, LogOut, Scale, ClipboardCheck
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
-import { useLocation } from "react-router-dom";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent,
   SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarFooter, useSidebar,
 } from "@/components/ui/sidebar";
+import { useAuth } from "@/contexts/AuthContext";
 
-const navItems = [
+const adminNav = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Clients", url: "/clients", icon: Users },
+  { title: "Pending Approvals", url: "/clients/onboarding", icon: ClipboardCheck },
   { title: "Projects", url: "/projects", icon: FolderKanban },
   { title: "Team", url: "/team", icon: UserCog },
   { title: "Billing", url: "/billing", icon: Receipt },
@@ -19,10 +20,17 @@ const navItems = [
   { title: "Reports", url: "/reports", icon: BarChart3 },
 ];
 
+const teamNav = [
+  { title: "Dashboard", url: "/", icon: LayoutDashboard },
+  { title: "My Projects", url: "/projects", icon: FolderKanban },
+  { title: "Time & Billing", url: "/billing", icon: Receipt },
+];
+
 export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
-  const location = useLocation();
+  const { isAdmin, logout } = useAuth();
+  const navItems = isAdmin ? adminNav : teamNav;
 
   return (
     <Sidebar collapsible="icon">
@@ -30,16 +38,16 @@ export function AppSidebar() {
         {!collapsed ? (
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
-              <ShieldCheck className="w-5 h-5 text-white" />
+              <Scale className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h1 className="text-sm font-bold text-sidebar-accent-foreground tracking-tight">CorpVault</h1>
-              <p className="text-[10px] text-sidebar-foreground/60">Tenant Platform</p>
+              <h1 className="text-sm font-bold text-sidebar-accent-foreground tracking-tight">Lexora</h1>
+              <p className="text-[10px] text-sidebar-foreground/60">Law Firm Platform</p>
             </div>
           </div>
         ) : (
           <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-primary to-secondary flex items-center justify-center mx-auto">
-            <ShieldCheck className="w-5 h-5 text-white" />
+            <Scale className="w-5 h-5 text-white" />
           </div>
         )}
       </div>
@@ -79,7 +87,7 @@ export function AppSidebar() {
             </SidebarMenuButton>
           </SidebarMenuItem>
           <SidebarMenuItem>
-            <SidebarMenuButton className="hover:bg-sidebar-accent/50 text-sidebar-foreground cursor-pointer">
+            <SidebarMenuButton className="hover:bg-sidebar-accent/50 text-sidebar-foreground cursor-pointer" onClick={logout}>
               <LogOut className="mr-2 h-4 w-4" />
               {!collapsed && <span>Sign Out</span>}
             </SidebarMenuButton>
