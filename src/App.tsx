@@ -3,7 +3,9 @@ import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { AppLayout } from "@/components/layout/AppLayout";
+import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Clients from "./pages/Clients";
 import ClientOnboarding from "./pages/ClientOnboarding";
@@ -17,27 +19,39 @@ import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
+function AppRoutes() {
+  const { user, isAdmin } = useAuth();
+
+  if (!user) return <Login />;
+
+  return (
+    <Routes>
+      <Route path="/" element={<AppLayout><Dashboard /></AppLayout>} />
+      {isAdmin && <Route path="/clients" element={<AppLayout><Clients /></AppLayout>} />}
+      {isAdmin && <Route path="/clients/onboarding" element={<AppLayout><ClientOnboarding /></AppLayout>} />}
+      {isAdmin && <Route path="/clients/:id" element={<AppLayout><ClientProfile /></AppLayout>} />}
+      <Route path="/projects" element={<AppLayout><ProjectsList /></AppLayout>} />
+      <Route path="/projects/:id" element={<AppLayout><ProjectDetail /></AppLayout>} />
+      {isAdmin && <Route path="/team" element={<AppLayout><Team /></AppLayout>} />}
+      <Route path="/billing" element={<AppLayout><Billing /></AppLayout>} />
+      {isAdmin && <Route path="/compliance" element={<AppLayout><Compliance /></AppLayout>} />}
+      {isAdmin && <Route path="/reports" element={<AppLayout><Reports /></AppLayout>} />}
+      <Route path="/settings" element={<AppLayout><div className="text-center py-12"><h1 className="text-2xl font-bold">Settings</h1><p className="text-muted-foreground">Coming soon</p></div></AppLayout>} />
+      <Route path="*" element={<NotFound />} />
+    </Routes>
+  );
+}
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
       <Sonner />
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<AppLayout><Dashboard /></AppLayout>} />
-          <Route path="/clients" element={<AppLayout><Clients /></AppLayout>} />
-          <Route path="/clients/new" element={<AppLayout><ClientOnboarding /></AppLayout>} />
-          <Route path="/clients/:id" element={<AppLayout><ClientProfile /></AppLayout>} />
-          <Route path="/projects" element={<AppLayout><ProjectsList /></AppLayout>} />
-          <Route path="/projects/:id" element={<AppLayout><ProjectDetail /></AppLayout>} />
-          <Route path="/team" element={<AppLayout><Team /></AppLayout>} />
-          <Route path="/billing" element={<AppLayout><Billing /></AppLayout>} />
-          <Route path="/compliance" element={<AppLayout><Compliance /></AppLayout>} />
-          <Route path="/reports" element={<AppLayout><Reports /></AppLayout>} />
-          <Route path="/settings" element={<AppLayout><div className="text-center py-12"><h1 className="text-2xl font-bold">Settings</h1><p className="text-muted-foreground">Coming soon</p></div></AppLayout>} />
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
+      <AuthProvider>
+        <BrowserRouter>
+          <AppRoutes />
+        </BrowserRouter>
+      </AuthProvider>
     </TooltipProvider>
   </QueryClientProvider>
 );
