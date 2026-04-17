@@ -79,7 +79,7 @@ export default function ClientProfile() {
     const isMediumRisk = client.riskLevel === "Medium";
     switch (check.id) {
       case "identity":
-        return { ...check, status: "passed", result: "Verified", detail: "Document authenticity confirmed; biometric match 98%" };
+        return { ...check, status: "passed", result: "Verified", detail: "Document authenticity confirmed" };
       case "pep":
         return isHighRisk
           ? { ...check, status: "flagged", result: "Match found", detail: "Possible match with PEP — manual review required" }
