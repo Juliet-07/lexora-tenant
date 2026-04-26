@@ -4,7 +4,9 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { ModuleProvider, useModule } from "@/contexts/ModuleContext";
 import { AppLayout } from "@/components/layout/AppLayout";
+import { ModulePlaceholder } from "@/components/layout/ModulePlaceholder";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Clients from "./pages/Clients";
@@ -19,6 +21,12 @@ import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
+function ModuleHome() {
+  const { currentModule } = useModule();
+  if (currentModule.id === "crm") return <Dashboard />;
+  return <ModulePlaceholder />;
+}
+
 function AppRoutes() {
   const { user, isAdmin } = useAuth();
 
@@ -26,7 +34,7 @@ function AppRoutes() {
 
   return (
     <Routes>
-      <Route path="/" element={<AppLayout><Dashboard /></AppLayout>} />
+      <Route path="/" element={<AppLayout><ModuleHome /></AppLayout>} />
       {isAdmin && <Route path="/clients" element={<AppLayout><Clients /></AppLayout>} />}
       {isAdmin && <Route path="/clients/onboarding" element={<AppLayout><ClientOnboarding /></AppLayout>} />}
       {isAdmin && <Route path="/clients/:id" element={<AppLayout><ClientProfile /></AppLayout>} />}
@@ -36,6 +44,10 @@ function AppRoutes() {
       <Route path="/billing" element={<AppLayout><Billing /></AppLayout>} />
       {isAdmin && <Route path="/compliance" element={<AppLayout><Compliance /></AppLayout>} />}
       {isAdmin && <Route path="/reports" element={<AppLayout><Reports /></AppLayout>} />}
+      {/* Module placeholder routes */}
+      <Route path="/aml/*" element={<AppLayout><ModulePlaceholder /></AppLayout>} />
+      <Route path="/grc/*" element={<AppLayout><ModulePlaceholder /></AppLayout>} />
+      <Route path="/hr/*" element={<AppLayout><ModulePlaceholder /></AppLayout>} />
       <Route path="/settings" element={<AppLayout><div className="text-center py-12"><h1 className="text-2xl font-bold">Settings</h1><p className="text-muted-foreground">Coming soon</p></div></AppLayout>} />
       <Route path="*" element={<NotFound />} />
     </Routes>
@@ -48,9 +60,11 @@ const App = () => (
       <Toaster />
       <Sonner />
       <AuthProvider>
-        <BrowserRouter>
-          <AppRoutes />
-        </BrowserRouter>
+        <ModuleProvider>
+          <BrowserRouter>
+            <AppRoutes />
+          </BrowserRouter>
+        </ModuleProvider>
       </AuthProvider>
     </TooltipProvider>
   </QueryClientProvider>
