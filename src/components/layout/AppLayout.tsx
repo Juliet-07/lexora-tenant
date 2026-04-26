@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
+import { ModuleSwitcher } from "./ModuleSwitcher";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -22,9 +23,10 @@ export function AppLayout({ children }: AppLayoutProps) {
           <header className="h-14 flex items-center justify-between border-b bg-card px-4 shrink-0">
             <div className="flex items-center gap-3">
               <SidebarTrigger />
-              <div className="relative hidden md:block">
+              <ModuleSwitcher />
+              <div className="relative hidden lg:block">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input placeholder="Search clients, projects..." className="pl-9 w-72 h-9 bg-muted/50 border-0" />
+                <Input placeholder="Search..." className="pl-9 w-56 h-9 bg-muted/50 border-0" />
               </div>
             </div>
             <div className="flex items-center gap-3">

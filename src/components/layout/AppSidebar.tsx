@@ -1,63 +1,98 @@
 import {
   LayoutDashboard, Users, FolderKanban, UserCog, Receipt,
-  ShieldCheck, BarChart3, Settings, LogOut, Scale, ClipboardCheck
+  ShieldCheck, BarChart3, Settings, LogOut, ClipboardCheck,
+  ScanSearch, FileWarning, Activity, BookOpen, ListChecks,
+  AlertTriangle, FileText, ShieldAlert, CalendarDays, Wallet,
+  GraduationCap, Briefcase, ClipboardList,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import {
-  Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent,
+  Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
   SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarFooter, useSidebar,
 } from "@/components/ui/sidebar";
 import { useAuth } from "@/contexts/AuthContext";
+import { useModule } from "@/contexts/ModuleContext";
 
-const adminNav = [
-  { title: "Dashboard", url: "/", icon: LayoutDashboard },
-  { title: "Clients", url: "/clients", icon: Users },
-  { title: "Pending Approvals", url: "/clients/onboarding", icon: ClipboardCheck },
-  { title: "Projects", url: "/projects", icon: FolderKanban },
-  { title: "Team", url: "/team", icon: UserCog },
-  { title: "Billing", url: "/billing", icon: Receipt },
-  { title: "Compliance", url: "/compliance", icon: ShieldCheck },
-  { title: "Reports", url: "/reports", icon: BarChart3 },
-];
-
-const teamNav = [
-  { title: "Dashboard", url: "/", icon: LayoutDashboard },
-  { title: "My Projects", url: "/projects", icon: FolderKanban },
-  { title: "Time & Billing", url: "/billing", icon: Receipt },
-];
+const NAV_BY_MODULE: Record<string, { title: string; url: string; icon: any; adminOnly?: boolean }[]> = {
+  crm: [
+    { title: "Dashboard", url: "/", icon: LayoutDashboard },
+    { title: "Clients", url: "/clients", icon: Users, adminOnly: true },
+    { title: "Pending Approvals", url: "/clients/onboarding", icon: ClipboardCheck, adminOnly: true },
+    { title: "Projects", url: "/projects", icon: FolderKanban },
+    { title: "Team", url: "/team", icon: UserCog, adminOnly: true },
+    { title: "Billing", url: "/billing", icon: Receipt },
+    { title: "Reports", url: "/reports", icon: BarChart3, adminOnly: true },
+  ],
+  aml: [
+    { title: "Dashboard", url: "/", icon: LayoutDashboard },
+    { title: "Onboarding & CDD", url: "/clients/onboarding", icon: ClipboardCheck, adminOnly: true },
+    { title: "Screening (PEP/Sanctions)", url: "/aml/screening", icon: ScanSearch, adminOnly: true },
+    { title: "Risk Scoring", url: "/aml/risk", icon: ShieldAlert, adminOnly: true },
+    { title: "Transaction Monitoring", url: "/aml/transactions", icon: Activity, adminOnly: true },
+    { title: "SAR / STR", url: "/aml/sar", icon: FileWarning, adminOnly: true },
+    { title: "Compliance Alerts", url: "/compliance", icon: ShieldCheck, adminOnly: true },
+    { title: "Regulatory Reports", url: "/reports", icon: BarChart3, adminOnly: true },
+  ],
+  grc: [
+    { title: "Dashboard", url: "/", icon: LayoutDashboard },
+    { title: "Risk Register", url: "/grc/risks", icon: AlertTriangle, adminOnly: true },
+    { title: "Controls Library", url: "/grc/controls", icon: ListChecks, adminOnly: true },
+    { title: "Policies", url: "/grc/policies", icon: BookOpen, adminOnly: true },
+    { title: "Incidents", url: "/grc/incidents", icon: FileWarning, adminOnly: true },
+    { title: "Audit Support", url: "/grc/audits", icon: FileText, adminOnly: true },
+    { title: "Third-Party Risk", url: "/grc/vendors", icon: Briefcase, adminOnly: true },
+    { title: "BCP / DR", url: "/grc/bcp", icon: ShieldAlert, adminOnly: true },
+  ],
+  hr: [
+    { title: "Dashboard", url: "/", icon: LayoutDashboard },
+    { title: "Employees", url: "/hr/employees", icon: Users, adminOnly: true },
+    { title: "Recruitment", url: "/hr/recruitment", icon: ClipboardList, adminOnly: true },
+    { title: "Time & Attendance", url: "/hr/attendance", icon: CalendarDays },
+    { title: "Leave", url: "/hr/leave", icon: CalendarDays },
+    { title: "Performance", url: "/hr/performance", icon: BarChart3, adminOnly: true },
+    { title: "Payroll", url: "/hr/payroll", icon: Wallet, adminOnly: true },
+    { title: "Learning & Dev", url: "/hr/learning", icon: GraduationCap },
+  ],
+};
 
 export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
   const { isAdmin, logout } = useAuth();
-  const navItems = isAdmin ? adminNav : teamNav;
+  const { currentModule } = useModule();
+  const Icon = currentModule.icon;
+
+  const items = (NAV_BY_MODULE[currentModule.id] ?? []).filter(
+    (n) => !n.adminOnly || isAdmin
+  );
 
   return (
     <Sidebar collapsible="icon">
       <div className="p-4 border-b border-sidebar-border">
         {!collapsed ? (
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
-              <Scale className="w-5 h-5 text-white" />
+            <div className={`w-9 h-9 rounded-lg bg-gradient-to-br ${currentModule.color} flex items-center justify-center`}>
+              <Icon className="w-5 h-5 text-white" />
             </div>
-            <div>
-              <h1 className="text-sm font-bold text-sidebar-accent-foreground tracking-tight">Lexora</h1>
-              <p className="text-[10px] text-sidebar-foreground/60">Law Firm Platform</p>
+            <div className="min-w-0">
+              <h1 className="text-sm font-bold text-sidebar-accent-foreground tracking-tight truncate">Lexora</h1>
+              <p className="text-[10px] text-sidebar-foreground/60 truncate">{currentModule.shortName}</p>
             </div>
           </div>
         ) : (
-          <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-primary to-secondary flex items-center justify-center mx-auto">
-            <Scale className="w-5 h-5 text-white" />
+          <div className={`w-9 h-9 rounded-lg bg-gradient-to-br ${currentModule.color} flex items-center justify-center mx-auto`}>
+            <Icon className="w-5 h-5 text-white" />
           </div>
         )}
       </div>
 
       <SidebarContent className="pt-2">
         <SidebarGroup>
+          {!collapsed && <SidebarGroupLabel>{currentModule.shortName}</SidebarGroupLabel>}
           <SidebarGroupContent>
             <SidebarMenu>
-              {navItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
+              {items.map((item) => (
+                <SidebarMenuItem key={item.title + item.url}>
                   <SidebarMenuButton asChild>
                     <NavLink
                       to={item.url}
