@@ -17,7 +17,7 @@ const NAV_BY_MODULE: Record<string, { title: string; url: string; icon: any; adm
   crm: [
     { title: "Dashboard", url: "/", icon: LayoutDashboard },
     { title: "Clients", url: "/clients", icon: Users, adminOnly: true },
-    { title: "Pending Approvals", url: "/clients/onboarding", icon: ClipboardCheck, adminOnly: true },
+    // { title: "Pending Approvals", url: "/clients/onboarding", icon: ClipboardCheck, adminOnly: true },
     { title: "Projects", url: "/projects", icon: FolderKanban },
     { title: "Team", url: "/team", icon: UserCog, adminOnly: true },
     { title: "Billing", url: "/billing", icon: Receipt },
@@ -27,7 +27,7 @@ const NAV_BY_MODULE: Record<string, { title: string; url: string; icon: any; adm
     { title: "Dashboard", url: "/", icon: LayoutDashboard },
     { title: "Onboarding & CDD", url: "/clients/onboarding", icon: ClipboardCheck, adminOnly: true },
     { title: "Screening (PEP/Sanctions)", url: "/aml/screening", icon: ScanSearch, adminOnly: true },
-    { title: "Risk Scoring", url: "/aml/risk", icon: ShieldAlert, adminOnly: true },
+    { title: "Risk Engine", url: "/aml/risk", icon: ShieldAlert, adminOnly: true },
     { title: "Transaction Monitoring", url: "/aml/transactions", icon: Activity, adminOnly: true },
     { title: "SAR / STR", url: "/aml/sar", icon: FileWarning, adminOnly: true },
     { title: "Compliance Alerts", url: "/compliance", icon: ShieldCheck, adminOnly: true },
