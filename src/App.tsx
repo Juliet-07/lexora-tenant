@@ -34,21 +34,134 @@ function AppRoutes() {
 
   return (
     <Routes>
-      <Route path="/" element={<AppLayout><ModuleHome /></AppLayout>} />
-      {isAdmin && <Route path="/clients" element={<AppLayout><Clients /></AppLayout>} />}
-      {isAdmin && <Route path="/clients/onboarding" element={<AppLayout><ClientOnboarding /></AppLayout>} />}
-      {isAdmin && <Route path="/clients/:id" element={<AppLayout><ClientProfile /></AppLayout>} />}
-      <Route path="/projects" element={<AppLayout><ProjectsList /></AppLayout>} />
-      <Route path="/projects/:id" element={<AppLayout><ProjectDetail /></AppLayout>} />
-      {isAdmin && <Route path="/team" element={<AppLayout><Team /></AppLayout>} />}
-      <Route path="/billing" element={<AppLayout><Billing /></AppLayout>} />
-      {isAdmin && <Route path="/compliance" element={<AppLayout><Compliance /></AppLayout>} />}
-      {isAdmin && <Route path="/reports" element={<AppLayout><Reports /></AppLayout>} />}
+      <Route
+        path="/"
+        element={
+          <AppLayout>
+            <ModuleHome />
+          </AppLayout>
+        }
+      />
+      {isAdmin && (
+        <Route
+          path="/clients"
+          element={
+            <AppLayout>
+              <Clients />
+            </AppLayout>
+          }
+        />
+      )}
+      {isAdmin && (
+        <Route
+          path="/clients/onboarding"
+          element={
+            <AppLayout>
+              <ClientOnboarding />
+            </AppLayout>
+          }
+        />
+      )}
+      {isAdmin && (
+        <Route
+          path="/clients/:id"
+          element={
+            <AppLayout>
+              <ClientProfile />
+            </AppLayout>
+          }
+        />
+      )}
+      <Route
+        path="/projects"
+        element={
+          <AppLayout>
+            <ProjectsList />
+          </AppLayout>
+        }
+      />
+      <Route
+        path="/projects/:id"
+        element={
+          <AppLayout>
+            <ProjectDetail />
+          </AppLayout>
+        }
+      />
+      {isAdmin && (
+        <Route
+          path="/team"
+          element={
+            <AppLayout>
+              <Team />
+            </AppLayout>
+          }
+        />
+      )}
+      <Route
+        path="/billing"
+        element={
+          <AppLayout>
+            <Billing />
+          </AppLayout>
+        }
+      />
+      {isAdmin && (
+        <Route
+          path="/compliance"
+          element={
+            <AppLayout>
+              <Compliance />
+            </AppLayout>
+          }
+        />
+      )}
+      {isAdmin && (
+        <Route
+          path="/reports"
+          element={
+            <AppLayout>
+              <Reports />
+            </AppLayout>
+          }
+        />
+      )}
       {/* Module placeholder routes */}
-      <Route path="/aml/*" element={<AppLayout><ModulePlaceholder /></AppLayout>} />
-      <Route path="/grc/*" element={<AppLayout><ModulePlaceholder /></AppLayout>} />
-      <Route path="/hr/*" element={<AppLayout><ModulePlaceholder /></AppLayout>} />
-      <Route path="/settings" element={<AppLayout><div className="text-center py-12"><h1 className="text-2xl font-bold">Settings</h1><p className="text-muted-foreground">Coming soon</p></div></AppLayout>} />
+      <Route
+        path="/aml/*"
+        element={
+          <AppLayout>
+            <ModulePlaceholder />
+          </AppLayout>
+        }
+      />
+      <Route
+        path="/grc/*"
+        element={
+          <AppLayout>
+            <ModulePlaceholder />
+          </AppLayout>
+        }
+      />
+      <Route
+        path="/hr/*"
+        element={
+          <AppLayout>
+            <ModulePlaceholder />
+          </AppLayout>
+        }
+      />
+      <Route
+        path="/settings"
+        element={
+          <AppLayout>
+            <div className="text-center py-12">
+              <h1 className="text-2xl font-bold">Settings</h1>
+              <p className="text-muted-foreground">Coming soon</p>
+            </div>
+          </AppLayout>
+        }
+      />
       <Route path="*" element={<NotFound />} />
     </Routes>
   );
