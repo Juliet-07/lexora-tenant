@@ -32,8 +32,6 @@ import {
   ArrowUpRight,
   Loader2,
   RefreshCw,
-  Plus,
-  AlertTriangle,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -172,11 +170,6 @@ export default function Clients() {
               <RefreshCw className="h-4 w-4 mr-2" />
             )}
             Refresh
-          </Button>
-          <Button asChild className="bg-gradient-to-r from-primary to-secondary">
-            <Link to="/clients/onboarding">
-              <Plus className="h-4 w-4 mr-2" /> Add Client
-            </Link>
           </Button>
         </div>
       </div>
@@ -381,15 +374,6 @@ export default function Clients() {
                               <Eye className="h-4 w-4 mr-2" /> View Profile
                             </Link>
                           </DropdownMenuItem>
-                          {(c.status === "submitted" ||
-                            c.kycStatus === "submitted") && (
-                            <DropdownMenuItem asChild>
-                              <Link to={`/clients/${c._id}`}>
-                                <AlertTriangle className="h-4 w-4 mr-2" /> Review &
-                                Verify
-                              </Link>
-                            </DropdownMenuItem>
-                          )}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>
