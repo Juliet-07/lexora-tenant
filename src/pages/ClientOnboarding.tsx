@@ -384,12 +384,12 @@ export default function ClientOnboarding() {
                         asChild
                         className="bg-gradient-to-r from-primary to-secondary"
                       >
-                        <Link to={`/clients/${client._id}`}>
-                          <Eye className="h-4 w-4 mr-2" /> Review & Verify
+                        <Link to={`/clients/onboarding/${client._id}`}>
+                          <Eye className="h-4 w-4 mr-2" /> View
                         </Link>
                       </Button>
                       <p className="text-[11px] text-muted-foreground text-center max-w-[180px]">
-                        Run AML / KYC checks before approving
+                        See onboarding progress & verifications
                       </p>
                     </div>
                   </div>
