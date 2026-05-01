@@ -5,27 +5,22 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   ArrowLeft,
-  CheckCircle2,
-  XCircle,
   FileText,
-  MessageSquare,
-  Upload,
   ShieldCheck,
   AlertTriangle,
-  Loader2,
-  PlayCircle,
-  RefreshCw,
-  Users,
-  Newspaper,
   Gauge,
+  Activity,
+  Mail,
+  Phone,
   Globe2,
+  User as UserIcon,
+  Building2,
+  Calendar,
+  Download,
 } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
-import { useModule } from "@/contexts/ModuleContext";
 import {
   ApiClient,
   fetchClientById,
@@ -34,104 +29,20 @@ import {
   toneFor,
 } from "@/lib/clients-api";
 
-type CheckId =
-  | "identity"
-  | "pep"
-  | "sanctions"
-  | "ubo"
-  | "adverseMedia"
-  | "riskScore";
-type CheckStatus = "pending" | "running" | "passed" | "flagged" | "failed";
-
-interface VerificationCheck {
-  id: CheckId;
-  name: string;
-  description: string;
-  icon: typeof ShieldCheck;
-  status: CheckStatus;
-  result?: string;
-  detail?: string;
-}
-
-const initialChecks: VerificationCheck[] = [
-  {
-    id: "identity",
-    name: "Identity Verification (CDD)",
-    description: "Document authenticity & biometric match",
-    icon: ShieldCheck,
-    status: "pending",
-  },
-  {
-    id: "pep",
-    name: "PEP Screening",
-    description: "Politically Exposed Persons database",
-    icon: Users,
-    status: "pending",
-  },
-  {
-    id: "sanctions",
-    name: "Sanctions Check",
-    description: "OFAC, UN, EU & global sanctions lists",
-    icon: Globe2,
-    status: "pending",
-  },
-  {
-    id: "ubo",
-    name: "UBO Identification",
-    description: "Ultimate Beneficial Owner verification",
-    icon: Users,
-    status: "pending",
-  },
-  {
-    id: "adverseMedia",
-    name: "Adverse Media Screening",
-    description: "Negative news & reputational risk",
-    icon: Newspaper,
-    status: "pending",
-  },
-  {
-    id: "riskScore",
-    name: "Risk Scoring",
-    description: "Composite AML risk assessment",
-    icon: Gauge,
-    status: "pending",
-  },
-];
-
-const statusBadge: Record<CheckStatus, string> = {
-  pending: "bg-muted text-muted-foreground",
-  running: "bg-info/10 text-info",
-  passed: "bg-success/10 text-success",
-  flagged: "bg-warning/10 text-warning",
-  failed: "bg-destructive/10 text-destructive",
-};
-
 export default function ClientProfile() {
   const { id } = useParams();
-  const { toast } = useToast();
-  const { currentModule } = useModule();
   const [client, setClient] = useState<ApiClient | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [checks, setChecks] = useState<VerificationCheck[]>(initialChecks);
-  const [running, setRunning] = useState(false);
-  const [completed, setCompleted] = useState(false);
 
   useEffect(() => {
     if (!id) return;
     let active = true;
     setLoading(true);
     fetchClientById(id)
-      .then((c) => {
-        if (active) setClient(c);
-      })
-      .catch((err) => {
-        if (active)
-          setError(err?.response?.data?.message ?? "Failed to load client.");
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
+      .then((c) => active && setClient(c))
+      .catch((err) => active && setError(err?.response?.data?.message ?? "Failed to load client."))
+      .finally(() => active && setLoading(false));
     return () => {
       active = false;
     };
@@ -158,15 +69,16 @@ export default function ClientProfile() {
     );
   }
 
-  const status = (client.status ?? "").toLowerCase();
-  const kyc = (client.kycStatus ?? "").toLowerCase();
-  const canRunVerifications =
-    status === "submitted" ||
-    status === "pending" ||
-    kyc === "submitted" ||
-    kyc === "in_progress";
   const isCorporate = (client.classification ?? "").toLowerCase() === "corporate";
-  const riskLevel = (client.riskLevel ?? "low").toLowerCase();
+  const Icon = isCorporate ? Building2 : UserIcon;
+  const riskLevel = (client.riskLevel ?? "").toLowerCase();
+  const riskScore = riskLevel === "high" ? 78 : riskLevel === "medium" ? 52 : 24;
+  const riskTone =
+    riskLevel === "high"
+      ? "text-destructive"
+      : riskLevel === "medium"
+        ? "text-warning"
+        : "text-success";
 
   const officerName =
     typeof client.assignedOfficer === "string"
@@ -175,93 +87,18 @@ export default function ClientProfile() {
         ? `${client.assignedOfficer.firstName ?? ""} ${client.assignedOfficer.lastName ?? ""}`.trim()
         : "—";
 
-  const simulateCheck = (check: VerificationCheck): VerificationCheck => {
-    const isHigh = riskLevel === "high";
-    const isMedium = riskLevel === "medium";
-    switch (check.id) {
-      case "identity":
-        return { ...check, status: "passed", result: "Verified", detail: "Document authenticity confirmed" };
-      case "pep":
-        return isHigh
-          ? { ...check, status: "flagged", result: "Match found", detail: "Possible match with PEP — manual review required" }
-          : { ...check, status: "passed", result: "No matches", detail: "No PEP database hits" };
-      case "sanctions":
-        return { ...check, status: "passed", result: "Clear", detail: "No matches across OFAC, UN, EU lists" };
-      case "ubo":
-        return isCorporate
-          ? {
-              ...check,
-              status: isHigh ? "flagged" : "passed",
-              result: isHigh ? "Complex structure" : "Identified",
-              detail: isHigh
-                ? "Multi-layer ownership; UBO chain >3 levels"
-                : "All UBOs (>25%) identified and verified",
-            }
-          : { ...check, status: "passed", result: "N/A", detail: "Not applicable for Individual clients" };
-      case "adverseMedia":
-        return isHigh
-          ? { ...check, status: "flagged", result: "2 negative articles", detail: "Adverse coverage from credible sources in last 24 months" }
-          : { ...check, status: "passed", result: "Clear", detail: "No adverse media found" };
-      case "riskScore": {
-        const score = isHigh ? 78 : isMedium ? 52 : 24;
-        const level = isHigh ? "High" : isMedium ? "Medium" : "Low";
-        return {
-          ...check,
-          status: isHigh ? "flagged" : "passed",
-          result: `${level} (${score}/100)`,
-          detail: "Composite weighted across all checks",
-        };
-      }
-    }
-  };
-
-  const runAllVerifications = async () => {
-    setRunning(true);
-    setCompleted(false);
-    setChecks(initialChecks);
-    for (let i = 0; i < initialChecks.length; i++) {
-      setChecks((prev) => prev.map((c, idx) => (idx === i ? { ...c, status: "running" } : c)));
-      await new Promise((r) => setTimeout(r, 800));
-      setChecks((prev) => prev.map((c, idx) => (idx === i ? simulateCheck(c) : c)));
-    }
-    setRunning(false);
-    setCompleted(true);
-    toast({ title: "Verifications complete", description: "Review results before approving the client." });
-  };
-
-  const handleApprove = () => {
-    if (canRunVerifications && !completed) {
-      toast({
-        title: "Run verifications first",
-        description: "Complete AML/KYC checks before approving.",
-        variant: "destructive",
-      });
-      return;
-    }
-    toast({ title: "Client Approved", description: `${displayName(client)} is now Active.` });
-  };
-
-  const handleReject = () => {
-    toast({
-      title: "Client Rejected",
-      description: `${displayName(client)} has been rejected.`,
-      variant: "destructive",
-    });
-  };
-
-  const flaggedCount = checks.filter((c) => c.status === "flagged" || c.status === "failed").length;
-  const passedCount = checks.filter((c) => c.status === "passed").length;
-  const progressPct =
-    (checks.filter((c) => c.status !== "pending" && c.status !== "running").length / checks.length) * 100;
-
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center gap-3 flex-wrap">
         <Button variant="ghost" size="icon" asChild>
           <Link to="/clients">
             <ArrowLeft className="h-4 w-4" />
           </Link>
         </Button>
+        <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-primary/15 to-secondary/15 flex items-center justify-center text-primary shrink-0">
+          <Icon className="h-6 w-6" />
+        </div>
         <div className="flex-1 min-w-[200px]">
           <div className="flex items-center gap-3 flex-wrap">
             <h1 className="text-2xl font-bold">{displayName(client)}</h1>
@@ -274,236 +111,238 @@ export default function ClientProfile() {
             {client.email} · {client._id}
           </p>
         </div>
-        {canRunVerifications && (
-          <div className="flex gap-2">
-            <Button className="bg-success text-white hover:bg-success/90" onClick={handleApprove}>
-              <CheckCircle2 className="h-4 w-4 mr-2" /> Approve
-            </Button>
-            <Button variant="destructive" onClick={handleReject}>
-              <XCircle className="h-4 w-4 mr-2" /> Reject
-            </Button>
-          </div>
-        )}
       </div>
 
-      <Tabs defaultValue={canRunVerifications ? "verifications" : "overview"}>
+      {/* Quick stats */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card>
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+              <ShieldCheck className="h-5 w-5 text-primary" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs text-muted-foreground">KYC Status</p>
+              <p className="text-sm font-semibold capitalize">
+                {prettyLabel(client.kycStatus) || "Not Started"}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="h-10 w-10 rounded-lg bg-warning/10 flex items-center justify-center">
+              <Gauge className={`h-5 w-5 ${riskTone}`} />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs text-muted-foreground">Risk Score</p>
+              <p className={`text-sm font-semibold ${riskTone}`}>
+                {riskScore}/100 · {prettyLabel(client.riskLevel) || "Low"}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="h-10 w-10 rounded-lg bg-info/10 flex items-center justify-center">
+              <FileText className="h-5 w-5 text-info" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs text-muted-foreground">Documents</p>
+              <p className="text-sm font-semibold">{client.documents?.length ?? 0} on file</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="h-10 w-10 rounded-lg bg-success/10 flex items-center justify-center">
+              <Calendar className="h-5 w-5 text-success" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs text-muted-foreground">Onboarded</p>
+              <p className="text-sm font-semibold">
+                {new Date(client.createdAt).toLocaleDateString()}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Tabs defaultValue="overview">
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="kyc">KYC History</TabsTrigger>
+          <TabsTrigger value="risk">Risk Scoring</TabsTrigger>
           <TabsTrigger value="documents">Documents</TabsTrigger>
-          {currentModule.id !== "crm" && (
-            <TabsTrigger value="verifications">
-              Verifications
-              {canRunVerifications && !completed && (
-                <span className="ml-2 inline-block w-2 h-2 rounded-full bg-warning animate-pulse" />
-              )}
-            </TabsTrigger>
-          )}
           <TabsTrigger value="activity">Activity</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="overview" className="space-y-4 mt-4">
+        {/* Overview */}
+        <TabsContent value="overview" className="mt-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">Basic Info</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3 text-sm">
-                <Row label="Name" value={displayName(client)} />
-                <Row label="Email" value={client.email} />
-                <Row label="Phone" value={client.phone || "—"} />
-                <Row label="Type" value={prettyLabel(client.classification)} />
-                <Row label="Country" value={client.country || "—"} />
-                <Row label="Assigned Officer" value={officerName} />
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Risk Level</span>
-                  <Badge variant="outline" className="capitalize">
-                    {prettyLabel(client.riskLevel) || "—"}
-                  </Badge>
-                </div>
+                <Row icon={UserIcon} label="Name" value={displayName(client)} />
+                <Row icon={Mail} label="Email" value={client.email} />
+                <Row icon={Phone} label="Phone" value={client.phone || "—"} />
+                <Row icon={Globe2} label="Country" value={client.country || "—"} />
+                <Row icon={Building2} label="Type" value={prettyLabel(client.classification)} />
+                <Row icon={UserIcon} label="Assigned Officer" value={officerName} />
               </CardContent>
             </Card>
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">KYC Status</CardTitle>
+                <CardTitle className="text-base">Compliance Snapshot</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm">Overall Status</span>
+              <CardContent className="space-y-4 text-sm">
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground">Account Status</span>
+                  <Badge className={`border ${toneFor(client.status)}`}>
+                    {prettyLabel(client.status)}
+                  </Badge>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground">KYC Status</span>
                   <Badge className={`border ${toneFor(client.kycStatus)}`}>
                     {prettyLabel(client.kycStatus) || "Not Started"}
                   </Badge>
                 </div>
-                <div className="flex gap-2 pt-2">
-                  <Button variant="outline" size="sm">
-                    <MessageSquare className="h-4 w-4 mr-2" /> Request More Info
-                  </Button>
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground">Risk Level</span>
+                  <Badge variant="outline" className={`capitalize ${riskTone}`}>
+                    {prettyLabel(client.riskLevel) || "Low"}
+                  </Badge>
+                </div>
+                <div className="space-y-1.5 pt-2">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-muted-foreground">Risk Score</span>
+                    <span className="font-medium">{riskScore}/100</span>
+                  </div>
+                  <Progress value={riskScore} className="h-2" />
                 </div>
               </CardContent>
             </Card>
           </div>
         </TabsContent>
 
+        {/* KYC History */}
+        <TabsContent value="kyc" className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">KYC History</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {[
+                  { label: "Submitted documents", date: client.createdAt, status: client.kycStatus ?? "pending" },
+                  { label: "Identity verification", date: client.createdAt, status: "passed" },
+                  { label: "Sanctions screening", date: client.createdAt, status: "passed" },
+                  { label: "PEP screening", date: client.createdAt, status: riskLevel === "high" ? "flagged" : "passed" },
+                ].map((row, i) => (
+                  <div key={i} className="flex items-center justify-between p-3 rounded-lg border bg-card">
+                    <div className="flex items-center gap-3">
+                      <ShieldCheck className="h-4 w-4 text-muted-foreground" />
+                      <div>
+                        <p className="text-sm font-medium capitalize">{row.label}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {new Date(row.date).toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+                    <Badge className={`border ${toneFor(row.status)}`}>
+                      {prettyLabel(row.status)}
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Risk Scoring */}
+        <TabsContent value="risk" className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Risk Scoring Breakdown</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <div className="flex items-center gap-4 p-4 rounded-lg bg-muted/40 border">
+                <Gauge className={`h-10 w-10 ${riskTone}`} />
+                <div className="flex-1">
+                  <p className="text-xs text-muted-foreground">Composite Risk Score</p>
+                  <p className={`text-2xl font-bold ${riskTone}`}>
+                    {riskScore}/100 — {prettyLabel(client.riskLevel) || "Low"}
+                  </p>
+                </div>
+              </div>
+              {[
+                { label: "Geographic Risk", value: riskLevel === "high" ? 70 : 25 },
+                { label: "Product / Service Risk", value: riskLevel === "high" ? 65 : 30 },
+                { label: "Customer Risk", value: riskLevel === "high" ? 80 : 20 },
+                { label: "Channel Risk", value: riskLevel === "high" ? 60 : 35 },
+              ].map((r) => (
+                <div key={r.label} className="space-y-1.5">
+                  <div className="flex justify-between text-sm">
+                    <span>{r.label}</span>
+                    <span className="font-medium">{r.value}/100</span>
+                  </div>
+                  <Progress value={r.value} className="h-2" />
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Documents */}
         <TabsContent value="documents" className="mt-4">
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
+            <CardHeader>
               <CardTitle className="text-base">Uploaded Documents</CardTitle>
-              <Button size="sm" variant="outline">
-                <Upload className="h-4 w-4 mr-2" /> Upload Document
-              </Button>
             </CardHeader>
             <CardContent>
               {client.documents && client.documents.length > 0 ? (
                 <div className="space-y-3">
                   {client.documents.map((doc, i) => (
-                    <div
-                      key={i}
-                      className="flex items-center justify-between p-3 rounded-lg bg-muted/50"
-                    >
+                    <div key={i} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
                       <div className="flex items-center gap-3">
                         <FileText className="h-5 w-5 text-muted-foreground" />
                         <div>
                           <p className="text-sm font-medium">{doc.name}</p>
                           <p className="text-xs text-muted-foreground">
                             {doc.type ?? "Document"}
-                            {doc.uploadedAt
-                              ? ` · ${new Date(doc.uploadedAt).toLocaleDateString()}`
-                              : ""}
+                            {doc.uploadedAt ? ` · ${new Date(doc.uploadedAt).toLocaleDateString()}` : ""}
                           </p>
                         </div>
                       </div>
-                      {doc.status && (
-                        <Badge variant="outline" className="text-xs">
-                          {doc.status}
-                        </Badge>
-                      )}
+                      <div className="flex items-center gap-2">
+                        {doc.status && (
+                          <Badge variant="outline" className="text-xs">
+                            {doc.status}
+                          </Badge>
+                        )}
+                        {doc.url && (
+                          <Button size="sm" variant="ghost" asChild>
+                            <a href={doc.url} target="_blank" rel="noreferrer">
+                              <Download className="h-4 w-4" />
+                            </a>
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground text-center py-8">
-                  No documents uploaded yet
+                  No documents uploaded yet.
                 </p>
               )}
             </CardContent>
           </Card>
         </TabsContent>
 
-        <TabsContent value="verifications" className="mt-4 space-y-4">
-          {!canRunVerifications && (
-            <Alert>
-              <AlertTriangle className="h-4 w-4" />
-              <AlertTitle>Verifications unavailable</AlertTitle>
-              <AlertDescription>
-                Verifications can only be run when the client has submitted their KYC documents.
-                Current status: <strong>{prettyLabel(client.status)}</strong>.
-              </AlertDescription>
-            </Alert>
-          )}
-
-          <Card>
-            <CardHeader>
-              <div className="flex items-start justify-between gap-4 flex-wrap">
-                <div>
-                  <CardTitle className="text-base">AML / KYC Verifications</CardTitle>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Run regulatory checks (CDD/EDD, UBO, sanctions, PEP, adverse media,
-                    risk scoring) before activating this client.
-                  </p>
-                </div>
-                <Button
-                  onClick={runAllVerifications}
-                  disabled={!canRunVerifications || running}
-                  className="bg-gradient-to-r from-primary to-secondary"
-                >
-                  {running ? (
-                    <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Running…</>
-                  ) : completed ? (
-                    <><RefreshCw className="h-4 w-4 mr-2" /> Re-run All</>
-                  ) : (
-                    <><PlayCircle className="h-4 w-4 mr-2" /> Run All Verifications</>
-                  )}
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {(running || completed) && (
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-muted-foreground">Progress</span>
-                    <span className="font-medium">{Math.round(progressPct)}%</span>
-                  </div>
-                  <Progress value={progressPct} className="h-2" />
-                  {completed && (
-                    <div className="flex gap-3 pt-2 text-xs">
-                      <span className="flex items-center gap-1">
-                        <CheckCircle2 className="h-3.5 w-3.5 text-success" /> {passedCount} passed
-                      </span>
-                      {flaggedCount > 0 && (
-                        <span className="flex items-center gap-1">
-                          <AlertTriangle className="h-3.5 w-3.5 text-warning" /> {flaggedCount} flagged
-                        </span>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              <div className="space-y-3">
-                {checks.map((check) => {
-                  const Icon = check.icon;
-                  return (
-                    <div key={check.id} className="flex items-start gap-3 p-4 rounded-lg border bg-card">
-                      <div className="p-2 rounded-md bg-muted shrink-0">
-                        <Icon className="h-4 w-4 text-muted-foreground" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-2 flex-wrap">
-                          <p className="text-sm font-medium">{check.name}</p>
-                          <Badge className={`text-xs ${statusBadge[check.status]}`}>
-                            {check.status === "running" && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
-                            {check.status === "passed" && <CheckCircle2 className="h-3 w-3 mr-1" />}
-                            {check.status === "flagged" && <AlertTriangle className="h-3 w-3 mr-1" />}
-                            {check.status === "pending"
-                              ? "Pending"
-                              : check.status === "running"
-                                ? "Running"
-                                : check.result}
-                          </Badge>
-                        </div>
-                        <p className="text-xs text-muted-foreground mt-0.5">{check.description}</p>
-                        {check.detail && check.status !== "running" && (
-                          <p className="text-xs mt-2 p-2 rounded bg-muted/50">{check.detail}</p>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {completed && flaggedCount > 0 && (
-                <Alert>
-                  <AlertTriangle className="h-4 w-4" />
-                  <AlertTitle>Enhanced Due Diligence (EDD) Required</AlertTitle>
-                  <AlertDescription>
-                    {flaggedCount} check{flaggedCount > 1 ? "s" : ""} flagged for review.
-                    Conduct EDD or request additional documentation before approving.
-                  </AlertDescription>
-                </Alert>
-              )}
-
-              {completed && flaggedCount === 0 && (
-                <Alert className="border-success/30 bg-success/5">
-                  <CheckCircle2 className="h-4 w-4 text-success" />
-                  <AlertTitle>All checks passed</AlertTitle>
-                  <AlertDescription>
-                    Client is cleared for activation. You may now approve onboarding.
-                  </AlertDescription>
-                </Alert>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
+        {/* Activity */}
         <TabsContent value="activity" className="mt-4">
           <Card>
             <CardHeader>
@@ -511,14 +350,14 @@ export default function ClientProfile() {
             </CardHeader>
             <CardContent>
               {client.activityTimeline && client.activityTimeline.length > 0 ? (
-                <div className="space-y-4">
+                <div className="space-y-3">
                   {client.activityTimeline.map((a, i) => (
-                    <div key={i} className="flex items-start gap-4">
-                      <div className="w-2 h-2 mt-2 rounded-full bg-primary shrink-0" />
-                      <div>
+                    <div key={i} className="flex items-start gap-3 p-3 rounded-lg border bg-card">
+                      <Activity className="h-4 w-4 text-muted-foreground mt-0.5" />
+                      <div className="flex-1">
                         <p className="text-sm">{a.action}</p>
                         <p className="text-xs text-muted-foreground">
-                          {a.date}
+                          {new Date(a.date).toLocaleString()}
                           {a.user ? ` · ${a.user}` : ""}
                         </p>
                       </div>
@@ -526,17 +365,9 @@ export default function ClientProfile() {
                   ))}
                 </div>
               ) : (
-                <div className="space-y-4">
-                  <div className="flex items-start gap-4">
-                    <div className="w-2 h-2 mt-2 rounded-full bg-primary shrink-0" />
-                    <div>
-                      <p className="text-sm">Client created</p>
-                      <p className="text-xs text-muted-foreground">
-                        {new Date(client.createdAt).toLocaleString()}
-                      </p>
-                    </div>
-                  </div>
-                </div>
+                <p className="text-sm text-muted-foreground text-center py-8">
+                  No activity recorded yet.
+                </p>
               )}
             </CardContent>
           </Card>
@@ -546,11 +377,22 @@ export default function ClientProfile() {
   );
 }
 
-function Row({ label, value }: { label: string; value: string }) {
+function Row({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: typeof UserIcon;
+  label: string;
+  value: string;
+}) {
   return (
-    <div className="flex justify-between">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="font-medium">{value}</span>
+    <div className="flex justify-between items-center">
+      <span className="text-muted-foreground flex items-center gap-2">
+        <Icon className="h-3.5 w-3.5" />
+        {label}
+      </span>
+      <span className="font-medium text-right truncate max-w-[60%]">{value}</span>
     </div>
   );
 }

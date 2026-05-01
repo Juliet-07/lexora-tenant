@@ -11,6 +11,7 @@ import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Clients from "./pages/Clients";
 import ClientOnboarding from "./pages/ClientOnboarding";
+import OnboardingDetail from "./pages/OnboardingDetail";
 import ClientProfile from "./pages/ClientProfile";
 import { ProjectsList, ProjectDetail } from "./pages/Projects";
 import Team from "./pages/Team";
@@ -66,6 +67,16 @@ function AppRoutes() {
           element={
             <AppLayout>
               <ClientOnboarding />
+            </AppLayout>
+          }
+        />
+      )}
+      {isAdmin && (
+        <Route
+          path="/clients/onboarding/:id"
+          element={
+            <AppLayout>
+              <OnboardingDetail />
             </AppLayout>
           }
         />

@@ -35,12 +35,30 @@ import {
 } from "@/components/ui/select";
 import {
   ApiClient,
-  fetchClients,
   displayName,
   prettyLabel,
   toneFor,
 } from "@/lib/clients-api";
 import { api } from "@/lib/api";
+
+// Onboarding endpoint (separate from /tenant/my-clients).
+// TODO: replace path when backend confirms — falls back gracefully.
+const ONBOARDING_ENDPOINT = "/tenant/onboarding";
+
+const fetchOnboardingClients = async (): Promise<ApiClient[]> => {
+  try {
+    const res = await api.get(ONBOARDING_ENDPOINT);
+    const data = res.data?.data;
+    if (Array.isArray(data)) return data;
+    return data?.clients ?? data?.items ?? [];
+  } catch {
+    // fallback to my-clients filtered to onboarding-relevant statuses
+    const res = await api.get("/tenant/my-clients");
+    const data = res.data?.data;
+    const list: ApiClient[] = Array.isArray(data) ? data : (data?.clients ?? data?.items ?? []);
+    return list;
+  }
+};
 
 const PENDING_STATUSES = new Set([
   "submitted",
@@ -68,7 +86,7 @@ export default function ClientOnboarding() {
     if (!silent) setLoading(true);
     else setRefreshing(true);
     try {
-      const list = await fetchClients();
+      const list = await fetchOnboardingClients();
       setClients(list);
     } catch (err: any) {
       toast({
@@ -366,12 +384,12 @@ export default function ClientOnboarding() {
                         asChild
                         className="bg-gradient-to-r from-primary to-secondary"
                       >
-                        <Link to={`/clients/${client._id}`}>
-                          <Eye className="h-4 w-4 mr-2" /> Review & Verify
+                        <Link to={`/clients/onboarding/${client._id}`}>
+                          <Eye className="h-4 w-4 mr-2" /> View
                         </Link>
                       </Button>
                       <p className="text-[11px] text-muted-foreground text-center max-w-[180px]">
-                        Run AML / KYC checks before approving
+                        See onboarding progress & verifications
                       </p>
                     </div>
                   </div>
