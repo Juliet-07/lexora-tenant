@@ -201,6 +201,84 @@ export default function STR() {
           </Table>
         </CardContent>
       </Card>
+
+      {/* New STR dialog */}
+      <Dialog open={showForm} onOpenChange={(o) => { if (!o) reset(); setShowForm(o); }}>
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>New Suspicious Transaction Report</DialogTitle>
+            <DialogDescription>
+              Submit to RBZ Financial Intelligence Unit. All starred fields are required.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid md:grid-cols-2 gap-4 py-2">
+            <div>
+              <Label>Related Case ID</Label>
+              <Input
+                placeholder="CASE001"
+                value={form.relatedCaseId}
+                onChange={(e) => setForm({ ...form, relatedCaseId: e.target.value })}
+              />
+            </div>
+            <div>
+              <Label>Customer ID *</Label>
+              <Input
+                value={form.customerId}
+                onChange={(e) => setForm({ ...form, customerId: e.target.value })}
+              />
+            </div>
+            <div>
+              <Label>Customer Name *</Label>
+              <Input
+                value={form.customerName}
+                onChange={(e) => setForm({ ...form, customerName: e.target.value })}
+              />
+            </div>
+            <div>
+              <Label>Transaction Amount (USD) *</Label>
+              <Input
+                type="number"
+                value={form.amount}
+                onChange={(e) => setForm({ ...form, amount: e.target.value })}
+              />
+            </div>
+            <div className="md:col-span-2">
+              <Label>Transaction Date *</Label>
+              <Input
+                type="date"
+                value={form.transactionDate}
+                onChange={(e) => setForm({ ...form, transactionDate: e.target.value })}
+              />
+            </div>
+            <div className="md:col-span-2">
+              <Label>Description of Suspicious Activity *</Label>
+              <Textarea
+                rows={4}
+                placeholder="Describe the suspicious activity in detail…"
+                value={form.description}
+                onChange={(e) => setForm({ ...form, description: e.target.value })}
+              />
+            </div>
+            <div className="md:col-span-2">
+              <Label>Additional Information</Label>
+              <Textarea
+                rows={3}
+                placeholder="Any other relevant information…"
+                value={form.additional}
+                onChange={(e) => setForm({ ...form, additional: e.target.value })}
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => { reset(); setShowForm(false); }}>Cancel</Button>
+            <Button variant="secondary" onClick={() => create("Draft")}>Save as Draft</Button>
+            <Button onClick={() => create("Submitted")}>
+              <Send className="h-4 w-4 mr-1" /> Submit to RBZ FIU
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
+
