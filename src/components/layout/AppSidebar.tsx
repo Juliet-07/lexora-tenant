@@ -52,6 +52,7 @@ const NAV_BY_MODULE: Record<
 > = {
   "kyc/aml": [
     { title: "Dashboard", url: "/", icon: LayoutDashboard },
+    { title: "Clients", url: "/clients", icon: Users, adminOnly: true },
     {
       title: "Onboarding & CDD",
       url: "/clients/onboarding",
@@ -92,6 +93,7 @@ const NAV_BY_MODULE: Record<
   ],
   grc: [
     { title: "Dashboard", url: "/", icon: LayoutDashboard },
+    { title: "Clients", url: "/clients", icon: Users, adminOnly: true },
     {
       title: "Risk Register",
       url: "/grc/risks",
@@ -140,6 +142,7 @@ const NAV_BY_MODULE: Record<
   ],
   hr: [
     { title: "Dashboard", url: "/", icon: LayoutDashboard },
+    { title: "Clients", url: "/clients", icon: Users, adminOnly: true },
     { title: "Employees", url: "/hr/employees", icon: Users, adminOnly: true },
     {
       title: "Recruitment",
