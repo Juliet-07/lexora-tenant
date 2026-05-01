@@ -228,66 +228,13 @@ export default function TransactionMonitoring() {
         {/* Rules Engine */}
         <TabsContent value="rules" className="space-y-4">
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
+            <CardHeader>
               <CardTitle className="text-base">Rules Engine</CardTitle>
-              <Button
-                variant={showRuleForm ? "outline" : "default"}
-                size="sm"
-                onClick={() => setShowRuleForm(!showRuleForm)}
-              >
-                {showRuleForm ? "Cancel" : (<><Plus className="h-4 w-4 mr-1" /> New Rule</>)}
-              </Button>
+              <p className="text-xs text-muted-foreground">
+                Manage thresholds & timeframes. Risk rules are configured in the Risk Engine.
+              </p>
             </CardHeader>
-            {showRuleForm && (
-              <CardContent className="border-t bg-muted/30">
-                <p className="font-semibold text-sm mb-4">Create New Rule</p>
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div>
-                    <Label>Rule Name *</Label>
-                    <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-                  </div>
-                  <div>
-                    <Label>Priority *</Label>
-                    <Select value={form.priority} onValueChange={(v) => setForm({ ...form, priority: v })}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Low">Low</SelectItem>
-                        <SelectItem value="Medium">Medium</SelectItem>
-                        <SelectItem value="High">High</SelectItem>
-                        <SelectItem value="Critical">Critical</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label>Threshold (USD) *</Label>
-                    <Input
-                      type="number"
-                      value={form.threshold}
-                      onChange={(e) => setForm({ ...form, threshold: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <Label>Timeframe *</Label>
-                    <Input
-                      placeholder="e.g., 24 hours, 7 days"
-                      value={form.timeframe}
-                      onChange={(e) => setForm({ ...form, timeframe: e.target.value })}
-                    />
-                  </div>
-                  <div className="md:col-span-2">
-                    <Label>Description *</Label>
-                    <Textarea
-                      value={form.description}
-                      onChange={(e) => setForm({ ...form, description: e.target.value })}
-                    />
-                  </div>
-                </div>
-                <div className="flex justify-end mt-4">
-                  <Button onClick={createRule}>Create Rule</Button>
-                </div>
-              </CardContent>
-            )}
-            <CardContent className={showRuleForm ? "border-t pt-4" : ""}>
+            <CardContent>
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -342,7 +289,42 @@ export default function TransactionMonitoring() {
         {/* Scenario Builder */}
         <TabsContent value="scenarios" className="space-y-4">
           <Card>
-            <CardHeader><CardTitle className="text-base">Scenarios</CardTitle></CardHeader>
+            <CardHeader>
+              <CardTitle className="text-base">Create Custom Scenario</CardTitle>
+              <p className="text-xs text-muted-foreground">
+                Chain conditions to detect multi-step suspicious behavior (e.g., smurfing, layering).
+              </p>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-4">
+                <div>
+                  <Label>Scenario Name *</Label>
+                  <Input
+                    placeholder="e.g., Structuring under reporting threshold"
+                    value={scenarioForm.name}
+                    onChange={(e) => setScenarioForm({ ...scenarioForm, name: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label>Conditions (one step per line) *</Label>
+                  <Textarea
+                    rows={5}
+                    placeholder={"Multiple deposits < USD 10K within 24h\nSame beneficiary\nAggregate > USD 50K"}
+                    value={scenarioForm.stepsText}
+                    onChange={(e) => setScenarioForm({ ...scenarioForm, stepsText: e.target.value })}
+                  />
+                </div>
+                <div className="flex justify-end">
+                  <Button onClick={createScenario} className="gap-1">
+                    <Plus className="h-4 w-4" /> Add Scenario
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader><CardTitle className="text-base">Active Scenarios</CardTitle></CardHeader>
             <CardContent className="space-y-3">
               {scenarios.map((s) => (
                 <div key={s.id} className="border rounded-lg p-4">
@@ -351,12 +333,20 @@ export default function TransactionMonitoring() {
                       <p className="font-semibold text-sm">{s.name}</p>
                       <p className="text-xs text-muted-foreground">{s.id}</p>
                     </div>
-                    <Badge
-                      variant="outline"
-                      className={s.active ? "bg-success/15 text-success border-success/30" : "bg-muted"}
-                    >
-                      {s.active ? "Active" : "Inactive"}
-                    </Badge>
+                    <div className="flex items-center gap-1">
+                      <Badge
+                        variant="outline"
+                        className={s.active ? "bg-success/15 text-success border-success/30" : "bg-muted"}
+                      >
+                        {s.active ? "Active" : "Inactive"}
+                      </Badge>
+                      <Button variant="ghost" size="icon" onClick={() => toggleScenario(s.id)}>
+                        {s.active ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+                      </Button>
+                      <Button variant="ghost" size="icon" onClick={() => deleteScenario(s.id)}>
+                        <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                      </Button>
+                    </div>
                   </div>
                   <div className="space-y-1.5 ml-2">
                     {s.steps.map((step, i) => (
@@ -374,7 +364,6 @@ export default function TransactionMonitoring() {
           </Card>
         </TabsContent>
 
-        {/* Behavioral Profiling */}
         <TabsContent value="profiling" className="space-y-4">
           <Card>
             <CardHeader><CardTitle className="text-base">Customer Behavioral Profiles</CardTitle></CardHeader>
