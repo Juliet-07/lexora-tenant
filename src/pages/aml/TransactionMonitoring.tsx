@@ -101,38 +101,33 @@ function priorityBadge(p: string) {
 export default function TransactionMonitoring() {
   const [tab, setTab] = useState("overview");
   const [rules, setRules] = useState(initialRules);
-  const [scenarios] = useState(initialScenarios);
-  const [showRuleForm, setShowRuleForm] = useState(false);
+  const [scenarios, setScenarios] = useState(initialScenarios);
 
-  const [form, setForm] = useState({
+  const [scenarioForm, setScenarioForm] = useState({
     name: "",
-    priority: "Medium",
-    threshold: "",
-    timeframe: "",
-    description: "",
+    stepsText: "",
   });
 
-  const createRule = () => {
-    if (!form.name || !form.threshold || !form.timeframe || !form.description) {
-      toast.error("Please fill all required fields");
+  const createScenario = () => {
+    if (!scenarioForm.name || !scenarioForm.stepsText.trim()) {
+      toast.error("Provide a scenario name and at least one step");
       return;
     }
-    setRules([
-      ...rules,
+    const steps = scenarioForm.stepsText
+      .split("\n")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    setScenarios([
+      ...scenarios,
       {
-        id: `R${String(rules.length + 1).padStart(3, "0")}`,
-        name: form.name,
-        priority: form.priority as Rule["priority"],
-        threshold: Number(form.threshold),
-        timeframe: form.timeframe,
-        description: form.description,
+        id: `S${String(scenarios.length + 1).padStart(3, "0")}`,
+        name: scenarioForm.name,
+        steps,
         active: true,
-        triggers: 0,
       },
     ]);
-    setForm({ name: "", priority: "Medium", threshold: "", timeframe: "", description: "" });
-    setShowRuleForm(false);
-    toast.success("Rule created");
+    setScenarioForm({ name: "", stepsText: "" });
+    toast.success("Scenario created");
   };
 
   const toggleRule = (id: string) => {
@@ -142,6 +137,14 @@ export default function TransactionMonitoring() {
   const deleteRule = (id: string) => {
     setRules(rules.filter((r) => r.id !== id));
     toast.success("Rule deleted");
+  };
+
+  const toggleScenario = (id: string) =>
+    setScenarios(scenarios.map((s) => (s.id === id ? { ...s, active: !s.active } : s)));
+
+  const deleteScenario = (id: string) => {
+    setScenarios(scenarios.filter((s) => s.id !== id));
+    toast.success("Scenario removed");
   };
 
   return (
