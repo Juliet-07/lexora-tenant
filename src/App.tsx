@@ -17,14 +17,21 @@ import Team from "./pages/Team";
 import Billing from "./pages/Billing";
 import Compliance from "./pages/Compliance";
 import Reports from "./pages/Reports";
+import RiskEngine from "./pages/aml/RiskEngine";
+import TransactionMonitoring from "./pages/aml/TransactionMonitoring";
+import STR from "./pages/aml/STR";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
+// Modules with bespoke landing screens; everything else falls back to the
+// shared Dashboard which is API-driven and works for any active plan.
+const PLACEHOLDER_MODULES = new Set<string>([]);
+
 function ModuleHome() {
   const { currentModule } = useModule();
-  if (currentModule.id === "crm") return <Dashboard />;
-  return <ModulePlaceholder />;
+  if (PLACEHOLDER_MODULES.has(currentModule.id)) return <ModulePlaceholder />;
+  return <Dashboard />;
 }
 
 function AppRoutes() {
@@ -126,7 +133,25 @@ function AppRoutes() {
           }
         />
       )}
-      {/* Module placeholder routes */}
+      {/* AML/KYC module routes */}
+      {isAdmin && (
+        <Route
+          path="/aml/risk"
+          element={<AppLayout><RiskEngine /></AppLayout>}
+        />
+      )}
+      {isAdmin && (
+        <Route
+          path="/aml/transactions"
+          element={<AppLayout><TransactionMonitoring /></AppLayout>}
+        />
+      )}
+      {isAdmin && (
+        <Route
+          path="/aml/sar"
+          element={<AppLayout><STR /></AppLayout>}
+        />
+      )}
       <Route
         path="/aml/*"
         element={
