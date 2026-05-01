@@ -20,6 +20,7 @@ import Reports from "./pages/Reports";
 import RiskEngine from "./pages/aml/RiskEngine";
 import TransactionMonitoring from "./pages/aml/TransactionMonitoring";
 import STR from "./pages/aml/STR";
+import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -180,10 +181,7 @@ function AppRoutes() {
         path="/settings"
         element={
           <AppLayout>
-            <div className="text-center py-12">
-              <h1 className="text-2xl font-bold">Settings</h1>
-              <p className="text-muted-foreground">Coming soon</p>
-            </div>
+            <Settings />
           </AppLayout>
         }
       />
