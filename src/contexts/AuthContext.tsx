@@ -1,61 +1,118 @@
-import { createContext, useContext, useState, ReactNode } from "react";
-import { teamMembers } from "@/data/mockData";
+import {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  ReactNode,
+} from "react";
+import { api } from "@/lib/api";
 
+// ─── Role mapping ─────────────────────────────────────────────
 export type UserRole = "admin" | "team_member";
 
 export interface AuthUser {
   id: string;
-  name: string;
+  firstName: string;
+  lastName: string;
   email: string;
+  userType: string;
+  roles: string[];
   role: UserRole;
-  avatar: string;
+  tenantId: string | null;
+  businessName: string;
+  mustChangePassword: boolean;
 }
 
 interface AuthContextType {
   user: AuthUser | null;
-  login: (email: string, password: string) => boolean;
+  login: (email: string, password: string) => Promise<void>;
   logout: () => void;
   isAdmin: boolean;
+  isLoading: boolean;
+  error: string | null;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-const ADMIN_USER: AuthUser = {
-  id: "ADMIN-001",
-  name: "Sarah Chen",
-  email: "admin@lexora.com",
-  role: "admin",
-  avatar: "SC",
-};
+function deriveRole(roles: string[]): UserRole {
+  const adminRoles = ["tenant_owner", "tenant_admin"];
+  return roles.some((r) => adminRoles.includes(r)) ? "admin" : "team_member";
+}
+
+function mapUser(raw: any): AuthUser {
+  return {
+    id: raw._id,
+    firstName: raw.firstName,
+    lastName: raw.lastName,
+    email: raw.email,
+    userType: raw.userType,
+    roles: raw.roles ?? [],
+    role: deriveRole(raw.roles ?? []),
+    tenantId: raw.tenantId ?? null,
+    businessName: raw.tenantProfile?.businessName ?? "",
+    mustChangePassword: raw.mustChangePassword ?? false,
+  };
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [isLoading, setIsLoading] = useState(true); // start true — hydrate from storage
+  const [error, setError] = useState<string | null>(null);
 
-  const login = (email: string, password: string): boolean => {
-    // Admin login
-    if (email === "admin@lexora.com" && password === "admin123") {
-      setUser(ADMIN_USER);
-      return true;
+  // ── Hydrate from localStorage on mount ───────────────────
+  useEffect(() => {
+    const stored = localStorage.getItem("tenantUser");
+    const token = localStorage.getItem("tenantToken");
+    if (stored && token) {
+      try {
+        setUser(JSON.parse(stored));
+      } catch {
+        localStorage.removeItem("tenantUser");
+      }
     }
-    // Team member login
-    const member = teamMembers.find((m) => m.email === email);
-    if (member && password === "team123") {
-      setUser({
-        id: member.id,
-        name: member.name,
-        email: member.email,
-        role: "team_member",
-        avatar: member.avatar,
-      });
-      return true;
+    setIsLoading(false);
+  }, []);
+
+  // ── Login ─────────────────────────────────────────────────
+  const login = async (email: string, password: string): Promise<void> => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const res = await api.post("/auth/login", { email, password });
+      const { user: rawUser, tokens } = res.data.data;
+
+      localStorage.setItem("tenantToken", tokens.accessToken);
+
+      const mapped = mapUser(rawUser);
+      localStorage.setItem("tenantUser", JSON.stringify(mapped));
+      setUser(mapped);
+    } catch (err: any) {
+      const msg = err?.response?.data?.message ?? "Invalid email or password";
+      setError(msg);
+      throw new Error(msg);
+    } finally {
+      setIsLoading(false);
     }
-    return false;
   };
 
-  const logout = () => setUser(null);
+  // ── Logout ────────────────────────────────────────────────
+  const logout = () => {
+    localStorage.removeItem("tenantToken");
+    localStorage.removeItem("tenantUser");
+    setUser(null);
+  };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, isAdmin: user?.role === "admin" }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        login,
+        logout,
+        isAdmin: user?.role === "admin",
+        isLoading,
+        error,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

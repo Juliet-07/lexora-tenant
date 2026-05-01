@@ -1,67 +1,146 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Users, Clock, FolderKanban, DollarSign, AlertTriangle, CheckCircle2, ArrowUpRight } from "lucide-react";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import { clients, tasks, complianceAlerts, recentActivity, revenueData, projects, notifications } from "@/data/mockData";
+import {
+  Users,
+  Clock,
+  FolderKanban,
+  AlertTriangle,
+  CheckCircle2,
+  ArrowUpRight,
+  Package,
+  Loader2,
+  CalendarClock,
+  ShieldCheck,
+} from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useModule } from "@/contexts/ModuleContext";
 
-const severityColor: Record<string, string> = {
-  Critical: "bg-destructive text-destructive-foreground",
-  High: "bg-warning text-warning-foreground",
-  Medium: "bg-info text-info-foreground",
-  Low: "bg-muted text-muted-foreground",
-};
-
-const priorityColor: Record<string, string> = {
-  High: "text-destructive",
-  Medium: "text-warning",
-  Low: "text-muted-foreground",
-};
-
-const statusStyle: Record<string, string> = {
-  Overdue: "bg-destructive/10 text-destructive",
-  "Due Today": "bg-warning/10 text-warning",
-  Upcoming: "bg-muted text-muted-foreground",
-};
+function TrialBanner({
+  trialEndsAt,
+  plan,
+}: {
+  trialEndsAt: string | null;
+  plan: string;
+}) {
+  if (!trialEndsAt || plan !== "free") return null;
+  const daysLeft = Math.max(
+    0,
+    Math.ceil(
+      (new Date(trialEndsAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24),
+    ),
+  );
+  return (
+    <div className="flex items-center gap-3 p-4 rounded-xl bg-warning/10 border border-warning/30 text-warning text-sm">
+      <CalendarClock className="h-5 w-5 shrink-0" />
+      <span>
+        <strong>Free trial</strong> — {daysLeft} day{daysLeft !== 1 ? "s" : ""}{" "}
+        remaining. Contact your administrator to upgrade your plan.
+      </span>
+    </div>
+  );
+}
 
 export default function Dashboard() {
   const { user, isAdmin } = useAuth();
-  const today = new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+  const { dashboardData, subscription, isLoadingDashboard, modules } =
+    useModule();
 
-  const myProjects = isAdmin ? projects : projects.filter(p => p.assignedTeam.includes(user?.name || ""));
-  const myTasks = isAdmin ? tasks : tasks.filter(t => t.assignee === user?.name);
+  const today = new Date().toLocaleDateString("en-US", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
 
+  if (isLoadingDashboard) {
+    return (
+      <div className="flex items-center justify-center h-64 gap-3 text-muted-foreground">
+        <Loader2 className="h-5 w-5 animate-spin" />
+        <span className="text-sm">Loading dashboard…</span>
+      </div>
+    );
+  }
+
+  const team = dashboardData?.team;
+  const activeModules = subscription?.activeModules ?? [];
+
+  // ── Stat cards — built from real data ──────────────────────
   const statCards = isAdmin
     ? [
-        { title: "Active Clients", value: clients.filter(c => c.status === "Active").length, icon: Users, change: "+3 this month", color: "text-primary" },
-        { title: "Pending Approvals", value: clients.filter(c => c.kycStatus === "Submitted" || c.kycStatus === "In Progress").length, icon: Clock, change: "Review needed", color: "text-warning" },
-        { title: "Open Projects", value: projects.filter(p => p.status !== "Completed").length, icon: FolderKanban, change: "1 at risk", color: "text-secondary" },
-        { title: "Revenue (Apr)", value: "$89,000", icon: DollarSign, change: "+12% vs last month", color: "text-success" },
+        {
+          title: "Team Members",
+          value: team?.total ?? 0,
+          icon: Users,
+          change: `${team?.active ?? 0} active`,
+          color: "text-primary",
+        },
+        {
+          title: "Active",
+          value: team?.active ?? 0,
+          icon: CheckCircle2,
+          change: "Online members",
+          color: "text-success",
+        },
+        {
+          title: "Active Modules",
+          value: activeModules.length,
+          icon: Package,
+          change: subscription?.plan ? `${subscription.plan} plan` : "No plan",
+          color: "text-secondary",
+        },
+        {
+          title: "Subscription",
+          value: subscription?.status ?? "—",
+          icon: ShieldCheck,
+          change: subscription?.plan ?? "—",
+          color: "text-info",
+        },
       ]
     : [
-        { title: "My Projects", value: myProjects.length, icon: FolderKanban, change: `${myProjects.filter(p => p.status === "In Progress").length} in progress`, color: "text-primary" },
-        { title: "My Tasks", value: myTasks.length, icon: Clock, change: `${myTasks.filter(t => t.status === "Overdue").length} overdue`, color: "text-warning" },
+        {
+          title: "Active Modules",
+          value: activeModules.length,
+          icon: Package,
+          change: `${subscription?.plan ?? "—"} plan`,
+          color: "text-primary",
+        },
+        {
+          title: "Team Size",
+          value: team?.total ?? 0,
+          icon: Users,
+          change: `${team?.active ?? 0} active`,
+          color: "text-success",
+        },
       ];
 
   return (
     <div className="space-y-6">
+      {/* Greeting */}
       <div>
-        <h1 className="text-2xl font-bold">Welcome back, {user?.name?.split(" ")[0]}</h1>
+        <h1 className="text-2xl font-bold">Welcome back, {user?.firstName}</h1>
         <p className="text-muted-foreground text-sm">{today}</p>
+        {user?.businessName && (
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {user.businessName}
+          </p>
+        )}
       </div>
 
-      {/* Notifications */}
-      {notifications.filter(n => !n.read).length > 0 && (
-        <div className="space-y-2">
-          {notifications.filter(n => !n.read).map(n => (
-            <div key={n.id} className={`p-3 rounded-lg text-sm flex items-center gap-2 ${n.type === "success" ? "bg-success/10 text-success" : n.type === "warning" ? "bg-warning/10 text-warning" : "bg-info/10 text-info"}`}>
-              <CheckCircle2 className="h-4 w-4 shrink-0" />
-              {n.message}
-            </div>
-          ))}
+      {/* Trial banner */}
+      <TrialBanner
+        trialEndsAt={subscription?.trialEndsAt ?? null}
+        plan={subscription?.plan ?? ""}
+      />
+
+      {/* Must change password notice */}
+      {user?.mustChangePassword && (
+        <div className="flex items-center gap-2 p-3 rounded-lg text-sm bg-destructive/10 text-destructive">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          You are required to change your password. Go to Settings → Security.
         </div>
       )}
 
+      {/* Stat cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {statCards.map((stat) => (
           <Card key={stat.title} className="hover:shadow-md transition-shadow">
@@ -69,7 +148,9 @@ export default function Dashboard() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">{stat.title}</p>
-                  <p className="text-2xl font-bold mt-1">{stat.value}</p>
+                  <p className="text-2xl font-bold mt-1 capitalize">
+                    {stat.value}
+                  </p>
                   <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
                     <ArrowUpRight className="h-3 w-3" />
                     {stat.change}
@@ -84,100 +165,112 @@ export default function Dashboard() {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {isAdmin && (
-          <Card className="lg:col-span-2">
-            <CardHeader className="pb-2"><CardTitle className="text-base">Revenue Overview</CardTitle></CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={260}>
-                <BarChart data={revenueData}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                  <XAxis dataKey="month" className="text-xs" tick={{ fill: 'hsl(var(--muted-foreground))' }} />
-                  <YAxis className="text-xs" tick={{ fill: 'hsl(var(--muted-foreground))' }} tickFormatter={v => `$${v/1000}k`} />
-                  <Tooltip formatter={(v: number) => [`$${v.toLocaleString()}`, "Revenue"]} />
-                  <Bar dataKey="revenue" fill="hsl(var(--primary))" radius={[6, 6, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-        )}
-
-        <Card className={isAdmin ? "" : "lg:col-span-2"}>
-          <CardHeader className="pb-2"><CardTitle className="text-base">{isAdmin ? "Tasks" : "My Tasks"}</CardTitle></CardHeader>
-          <CardContent className="space-y-3">
-            {myTasks.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-4">No tasks assigned</p>
-            ) : (
-              myTasks.map((task) => (
-                <div key={task.id} className="flex items-start gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors">
-                  <div className={`mt-0.5 ${priorityColor[task.priority]}`}>
-                    {task.status === "Overdue" ? <AlertTriangle className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{task.title}</p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${statusStyle[task.status]}`}>{task.status}</Badge>
-                      {isAdmin && <span className="text-[10px] text-muted-foreground">{task.assignee}</span>}
+      {/* Active modules grid */}
+      {activeModules.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Package className="h-4 w-4 text-primary" />
+              Your Active Modules
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {modules.map((mod) => {
+                const Icon = mod.icon;
+                return (
+                  <div
+                    key={mod.id}
+                    className="flex items-center gap-3 p-3 rounded-lg border bg-muted/30 hover:bg-muted/50 transition-colors"
+                  >
+                    <div
+                      className={`w-9 h-9 rounded-lg bg-gradient-to-br ${mod.color} flex items-center justify-center shrink-0`}
+                    >
+                      <Icon className="h-4 w-4 text-white" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">
+                        {mod.shortName}
+                      </p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {mod.scope}
+                      </p>
                     </div>
                   </div>
-                </div>
-              ))
-            )}
+                );
+              })}
+            </div>
           </CardContent>
         </Card>
+      )}
 
-        {!isAdmin && (
-          <Card>
-            <CardHeader className="pb-2"><CardTitle className="text-base">My Projects</CardTitle></CardHeader>
-            <CardContent className="space-y-3">
-              {myProjects.map(p => (
-                <div key={p.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/50">
-                  <div>
-                    <p className="text-sm font-medium">{p.name}</p>
-                    <p className="text-xs text-muted-foreground">{p.clientName}</p>
-                  </div>
-                  <Badge variant="outline" className="text-xs">{p.status}</Badge>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-        )}
-      </div>
-
-      {isAdmin && (
+      {/* Team overview — admin only */}
+      {isAdmin && team && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Role breakdown */}
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-base flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4 text-warning" />
-                Compliance Alerts
-              </CardTitle>
+              <CardTitle className="text-base">Team by Role</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3">
-              {complianceAlerts.filter(a => a.status !== "Resolved").map((alert) => (
-                <div key={alert.id} className="flex items-start gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors">
-                  <Badge className={`text-[10px] px-1.5 py-0 shrink-0 ${severityColor[alert.severity]}`}>{alert.severity}</Badge>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium">{alert.clientName}</p>
-                    <p className="text-xs text-muted-foreground truncate">{alert.description}</p>
-                  </div>
+            <CardContent>
+              {team.byRole?.length > 0 ? (
+                <div className="space-y-2">
+                  {team.byRole.map((r: { _id: string; count: number }) => (
+                    <div
+                      key={r._id}
+                      className="flex items-center justify-between text-sm"
+                    >
+                      <span className="capitalize text-muted-foreground">
+                        {r._id.replace("tenant_", "").replace("_", " ")}
+                      </span>
+                      <Badge variant="secondary">{r.count}</Badge>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  No team members yet.
+                </p>
+              )}
             </CardContent>
           </Card>
 
+          {/* Recent members */}
           <Card>
-            <CardHeader className="pb-2"><CardTitle className="text-base">Recent Activity</CardTitle></CardHeader>
-            <CardContent className="space-y-3">
-              {recentActivity.map((act) => (
-                <div key={act.id} className="flex items-start gap-3 p-2">
-                  <div className="mt-1 w-2 h-2 rounded-full bg-primary shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm">{act.action}</p>
-                    <p className="text-xs text-muted-foreground">{act.user} · {act.timestamp}</p>
-                  </div>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Recent Members</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {team.recentMembers?.length > 0 ? (
+                <div className="space-y-3">
+                  {team.recentMembers.map((m: any) => (
+                    <div key={m._id} className="flex items-center gap-3">
+                      <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center text-xs font-bold text-muted-foreground">
+                        {m.firstName?.[0]}
+                        {m.lastName?.[0]}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">
+                          {m.firstName} {m.lastName}
+                        </p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {m.email}
+                        </p>
+                      </div>
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] capitalize shrink-0"
+                      >
+                        {m.roles?.[0]?.replace("tenant_", "")}
+                      </Badge>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  No team members yet. Invite your first member.
+                </p>
+              )}
             </CardContent>
           </Card>
         </div>

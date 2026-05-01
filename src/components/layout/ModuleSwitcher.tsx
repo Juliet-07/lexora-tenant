@@ -16,6 +16,23 @@ export function ModuleSwitcher() {
   const navigate = useNavigate();
   const Icon = currentModule.icon;
 
+  // Don't render switcher if there's only one module
+  if (modules.length <= 1) {
+    return (
+      <div className="h-10 px-3 flex items-center gap-2 border border-border/50 rounded-md">
+        <div
+          className={`w-7 h-7 rounded-md bg-gradient-to-br ${currentModule.color} flex items-center justify-center`}
+        >
+          <Icon className="w-4 h-4 text-white" />
+        </div>
+        <div className="text-left hidden sm:block leading-tight">
+          <div className="text-xs text-muted-foreground">Module</div>
+          <div className="text-sm font-semibold">{currentModule.shortName}</div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -30,7 +47,9 @@ export function ModuleSwitcher() {
           </div>
           <div className="text-left hidden sm:block leading-tight">
             <div className="text-xs text-muted-foreground">Module</div>
-            <div className="text-sm font-semibold">{currentModule.shortName}</div>
+            <div className="text-sm font-semibold">
+              {currentModule.shortName}
+            </div>
           </div>
           <ChevronDown className="w-4 h-4 text-muted-foreground" />
         </Button>

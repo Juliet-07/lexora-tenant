@@ -1,23 +1,27 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import { Scale, AlertCircle } from "lucide-react";
+import { Scale, AlertCircle, Loader2 } from "lucide-react";
 
 export default function Login() {
-  const { login } = useAuth();
+  const { login, isLoading } = useAuth();
+  const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    if (!login(email, password)) {
-      setError("Invalid email or password");
+    try {
+      await login(email, password);
+      navigate("/", { replace: true });
+    } catch (err: any) {
+      setError(err.message ?? "Invalid email or password");
     }
   };
 
@@ -33,7 +37,9 @@ export default function Login() {
           <h1 className="text-3xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
             Lexora
           </h1>
-          <p className="text-sm text-muted-foreground">Law Firm Management Platform</p>
+          <p className="text-sm text-muted-foreground">
+            Law Firm Management Platform
+          </p>
         </div>
 
         <Card className="shadow-xl border-0">
@@ -44,36 +50,47 @@ export default function Login() {
             <form onSubmit={handleSubmit} className="space-y-4">
               {error && (
                 <div className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 p-3 rounded-lg">
-                  <AlertCircle className="h-4 w-4" />
+                  <AlertCircle className="h-4 w-4 shrink-0" />
                   {error}
                 </div>
               )}
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
-                <Input id="email" type="email" placeholder="you@firm.com" value={email} onChange={(e) => setEmail(e.target.value)} required />
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="you@firm.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="password">Password</Label>
-                <Input id="password" type="password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} required />
+                <Input
+                  id="password"
+                  type="password"
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                />
               </div>
-              <Button type="submit" className="w-full bg-gradient-to-r from-primary to-secondary text-white">
-                Sign In
+              <Button
+                type="submit"
+                className="w-full bg-gradient-to-r from-primary to-secondary text-white"
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Signing
+                    in…
+                  </>
+                ) : (
+                  "Sign In"
+                )}
               </Button>
             </form>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-muted/50 border-dashed">
-          <CardContent className="p-4 space-y-2 text-xs">
-            <p className="font-semibold text-sm text-muted-foreground">Demo Credentials</p>
-            <div className="flex items-center gap-2">
-              <Badge className="bg-primary/10 text-primary text-[10px]">Admin</Badge>
-              <span className="text-muted-foreground">admin@lexora.com / admin123</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Badge className="bg-secondary/10 text-secondary text-[10px]">Team</Badge>
-              <span className="text-muted-foreground">s.chen@firm.com / team123</span>
-            </div>
           </CardContent>
         </Card>
       </div>
