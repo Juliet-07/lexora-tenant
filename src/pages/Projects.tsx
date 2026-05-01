@@ -29,7 +29,8 @@ export function ProjectsList() {
   const { toast } = useToast();
   const { user, isAdmin } = useAuth();
 
-  const displayProjects = isAdmin ? projectList : projectList.filter(p => p.assignedTeam.includes(user?.name || ""));
+  const fullName = user ? `${user.firstName} ${user.lastName}` : "";
+  const displayProjects = isAdmin ? projectList : projectList.filter(p => p.assignedTeam.includes(fullName));
 
   const handleCreate = () => {
     if (!newProject.name || !newProject.clientId) return;
@@ -201,7 +202,8 @@ export function ProjectDetail() {
     { title: "Final Delivery", date: project.deadline, done: false },
   ];
 
-  const myTasks = user?.role === "team_member" ? tasks.filter(t => t.assignee === user.name) : tasks;
+  const userFullName = user ? `${user.firstName} ${user.lastName}` : "";
+  const myTasks = user?.role === "team_member" ? tasks.filter(t => t.assignee === userFullName) : tasks;
 
   return (
     <div className="space-y-6">

@@ -30,7 +30,8 @@ export default function Billing() {
   const totalPending = invoiceList.filter(i => i.status === "Pending").reduce((s, i) => s + i.amount, 0);
   const totalOverdue = invoiceList.filter(i => i.status === "Overdue").reduce((s, i) => s + i.amount, 0);
 
-  const displayEntries = isAdmin ? timeEntryList : timeEntryList.filter(e => e.teamMemberName === user?.name);
+  const fullName = user ? `${user.firstName} ${user.lastName}` : "";
+  const displayEntries = isAdmin ? timeEntryList : timeEntryList.filter(e => e.teamMemberName === fullName);
   const totalBillableHours = displayEntries.filter(e => e.billable).reduce((s, e) => s + e.hours, 0);
   const totalBillableAmount = displayEntries.filter(e => e.billable).reduce((s, e) => s + e.hours * e.rate, 0);
 
@@ -63,7 +64,7 @@ export default function Billing() {
       projectId: newTimeEntry.projectId,
       projectName: project?.name || "",
       teamMemberId: user?.id || "",
-      teamMemberName: user?.name || "",
+      teamMemberName: fullName,
       date: new Date().toISOString().split("T")[0],
       hours: newTimeEntry.hours,
       description: newTimeEntry.description,
@@ -76,7 +77,7 @@ export default function Billing() {
     toast({ title: "Time Logged", description: `${newTimeEntry.hours} hours logged for ${project?.name}` });
   };
 
-  const myProjects = isAdmin ? projects : projects.filter(p => p.assignedTeam.includes(user?.name || ""));
+  const myProjects = isAdmin ? projects : projects.filter(p => p.assignedTeam.includes(fullName));
 
   return (
     <div className="space-y-6">

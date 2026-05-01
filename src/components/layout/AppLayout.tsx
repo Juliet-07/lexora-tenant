@@ -38,10 +38,12 @@ export function AppLayout({ children }: AppLayoutProps) {
               <div className="flex items-center gap-2">
                 <Avatar className="h-8 w-8">
                   <AvatarFallback className="bg-gradient-to-br from-primary to-secondary text-white text-xs font-semibold">
-                    {user?.avatar || "?"}
+                    {user ? `${user.firstName?.[0] ?? ""}${user.lastName?.[0] ?? ""}` : "?"}
                   </AvatarFallback>
                 </Avatar>
-                <span className="text-sm font-medium hidden md:block">{user?.name}</span>
+                <span className="text-sm font-medium hidden md:block">
+                  {user ? `${user.firstName} ${user.lastName}` : ""}
+                </span>
               </div>
               <Button variant="ghost" size="icon" onClick={logout} title="Sign Out">
                 <LogOut className="h-4 w-4" />
