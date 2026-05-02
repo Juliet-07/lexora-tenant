@@ -9,7 +9,7 @@ export interface ApiClient {
   email: string;
   phone?: string;
   status: string; // pending | active | rejected | suspended | invited | submitted | in_progress | approved
-  classification?: string; // individual | corporate
+  classifications?: string; // individual | corporate
   kycStatus?: string; // not_started | in_progress | submitted | approved | rejected
   riskLevel?: string; // low | medium | high
   country?: string;

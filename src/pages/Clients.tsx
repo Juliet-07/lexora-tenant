@@ -96,7 +96,7 @@ export default function Clients() {
         (c.status ?? "").toLowerCase() === statusFilter;
       const matchType =
         typeFilter === "all" ||
-        (c.classification ?? "").toLowerCase() === typeFilter;
+        (c.classifications ?? "").toLowerCase() === typeFilter;
       return matchSearch && matchStatus && matchType;
     });
   }, [clients, search, statusFilter, typeFilter]);
@@ -332,7 +332,7 @@ export default function Clients() {
                   <TableRow key={c._id} className="hover:bg-muted/40">
                     <TableCell className="font-medium">
                       <div className="flex items-center gap-2">
-                        {c.classification === "corporate" ? (
+                        {c.classifications === "corporate" ? (
                           <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />
                         ) : (
                           <UserIcon className="h-4 w-4 text-muted-foreground shrink-0" />
@@ -345,7 +345,7 @@ export default function Clients() {
                     <TableCell className="text-sm">{c.email}</TableCell>
                     <TableCell>
                       <Badge variant="outline" className="text-xs capitalize">
-                        {prettyLabel(c.classification)}
+                        {prettyLabel(c.classifications)}
                       </Badge>
                     </TableCell>
                     <TableCell>
