@@ -135,7 +135,7 @@ export default function OnboardingDetail() {
     );
   }
 
-  const isCorporate = (client.classification ?? "").toLowerCase() === "corporate";
+  const isCorporate = (client.classifications ?? "").toLowerCase() === "corporate";
   const Icon = isCorporate ? Building2 : UserIcon;
   const status = (client.status ?? "").toLowerCase();
   const riskLevel = (client.riskLevel ?? "low").toLowerCase();
@@ -256,7 +256,7 @@ export default function OnboardingDetail() {
             <h1 className="text-2xl font-bold">{displayName(client)}</h1>
             <Badge className={`border ${toneFor(client.status)}`}>{prettyLabel(client.status)}</Badge>
             <Badge variant="outline" className="capitalize">
-              {prettyLabel(client.classification)}
+              {prettyLabel(client.classifications)}
             </Badge>
           </div>
           <p className="text-sm text-muted-foreground">
@@ -346,7 +346,7 @@ export default function OnboardingDetail() {
             <Row label="Email" value={client.email} />
             <Row label="Phone" value={client.phone || "—"} />
             <Row label="Country" value={client.country || "—"} />
-            <Row label="Type" value={prettyLabel(client.classification)} />
+            <Row label="Type" value={prettyLabel(client.classifications)} />
             <Row label="Submitted" value={new Date(client.createdAt).toLocaleString()} />
           </CardContent>
         </Card>

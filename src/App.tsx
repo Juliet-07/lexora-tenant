@@ -9,10 +9,10 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { ModulePlaceholder } from "@/components/layout/ModulePlaceholder";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
-import Clients from "./pages/Clients";
-import ClientOnboarding from "./pages/ClientOnboarding";
-import OnboardingDetail from "./pages/OnboardingDetail";
-import ClientProfile from "./pages/ClientProfile";
+import Clients from "./pages/client/Clients";
+import ClientOnboarding from "./pages/kyc/ClientOnboarding";
+import OnboardingDetail from "./pages/kyc/OnboardingDetail";
+import ClientProfile from "./pages/client/ClientProfile";
 import { ProjectsList, ProjectDetail } from "./pages/Projects";
 import Team from "./pages/Team";
 import Billing from "./pages/Billing";
@@ -63,6 +63,16 @@ function AppRoutes() {
       )}
       {isAdmin && (
         <Route
+          path="/clients/:id"
+          element={
+            <AppLayout>
+              <ClientProfile />
+            </AppLayout>
+          }
+        />
+      )}
+      {isAdmin && (
+        <Route
           path="/clients/onboarding"
           element={
             <AppLayout>
@@ -77,16 +87,6 @@ function AppRoutes() {
           element={
             <AppLayout>
               <OnboardingDetail />
-            </AppLayout>
-          }
-        />
-      )}
-      {isAdmin && (
-        <Route
-          path="/clients/:id"
-          element={
-            <AppLayout>
-              <ClientProfile />
             </AppLayout>
           }
         />
@@ -149,19 +149,31 @@ function AppRoutes() {
       {isAdmin && (
         <Route
           path="/aml/risk"
-          element={<AppLayout><RiskEngine /></AppLayout>}
+          element={
+            <AppLayout>
+              <RiskEngine />
+            </AppLayout>
+          }
         />
       )}
       {isAdmin && (
         <Route
           path="/aml/transactions"
-          element={<AppLayout><TransactionMonitoring /></AppLayout>}
+          element={
+            <AppLayout>
+              <TransactionMonitoring />
+            </AppLayout>
+          }
         />
       )}
       {isAdmin && (
         <Route
           path="/aml/sar"
-          element={<AppLayout><STR /></AppLayout>}
+          element={
+            <AppLayout>
+              <STR />
+            </AppLayout>
+          }
         />
       )}
       <Route

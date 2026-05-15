@@ -38,7 +38,7 @@ export default function Login() {
             Lexora
           </h1>
           <p className="text-sm text-muted-foreground">
-            Law Firm Management Platform
+            Business Practice Manager
           </p>
         </div>
 

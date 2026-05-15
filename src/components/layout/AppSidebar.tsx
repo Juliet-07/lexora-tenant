@@ -52,13 +52,13 @@ const NAV_BY_MODULE: Record<
 > = {
   "kyc/aml": [
     { title: "Dashboard", url: "/", icon: LayoutDashboard },
-    { title: "Clients", url: "/clients", icon: Users, adminOnly: true },
     {
       title: "Onboarding & CDD",
       url: "/clients/onboarding",
       icon: ClipboardCheck,
       adminOnly: true,
     },
+    { title: "Clients", url: "/clients", icon: Users, adminOnly: true },
     // {
     //   title: "Screening",
     //   url: "/aml/screening",

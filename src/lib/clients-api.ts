@@ -1,6 +1,5 @@
 import { api } from "./api";
 
-// ─── API types (raw shapes returned by /tenant/my-clients*) ──
 export interface ApiClient {
   _id: string;
   firstName?: string;
@@ -34,6 +33,66 @@ export interface ClientStats {
   recentClients: ApiClient[];
 }
 
+export type AssignedTo = {
+  _id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  roles: string[];
+};
+
+export type ClientProfileRecord = {
+  _id: string;
+  userId: string;
+  tenantId: string;
+  assignedTo: AssignedTo | null;
+  classifications: string;
+  individualProfile: Record<string, any> | null;
+  entityProfile: Record<string, any> | null;
+  isPoliticallyExposed: boolean;
+  pepDetails: any | null;
+  kycStatus: string;
+  kycCompletedAt: string | null;
+  riskLevel: string;
+  profileCompletionPercent: number;
+  tags: string[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ApiClientDetail = {
+  _id: string;
+  userType: string;
+  firstName: string;
+  lastName: string;
+  fullName: string;
+  email: string;
+  phone?: string;
+  roles: string[];
+  status: string;
+  tenantId: string;
+  clientProfile: { classifications: string } | null;
+  isEmailVerified: boolean;
+  lastLoginAt: string | null;
+  mustChangePassword: boolean;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  profile: ClientProfileRecord | null;
+  classifications: string;
+  kycStatus: string;
+  riskLevel: string;
+  country?: string;
+  documents?: {
+    name: string;
+    type?: string;
+    status?: string;
+    url?: string;
+    uploadedAt?: string;
+  }[];
+  activityTimeline?: { action: string; date: string; user?: string }[];
+};
+
 export const fetchClients = async (): Promise<ApiClient[]> => {
   const res = await api.get("/tenant/my-clients");
   const data = res.data?.data;
@@ -47,10 +106,23 @@ export const fetchClientStats = async (): Promise<ClientStats> => {
   return res.data.data;
 };
 
-export const fetchClientById = async (id: string): Promise<ApiClient> => {
+export async function fetchClientById(id: string): Promise<ApiClientDetail> {
   const res = await api.get(`/tenant/my-clients/${id}`);
-  return res.data.data;
-};
+  const raw = res.data?.data ?? res.data;
+
+  return {
+    ...raw,
+    classifications:
+      raw.profile?.classifications ??
+      raw.clientProfile?.classifications ??
+      "individual",
+    kycStatus: raw.profile?.kycStatus ?? "not_started",
+    riskLevel: raw.profile?.riskLevel ?? "unrated",
+    country: raw.profile?.address?.country ?? null,
+    documents: raw.profile?.documents ?? [],
+    activityTimeline: raw.profile?.metadata?.auditTrail ?? [],
+  };
+}
 
 // ─── Display helpers ────────────────────────────────────────
 export const displayName = (c: ApiClient): string => {
@@ -60,9 +132,7 @@ export const displayName = (c: ApiClient): string => {
 
 export const prettyLabel = (s?: string): string => {
   if (!s) return "—";
-  return s
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (m) => m.toUpperCase());
+  return s.replace(/_/g, " ").replace(/\b\w/g, (m) => m.toUpperCase());
 };
 
 export const statusTone: Record<string, string> = {
@@ -78,4 +148,6 @@ export const statusTone: Record<string, string> = {
 };
 
 export const toneFor = (s?: string): string =>
-  statusTone[(s ?? "").toLowerCase()] ?? "bg-muted text-muted-foreground border-border";
+  statusTone[(s ?? "").toLowerCase()] ??
+  "bg-muted text-muted-foreground border-border";
+// Add this to your existing clients-api.ts
