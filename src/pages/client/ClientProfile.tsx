@@ -113,7 +113,7 @@ export default function ClientProfile() {
   const isPep = client.profile?.isPoliticallyExposed ?? false;
 
   const auditTrail =
-    client.profile?.metadata?.auditTrail ?? client.activityTimeline ?? [];
+    (client.profile as any)?.metadata?.auditTrail ?? client.activityTimeline ?? [];
 
   return (
     <div className="space-y-6">

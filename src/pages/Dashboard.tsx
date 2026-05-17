@@ -1,5 +1,7 @@
+import { Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Users,
   Clock,
@@ -30,12 +32,15 @@ function TrialBanner({
     ),
   );
   return (
-    <div className="flex items-center gap-3 p-4 rounded-xl bg-warning/10 border border-warning/30 text-warning text-sm">
+    <div className="flex flex-wrap items-center gap-3 p-4 rounded-xl bg-warning/10 border border-warning/30 text-warning text-sm">
       <CalendarClock className="h-5 w-5 shrink-0" />
-      <span>
+      <span className="flex-1 min-w-[200px]">
         <strong>Free trial</strong> — {daysLeft} day{daysLeft !== 1 ? "s" : ""}{" "}
-        remaining. Contact your administrator to upgrade your plan.
+        remaining. Upgrade your plan to keep full access.
       </span>
+      <Button asChild size="sm" variant="outline" className="border-warning/40 text-warning hover:bg-warning/20">
+        <Link to="/settings?tab=plan">Upgrade plan</Link>
+      </Button>
     </div>
   );
 }
@@ -134,9 +139,14 @@ export default function Dashboard() {
 
       {/* Must change password notice */}
       {user?.mustChangePassword && (
-        <div className="flex items-center gap-2 p-3 rounded-lg text-sm bg-destructive/10 text-destructive">
+        <div className="flex flex-wrap items-center gap-3 p-3 rounded-lg text-sm bg-destructive/10 text-destructive">
           <AlertTriangle className="h-4 w-4 shrink-0" />
-          You are required to change your password. Go to Settings → Security.
+          <span className="flex-1 min-w-[200px]">
+            You are required to change your password.
+          </span>
+          <Button asChild size="sm" variant="outline" className="border-destructive/40 text-destructive hover:bg-destructive/20">
+            <Link to="/settings?tab=security">Change password</Link>
+          </Button>
         </div>
       )}
 
