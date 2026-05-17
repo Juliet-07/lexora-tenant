@@ -139,9 +139,14 @@ export default function Dashboard() {
 
       {/* Must change password notice */}
       {user?.mustChangePassword && (
-        <div className="flex items-center gap-2 p-3 rounded-lg text-sm bg-destructive/10 text-destructive">
+        <div className="flex flex-wrap items-center gap-3 p-3 rounded-lg text-sm bg-destructive/10 text-destructive">
           <AlertTriangle className="h-4 w-4 shrink-0" />
-          You are required to change your password. Go to Settings → Security.
+          <span className="flex-1 min-w-[200px]">
+            You are required to change your password.
+          </span>
+          <Button asChild size="sm" variant="outline" className="border-destructive/40 text-destructive hover:bg-destructive/20">
+            <Link to="/settings?tab=security">Change password</Link>
+          </Button>
         </div>
       )}
 
