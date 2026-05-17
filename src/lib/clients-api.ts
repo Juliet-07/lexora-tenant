@@ -103,6 +103,7 @@ export const fetchClients = async (): Promise<ApiClient[]> => {
 
 export const fetchClientStats = async (): Promise<ClientStats> => {
   const res = await api.get("/tenant/client-stats");
+  console.log(res.data.data);
   return res.data.data;
 };
 
@@ -124,6 +125,9 @@ export async function fetchClientById(id: string): Promise<ApiClientDetail> {
   };
 }
 
+export async function reactivateClient(clientId: string): Promise<void> {
+  await api.patch(`/tenant/${clientId}/reactivate`);
+}
 // ─── Display helpers ────────────────────────────────────────
 export const displayName = (c: ApiClient): string => {
   if (c.businessName) return c.businessName;

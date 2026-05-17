@@ -49,6 +49,7 @@ import {
   displayName,
   prettyLabel,
   toneFor,
+  reactivateClient,
 } from "@/lib/clients-api";
 
 export default function Clients() {
@@ -102,10 +103,13 @@ export default function Clients() {
   }, [clients, search, statusFilter, typeFilter]);
 
   const total = stats?.total ?? clients.length;
-  const countOf = (arr: { _id: string; count: number }[] | undefined, id: string) =>
-    arr?.find((x) => x._id?.toLowerCase() === id)?.count ?? 0;
+  const countOf = (
+    arr: { _id: string; count: number }[] | undefined,
+    id: string,
+  ) => arr?.find((x) => x._id?.toLowerCase() === id)?.count ?? 0;
 
-  const activeCount = countOf(stats?.byStatus, "active") + countOf(stats?.byStatus, "approved");
+  const activeCount =
+    countOf(stats?.byStatus, "active") + countOf(stats?.byStatus, "approved");
   const pendingCount =
     countOf(stats?.byStatus, "pending") +
     countOf(stats?.byStatus, "submitted") +
@@ -147,6 +151,23 @@ export default function Clients() {
     },
   ];
 
+  const handleReactivate = async (clientId: string) => {
+    try {
+      await reactivateClient(clientId);
+      toast({
+        title: "Client reactivated",
+        description: "They can now log in and redo onboarding.",
+      });
+      loadAll(true);
+    } catch (err: any) {
+      toast({
+        title: "Reactivation failed",
+        description: err?.response?.data?.message ?? "Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -177,7 +198,10 @@ export default function Clients() {
       {/* Stat cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {statCards.map((s) => (
-          <Card key={s.title} className="overflow-hidden hover:shadow-md transition-shadow">
+          <Card
+            key={s.title}
+            className="overflow-hidden hover:shadow-md transition-shadow"
+          >
             <CardContent className="p-5 relative">
               <div className="flex items-start justify-between">
                 <div>
@@ -229,7 +253,7 @@ export default function Clients() {
       </div>
 
       {/* Recent clients */}
-      {stats?.recentClients && stats.recentClients.length > 0 && (
+      {/* {stats?.recentClients && stats.recentClients.length > 0 && (
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
@@ -248,10 +272,16 @@ export default function Clients() {
                     {(displayName(c)[0] ?? "?").toUpperCase()}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{displayName(c)}</p>
-                    <p className="text-xs text-muted-foreground truncate">{c.email}</p>
+                    <p className="text-sm font-medium truncate">
+                      {displayName(c)}
+                    </p>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {c.email}
+                    </p>
                   </div>
-                  <Badge className={`text-[10px] capitalize border ${toneFor(c.status)}`}>
+                  <Badge
+                    className={`text-[10px] capitalize border ${toneFor(c.status)}`}
+                  >
                     {prettyLabel(c.status)}
                   </Badge>
                 </Link>
@@ -259,7 +289,7 @@ export default function Clients() {
             </div>
           </CardContent>
         </Card>
-      )}
+      )} */}
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3">
@@ -337,7 +367,10 @@ export default function Clients() {
                         ) : (
                           <UserIcon className="h-4 w-4 text-muted-foreground shrink-0" />
                         )}
-                        <Link to={`/clients/${c._id}`} className="hover:text-primary">
+                        <Link
+                          to={`/clients/${c._id}`}
+                          className="hover:text-primary"
+                        >
                           {displayName(c)}
                         </Link>
                       </div>
@@ -349,12 +382,16 @@ export default function Clients() {
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <Badge className={`text-xs capitalize border ${toneFor(c.status)}`}>
+                      <Badge
+                        className={`text-xs capitalize border ${toneFor(c.status)}`}
+                      >
                         {prettyLabel(c.status)}
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <Badge className={`text-xs capitalize border ${toneFor(c.kycStatus)}`}>
+                      <Badge
+                        className={`text-xs capitalize border ${toneFor(c.kycStatus)}`}
+                      >
                         {prettyLabel(c.kycStatus)}
                       </Badge>
                     </TableCell>
@@ -374,6 +411,15 @@ export default function Clients() {
                               <Eye className="h-4 w-4 mr-2" /> View Profile
                             </Link>
                           </DropdownMenuItem>
+                          {(c.status ?? "").toLowerCase() === "inactive" && (
+                            <DropdownMenuItem
+                              onClick={() => handleReactivate(c._id)}
+                              className="text-emerald-600 focus:text-emerald-600"
+                            >
+                              <RefreshCw className="h-4 w-4 mr-2" /> Reactivate
+                              Client
+                            </DropdownMenuItem>
+                          )}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>
