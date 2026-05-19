@@ -21,7 +21,7 @@ import Reports from "./pages/Reports";
 import RiskEngine from "./pages/aml/RiskEngine";
 import TransactionMonitoring from "./pages/aml/TransactionMonitoring";
 import STR from "./pages/aml/STR";
-import Settings from "./pages/Settings";
+import Settings from "./pages/settings/Index";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
