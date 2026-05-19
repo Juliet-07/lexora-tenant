@@ -79,6 +79,12 @@ const NAV_BY_MODULE: Record<
     },
     { title: "SAR / STR", url: "/aml/sar", icon: FileWarning, adminOnly: true },
     {
+      title: "Watchlist Management",
+      url: "/aml/watchlist",
+      icon: ScanSearch,
+      adminOnly: true,
+    },
+    {
       title: "Compliance Alerts",
       url: "/compliance",
       icon: ShieldCheck,
