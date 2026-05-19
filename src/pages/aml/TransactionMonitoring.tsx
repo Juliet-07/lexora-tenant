@@ -287,82 +287,119 @@ export default function TransactionMonitoring() {
         </TabsContent>
 
         {/* Scenario Builder */}
-        <TabsContent value="scenarios" className="space-y-4">
+        <TabsContent value="wire" className="space-y-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <Card><CardContent className="p-4">
+              <p className="text-xs text-muted-foreground">Wires (24h)</p>
+              <p className="text-3xl font-bold text-primary">147</p>
+              <p className="text-xs text-success mt-1">USD 4.2M total</p>
+            </CardContent></Card>
+            <Card><CardContent className="p-4">
+              <p className="text-xs text-muted-foreground">Cross-Border</p>
+              <p className="text-3xl font-bold text-warning">38</p>
+              <p className="text-xs text-muted-foreground mt-1">26% of volume</p>
+            </CardContent></Card>
+            <Card><CardContent className="p-4">
+              <p className="text-xs text-muted-foreground">Flagged Wires</p>
+              <p className="text-3xl font-bold text-destructive">9</p>
+              <p className="text-xs text-muted-foreground mt-1">Awaiting review</p>
+            </CardContent></Card>
+            <Card><CardContent className="p-4">
+              <p className="text-xs text-muted-foreground">Blocked</p>
+              <p className="text-3xl font-bold text-destructive">2</p>
+              <p className="text-xs text-muted-foreground mt-1">OFAC / sanctions</p>
+            </CardContent></Card>
+          </div>
+
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Create Custom Scenario</CardTitle>
+              <CardTitle className="text-base">Recent Wire Transfers</CardTitle>
               <p className="text-xs text-muted-foreground">
-                Chain conditions to detect multi-step suspicious behavior (e.g., smurfing, layering).
+                SWIFT/SEPA monitoring with originator, beneficiary and corridor risk scoring.
               </p>
             </CardHeader>
             <CardContent>
-              <div className="grid gap-4">
-                <div>
-                  <Label>Scenario Name *</Label>
-                  <Input
-                    placeholder="e.g., Structuring under reporting threshold"
-                    value={scenarioForm.name}
-                    onChange={(e) => setScenarioForm({ ...scenarioForm, name: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <Label>Conditions (one step per line) *</Label>
-                  <Textarea
-                    rows={5}
-                    placeholder={"Multiple deposits < USD 10K within 24h\nSame beneficiary\nAggregate > USD 50K"}
-                    value={scenarioForm.stepsText}
-                    onChange={(e) => setScenarioForm({ ...scenarioForm, stepsText: e.target.value })}
-                  />
-                </div>
-                <div className="flex justify-end">
-                  <Button onClick={createScenario} className="gap-1">
-                    <Plus className="h-4 w-4" /> Add Scenario
-                  </Button>
-                </div>
-              </div>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Ref</TableHead>
+                    <TableHead>Time</TableHead>
+                    <TableHead>Originator</TableHead>
+                    <TableHead>Beneficiary</TableHead>
+                    <TableHead>Corridor</TableHead>
+                    <TableHead>Amount</TableHead>
+                    <TableHead>Risk</TableHead>
+                    <TableHead>Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {[
+                    { ref: "WT-8821", time: "14:42", from: "Tendai Moyo", to: "Apex Holdings", corridor: "ZW → AE", amt: 42000, risk: "High", status: "Held" },
+                    { ref: "WT-8820", time: "13:11", from: "Nhaka Enterprises", to: "Global Tech LLC", corridor: "ZW → US", amt: 18500, risk: "Medium", status: "Cleared" },
+                    { ref: "WT-8819", time: "11:58", from: "Chipo Trading", to: "Beijing Imports", corridor: "ZW → CN", amt: 76000, risk: "High", status: "Under Review" },
+                    { ref: "WT-8818", time: "10:22", from: "Rudo Chihota", to: "Family Trust UK", corridor: "ZW → GB", amt: 6200, risk: "Low", status: "Cleared" },
+                    { ref: "WT-8817", time: "09:04", from: "Tapiwa Mpofu", to: "Offshore Capital", corridor: "ZW → KY", amt: 95000, risk: "Critical", status: "Blocked" },
+                  ].map((w) => (
+                    <TableRow key={w.ref}>
+                      <TableCell className="font-mono text-xs">{w.ref}</TableCell>
+                      <TableCell className="text-xs">{w.time}</TableCell>
+                      <TableCell className="font-medium">{w.from}</TableCell>
+                      <TableCell>{w.to}</TableCell>
+                      <TableCell className="text-xs">{w.corridor}</TableCell>
+                      <TableCell className="font-semibold">USD {w.amt.toLocaleString()}</TableCell>
+                      <TableCell>
+                        {priorityBadge(w.risk as Alert["severity"])}
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant="outline"
+                          className={
+                            w.status === "Blocked" || w.status === "Held"
+                              ? "bg-destructive/15 text-destructive border-destructive/30"
+                              : w.status === "Under Review"
+                                ? "bg-warning/15 text-warning border-warning/30"
+                                : "bg-success/15 text-success border-success/30"
+                          }
+                        >
+                          {w.status}
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader><CardTitle className="text-base">Active Scenarios</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-base">High-Risk Corridors</CardTitle></CardHeader>
             <CardContent className="space-y-3">
-              {scenarios.map((s) => (
-                <div key={s.id} className="border rounded-lg p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <div>
-                      <p className="font-semibold text-sm">{s.name}</p>
-                      <p className="text-xs text-muted-foreground">{s.id}</p>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Badge
-                        variant="outline"
-                        className={s.active ? "bg-success/15 text-success border-success/30" : "bg-muted"}
-                      >
-                        {s.active ? "Active" : "Inactive"}
-                      </Badge>
-                      <Button variant="ghost" size="icon" onClick={() => toggleScenario(s.id)}>
-                        {s.active ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
-                      </Button>
-                      <Button variant="ghost" size="icon" onClick={() => deleteScenario(s.id)}>
-                        <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                      </Button>
-                    </div>
+              {[
+                { name: "ZW → AE (UAE)", pct: 82, vol: "USD 312K" },
+                { name: "ZW → CN (China)", pct: 71, vol: "USD 280K" },
+                { name: "ZW → KY (Cayman)", pct: 95, vol: "USD 198K" },
+                { name: "ZW → GB (UK)", pct: 34, vol: "USD 540K" },
+              ].map((c) => (
+                <div key={c.name} className="space-y-1">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-medium">{c.name}</span>
+                    <span className="text-muted-foreground">{c.vol}</span>
                   </div>
-                  <div className="space-y-1.5 ml-2">
-                    {s.steps.map((step, i) => (
-                      <div key={i} className="flex items-start gap-2 text-xs">
-                        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-primary font-semibold shrink-0">
-                          {i + 1}
-                        </span>
-                        <span className="text-muted-foreground">{step}</span>
-                      </div>
-                    ))}
+                  <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                    <div
+                      className="h-full"
+                      style={{
+                        width: `${c.pct}%`,
+                        background: c.pct > 70 ? "hsl(var(--destructive))" : c.pct > 40 ? "hsl(var(--warning))" : "hsl(var(--success))",
+                      }}
+                    />
                   </div>
                 </div>
               ))}
             </CardContent>
           </Card>
         </TabsContent>
+
 
         <TabsContent value="profiling" className="space-y-4">
           <Card>
