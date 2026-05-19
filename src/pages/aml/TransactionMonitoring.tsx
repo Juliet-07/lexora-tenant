@@ -101,34 +101,7 @@ function priorityBadge(p: string) {
 export default function TransactionMonitoring() {
   const [tab, setTab] = useState("overview");
   const [rules, setRules] = useState(initialRules);
-  const [scenarios, setScenarios] = useState(initialScenarios);
-
-  const [scenarioForm, setScenarioForm] = useState({
-    name: "",
-    stepsText: "",
-  });
-
-  const createScenario = () => {
-    if (!scenarioForm.name || !scenarioForm.stepsText.trim()) {
-      toast.error("Provide a scenario name and at least one step");
-      return;
-    }
-    const steps = scenarioForm.stepsText
-      .split("\n")
-      .map((s) => s.trim())
-      .filter(Boolean);
-    setScenarios([
-      ...scenarios,
-      {
-        id: `S${String(scenarios.length + 1).padStart(3, "0")}`,
-        name: scenarioForm.name,
-        steps,
-        active: true,
-      },
-    ]);
-    setScenarioForm({ name: "", stepsText: "" });
-    toast.success("Scenario created");
-  };
+  const scenarios = initialScenarios;
 
   const toggleRule = (id: string) => {
     setRules(rules.map((r) => (r.id === id ? { ...r, active: !r.active } : r)));
@@ -139,22 +112,15 @@ export default function TransactionMonitoring() {
     toast.success("Rule deleted");
   };
 
-  const toggleScenario = (id: string) =>
-    setScenarios(scenarios.map((s) => (s.id === id ? { ...s, active: !s.active } : s)));
-
-  const deleteScenario = (id: string) => {
-    setScenarios(scenarios.filter((s) => s.id !== id));
-    toast.success("Scenario removed");
-  };
-
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Transaction Monitoring</h1>
         <p className="text-sm text-muted-foreground">
-          Real-time surveillance, rules engine, scenario analysis and alerts
+          Real-time surveillance, rules engine, wire transfer monitoring and alerts
         </p>
       </div>
+
 
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList>
