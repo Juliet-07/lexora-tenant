@@ -177,6 +177,16 @@ function AppRoutes() {
           }
         />
       )}
+      {isAdmin && (
+        <Route
+          path="/aml/watchlist"
+          element={
+            <AppLayout>
+              <WatchlistManagement />
+            </AppLayout>
+          }
+        />
+      )}
       <Route
         path="/aml/*"
         element={
