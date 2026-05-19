@@ -41,8 +41,21 @@ import {
   LineChart,
   Line,
 } from "recharts";
-import { RefreshCw, Eye, Plus, Pause, Play, Trash2, Settings2 } from "lucide-react";
+import { RefreshCw, Eye, Plus, Pause, Play, Trash2, Settings2, Workflow } from "lucide-react";
 import { toast } from "sonner";
+
+interface Scenario {
+  id: string;
+  name: string;
+  steps: string[];
+  active: boolean;
+}
+
+const initialScenarios: Scenario[] = [
+  { id: "S001", name: "Smurfing detection", steps: ["Multiple deposits < USD 10K within 24h", "Same beneficiary", "Aggregate > USD 50K"], active: true },
+  { id: "S002", name: "Layering pattern", steps: ["Funds received from foreign account", "Multiple internal transfers within 48h", "Outbound wire to high-risk jurisdiction"], active: true },
+  { id: "S003", name: "Dormant account reactivation", steps: ["Account dormant > 180 days", "Sudden large inbound", "Quick outbound transfer"], active: false },
+];
 
 interface CustomerRisk {
   id: string;
@@ -166,6 +179,30 @@ export default function RiskEngine() {
     appliesWhen: "",
     description: "",
   });
+  const [scenarios, setScenarios] = useState<Scenario[]>(initialScenarios);
+  const [scenarioForm, setScenarioForm] = useState({ name: "", stepsText: "" });
+
+  const createScenario = () => {
+    if (!scenarioForm.name || !scenarioForm.stepsText.trim()) {
+      toast.error("Provide a scenario name and at least one step");
+      return;
+    }
+    const steps = scenarioForm.stepsText.split("\n").map((s) => s.trim()).filter(Boolean);
+    setScenarios([
+      ...scenarios,
+      { id: `S${String(scenarios.length + 1).padStart(3, "0")}`, name: scenarioForm.name, steps, active: true },
+    ]);
+    setScenarioForm({ name: "", stepsText: "" });
+    toast.success("Scenario created");
+  };
+
+  const toggleScenario = (id: string) =>
+    setScenarios(scenarios.map((s) => (s.id === id ? { ...s, active: !s.active } : s)));
+
+  const deleteScenario = (id: string) => {
+    setScenarios(scenarios.filter((s) => s.id !== id));
+    toast.success("Scenario removed");
+  };
 
   const high = customerRisks.filter((c) => c.level === "HIGH").length;
   const medium = customerRisks.filter((c) => c.level === "MEDIUM").length;
@@ -263,6 +300,7 @@ export default function RiskEngine() {
         <TabsList>
           <TabsTrigger value="insights">Risk Insights</TabsTrigger>
           <TabsTrigger value="rules">Risk Rules</TabsTrigger>
+          <TabsTrigger value="scenarios">Scenario Builder</TabsTrigger>
           <TabsTrigger value="customer">Customer Risk Model</TabsTrigger>
           <TabsTrigger value="transaction">Transaction Risk Model</TabsTrigger>
         </TabsList>
@@ -462,6 +500,87 @@ export default function RiskEngine() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* ── Scenario Builder ──────────────────────────── */}
+        <TabsContent value="scenarios" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Workflow className="h-4 w-4 text-primary" /> Create Custom Scenario
+              </CardTitle>
+              <p className="text-xs text-muted-foreground">
+                Chain conditions to detect multi-step suspicious behaviour (e.g., smurfing, layering).
+              </p>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-4">
+                <div>
+                  <Label>Scenario Name *</Label>
+                  <Input
+                    placeholder="e.g., Structuring under reporting threshold"
+                    value={scenarioForm.name}
+                    onChange={(e) => setScenarioForm({ ...scenarioForm, name: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label>Conditions (one step per line) *</Label>
+                  <Textarea
+                    rows={5}
+                    placeholder={"Multiple deposits < USD 10K within 24h\nSame beneficiary\nAggregate > USD 50K"}
+                    value={scenarioForm.stepsText}
+                    onChange={(e) => setScenarioForm({ ...scenarioForm, stepsText: e.target.value })}
+                  />
+                </div>
+                <div className="flex justify-end">
+                  <Button onClick={createScenario} className="gap-1">
+                    <Plus className="h-4 w-4" /> Add Scenario
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader><CardTitle className="text-base">Active Scenarios</CardTitle></CardHeader>
+            <CardContent className="space-y-3">
+              {scenarios.map((s) => (
+                <div key={s.id} className="border rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <div>
+                      <p className="font-semibold text-sm">{s.name}</p>
+                      <p className="text-xs text-muted-foreground">{s.id}</p>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Badge
+                        variant="outline"
+                        className={s.active ? "bg-success/15 text-success border-success/30" : "bg-muted"}
+                      >
+                        {s.active ? "Active" : "Inactive"}
+                      </Badge>
+                      <Button variant="ghost" size="icon" onClick={() => toggleScenario(s.id)}>
+                        {s.active ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+                      </Button>
+                      <Button variant="ghost" size="icon" onClick={() => deleteScenario(s.id)}>
+                        <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="space-y-1.5 ml-2">
+                    {s.steps.map((step, i) => (
+                      <div key={i} className="flex items-start gap-2 text-xs">
+                        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-primary font-semibold shrink-0">
+                          {i + 1}
+                        </span>
+                        <span className="text-muted-foreground">{step}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
 
         {/* ── Customer Risk ─────────────────────────────── */}
         <TabsContent value="customer">
