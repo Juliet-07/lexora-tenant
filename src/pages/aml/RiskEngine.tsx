@@ -300,6 +300,7 @@ export default function RiskEngine() {
         <TabsList>
           <TabsTrigger value="insights">Risk Insights</TabsTrigger>
           <TabsTrigger value="rules">Risk Rules</TabsTrigger>
+          <TabsTrigger value="scenarios">Scenario Builder</TabsTrigger>
           <TabsTrigger value="customer">Customer Risk Model</TabsTrigger>
           <TabsTrigger value="transaction">Transaction Risk Model</TabsTrigger>
         </TabsList>
