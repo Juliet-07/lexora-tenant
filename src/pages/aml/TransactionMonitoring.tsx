@@ -160,7 +160,7 @@ export default function TransactionMonitoring() {
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="rules">Rules Engine</TabsTrigger>
-          <TabsTrigger value="scenarios">Scenario Builder</TabsTrigger>
+          <TabsTrigger value="wire">Wire Transfer Monitoring</TabsTrigger>
           <TabsTrigger value="profiling">Behavioral Profiling</TabsTrigger>
           <TabsTrigger value="alerts">Real-Time Alerts</TabsTrigger>
         </TabsList>
