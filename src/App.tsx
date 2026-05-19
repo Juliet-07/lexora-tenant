@@ -21,6 +21,7 @@ import Reports from "./pages/Reports";
 import RiskEngine from "./pages/aml/RiskEngine";
 import TransactionMonitoring from "./pages/aml/TransactionMonitoring";
 import STR from "./pages/aml/STR";
+import WatchlistManagement from "./pages/aml/WatchlistManagement";
 import Settings from "./pages/settings/Index";
 import NotFound from "./pages/NotFound";
 
