@@ -179,6 +179,30 @@ export default function RiskEngine() {
     appliesWhen: "",
     description: "",
   });
+  const [scenarios, setScenarios] = useState<Scenario[]>(initialScenarios);
+  const [scenarioForm, setScenarioForm] = useState({ name: "", stepsText: "" });
+
+  const createScenario = () => {
+    if (!scenarioForm.name || !scenarioForm.stepsText.trim()) {
+      toast.error("Provide a scenario name and at least one step");
+      return;
+    }
+    const steps = scenarioForm.stepsText.split("\n").map((s) => s.trim()).filter(Boolean);
+    setScenarios([
+      ...scenarios,
+      { id: `S${String(scenarios.length + 1).padStart(3, "0")}`, name: scenarioForm.name, steps, active: true },
+    ]);
+    setScenarioForm({ name: "", stepsText: "" });
+    toast.success("Scenario created");
+  };
+
+  const toggleScenario = (id: string) =>
+    setScenarios(scenarios.map((s) => (s.id === id ? { ...s, active: !s.active } : s)));
+
+  const deleteScenario = (id: string) => {
+    setScenarios(scenarios.filter((s) => s.id !== id));
+    toast.success("Scenario removed");
+  };
 
   const high = customerRisks.filter((c) => c.level === "HIGH").length;
   const medium = customerRisks.filter((c) => c.level === "MEDIUM").length;
