@@ -41,8 +41,21 @@ import {
   LineChart,
   Line,
 } from "recharts";
-import { RefreshCw, Eye, Plus, Pause, Play, Trash2, Settings2 } from "lucide-react";
+import { RefreshCw, Eye, Plus, Pause, Play, Trash2, Settings2, Workflow } from "lucide-react";
 import { toast } from "sonner";
+
+interface Scenario {
+  id: string;
+  name: string;
+  steps: string[];
+  active: boolean;
+}
+
+const initialScenarios: Scenario[] = [
+  { id: "S001", name: "Smurfing detection", steps: ["Multiple deposits < USD 10K within 24h", "Same beneficiary", "Aggregate > USD 50K"], active: true },
+  { id: "S002", name: "Layering pattern", steps: ["Funds received from foreign account", "Multiple internal transfers within 48h", "Outbound wire to high-risk jurisdiction"], active: true },
+  { id: "S003", name: "Dormant account reactivation", steps: ["Account dormant > 180 days", "Sudden large inbound", "Quick outbound transfer"], active: false },
+];
 
 interface CustomerRisk {
   id: string;
