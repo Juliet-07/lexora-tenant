@@ -18,6 +18,7 @@ import Team from "./pages/Team";
 import Billing from "./pages/Billing";
 import Compliance from "./pages/Compliance";
 import Reports from "./pages/Reports";
+import AmlReports from "./pages/aml/Reports";
 import RiskEngine from "./pages/aml/RiskEngine";
 import TransactionMonitoring from "./pages/aml/TransactionMonitoring";
 import STR from "./pages/aml/STR";
@@ -142,6 +143,16 @@ function AppRoutes() {
           element={
             <AppLayout>
               <Reports />
+            </AppLayout>
+          }
+        />
+      )}
+      {isAdmin && (
+        <Route
+          path="/aml/reports"
+          element={
+            <AppLayout>
+              <AmlReports />
             </AppLayout>
           }
         />

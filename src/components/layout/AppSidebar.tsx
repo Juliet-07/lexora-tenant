@@ -91,8 +91,8 @@ const NAV_BY_MODULE: Record<
       adminOnly: true,
     },
     {
-      title: "Regulatory Reports",
-      url: "/reports",
+      title: "Reporting & Analytics",
+      url: "/aml/reports",
       icon: BarChart3,
       adminOnly: true,
     },
