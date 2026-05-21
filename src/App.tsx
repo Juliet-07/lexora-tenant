@@ -147,6 +147,16 @@ function AppRoutes() {
           }
         />
       )}
+      {isAdmin && (
+        <Route
+          path="/aml/reports"
+          element={
+            <AppLayout>
+              <AmlReports />
+            </AppLayout>
+          }
+        />
+      )}
       {/* AML/KYC module routes */}
       {isAdmin && (
         <Route
