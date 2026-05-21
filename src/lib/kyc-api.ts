@@ -605,3 +605,154 @@ export const adHocScreen = async (dto: {
   const res = await api.post("/kyc/watchlist/screen", dto);
   return res.data?.data ?? res.data;
 };
+
+// ─────────────────────────────────────────────────────────────
+// REPORTS & ANALYTICS — Types
+// ─────────────────────────────────────────────────────────────
+
+export interface OperationalReport {
+  period: string;
+  summary: {
+    alertsGenerated: { value: number; change: number | null };
+    alertsResolved: { value: number; change: number | null };
+    casesCreated: { value: number; change: number | null };
+    casesClosed: { value: number; change: number | null };
+    strsFiled: { value: number; change: number | null };
+    avgResolutionDays: { value: number | null; change: number | null };
+  };
+  dailyAlertTrend: { date: string; label: string; count: number }[];
+  generatedAt: string;
+}
+
+export interface RiskAnalyticsReport {
+  summary: {
+    totalClients: number;
+    critical: number;
+    high: number;
+    medium: number;
+    low: number;
+    unrated: number;
+  };
+  riskDistribution: { _id: string; count: number }[];
+  kycStatusBreakdown: { _id: string; count: number }[];
+  verificationOutcomes: {
+    _id: string;
+    flagged: number;
+    passed: number;
+    failed: number;
+  }[];
+  topRiskFactors: { _id: string; count: number }[];
+  highRiskClients: {
+    clientId: string;
+    fullName: string;
+    email: string;
+    riskLevel: string;
+    kycStatus: string;
+  }[];
+  riskTrend: {
+    _id: { year: number; month: number };
+    avgScore: number;
+    count: number;
+  }[];
+  recentlyFlagged: {
+    clientId: string;
+    fullName: string;
+    email: string;
+    riskLevel: string;
+    verificationCompletedAt: string;
+  }[];
+  generatedAt: string;
+}
+
+export interface RegulatoryDashboard {
+  strSummary: {
+    draft: number;
+    pendingReview: number;
+    submitted: number;
+    acknowledged: number;
+    total: number;
+  };
+  complianceHealth: {
+    overdueReviews: number;
+    sanctionHits: number;
+    pepHits: number;
+    openAlerts: number;
+  };
+  overdueReviews: {
+    clientId: string;
+    fullName: string;
+    email: string;
+    riskLevel: string;
+    kycCompletedAt: string;
+  }[];
+  recentStrs: any[];
+  generatedAt: string;
+}
+
+export interface TrendAnalysis {
+  clientGrowth: { _id: { year: number; month: number }; count: number }[];
+  onboardingFunnel: { _id: string; count: number }[];
+  alertTrend: {
+    _id: { year: number; month: number };
+    total: number;
+    resolved: number;
+  }[];
+  txVolumeTrend: {
+    _id: { year: number; month: number };
+    count: number;
+    totalAmount: number;
+    flagged: number;
+  }[];
+  strTrend: {
+    _id: { year: number; month: number };
+    total: number;
+    submitted: number;
+  }[];
+  generatedAt: string;
+}
+
+// ─────────────────────────────────────────────────────────────
+// REPORTS & ANALYTICS — API calls
+// ─────────────────────────────────────────────────────────────
+
+export const fetchOperationalReport = async (): Promise<OperationalReport> => {
+  const res = await api.get("/kyc/reports/operational");
+  return res.data?.data ?? res.data;
+};
+
+export const fetchRiskAnalyticsReport =
+  async (): Promise<RiskAnalyticsReport> => {
+    const res = await api.get("/kyc/reports/risk");
+    return res.data?.data ?? res.data;
+  };
+
+export const fetchRegulatoryDashboard =
+  async (): Promise<RegulatoryDashboard> => {
+    const res = await api.get("/kyc/reports/regulatory");
+    return res.data?.data ?? res.data;
+  };
+
+export const fetchTrendAnalysis = async (): Promise<TrendAnalysis> => {
+  const res = await api.get("/kyc/reports/trends");
+  return res.data?.data ?? res.data;
+};
+
+// Triggers CSV download directly in the browser
+export const exportReport = (
+  type: "operational" | "risk" | "regulatory" | "trends",
+): void => {
+  const token = localStorage.getItem("tenantToken");
+  const base = import.meta.env.VITE_REACT_APP_BASE_URL;
+  const filename = `lexora-${type}-report-${new Date().toISOString().split("T")[0]}.csv`;
+  fetch(`${base}/kyc/reports/export/${type}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+    .then((r) => r.blob())
+    .then((blob) => {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
+};

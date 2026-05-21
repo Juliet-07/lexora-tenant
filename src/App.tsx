@@ -16,8 +16,7 @@ import ClientProfile from "./pages/client/ClientProfile";
 import { ProjectsList, ProjectDetail } from "./pages/Projects";
 import Team from "./pages/Team";
 import Billing from "./pages/Billing";
-import Compliance from "./pages/Compliance";
-import Reports from "./pages/Reports";
+import Compliance from "./pages/aml/Compliance";
 import AmlReports from "./pages/aml/Reports";
 import RiskEngine from "./pages/aml/RiskEngine";
 import TransactionMonitoring from "./pages/aml/TransactionMonitoring";
@@ -129,20 +128,10 @@ function AppRoutes() {
       />
       {isAdmin && (
         <Route
-          path="/compliance"
+          path="/aml/compliance"
           element={
             <AppLayout>
               <Compliance />
-            </AppLayout>
-          }
-        />
-      )}
-      {isAdmin && (
-        <Route
-          path="/reports"
-          element={
-            <AppLayout>
-              <Reports />
             </AppLayout>
           }
         />

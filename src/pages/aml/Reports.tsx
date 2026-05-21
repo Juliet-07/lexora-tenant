@@ -1,614 +1,1101 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Progress } from "@/components/ui/progress";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
-  BarChart3,
-  Target,
-  ClipboardList,
-  LineChart as LineChartIcon,
-  Download,
-  TrendingUp,
-  TrendingDown,
-  ShieldCheck,
-  AlertTriangle,
-  ArrowUpRight,
-} from "lucide-react";
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import {
-  Bar,
   BarChart,
-  CartesianGrid,
-  Cell,
-  Legend,
-  Line,
+  Bar,
   LineChart,
-  Pie,
+  Line,
   PieChart,
-  ResponsiveContainer,
-  Tooltip,
+  Pie,
+  Cell,
   XAxis,
   YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Legend,
 } from "recharts";
+import {
+  Download,
+  RefreshCw,
+  TrendingUp,
+  TrendingDown,
+  BarChart3,
+  ShieldCheck,
+  ClipboardList,
+  Activity,
+  AlertTriangle,
+  Users,
+  FileText,
+  Clock,
+} from "lucide-react";
+import {
+  fetchOperationalReport,
+  fetchRiskAnalyticsReport,
+  fetchRegulatoryDashboard,
+  fetchTrendAnalysis,
+  exportReport,
+  type OperationalReport,
+  type RiskAnalyticsReport,
+  type RegulatoryDashboard,
+  type TrendAnalysis,
+} from "@/lib/kyc-api";
+import { prettyLabel, toneFor } from "@/lib/clients-api";
 
-// ---------- mock data (themed for Lexora, FIU-agnostic) ----------
-const alertTrend = Array.from({ length: 30 }).map((_, i) => ({
-  d: `D${i + 1}`,
-  v: 18 + Math.round(Math.sin(i / 3) * 6 + i * 0.6 + Math.random() * 5),
-}));
+// ─────────────────────────────────────────────────────────────
+// CONSTANTS
+// ─────────────────────────────────────────────────────────────
 
-const analysts = [
-  { name: "Ruvimbo Nyathi", handled: 45, closed: 38, avg: "2.8 days" },
-  { name: "Tapiwa Mpofu", handled: 42, closed: 35, avg: "3.1 days" },
-  { name: "Tendai Chikwanha", handled: 38, closed: 32, avg: "3.4 days" },
-  { name: "Chipo Mutasa", handled: 35, closed: 30, avg: "3.0 days" },
+const MONTHS = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
 ];
 
-const opsKpis = [
-  { label: "Alerts Generated", value: "145", delta: "+12%", up: true },
-  { label: "Alerts Resolved", value: "128", delta: "+8%", up: true },
-  { label: "Cases Created", value: "23", delta: "+15%", up: true },
-  { label: "Cases Closed", value: "18", delta: "+5%", up: true },
-  { label: "STRs Filed to FIU", value: "5", delta: "+2", up: true },
-  { label: "Avg Resolution Time", value: "3.2 days", delta: "-0.5 days", up: true },
-];
+const RISK_COLORS: Record<string, string> = {
+  critical: "#ef4444",
+  high: "#f97316",
+  medium: "#eab308",
+  low: "#22c55e",
+  unrated: "#94a3b8",
+};
 
-const riskDist = [
-  { name: "High Risk", value: 425, color: "hsl(var(--destructive))" },
-  { name: "Medium Risk", value: 280, color: "hsl(var(--warning))" },
-  { name: "Low Risk", value: 145, color: "hsl(var(--success))" },
-];
+const KYC_COLORS: Record<string, string> = {
+  approved: "#22c55e",
+  submitted: "#3b82f6",
+  in_progress: "#a855f7",
+  not_started: "#94a3b8",
+  rejected: "#ef4444",
+};
 
-const productRisk = [
-  { label: "Savings Accounts", score: 30, tone: "success" },
-  { label: "Wire Transfers", score: 65, tone: "warning" },
-  { label: "Cash Transactions", score: 85, tone: "destructive" },
-  { label: "Mobile Money", score: 55, tone: "warning" },
-  { label: "Cross-Border Payments", score: 78, tone: "destructive" },
-];
+const monthLabel = (m: { year: number; month: number }) =>
+  `${MONTHS[m.month - 1]} ${m.year}`;
 
-const heatmap = [
-  { region: "Harare", score: 75, customers: 285 },
-  { region: "Lagos", score: 68, customers: 142 },
-  { region: "Nairobi", score: 52, customers: 98 },
-  { region: "Accra", score: 45, customers: 76 },
-  { region: "Kigali", score: 58, customers: 64 },
-  { region: "Kampala", score: 42, customers: 52 },
-  { region: "Dar es Salaam", score: 70, customers: 87 },
-  { region: "Cape Town", score: 48, customers: 46 },
-];
+// ─────────────────────────────────────────────────────────────
+// STAT CARD — matches the style from other pages
+// ─────────────────────────────────────────────────────────────
 
-const heatTone = (s: number) =>
-  s >= 70
-    ? "bg-destructive/10 border-destructive/30"
-    : s >= 55
-    ? "bg-warning/10 border-warning/30"
-    : s >= 45
-    ? "bg-info/10 border-info/30"
-    : "bg-success/10 border-success/30";
-
-const compliance = [
-  { label: "KYC Compliance Rate", value: 98, target: 95 },
-  { label: "STR Filing Timeliness", value: 96, target: 90 },
-  { label: "Alert Response Time", value: 89, target: 85 },
-  { label: "Customer Risk Assessment", value: 92, target: 95 },
-];
-
-const trendVolume = ["May", "Jun", "Jul", "Aug", "Sep", "Oct"].map((m, i) => ({
-  m,
-  Cash: 120 + i * 8 + Math.round(Math.random() * 10),
-  Wire: 90 + i * 5 + Math.round(Math.random() * 10),
-  Mobile: 60 + i * 6 + Math.round(Math.random() * 10),
-}));
-
-const alertPatterns = [
-  { name: "Large Cash", v: 42 },
-  { name: "Structuring", v: 31 },
-  { name: "Round Amt", v: 24 },
-  { name: "Cross Border", v: 38 },
-  { name: "Unusual Time", v: 18 },
-  { name: "Rapid Txns", v: 27 },
-];
-
-const emerging = [
-  {
-    title: "Increase in round-amount cash deposits",
-    detail: "45% increase in last 30 days — potential structuring",
-    tone: "warning" as const,
-  },
-  {
-    title: "Surge in mobile money transfers to high-risk corridors",
-    detail: "Cross-border transfers to flagged jurisdictions up 38%",
-    tone: "destructive" as const,
-  },
-  {
-    title: "PEP exposure growth in onboarding pipeline",
-    detail: "12% more PEP-linked applicants vs prior quarter",
-    tone: "info" as const,
-  },
-];
-
-// ---------- small primitives ----------
-function Delta({ up, children }: { up: boolean; children: React.ReactNode }) {
-  const Icon = up ? TrendingUp : TrendingDown;
-  return (
-    <span
-      className={`inline-flex items-center gap-1 text-xs font-semibold ${
-        up ? "text-success" : "text-destructive"
-      }`}
-    >
-      <Icon className="h-3 w-3" />
-      {children}
-    </span>
-  );
-}
-
-function KpiCard({
+function StatCard({
   label,
   value,
-  delta,
-  up,
+  change,
+  sub,
+  icon: Icon,
+  color = "text-primary",
 }: {
   label: string;
-  value: string;
-  delta: string;
-  up: boolean;
+  value: string | number;
+  change?: number | null;
+  sub?: string;
+  icon?: any;
+  color?: string;
 }) {
   return (
-    <Card className="relative overflow-hidden border-border/60">
-      <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-primary to-secondary" />
-      <CardContent className="p-4">
-        <p className="text-xs text-muted-foreground">{label}</p>
-        <div className="mt-1 flex items-end justify-between gap-2">
-          <p className="text-2xl font-bold tracking-tight">{value}</p>
-          <Delta up={up}>{delta}</Delta>
+    <Card>
+      <CardContent className="p-5">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex-1 min-w-0">
+            <p className="text-xs text-muted-foreground">{label}</p>
+            <p className={`text-3xl font-bold mt-1 ${color}`}>{value}</p>
+            {change !== undefined && change !== null && (
+              <div className="flex items-center gap-1 mt-1">
+                {change >= 0 ? (
+                  <TrendingUp className="h-3 w-3 text-success" />
+                ) : (
+                  <TrendingDown className="h-3 w-3 text-destructive" />
+                )}
+                <span
+                  className={`text-xs font-medium ${change >= 0 ? "text-success" : "text-destructive"}`}
+                >
+                  {change >= 0 ? "+" : ""}
+                  {change}%
+                </span>
+              </div>
+            )}
+            {sub && <p className="text-xs text-muted-foreground mt-1">{sub}</p>}
+          </div>
+          {Icon && <Icon className={`h-6 w-6 opacity-40 shrink-0 ${color}`} />}
         </div>
       </CardContent>
     </Card>
   );
 }
 
-// ---------- tab panels ----------
-function OperationalReports({ range }: { range: string }) {
+// ─────────────────────────────────────────────────────────────
+// OPERATIONAL REPORTS TAB
+// ─────────────────────────────────────────────────────────────
+
+function OperationalTab() {
+  const { data, isLoading } = useQuery({
+    queryKey: ["reports-operational"],
+    queryFn: fetchOperationalReport,
+    staleTime: 60_000,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="space-y-4">
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Skeleton key={i} className="h-28 w-full" />
+          ))}
+        </div>
+        <Skeleton className="h-72 w-full" />
+      </div>
+    );
+  }
+
+  const s = data?.summary;
+
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-        {opsKpis.map((k) => (
-          <KpiCard key={k.label} {...k} />
+    <div className="space-y-4">
+      {/* Summary stats */}
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+        <StatCard
+          label="Alerts Generated"
+          value={s?.alertsGenerated.value ?? 0}
+          change={s?.alertsGenerated.change}
+          icon={AlertTriangle}
+          color="text-destructive"
+        />
+        <StatCard
+          label="Alerts Resolved"
+          value={s?.alertsResolved.value ?? 0}
+          change={s?.alertsResolved.change}
+          icon={ShieldCheck}
+          color="text-success"
+        />
+        <StatCard
+          label="Cases (STRs) Created"
+          value={s?.casesCreated.value ?? 0}
+          change={s?.casesCreated.change}
+          icon={FileText}
+          color="text-primary"
+        />
+        <StatCard
+          label="Cases Closed"
+          value={s?.casesClosed.value ?? 0}
+          icon={ClipboardList}
+          color="text-info"
+        />
+        <StatCard
+          label="STRs Filed to FIU"
+          value={s?.strsFiled.value ?? 0}
+          change={s?.strsFiled.change ?? undefined}
+          icon={FileText}
+          color="text-secondary"
+        />
+        <StatCard
+          label="Avg Resolution Time"
+          value={
+            s?.avgResolutionDays.value != null
+              ? `${s.avgResolutionDays.value} days`
+              : "—"
+          }
+          icon={Clock}
+          color="text-warning"
+        />
+      </div>
+
+      {/* Daily alert trend — bar chart */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base">
+              Alert Activity Trend (Last 30 Days)
+            </CardTitle>
+            <Badge variant="outline" className="text-xs">
+              Live
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {(data?.dailyAlertTrend ?? []).length === 0 ? (
+            <div className="h-56 flex items-center justify-center text-sm text-muted-foreground">
+              No alert data for this period
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart data={data?.dailyAlertTrend ?? []} barSize={16}>
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  stroke="#e2e8f0"
+                  vertical={false}
+                />
+                <XAxis dataKey="label" tick={{ fontSize: 10 }} interval={4} />
+                <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
+                <Tooltip
+                  cursor={{ fill: "hsl(var(--muted))" }}
+                  content={({ active, payload, label }) => {
+                    if (!active || !payload?.length) return null;
+                    return (
+                      <div className="rounded-lg border bg-background p-2 text-xs shadow-md">
+                        <p className="font-medium">{label}</p>
+                        <p className="text-muted-foreground">
+                          {payload[0]?.payload?.date}
+                        </p>
+                        <p className="text-primary font-semibold">
+                          {payload[0]?.value} alerts
+                        </p>
+                      </div>
+                    );
+                  }}
+                />
+                <Bar
+                  dataKey="count"
+                  radius={[3, 3, 0, 0]}
+                  fill="url(#barGradient)"
+                />
+                <defs>
+                  <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop
+                      offset="0%"
+                      stopColor="hsl(var(--primary))"
+                      stopOpacity={0.9}
+                    />
+                    <stop
+                      offset="100%"
+                      stopColor="hsl(var(--secondary))"
+                      stopOpacity={0.6}
+                    />
+                  </linearGradient>
+                </defs>
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// RISK ANALYTICS TAB
+// ─────────────────────────────────────────────────────────────
+
+function RiskAnalyticsTab() {
+  const { data, isLoading } = useQuery({
+    queryKey: ["reports-risk"],
+    queryFn: fetchRiskAnalyticsReport,
+    staleTime: 60_000,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="space-y-4">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <Skeleton key={i} className="h-24 w-full" />
+          ))}
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <Skeleton className="h-64 w-full" />
+          <Skeleton className="h-64 w-full" />
+        </div>
+      </div>
+    );
+  }
+
+  const s = data?.summary;
+  const total = s?.totalClients ?? 0;
+  const pieData = [
+    { name: "Critical", value: s?.critical ?? 0, color: RISK_COLORS.critical },
+    { name: "High", value: s?.high ?? 0, color: RISK_COLORS.high },
+    { name: "Medium", value: s?.medium ?? 0, color: RISK_COLORS.medium },
+    { name: "Low", value: s?.low ?? 0, color: RISK_COLORS.low },
+    { name: "Unrated", value: s?.unrated ?? 0, color: RISK_COLORS.unrated },
+  ].filter((d) => d.value > 0);
+
+  const kycPie = (data?.kycStatusBreakdown ?? []).map((k) => ({
+    name: prettyLabel(k._id),
+    value: k.count,
+    color: KYC_COLORS[k._id] ?? "#94a3b8",
+  }));
+
+  return (
+    <div className="space-y-4">
+      {/* Summary row */}
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+        {[
+          {
+            label: "Critical",
+            value: s?.critical ?? 0,
+            color: "text-destructive",
+          },
+          { label: "High", value: s?.high ?? 0, color: "text-warning" },
+          { label: "Medium", value: s?.medium ?? 0, color: "text-yellow-500" },
+          { label: "Low", value: s?.low ?? 0, color: "text-success" },
+          {
+            label: "Unrated",
+            value: s?.unrated ?? 0,
+            color: "text-muted-foreground",
+          },
+        ].map(({ label, value, color }) => (
+          <Card key={label}>
+            <CardContent className="p-4">
+              <p className="text-xs text-muted-foreground">{label} Risk</p>
+              <p className={`text-3xl font-bold ${color}`}>{value}</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {total > 0
+                  ? `${Math.round((value / total) * 100)}% of total`
+                  : "—"}
+              </p>
+            </CardContent>
+          </Card>
         ))}
       </div>
 
-      <Card>
-        <CardHeader className="pb-2 flex flex-row items-center justify-between">
-          <CardTitle className="text-base">Alert Activity Trend ({range})</CardTitle>
-          <Badge variant="outline" className="text-xs">Live</Badge>
-        </CardHeader>
-        <CardContent>
-          <ResponsiveContainer width="100%" height={240}>
-            <BarChart data={alertTrend}>
-              <defs>
-                <linearGradient id="barG" x1="0" x2="0" y1="0" y2="1">
-                  <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.95} />
-                  <stop offset="100%" stopColor="hsl(var(--secondary))" stopOpacity={0.8} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" className="stroke-border" vertical={false} />
-              <XAxis dataKey="d" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} />
-              <YAxis tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} />
-              <Tooltip
-                contentStyle={{
-                  background: "hsl(var(--popover))",
-                  border: "1px solid hsl(var(--border))",
-                  borderRadius: 8,
-                  fontSize: 12,
-                }}
-              />
-              <Bar dataKey="v" fill="url(#barG)" radius={[6, 6, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">Top Performing Analysts</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-12 px-3 py-2 text-[11px] uppercase tracking-wide text-muted-foreground border-b">
-            <div className="col-span-5">Analyst</div>
-            <div className="col-span-2 text-right">Alerts</div>
-            <div className="col-span-2 text-right">Cases Closed</div>
-            <div className="col-span-3 text-right">Avg Time</div>
-          </div>
-          {analysts.map((a, i) => (
-            <div
-              key={a.name}
-              className="grid grid-cols-12 items-center px-3 py-3 border-b last:border-0 hover:bg-muted/40 transition-colors"
-            >
-              <div className="col-span-5 flex items-center gap-3">
-                <div className="h-8 w-8 rounded-full bg-gradient-to-br from-primary to-secondary text-white grid place-items-center text-xs font-semibold">
-                  {a.name.split(" ").map((n) => n[0]).join("")}
-                </div>
-                <div>
-                  <p className="text-sm font-medium">{a.name}</p>
-                  <p className="text-[11px] text-muted-foreground">
-                    Rank #{i + 1} · Compliance Analyst
-                  </p>
-                </div>
-              </div>
-              <div className="col-span-2 text-right text-sm font-semibold">{a.handled}</div>
-              <div className="col-span-2 text-right text-sm font-semibold">{a.closed}</div>
-              <div className="col-span-3 text-right text-sm">
-                <Badge variant="outline" className="text-xs">{a.avg}</Badge>
-              </div>
-            </div>
-          ))}
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
-function RiskAnalytics() {
-  const total = riskDist.reduce((s, r) => s + r.value, 0);
-  return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card className="lg:col-span-1">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Customer Risk Distribution</CardTitle>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Risk distribution pie */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Risk Distribution</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="relative">
-              <ResponsiveContainer width="100%" height={220}>
-                <PieChart>
-                  <Pie
-                    data={riskDist}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={62}
-                    outerRadius={92}
-                    dataKey="value"
-                    paddingAngle={3}
-                    stroke="hsl(var(--card))"
-                    strokeWidth={2}
-                  >
-                    {riskDist.map((e, i) => (
-                      <Cell key={i} fill={e.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    contentStyle={{
-                      background: "hsl(var(--popover))",
-                      border: "1px solid hsl(var(--border))",
-                      borderRadius: 8,
-                      fontSize: 12,
-                    }}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                <p className="text-2xl font-bold">{total}</p>
-                <p className="text-xs text-muted-foreground">Total Customers</p>
+            {pieData.length === 0 ? (
+              <div className="h-56 flex items-center justify-center text-sm text-muted-foreground">
+                No risk data yet
               </div>
-            </div>
-            <div className="mt-3 space-y-2">
-              {riskDist.map((r) => (
-                <div key={r.name} className="flex items-center justify-between text-sm">
-                  <span className="inline-flex items-center gap-2">
-                    <span className="h-2.5 w-2.5 rounded-full" style={{ background: r.color }} />
-                    {r.name}
-                  </span>
-                  <span className="font-medium">
-                    {r.value} <span className="text-muted-foreground text-xs">({Math.round((r.value / total) * 100)}%)</span>
-                  </span>
+            ) : (
+              <>
+                <ResponsiveContainer width="100%" height={200}>
+                  <PieChart>
+                    <Pie
+                      data={pieData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={55}
+                      outerRadius={85}
+                      paddingAngle={3}
+                      dataKey="value"
+                      label={({ value }) => value}
+                    >
+                      {pieData.map((d) => (
+                        <Cell key={d.name} fill={d.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="flex flex-wrap gap-3 justify-center mt-2">
+                  {pieData.map((d) => (
+                    <div
+                      key={d.name}
+                      className="flex items-center gap-1.5 text-xs"
+                    >
+                      <span
+                        className="w-2.5 h-2.5 rounded-full"
+                        style={{ background: d.color }}
+                      />
+                      {d.name} ({d.value})
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              </>
+            )}
           </CardContent>
         </Card>
 
-        <Card className="lg:col-span-2">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Risk by Product / Channel</CardTitle>
+        {/* KYC status pie */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">KYC Status Breakdown</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
-            {productRisk.map((p) => (
-              <div key={p.label}>
-                <div className="flex items-center justify-between text-sm mb-1.5">
-                  <span className="font-medium">{p.label}</span>
-                  <span className="font-semibold tabular-nums">{p.score}</span>
-                </div>
-                <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
-                  <div
-                    className={`h-full rounded-full ${
-                      p.tone === "destructive"
-                        ? "bg-destructive"
-                        : p.tone === "warning"
-                        ? "bg-warning"
-                        : "bg-success"
-                    }`}
-                    style={{ width: `${p.score}%` }}
-                  />
-                </div>
+          <CardContent>
+            {kycPie.length === 0 ? (
+              <div className="h-56 flex items-center justify-center text-sm text-muted-foreground">
+                No KYC data yet
               </div>
-            ))}
+            ) : (
+              <>
+                <ResponsiveContainer width="100%" height={200}>
+                  <PieChart>
+                    <Pie
+                      data={kycPie}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={55}
+                      outerRadius={85}
+                      paddingAngle={3}
+                      dataKey="value"
+                      label={({ value }) => value}
+                    >
+                      {kycPie.map((d) => (
+                        <Cell key={d.name} fill={d.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="flex flex-wrap gap-3 justify-center mt-2">
+                  {kycPie.map((d) => (
+                    <div
+                      key={d.name}
+                      className="flex items-center gap-1.5 text-xs"
+                    >
+                      <span
+                        className="w-2.5 h-2.5 rounded-full"
+                        style={{ background: d.color }}
+                      />
+                      {d.name} ({d.value})
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
       </div>
 
-      <Card>
-        <CardHeader className="pb-2 flex flex-row items-center justify-between">
-          <CardTitle className="text-base">Risk Heatmap by Region</CardTitle>
-          <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-            <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-success" />Low</span>
-            <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-info" />Moderate</span>
-            <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-warning" />Elevated</span>
-            <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-destructive" />High</span>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {heatmap.map((h) => (
-              <div
-                key={h.region}
-                className={`rounded-lg border p-4 ${heatTone(h.score)}`}
-              >
-                <p className="text-xs font-medium text-muted-foreground">{h.region}</p>
-                <p className="text-2xl font-bold mt-1">{h.score}</p>
-                <p className="text-[11px] text-muted-foreground mt-1">{h.customers} customers</p>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+      {/* Verification outcomes */}
+      {(data?.verificationOutcomes ?? []).length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Verification Outcomes</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Check</TableHead>
+                  <TableHead>Flagged</TableHead>
+                  <TableHead>Passed</TableHead>
+                  <TableHead>Failed</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {(data?.verificationOutcomes ?? []).map((v) => (
+                  <TableRow key={v._id}>
+                    <TableCell className="font-medium capitalize">
+                      {prettyLabel(v._id)}
+                    </TableCell>
+                    <TableCell>
+                      <Badge className="bg-destructive/10 text-destructive text-xs">
+                        {v.flagged}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge className="bg-success/10 text-success text-xs">
+                        {v.passed}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge className="bg-muted text-muted-foreground text-xs">
+                        {v.failed}
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* High risk clients */}
+      {(data?.highRiskClients ?? []).length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">
+              High & Critical Risk Clients
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Client</TableHead>
+                  <TableHead>Risk Level</TableHead>
+                  <TableHead>KYC Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {(data?.highRiskClients ?? []).map((c) => (
+                  <TableRow key={c.clientId}>
+                    <TableCell>
+                      <p className="font-medium text-sm">{c.fullName}</p>
+                      <p className="text-xs text-muted-foreground">{c.email}</p>
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant="outline"
+                        className={`text-xs capitalize border ${toneFor(c.riskLevel)}`}
+                      >
+                        {prettyLabel(c.riskLevel)}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant="outline"
+                        className={`text-xs capitalize ${toneFor(c.kycStatus)}`}
+                      >
+                        {prettyLabel(c.kycStatus)}
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
 
-function RegulatoryDashboard() {
+// ─────────────────────────────────────────────────────────────
+// REGULATORY DASHBOARD TAB
+// ─────────────────────────────────────────────────────────────
+
+function RegulatoryTab() {
+  const { data, isLoading } = useQuery({
+    queryKey: ["reports-regulatory"],
+    queryFn: fetchRegulatoryDashboard,
+    staleTime: 60_000,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="space-y-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-24 w-full" />
+          ))}
+        </div>
+        <Skeleton className="h-64 w-full" />
+      </div>
+    );
+  }
+
+  const str = data?.strSummary;
+  const health = data?.complianceHealth;
+
   return (
     <div className="space-y-4">
-      {compliance.map((c) => {
-        const ok = c.value >= c.target;
-        return (
-          <Card key={c.label}>
-            <CardContent className="p-5">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  {ok ? (
-                    <ShieldCheck className="h-4 w-4 text-success" />
-                  ) : (
-                    <AlertTriangle className="h-4 w-4 text-warning" />
-                  )}
-                  <p className="text-sm font-medium">{c.label}</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Badge
-                    className={`text-[11px] ${
-                      ok
-                        ? "bg-success/15 text-success hover:bg-success/15"
-                        : "bg-warning/15 text-warning hover:bg-warning/15"
-                    }`}
-                  >
-                    {ok ? "Compliant" : "Warning"}
-                  </Badge>
-                  <span className="text-sm font-semibold tabular-nums">
-                    {c.value}% <span className="text-muted-foreground text-xs">/ {c.target}%</span>
-                  </span>
-                </div>
-              </div>
-              <Progress
-                value={c.value}
-                className={`h-2 ${ok ? "[&>div]:bg-success" : "[&>div]:bg-warning"}`}
-              />
-            </CardContent>
-          </Card>
-        );
-      })}
-
-      <Card className="bg-gradient-to-br from-accent/60 via-card to-card border-primary/20">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">FIU Compliance Summary</CardTitle>
-        </CardHeader>
-        <CardContent className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+      {/* STR stats */}
+      <div>
+        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-3">
+          STR Status
+        </p>
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
           {[
-            { l: "STRs Filed to FIU (Q4)", v: "15" },
-            { l: "Customers Under EDD", v: "32" },
-            { l: "PEP Screenings Completed", v: "156" },
-            { l: "Sanctions Matches", v: "8" },
-            { l: "Compliance Training Rate", v: "94%" },
-            { l: "Policy Violations", v: "2" },
-          ].map((i) => (
-            <div key={i.l}>
-              <p className="text-xs text-muted-foreground">{i.l}:</p>
-              <p className="text-2xl font-bold text-primary mt-0.5">{i.v}</p>
-            </div>
+            {
+              label: "Draft",
+              value: str?.draft ?? 0,
+              color: "text-muted-foreground",
+            },
+            {
+              label: "Pending Review",
+              value: str?.pendingReview ?? 0,
+              color: "text-warning",
+            },
+            {
+              label: "Submitted",
+              value: str?.submitted ?? 0,
+              color: "text-success",
+            },
+            {
+              label: "Acknowledged",
+              value: str?.acknowledged ?? 0,
+              color: "text-info",
+            },
+            { label: "Total", value: str?.total ?? 0, color: "text-primary" },
+          ].map(({ label, value, color }) => (
+            <Card key={label}>
+              <CardContent className="p-4">
+                <p className="text-xs text-muted-foreground">{label}</p>
+                <p className={`text-3xl font-bold ${color}`}>{value}</p>
+              </CardContent>
+            </Card>
           ))}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
+
+      {/* Compliance health */}
+      <div>
+        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-3">
+          Compliance Health
+        </p>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {[
+            {
+              label: "Overdue Reviews",
+              value: health?.overdueReviews ?? 0,
+              color: "text-destructive",
+              icon: Clock,
+            },
+            {
+              label: "Sanctions Hits",
+              value: health?.sanctionHits ?? 0,
+              color: "text-destructive",
+              icon: AlertTriangle,
+            },
+            {
+              label: "PEP Matches",
+              value: health?.pepHits ?? 0,
+              color: "text-warning",
+              icon: Users,
+            },
+            {
+              label: "Open Alerts",
+              value: health?.openAlerts ?? 0,
+              color: "text-warning",
+              icon: Activity,
+            },
+          ].map(({ label, value, color, icon: Icon }) => (
+            <Card key={label}>
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs text-muted-foreground">{label}</p>
+                    <p className={`text-3xl font-bold ${color}`}>{value}</p>
+                  </div>
+                  <Icon className={`h-6 w-6 opacity-40 ${color}`} />
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+
+      {/* Overdue reviews */}
+      {(data?.overdueReviews ?? []).length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Clock className="h-4 w-4 text-warning" />
+              Clients Overdue for Periodic Review
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Client</TableHead>
+                  <TableHead>Risk Level</TableHead>
+                  <TableHead>Last Reviewed</TableHead>
+                  <TableHead>Days Overdue</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {(data?.overdueReviews ?? []).map((c) => {
+                  const daysAgo = Math.floor(
+                    (Date.now() - new Date(c.kycCompletedAt).getTime()) /
+                      (1000 * 60 * 60 * 24),
+                  );
+                  return (
+                    <TableRow key={c.clientId}>
+                      <TableCell>
+                        <p className="font-medium text-sm">{c.fullName}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {c.email}
+                        </p>
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant="outline"
+                          className={`text-xs capitalize ${toneFor(c.riskLevel)}`}
+                        >
+                          {prettyLabel(c.riskLevel)}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {new Date(c.kycCompletedAt).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant="outline"
+                          className="bg-destructive/10 text-destructive border-destructive/20 text-xs"
+                        >
+                          {daysAgo - 180}d overdue
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Recent STRs */}
+      {(data?.recentStrs ?? []).length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Recent STR Reports</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>STR ID</TableHead>
+                  <TableHead>Customer</TableHead>
+                  <TableHead>Amount</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Filed</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {(data?.recentStrs ?? []).map((s: any) => {
+                  const client =
+                    typeof s.clientId === "object" ? s.clientId : null;
+                  return (
+                    <TableRow key={s._id}>
+                      <TableCell className="font-mono text-xs">
+                        {s.strId}
+                      </TableCell>
+                      <TableCell className="text-sm font-medium">
+                        {client
+                          ? `${client.firstName} ${client.lastName}`
+                          : s.customerName}
+                      </TableCell>
+                      <TableCell className="font-semibold text-sm">
+                        {s.currency} {s.amount?.toLocaleString()}
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant="outline"
+                          className={`text-xs capitalize ${
+                            s.status === "submitted" ||
+                            s.status === "acknowledged"
+                              ? "bg-success/10 text-success border-success/20"
+                              : s.status === "pending_review"
+                                ? "bg-warning/10 text-warning border-warning/20"
+                                : "bg-muted text-muted-foreground"
+                          }`}
+                        >
+                          {prettyLabel(s.status)}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {new Date(s.createdAt).toLocaleDateString()}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
 
-function TrendAnalysis() {
+// ─────────────────────────────────────────────────────────────
+// TREND ANALYSIS TAB
+// ─────────────────────────────────────────────────────────────
+
+function TrendAnalysisTab() {
+  const { data, isLoading } = useQuery({
+    queryKey: ["reports-trends"],
+    queryFn: fetchTrendAnalysis,
+    staleTime: 60_000,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="space-y-4">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <Skeleton key={i} className="h-64 w-full" />
+        ))}
+      </div>
+    );
+  }
+
+  const clientGrowthData = (data?.clientGrowth ?? []).map((d) => ({
+    month: monthLabel(d._id),
+    count: d.count,
+  }));
+
+  const alertTrendData = (data?.alertTrend ?? []).map((d) => ({
+    month: monthLabel(d._id),
+    total: d.total,
+    resolved: d.resolved,
+  }));
+
+  const txTrendData = (data?.txVolumeTrend ?? []).map((d) => ({
+    month: monthLabel(d._id),
+    total: d.count,
+    flagged: d.flagged,
+    amount: Math.round(d.totalAmount / 1000), // in thousands
+  }));
+
+  const funnelData = (data?.onboardingFunnel ?? []).map((d) => ({
+    stage: prettyLabel(d._id),
+    count: d.count,
+    color: KYC_COLORS[d._id] ?? "#94a3b8",
+  }));
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
+      {/* Client growth */}
       <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">Transaction Volume Trends (6 Months)</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ResponsiveContainer width="100%" height={280}>
-            <LineChart data={trendVolume}>
-              <CartesianGrid strokeDasharray="3 3" className="stroke-border" vertical={false} />
-              <XAxis dataKey="m" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} />
-              <YAxis tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} />
-              <Tooltip
-                contentStyle={{
-                  background: "hsl(var(--popover))",
-                  border: "1px solid hsl(var(--border))",
-                  borderRadius: 8,
-                  fontSize: 12,
-                }}
-              />
-              <Legend wrapperStyle={{ fontSize: 12 }} />
-              <Line type="monotone" dataKey="Cash" stroke="hsl(var(--destructive))" strokeWidth={2.5} dot={false} />
-              <Line type="monotone" dataKey="Wire" stroke="hsl(var(--primary))" strokeWidth={2.5} dot={false} />
-              <Line type="monotone" dataKey="Mobile" stroke="hsl(var(--success))" strokeWidth={2.5} dot={false} />
-            </LineChart>
-          </ResponsiveContainer>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">Alert Patterns by Type</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ResponsiveContainer width="100%" height={240}>
-            <BarChart data={alertPatterns}>
-              <defs>
-                <linearGradient id="patternG" x1="0" x2="0" y1="0" y2="1">
-                  <stop offset="0%" stopColor="hsl(var(--secondary))" stopOpacity={0.95} />
-                  <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0.85} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" className="stroke-border" vertical={false} />
-              <XAxis dataKey="name" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} />
-              <YAxis tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} />
-              <Tooltip
-                contentStyle={{
-                  background: "hsl(var(--popover))",
-                  border: "1px solid hsl(var(--border))",
-                  borderRadius: 8,
-                  fontSize: 12,
-                }}
-              />
-              <Bar dataKey="v" fill="url(#patternG)" radius={[6, 6, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </CardContent>
-      </Card>
-
-      <Card className="border-warning/30 bg-warning/5">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base flex items-center gap-2">
-            <AlertTriangle className="h-4 w-4 text-warning" />
-            Emerging Risk Indicators
+        <CardHeader>
+          <CardTitle className="text-base">
+            Client Growth (Last 6 Months)
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-2">
-          {emerging.map((e) => (
-            <div
-              key={e.title}
-              className="flex items-start gap-3 p-3 rounded-lg bg-card border border-border/60"
-            >
-              <div
-                className={`mt-0.5 h-2 w-2 rounded-full shrink-0 ${
-                  e.tone === "destructive"
-                    ? "bg-destructive"
-                    : e.tone === "warning"
-                    ? "bg-warning"
-                    : "bg-info"
-                }`}
-              />
-              <div className="flex-1">
-                <p className="text-sm font-medium">{e.title}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">{e.detail}</p>
-              </div>
-              <ArrowUpRight className="h-4 w-4 text-muted-foreground" />
+        <CardContent>
+          {clientGrowthData.length === 0 ? (
+            <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">
+              No client data yet
             </div>
-          ))}
+          ) : (
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={clientGrowthData} barSize={32}>
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  stroke="#e2e8f0"
+                  vertical={false}
+                />
+                <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+                <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                <Tooltip />
+                <Bar
+                  dataKey="count"
+                  radius={[4, 4, 0, 0]}
+                  fill="hsl(var(--primary))"
+                  name="New Clients"
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
         </CardContent>
       </Card>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Alert trend */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">
+              Alert Volume vs Resolved
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {alertTrendData.length === 0 ? (
+              <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">
+                No alert data yet
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={200}>
+                <LineChart data={alertTrendData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                  <XAxis dataKey="month" tick={{ fontSize: 10 }} />
+                  <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
+                  <Tooltip />
+                  <Legend />
+                  <Line
+                    type="monotone"
+                    dataKey="total"
+                    stroke="#ef4444"
+                    strokeWidth={2}
+                    dot={{ r: 3 }}
+                    name="Generated"
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="resolved"
+                    stroke="#22c55e"
+                    strokeWidth={2}
+                    dot={{ r: 3 }}
+                    name="Resolved"
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Onboarding funnel */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Onboarding Funnel</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {funnelData.length === 0 ? (
+              <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">
+                No onboarding data yet
+              </div>
+            ) : (
+              <div className="space-y-3 pt-2">
+                {funnelData
+                  .sort((a, b) => b.count - a.count)
+                  .map((d) => {
+                    const max = Math.max(...funnelData.map((f) => f.count), 1);
+                    const pct = Math.round((d.count / max) * 100);
+                    return (
+                      <div key={d.stage} className="space-y-1">
+                        <div className="flex justify-between text-xs">
+                          <span className="font-medium">{d.stage}</span>
+                          <span className="text-muted-foreground">
+                            {d.count}
+                          </span>
+                        </div>
+                        <div className="h-2 bg-muted rounded-full overflow-hidden">
+                          <div
+                            className="h-full rounded-full transition-all"
+                            style={{ width: `${pct}%`, background: d.color }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Transaction volume */}
+      {txTrendData.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">
+              Transaction Volume (Last 6 Months)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={txTrendData} barSize={24}>
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  stroke="#e2e8f0"
+                  vertical={false}
+                />
+                <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+                <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                <Tooltip />
+                <Legend />
+                <Bar
+                  dataKey="total"
+                  radius={[3, 3, 0, 0]}
+                  fill="hsl(var(--primary))"
+                  name="Total"
+                />
+                <Bar
+                  dataKey="flagged"
+                  radius={[3, 3, 0, 0]}
+                  fill="hsl(var(--destructive))"
+                  name="Flagged"
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
 
-// ---------- page ----------
-const TABS = [
-  { id: "ops", label: "Operational Reports", icon: BarChart3 },
-  { id: "risk", label: "Risk Analytics", icon: Target },
-  { id: "regulatory", label: "Regulatory Dashboard", icon: ClipboardList },
-  { id: "trend", label: "Trend Analysis", icon: LineChartIcon },
-] as const;
+// ─────────────────────────────────────────────────────────────
+// MAIN PAGE
+// ─────────────────────────────────────────────────────────────
 
-export default function AmlReports() {
-  const [tab, setTab] = useState<(typeof TABS)[number]["id"]>("ops");
-  const [range, setRange] = useState("Last 30 Days");
-  const activeLabel = useMemo(() => TABS.find((t) => t.id === tab)!.label, [tab]);
+export default function Reports() {
+  const qc = useQueryClient();
+  const [tab, setTab] = useState("operational");
+
+  const exportMap: Record<
+    string,
+    "operational" | "risk" | "regulatory" | "trends"
+  > = {
+    operational: "operational",
+    risk: "risk",
+    regulatory: "regulatory",
+    trends: "trends",
+  };
+
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ["reports-operational"] });
+    qc.invalidateQueries({ queryKey: ["reports-risk"] });
+    qc.invalidateQueries({ queryKey: ["reports-regulatory"] });
+    qc.invalidateQueries({ queryKey: ["reports-trends"] });
+  };
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+      {/* Header */}
+      <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Reporting &amp; Analytics</h1>
+          <h1 className="text-2xl font-bold">Reporting & Analytics</h1>
           <p className="text-sm text-muted-foreground">
             Comprehensive insights for FIU compliance and audit purposes
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Select value={range} onValueChange={setRange}>
-            <SelectTrigger className="w-[160px] h-9">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {["Last 7 Days", "Last 30 Days", "Last 90 Days", "Year to Date"].map((r) => (
-                <SelectItem key={r} value={r}>{r}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button className="bg-gradient-to-r from-primary to-secondary text-primary-foreground hover:opacity-95">
-            <Download className="h-4 w-4 mr-2" />
-            Export Report
+        <div className="flex gap-2">
+          <Button variant="outline" size="icon" onClick={invalidate}>
+            <RefreshCw className="h-4 w-4" />
+          </Button>
+          <Button
+            className="bg-gradient-to-r from-primary to-secondary"
+            onClick={() => exportReport(exportMap[tab] ?? "operational")}
+          >
+            <Download className="h-4 w-4 mr-2" /> Export Report
           </Button>
         </div>
       </div>
 
-      <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)}>
-        <TabsList className="grid grid-cols-2 lg:grid-cols-4 h-auto p-1.5 bg-muted/60 gap-1.5">
-          {TABS.map((t) => {
-            const Icon = t.icon;
-            return (
-              <TabsTrigger
-                key={t.id}
-                value={t.id}
-                className="flex-col gap-1.5 py-3 data-[state=active]:bg-card data-[state=active]:shadow-sm data-[state=active]:text-primary data-[state=active]:border data-[state=active]:border-primary/30"
-              >
-                <Icon className="h-4 w-4" />
-                <span className="text-xs font-medium">{t.label}</span>
-              </TabsTrigger>
-            );
-          })}
+      {/* Tabs */}
+      <Tabs value={tab} onValueChange={setTab}>
+        <TabsList className="grid grid-cols-4 w-full lg:w-auto lg:inline-flex">
+          <TabsTrigger value="operational" className="gap-2">
+            <BarChart3 className="h-4 w-4" />
+            <span className="hidden sm:inline">Operational Reports</span>
+            <span className="sm:hidden">Ops</span>
+          </TabsTrigger>
+          <TabsTrigger value="risk" className="gap-2">
+            <ShieldCheck className="h-4 w-4" />
+            <span className="hidden sm:inline">Risk Analytics</span>
+            <span className="sm:hidden">Risk</span>
+          </TabsTrigger>
+          <TabsTrigger value="regulatory" className="gap-2">
+            <ClipboardList className="h-4 w-4" />
+            <span className="hidden sm:inline">Regulatory Dashboard</span>
+            <span className="sm:hidden">Reg</span>
+          </TabsTrigger>
+          <TabsTrigger value="trends" className="gap-2">
+            <TrendingUp className="h-4 w-4" />
+            <span className="hidden sm:inline">Trend Analysis</span>
+            <span className="sm:hidden">Trends</span>
+          </TabsTrigger>
         </TabsList>
 
-        <div className="mt-4">
-          <Card className="bg-card/40 border-border/60">
-            <CardHeader className="pb-3 flex flex-row items-center justify-between">
-              <CardTitle className="text-base">{activeLabel}</CardTitle>
-              <Badge variant="outline" className="text-[11px]">
-                {range}
-              </Badge>
-            </CardHeader>
-            <CardContent>
-              <TabsContent value="ops" className="mt-0">
-                <OperationalReports range={range} />
-              </TabsContent>
-              <TabsContent value="risk" className="mt-0">
-                <RiskAnalytics />
-              </TabsContent>
-              <TabsContent value="regulatory" className="mt-0">
-                <RegulatoryDashboard />
-              </TabsContent>
-              <TabsContent value="trend" className="mt-0">
-                <TrendAnalysis />
-              </TabsContent>
-            </CardContent>
-          </Card>
-        </div>
+        <TabsContent value="operational" className="mt-4">
+          <OperationalTab />
+        </TabsContent>
+        <TabsContent value="risk" className="mt-4">
+          <RiskAnalyticsTab />
+        </TabsContent>
+        <TabsContent value="regulatory" className="mt-4">
+          <RegulatoryTab />
+        </TabsContent>
+        <TabsContent value="trends" className="mt-4">
+          <TrendAnalysisTab />
+        </TabsContent>
       </Tabs>
     </div>
   );

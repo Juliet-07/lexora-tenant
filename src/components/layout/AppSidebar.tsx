@@ -86,7 +86,7 @@ const NAV_BY_MODULE: Record<
     },
     {
       title: "Compliance Alerts",
-      url: "/compliance",
+      url: "/aml/compliance",
       icon: ShieldCheck,
       adminOnly: true,
     },
