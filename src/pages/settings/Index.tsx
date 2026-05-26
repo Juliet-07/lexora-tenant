@@ -1,17 +1,21 @@
 import { useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { User as UserIcon, Lock, Crown } from "lucide-react";
+import { User as UserIcon, Lock, Crown, FileText } from "lucide-react";
 
-import ProfileTab  from "./Profile";
+import ProfileTab from "./Profile";
 import SecurityTab from "./Security";
-import PlanTab     from "./Plan";
+import PlanTab from "./Plan";
+import EngagementTab from "./EngagementDocument";
 
 export default function Settings() {
   const [params, setParams] = useSearchParams();
-  const tab       = params.get("tab") ?? "profile";
-  const validTabs = useMemo(() => new Set(["profile", "security", "plan"]), []);
-  const active    = validTabs.has(tab) ? tab : "profile";
+  const tab = params.get("tab") ?? "profile";
+  const validTabs = useMemo(
+    () => new Set(["profile", "security", "plan", "engagement"]),
+    [],
+  );
+  const active = validTabs.has(tab) ? tab : "profile";
 
   const setTab = (v: string) => {
     const next = new URLSearchParams(params);
@@ -39,6 +43,9 @@ export default function Settings() {
           <TabsTrigger value="plan">
             <Crown className="h-4 w-4 mr-2" /> Plan
           </TabsTrigger>
+          <TabsTrigger value="engagement">
+            <FileText className="h-4 w-4 mr-2" /> Engagement
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="profile">
@@ -49,6 +56,9 @@ export default function Settings() {
         </TabsContent>
         <TabsContent value="plan">
           <PlanTab />
+        </TabsContent>
+        <TabsContent value="engagement">
+          <EngagementTab />
         </TabsContent>
       </Tabs>
     </div>

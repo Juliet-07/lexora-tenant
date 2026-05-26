@@ -14,6 +14,9 @@ import { useNavigate } from "react-router-dom";
 export function ModuleSwitcher() {
   const { currentModule, setModule, modules } = useModule();
   const navigate = useNavigate();
+
+  if (!currentModule) return null;
+  
   const Icon = currentModule.icon;
 
   // Don't render switcher if there's only one module

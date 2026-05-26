@@ -24,6 +24,7 @@ import STR from "./pages/aml/STR";
 import WatchlistManagement from "./pages/aml/WatchlistManagement";
 import Settings from "./pages/settings/Index";
 import NotFound from "./pages/NotFound";
+import { Loader2 } from "lucide-react";
 
 const queryClient = new QueryClient();
 
@@ -33,9 +34,23 @@ const PLACEHOLDER_MODULES = new Set<string>([]);
 
 function ModuleHome() {
   const { currentModule } = useModule();
+
+  // ✅ Guard
+  if (!currentModule)
+    return (
+      <div className="flex items-center justify-center h-64 text-muted-foreground">
+        <Loader2 className="h-5 w-5 animate-spin mr-2" />
+        <span className="text-sm">Loading workspace…</span>
+      </div>
+    );
+
   if (PLACEHOLDER_MODULES.has(currentModule.id)) return <ModulePlaceholder />;
   return <Dashboard />;
 }
+
+//   if (PLACEHOLDER_MODULES.has(currentModule.id)) return <ModulePlaceholder />;
+//   return <Dashboard />;
+// }
 
 function AppRoutes() {
   const { user, isAdmin } = useAuth();

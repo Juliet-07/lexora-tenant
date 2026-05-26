@@ -40,17 +40,25 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import { useModule } from "@/contexts/ModuleContext";
 
-// Nav items keyed by backend module id
+// ─────────────────────────────────────────────────────────────
+// Nav items keyed by backend module id.
+//
+// IMPORTANT: keys here must exactly match what the backend returns
+// in TenantSubscription.activeModules (PlatformModuleKey enum values).
+//
+// Backend enum → key used here:
+//   kyc_aml   → "kyc_aml"   (was "kyc/aml" — mismatch fixed)
+//   grc       → "grc"
+//   crm       → "crm"
+//   hr_pm     → "hr_pm"     (was "hr" — mismatch fixed)
+// ─────────────────────────────────────────────────────────────
+
 const NAV_BY_MODULE: Record<
   string,
-  {
-    title: string;
-    url: string;
-    icon: any;
-    adminOnly?: boolean;
-  }[]
+  { title: string; url: string; icon: any; adminOnly?: boolean }[]
 > = {
-  "kyc/aml": [
+  // ── AML / KYC ──────────────────────────────────────────────
+  kyc_aml: [
     { title: "Dashboard", url: "/", icon: LayoutDashboard },
     {
       title: "Onboarding & CDD",
@@ -59,12 +67,6 @@ const NAV_BY_MODULE: Record<
       adminOnly: true,
     },
     { title: "Clients", url: "/clients", icon: Users, adminOnly: true },
-    // {
-    //   title: "Screening",
-    //   url: "/aml/screening",
-    //   icon: ScanSearch,
-    //   adminOnly: true,
-    // },
     {
       title: "Risk Engine",
       url: "/aml/risk",
@@ -77,7 +79,12 @@ const NAV_BY_MODULE: Record<
       icon: Activity,
       adminOnly: true,
     },
-    { title: "SAR / STR", url: "/aml/sar", icon: FileWarning, adminOnly: true },
+    {
+      title: "SAR / STR",
+      url: "/aml/sar",
+      icon: FileWarning,
+      adminOnly: true,
+    },
     {
       title: "Watchlist Management",
       url: "/aml/watchlist",
@@ -97,6 +104,8 @@ const NAV_BY_MODULE: Record<
       adminOnly: true,
     },
   ],
+
+  // ── GRC ────────────────────────────────────────────────────
   grc: [
     { title: "Dashboard", url: "/", icon: LayoutDashboard },
     { title: "Clients", url: "/clients", icon: Users, adminOnly: true },
@@ -136,8 +145,15 @@ const NAV_BY_MODULE: Record<
       icon: Briefcase,
       adminOnly: true,
     },
-    { title: "BCP / DR", url: "/grc/bcp", icon: ShieldAlert, adminOnly: true },
+    {
+      title: "BCP / DR",
+      url: "/grc/bcp",
+      icon: ShieldAlert,
+      adminOnly: true,
+    },
   ],
+
+  // ── CRM ────────────────────────────────────────────────────
   crm: [
     { title: "Dashboard", url: "/", icon: LayoutDashboard },
     { title: "Clients", url: "/clients", icon: Users, adminOnly: true },
@@ -146,17 +162,28 @@ const NAV_BY_MODULE: Record<
     { title: "Billing", url: "/billing", icon: Receipt },
     { title: "Reports", url: "/reports", icon: BarChart3, adminOnly: true },
   ],
-  hr: [
+
+  // ── HR & People Management ─────────────────────────────────
+  hr_pm: [
     { title: "Dashboard", url: "/", icon: LayoutDashboard },
     { title: "Clients", url: "/clients", icon: Users, adminOnly: true },
-    { title: "Employees", url: "/hr/employees", icon: Users, adminOnly: true },
+    {
+      title: "Employees",
+      url: "/hr/employees",
+      icon: Users,
+      adminOnly: true,
+    },
     {
       title: "Recruitment",
       url: "/hr/recruitment",
       icon: ClipboardList,
       adminOnly: true,
     },
-    { title: "Time & Attendance", url: "/hr/attendance", icon: CalendarDays },
+    {
+      title: "Time & Attendance",
+      url: "/hr/attendance",
+      icon: CalendarDays,
+    },
     { title: "Leave", url: "/hr/leave", icon: CalendarDays },
     {
       title: "Performance",
@@ -164,16 +191,59 @@ const NAV_BY_MODULE: Record<
       icon: BarChart3,
       adminOnly: true,
     },
-    { title: "Payroll", url: "/hr/payroll", icon: Wallet, adminOnly: true },
-    { title: "Learning & Dev", url: "/hr/learning", icon: GraduationCap },
+    {
+      title: "Payroll",
+      url: "/hr/payroll",
+      icon: Wallet,
+      adminOnly: true,
+    },
+    {
+      title: "Learning & Dev",
+      url: "/hr/learning",
+      icon: GraduationCap,
+    },
   ],
+
+  // ── Legacy key aliases — kept so any old data still resolves ──
+  // If the DB ever returns "kyc/aml" or "hr" these still work.
+  "kyc/aml": [], // populated below after definition
+  hr: [], // populated below after definition
 };
+
+// Point legacy keys at the same arrays (no duplication)
+NAV_BY_MODULE["kyc/aml"] = NAV_BY_MODULE["kyc_aml"];
+NAV_BY_MODULE["hr"] = NAV_BY_MODULE["hr_pm"];
 
 export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
   const { isAdmin, logout } = useAuth();
   const { currentModule, isLoadingDashboard } = useModule();
+
+  if (!currentModule) {
+    return (
+      <Sidebar collapsible="icon">
+        <div className="p-4 border-b border-sidebar-border">
+          <div className="w-9 h-9 rounded-lg bg-muted animate-pulse mx-auto" />
+        </div>
+        <SidebarContent className="pt-2" />
+        <SidebarFooter className="border-t border-sidebar-border">
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                className="hover:bg-sidebar-accent/50 text-sidebar-foreground cursor-pointer"
+                onClick={logout}
+              >
+                <LogOut className="mr-2 h-4 w-4" />
+                {!collapsed && <span>Sign Out</span>}
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarFooter>
+      </Sidebar>
+    );
+  }
+
   const Icon = currentModule.icon;
 
   const navItems = (
