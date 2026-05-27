@@ -473,9 +473,9 @@ export default function ClientProfile() {
               <CardTitle className="text-base">Uploaded Documents</CardTitle>
             </CardHeader>
             <CardContent>
-              {client.documents && client.documents.length > 0 ? (
+              {client.onboarding?.documents && client.onboarding?.documents.length > 0 ? (
                 <div className="space-y-3">
-                  {client.documents.map((doc, i) => (
+                  {client.onboarding.documents.map((doc, i) => (
                     <div
                       key={i}
                       className="flex items-center justify-between p-3 rounded-lg bg-muted/50"

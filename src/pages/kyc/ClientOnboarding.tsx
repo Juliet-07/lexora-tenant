@@ -242,12 +242,31 @@ export default function ClientOnboarding() {
             />
           </Button>
 
+          <Button
+            className="bg-gradient-to-r from-primary to-secondary"
+            onClick={handleAddClientClick}
+            disabled={engagementLoading || !engagementReady}
+            title={
+              !engagementReady
+                ? "Upload an engagement document in Settings first"
+                : undefined
+            }
+          >
+            {engagementLoading ? (
+              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+            ) : (
+              <Plus className="h-4 w-4 mr-2" />
+            )}
+            Add Client
+          </Button>
+
+          {/* <Dialog open={dialogOpen} onOpenChange={setDialogOpen}></Dialog> */}
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogTrigger asChild>
+            {/* <DialogTrigger asChild>
               <Button className="bg-gradient-to-r from-primary to-secondary">
                 <Plus className="h-4 w-4 mr-2" /> Add Client
               </Button>
-            </DialogTrigger>
+            </DialogTrigger> */}
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>Invite New Client</DialogTitle>

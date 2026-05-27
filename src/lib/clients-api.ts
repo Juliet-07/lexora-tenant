@@ -83,14 +83,27 @@ export type ApiClientDetail = {
   kycStatus: string;
   riskLevel: string;
   country?: string;
-  documents?: {
-    name: string;
-    type?: string;
-    status?: string;
-    url?: string;
-    uploadedAt?: string;
-  }[];
+  // documents?: {
+  //   name: string;
+  //   type?: string;
+  //   status?: string;
+  //   url?: string;
+  //   uploadedAt?: string;
+  // }[];
   activityTimeline?: { action: string; date: string; user?: string }[];
+  onboarding?: {
+    formData?: Record<string, any>;
+    documents?: Array<{
+      name: string;
+      type?: string;
+      url?: string;
+      status?: string;
+      uploadedAt?: string;
+    }>;
+    completionPercent?: number;
+    submittedAt?: string;
+    lastSavedAt?: string;
+  } | null;
 };
 
 export const fetchClients = async (): Promise<ApiClient[]> => {
