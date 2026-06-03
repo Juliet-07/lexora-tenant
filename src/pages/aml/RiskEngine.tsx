@@ -531,7 +531,7 @@ function CreateScenarioDialog({
 export default function RiskEngine() {
   const { toast } = useToast();
   const qc = useQueryClient();
-  const [riskFilter, setRiskFilter] = useState("");
+  const [riskFilter, setRiskFilter] = useState("all");
 
   // ── Queries ───────────────────────────────────────────────
   const { data: dashboard, isLoading: dashLoading } = useQuery({
@@ -553,7 +553,10 @@ export default function RiskEngine() {
   const { data: clientRisk, isLoading: clientsLoading } = useQuery({
     queryKey: ["kyc-risk-clients", riskFilter],
     queryFn: () =>
-      fetchClientRiskList({ riskLevel: riskFilter || undefined, limit: 20 }),
+      fetchClientRiskList({
+        riskLevel: riskFilter === "all" ? undefined : riskFilter || undefined,
+        limit: 20,
+      }),
     staleTime: 30_000,
   });
 
@@ -1171,7 +1174,7 @@ export default function RiskEngine() {
                         <SelectValue placeholder="All risk levels" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">All levels</SelectItem>
+                        <SelectItem value="all">All levels</SelectItem>
                         <SelectItem value="critical">Critical</SelectItem>
                         <SelectItem value="high">High</SelectItem>
                         <SelectItem value="medium">Medium</SelectItem>

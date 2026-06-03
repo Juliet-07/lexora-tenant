@@ -49,16 +49,17 @@ import {
   ArrowUpCircle,
   Eye,
   Trash2,
+  MessageSquare,
+  FileText,
+  ArrowUpRight,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
   fetchAlertStats,
   fetchAlerts,
-  fetchAlertById,
   createManualAlert,
   updateAlert,
   bulkDismissAlerts,
-  fetchClientAlerts,
   type ComplianceAlert,
   type AlertStats,
 } from "@/lib/kyc-api";
@@ -96,30 +97,22 @@ function statusBadge(s: string) {
   const cls =
     s === "open"
       ? "bg-destructive/10 text-destructive border-destructive/20"
-      : s === "escalated"
-        ? "bg-warning/10 text-warning border-warning/20"
-        : s === "reviewed"
-          ? "bg-success/10 text-success border-success/20"
-          : "bg-muted text-muted-foreground";
+      : s === "acknowledged"
+        ? "bg-primary/10 text-primary border-primary/20"
+        : s === "escalated"
+          ? "bg-warning/10 text-warning border-warning/20"
+          : s === "reviewed"
+            ? "bg-success/10 text-success border-success/20"
+            : "bg-muted text-muted-foreground";
   return (
     <Badge variant="outline" className={`${cls} text-xs capitalize`}>
-      {prettyLabel(s)}
+      {s === "acknowledged" ? "Client Responded" : prettyLabel(s)}
     </Badge>
   );
 }
 
-function typeIcon(type: string) {
-  if (type === "open")
-    return <AlertTriangle className="h-4 w-4 text-destructive" />;
-  if (type === "escalated")
-    return <ArrowUpCircle className="h-4 w-4 text-warning" />;
-  if (type === "reviewed")
-    return <ShieldCheck className="h-4 w-4 text-success" />;
-  return <Clock className="h-4 w-4 text-muted-foreground" />;
-}
-
 // ─────────────────────────────────────────────────────────────
-// VIEW / REVIEW ALERT DIALOG
+// ALERT DETAIL DIALOG
 // ─────────────────────────────────────────────────────────────
 
 function AlertDetailDialog({
@@ -153,7 +146,15 @@ function AlertDetailDialog({
     typeof alert.clientId === "object" && alert.clientId
       ? alert.clientId
       : null;
+
   const isPending = updateMutation.isPending;
+  const canReview =
+    alert.status === "open" ||
+    alert.status === "acknowledged" ||
+    alert.status === "escalated";
+
+  // clientResponse may come as nested object
+  const clientResponse = (alert as any).clientResponse ?? null;
 
   return (
     <>
@@ -167,7 +168,7 @@ function AlertDetailDialog({
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 flex-wrap">
               <span>{prettyLabel(alert.type)}</span>
@@ -176,11 +177,11 @@ function AlertDetailDialog({
             </DialogTitle>
           </DialogHeader>
 
-          <div className="space-y-4 text-sm">
-            {/* Client */}
+          <div className="space-y-4 text-sm max-h-[60vh] overflow-y-auto pr-1">
+            {/* Client info */}
             {client && (
               <div className="p-3 rounded-lg bg-muted/40">
-                <p className="text-xs text-muted-foreground">Client</p>
+                <p className="text-xs text-muted-foreground mb-1">Client</p>
                 <p className="font-medium">
                   {client.firstName} {client.lastName}
                 </p>
@@ -221,6 +222,41 @@ function AlertDetailDialog({
               </div>
             )}
 
+            {/* ── CLIENT RESPONSE — shown when client has acknowledged ── */}
+            {clientResponse ? (
+              <div className="rounded-lg border border-primary/20 bg-primary/5 p-4 space-y-2">
+                <p className="text-xs font-semibold text-primary flex items-center gap-1.5">
+                  <MessageSquare className="h-3.5 w-3.5" />
+                  Client Response
+                  <span className="font-normal text-muted-foreground ml-1">
+                    · {new Date(clientResponse.respondedAt).toLocaleString()}
+                  </span>
+                </p>
+                <p className="text-sm text-foreground leading-relaxed">
+                  {clientResponse.note}
+                </p>
+                {clientResponse.documentUrl && (
+                  <a
+                    href={clientResponse.documentUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline mt-1"
+                  >
+                    <FileText className="h-3.5 w-3.5" />
+                    View attached document
+                    <ArrowUpRight className="h-3 w-3" />
+                  </a>
+                )}
+              </div>
+            ) : alert.status === "open" && client ? (
+              <div className="rounded-lg border border-muted bg-muted/30 p-3">
+                <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                  <Clock className="h-3.5 w-3.5" />
+                  Awaiting client response — client has been notified.
+                </p>
+              </div>
+            ) : null}
+
             {/* Previous review note */}
             {alert.reviewNote && (
               <div>
@@ -233,10 +269,17 @@ function AlertDetailDialog({
               Raised {new Date(alert.createdAt).toLocaleString()}
             </p>
 
-            {/* Review note */}
-            {alert.status === "open" || alert.status === "escalated" ? (
+            {/* Review note input */}
+            {canReview && (
               <div className="space-y-2">
-                <Label>Review Note</Label>
+                <Label>
+                  Review Note
+                  {clientResponse && (
+                    <span className="text-xs text-muted-foreground font-normal ml-2">
+                      (optional — summarise your decision)
+                    </span>
+                  )}
+                </Label>
                 <Textarea
                   rows={2}
                   placeholder="Optional note about your decision..."
@@ -244,11 +287,11 @@ function AlertDetailDialog({
                   onChange={(e) => setNote(e.target.value)}
                 />
               </div>
-            ) : null}
+            )}
           </div>
 
-          {/* Actions — only for open/escalated */}
-          {(alert.status === "open" || alert.status === "escalated") && (
+          {/* Actions */}
+          {canReview && (
             <DialogFooter className="gap-2 flex-wrap">
               <Button
                 variant="outline"
@@ -441,6 +484,8 @@ export default function ComplianceAlerts() {
     staleTime: 30_000,
   });
 
+  // When tab is 'open', pass 'open' to backend — backend now returns
+  // both OPEN and ACKNOWLEDGED for that filter value
   const statusParam =
     tab === "open"
       ? "open"
@@ -527,7 +572,7 @@ export default function ComplianceAlerts() {
           <p className="text-sm text-muted-foreground">
             {statsLoading
               ? "Loading…"
-              : `${stats?.summary.open ?? 0} open · ${stats?.summary.critical ?? 0} critical`}
+              : `${stats?.summary.open ?? 0} requiring attention · ${stats?.summary.critical ?? 0} critical`}
           </p>
         </div>
         <div className="flex gap-2">
@@ -540,7 +585,6 @@ export default function ComplianceAlerts() {
 
       {/* Summary cards + pie */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Stats grid */}
         <div className="lg:col-span-2 grid grid-cols-2 sm:grid-cols-4 gap-4">
           {statsLoading
             ? Array.from({ length: 4 }).map((_, i) => (
@@ -576,6 +620,12 @@ export default function ComplianceAlerts() {
                   <CardContent className="p-4">
                     <p className="text-xs text-muted-foreground">{label}</p>
                     <p className={`text-3xl font-bold ${color}`}>{value}</p>
+                    {label === "Open" &&
+                      (stats?.summary.acknowledged ?? 0) > 0 && (
+                        <p className="text-[10px] text-primary mt-0.5">
+                          {stats?.summary.acknowledged} client responded
+                        </p>
+                      )}
                   </CardContent>
                 </Card>
               ))}
@@ -706,7 +756,6 @@ export default function ComplianceAlerts() {
             </Tabs>
 
             <div className="flex items-center gap-2 flex-wrap">
-              {/* Severity filter */}
               <Select value={severityFilter} onValueChange={setSeverityFilter}>
                 <SelectTrigger className="w-32 h-8 text-xs">
                   <SelectValue placeholder="Severity" />
@@ -720,7 +769,6 @@ export default function ComplianceAlerts() {
                 </SelectContent>
               </Select>
 
-              {/* Bulk dismiss */}
               {selected.length > 0 && (
                 <Button
                   size="sm"
@@ -759,7 +807,6 @@ export default function ComplianceAlerts() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  {/* Bulk select — only for open alerts */}
                   {tab === "open" && (
                     <TableHead className="w-10">
                       <input
@@ -786,11 +833,18 @@ export default function ComplianceAlerts() {
                       ? alert.clientId
                       : null;
                   const isSelected = selected.includes(alert._id);
+                  const clientResponse = (alert as any).clientResponse ?? null;
 
                   return (
                     <TableRow
                       key={alert._id}
-                      className={isSelected ? "bg-muted/40" : ""}
+                      className={
+                        isSelected
+                          ? "bg-muted/40"
+                          : alert.status === "acknowledged"
+                            ? "bg-primary/5"
+                            : ""
+                      }
                     >
                       {tab === "open" && (
                         <TableCell>
@@ -809,6 +863,16 @@ export default function ComplianceAlerts() {
                         <p className="text-xs text-muted-foreground truncate">
                           {alert.description}
                         </p>
+                        {/* Client responded indicator in row */}
+                        {clientResponse && (
+                          <p className="text-[10px] text-primary flex items-center gap-1 mt-1">
+                            <MessageSquare className="h-3 w-3" />
+                            Client responded ·{" "}
+                            {new Date(
+                              clientResponse.respondedAt,
+                            ).toLocaleDateString()}
+                          </p>
+                        )}
                       </TableCell>
                       <TableCell className="text-sm">
                         {client ? (

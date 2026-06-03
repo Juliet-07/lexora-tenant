@@ -164,6 +164,7 @@ export default function OnboardingDetail() {
   const [completed, setCompleted] = useState(false);
   const [requestOpen, setRequestOpen] = useState(false);
   const [requestNote, setRequestNote] = useState("");
+  const [activeTab, setActiveTab] = useState("formData");
 
   // ── Fetch client ──────────────────────────────────────────
   const {
@@ -546,12 +547,13 @@ export default function OnboardingDetail() {
               size="sm"
               variant="outline"
               className="border-warning/40 text-warning hover:bg-warning/10 shrink-0"
-              onClick={() => {
-                const trigger = document.querySelector(
-                  '[data-value="verifications"]',
-                ) as HTMLElement;
-                trigger?.click();
-              }}
+              // onClick={() => {
+              //   const trigger = document.querySelector(
+              //     '[data-value="verifications"]',
+              //   ) as HTMLElement;
+              //   trigger?.click();
+              // }}
+              onClick={() => setActiveTab("verifications")}
             >
               Go to Verifications
             </Button>
@@ -637,7 +639,7 @@ export default function OnboardingDetail() {
         </div>
 
         {/* ── Tabs ── */}
-        <Tabs defaultValue="formData">
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList>
             <TabsTrigger value="formData">Form Data</TabsTrigger>
             <TabsTrigger value="documents">
@@ -648,7 +650,11 @@ export default function OnboardingDetail() {
                 </span>
               )}
             </TabsTrigger>
-            <TabsTrigger value="verifications" data-value="verifications">
+            <TabsTrigger
+              value="verifications"
+              data-value="verifications"
+              id="verifications-tab"
+            >
               Verifications
               {verificationDone && (
                 <span className="ml-1.5 rounded-full bg-success/10 text-success text-xs px-1.5">

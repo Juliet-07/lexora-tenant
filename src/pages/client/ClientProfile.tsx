@@ -22,6 +22,7 @@ import {
   Download,
   UserCheck,
   Percent,
+  Loader2,
 } from "lucide-react";
 import {
   ApiClientDetail,
@@ -30,12 +31,16 @@ import {
   prettyLabel,
   toneFor,
 } from "@/lib/clients-api";
+import { api } from "@/lib/api";
+import { useToast } from "@/hooks/use-toast";
 
 export default function ClientProfile() {
   const { id } = useParams();
+  const { toast } = useToast();
   const [client, setClient] = useState<ApiClientDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -56,6 +61,36 @@ export default function ClientProfile() {
       active = false;
     };
   }, [id]);
+
+  // ── Download KYC Report ───────────────────────────────────
+  const handleDownloadReport = async () => {
+    if (!id) return;
+    setDownloading(true);
+    try {
+      const response = await api.get(`/tenant/my-clients/${id}/report`, {
+        responseType: "blob",
+      });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement("a");
+      link.href = url;
+      const safeName = (client?.fullName ?? "client").replace(/\s+/g, "-");
+      const date = new Date().toISOString().split("T")[0];
+      link.setAttribute("download", `kyc-report-${safeName}-${date}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      toast({ title: "Report downloaded" });
+    } catch (err: any) {
+      toast({
+        title: "Download failed",
+        description: err?.response?.data?.message ?? "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -81,7 +116,6 @@ export default function ClientProfile() {
     );
   }
 
-  // ── Derived values from real response shape ───────────────
   const isCorporate = client.classifications?.toLowerCase() === "corporate";
   const Icon = isCorporate ? Building2 : UserIcon;
 
@@ -103,7 +137,6 @@ export default function ClientProfile() {
           ? "text-success"
           : "text-muted-foreground";
 
-  // assignedTo lives in client.profile.assignedTo
   const assignedTo = client.profile?.assignedTo;
   const officerName = assignedTo
     ? `${assignedTo.firstName} ${assignedTo.lastName}`.trim()
@@ -111,9 +144,15 @@ export default function ClientProfile() {
 
   const completion = client.profile?.profileCompletionPercent ?? 0;
   const isPep = client.profile?.isPoliticallyExposed ?? false;
-
   const auditTrail =
-    (client.profile as any)?.metadata?.auditTrail ?? client.activityTimeline ?? [];
+    (client.profile as any)?.metadata?.auditTrail ??
+    client.activityTimeline ??
+    [];
+
+  // Show download button when KYC has been submitted or further
+  const canDownloadReport = ["submitted", "approved", "rejected"].includes(
+    client.kycStatus?.toLowerCase() ?? "",
+  );
 
   return (
     <div className="space-y-6">
@@ -144,6 +183,29 @@ export default function ClientProfile() {
             {client.email} · ID: {client._id}
           </p>
         </div>
+
+        {/* ── Download Report button ── */}
+        {canDownloadReport && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleDownloadReport}
+            disabled={downloading}
+            className="shrink-0"
+          >
+            {downloading ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Generating…
+              </>
+            ) : (
+              <>
+                <Download className="h-4 w-4 mr-2" />
+                Download KYC Report
+              </>
+            )}
+          </Button>
+        )}
       </div>
 
       {/* Quick stats */}
@@ -291,7 +353,6 @@ export default function ClientProfile() {
               </CardContent>
             </Card>
 
-            {/* Individual profile details if available */}
             {client.profile?.individualProfile && (
               <Card className="md:col-span-2">
                 <CardHeader>
@@ -314,7 +375,6 @@ export default function ClientProfile() {
               </Card>
             )}
 
-            {/* Entity profile details if available */}
             {client.profile?.entityProfile && (
               <Card className="md:col-span-2">
                 <CardHeader>
@@ -376,7 +436,6 @@ export default function ClientProfile() {
                 </div>
               </div>
 
-              {/* Audit trail from profile metadata */}
               {auditTrail.length > 0 && (
                 <div className="pt-2">
                   <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
@@ -448,8 +507,7 @@ export default function ClientProfile() {
 
               {isPep && (
                 <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-sm text-destructive">
-                  ⚠ This client is flagged as a Politically Exposed Person
-                  (PEP).
+                  This client is flagged as a Politically Exposed Person (PEP).
                   {client.profile?.pepDetails && (
                     <p className="mt-1 text-xs">
                       {JSON.stringify(client.profile.pepDetails)}
@@ -473,7 +531,8 @@ export default function ClientProfile() {
               <CardTitle className="text-base">Uploaded Documents</CardTitle>
             </CardHeader>
             <CardContent>
-              {client.onboarding?.documents && client.onboarding?.documents.length > 0 ? (
+              {client.onboarding?.documents &&
+              client.onboarding.documents.length > 0 ? (
                 <div className="space-y-3">
                   {client.onboarding.documents.map((doc, i) => (
                     <div
