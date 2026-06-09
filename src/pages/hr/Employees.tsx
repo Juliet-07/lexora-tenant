@@ -220,7 +220,7 @@ export default function HREmployees() {
                   <div>
                     <SheetTitle>{selected.firstName} {selected.lastName}</SheetTitle>
                     <SheetDescription>{selected.jobTitle} · {selected.employeeNumber}</SheetDescription>
-                  </div>
+                    <div className="mt-1 inline-flex items-center gap-1 text-xs text-primary"><Building2 className="h-3 w-3" />{selected.clientName}</div>
                 </div>
               </SheetHeader>
               <Tabs defaultValue="profile" className="mt-6">
