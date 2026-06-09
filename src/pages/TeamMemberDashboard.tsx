@@ -8,12 +8,17 @@ import {
   CheckCircle2,
   Clock,
   ArrowUpRight,
-  CalendarDays,
   AlertCircle,
   ListChecks,
-  GraduationCap,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+
+// ─────────────────────────────────────────────────────────────
+// Team Member dashboard — scoped strictly to their workspace:
+// assigned clients, assigned tasks/projects, announcements.
+// No HR / admin actions here.
+// ─────────────────────────────────────────────────────────────
+
 
 // ─────────────────────────────────────────────────────────────
 // Team Member ("employee of the tenant") dashboard.
