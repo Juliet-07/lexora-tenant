@@ -69,6 +69,7 @@ function AppRoutes() {
 
   return (
     <Routes>
+      {/* ROUTES ACCESSIBLE ACROSS ALL MODULES */}
       <Route
         path="/"
         element={
@@ -117,22 +118,6 @@ function AppRoutes() {
           }
         />
       )}
-      <Route
-        path="/projects"
-        element={
-          <AppLayout>
-            <ProjectsList />
-          </AppLayout>
-        }
-      />
-      <Route
-        path="/projects/:id"
-        element={
-          <AppLayout>
-            <ProjectDetail />
-          </AppLayout>
-        }
-      />
       {isAdmin && (
         <Route
           path="/team"
@@ -143,34 +128,18 @@ function AppRoutes() {
           }
         />
       )}
-      <Route
-        path="/billing"
-        element={
-          <AppLayout>
-            <Billing />
-          </AppLayout>
-        }
-      />
       {isAdmin && (
         <Route
-          path="/aml/compliance"
+          path="/settings"
           element={
             <AppLayout>
-              <Compliance />
+              <Settings />
             </AppLayout>
           }
         />
       )}
-      {isAdmin && (
-        <Route
-          path="/aml/reports"
-          element={
-            <AppLayout>
-              <AmlReports />
-            </AppLayout>
-          }
-        />
-      )}
+      <Route path="*" element={<NotFound />} />
+      
       {/* AML/KYC module routes */}
       {isAdmin && (
         <Route
@@ -221,23 +190,85 @@ function AppRoutes() {
         }
       />
       {/* HR module routes */}
-      {isAdmin && <Route path="/hr/employees" element={<AppLayout><HREmployees /></AppLayout>} />}
-      {isAdmin && <Route path="/hr/recruitment" element={<AppLayout><HRRecruitment /></AppLayout>} />}
-      <Route path="/hr/attendance" element={<AppLayout><HRAttendance /></AppLayout>} />
-      <Route path="/hr/leave" element={<AppLayout><HRLeave /></AppLayout>} />
-      {isAdmin && <Route path="/hr/performance" element={<AppLayout><HRPerformance /></AppLayout>} />}
-      {isAdmin && <Route path="/hr/payroll" element={<AppLayout><HRPayroll /></AppLayout>} />}
-      <Route path="/hr/learning" element={<AppLayout><HRLearning /></AppLayout>} />
-      {isAdmin && <Route path="/hr/contracts" element={<AppLayout><HRContracts /></AppLayout>} />}
-      <Route path="/hr/requisitions" element={<AppLayout><HRRequisitions /></AppLayout>} />
-      <Route path="/hr/*" element={<AppLayout><ModulePlaceholder /></AppLayout>} />
-
-
+      {isAdmin && (
+        <Route
+          path="/hr/employees"
+          element={
+            <AppLayout>
+              <HREmployees />
+            </AppLayout>
+          }
+        />
+      )}
+      {isAdmin && (
+        <Route
+          path="/hr/recruitment"
+          element={
+            <AppLayout>
+              <HRRecruitment />
+            </AppLayout>
+          }
+        />
+      )}
       <Route
-        path="/grc/*"
+        path="/hr/attendance"
         element={
           <AppLayout>
-            <ModulePlaceholder />
+            <HRAttendance />
+          </AppLayout>
+        }
+      />
+      <Route
+        path="/hr/leave"
+        element={
+          <AppLayout>
+            <HRLeave />
+          </AppLayout>
+        }
+      />
+      {isAdmin && (
+        <Route
+          path="/hr/performance"
+          element={
+            <AppLayout>
+              <HRPerformance />
+            </AppLayout>
+          }
+        />
+      )}
+      {isAdmin && (
+        <Route
+          path="/hr/payroll"
+          element={
+            <AppLayout>
+              <HRPayroll />
+            </AppLayout>
+          }
+        />
+      )}
+      <Route
+        path="/hr/learning"
+        element={
+          <AppLayout>
+            <HRLearning />
+          </AppLayout>
+        }
+      />
+      {isAdmin && (
+        <Route
+          path="/hr/contracts"
+          element={
+            <AppLayout>
+              <HRContracts />
+            </AppLayout>
+          }
+        />
+      )}
+      <Route
+        path="/hr/requisitions"
+        element={
+          <AppLayout>
+            <HRRequisitions />
           </AppLayout>
         }
       />
@@ -249,15 +280,60 @@ function AppRoutes() {
           </AppLayout>
         }
       />
+
       <Route
-        path="/settings"
+        path="/projects"
         element={
           <AppLayout>
-            <Settings />
+            <ProjectsList />
           </AppLayout>
         }
       />
-      <Route path="*" element={<NotFound />} />
+      <Route
+        path="/projects/:id"
+        element={
+          <AppLayout>
+            <ProjectDetail />
+          </AppLayout>
+        }
+      />
+      <Route
+        path="/billing"
+        element={
+          <AppLayout>
+            <Billing />
+          </AppLayout>
+        }
+      />
+      {isAdmin && (
+        <Route
+          path="/aml/compliance"
+          element={
+            <AppLayout>
+              <Compliance />
+            </AppLayout>
+          }
+        />
+      )}
+      {isAdmin && (
+        <Route
+          path="/aml/reports"
+          element={
+            <AppLayout>
+              <AmlReports />
+            </AppLayout>
+          }
+        />
+      )}
+
+      <Route
+        path="/grc/*"
+        element={
+          <AppLayout>
+            <ModulePlaceholder />
+          </AppLayout>
+        }
+      />
     </Routes>
   );
 }
