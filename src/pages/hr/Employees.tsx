@@ -10,8 +10,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
-import { Users, UserPlus, Search, Briefcase, MapPin, Mail, Phone, Calendar, ShieldCheck, TrendingUp, UserMinus } from "lucide-react";
+import { Users, UserPlus, Search, Briefcase, MapPin, Mail, Phone, Calendar, ShieldCheck, TrendingUp, UserMinus, Building2 } from "lucide-react";
 import { employees as initial, type Employee } from "@/data/hrMockData";
+import { clients } from "@/data/mockData";
 import { useToast } from "@/hooks/use-toast";
 
 const statusColor = (s: Employee["status"]) =>
