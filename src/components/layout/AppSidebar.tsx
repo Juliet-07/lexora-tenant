@@ -153,7 +153,9 @@ const NAV_BY_MODULE: Record<
       icon: ShieldAlert,
       adminOnly: true,
     },
+    { title: "Team", url: "/team", icon: UserCog, adminOnly: true },
   ],
+
 
   // ── CRM ────────────────────────────────────────────────────
   crm: [
@@ -204,7 +206,20 @@ const NAV_BY_MODULE: Record<
       url: "/hr/learning",
       icon: GraduationCap,
     },
+    {
+      title: "Contracts",
+      url: "/hr/contracts",
+      icon: FileText,
+      adminOnly: true,
+    },
+    {
+      title: "Requisitions",
+      url: "/hr/requisitions",
+      icon: ClipboardList,
+    },
+    { title: "Team", url: "/team", icon: UserCog, adminOnly: true },
   ],
+
 
   // ── Legacy key aliases — kept so any old data still resolves ──
   // If the DB ever returns "kyc/aml" or "hr" these still work.
