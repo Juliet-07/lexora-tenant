@@ -153,12 +153,13 @@ export default function TeamMemberDashboard() {
       color: "text-secondary",
     },
     {
-      title: "Leave Balance",
-      value: "12d",
-      icon: CalendarDays,
-      change: "Annual remaining",
+      title: "Completed",
+      value: assignedTasks.filter((t) => t.status === "done").length,
+      icon: CheckCircle2,
+      change: "This week",
       color: "text-success",
     },
+
   ];
 
   return (
