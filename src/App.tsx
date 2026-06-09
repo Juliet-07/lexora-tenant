@@ -9,6 +9,7 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { ModulePlaceholder } from "@/components/layout/ModulePlaceholder";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
+import TeamMemberDashboard from "./pages/TeamMemberDashboard";
 import Clients from "./pages/client/Clients";
 import ClientOnboarding from "./pages/kyc/ClientOnboarding";
 import OnboardingDetail from "./pages/kyc/OnboardingDetail";
@@ -44,6 +45,10 @@ const PLACEHOLDER_MODULES = new Set<string>([]);
 
 function ModuleHome() {
   const { currentModule } = useModule();
+  const { isAdmin } = useAuth();
+
+  // Team members get their own focused dashboard regardless of module
+  if (!isAdmin) return <TeamMemberDashboard />;
 
   // ✅ Guard
   if (!currentModule)
@@ -297,14 +302,16 @@ function AppRoutes() {
           </AppLayout>
         }
       />
-      <Route
-        path="/billing"
-        element={
-          <AppLayout>
-            <Billing />
-          </AppLayout>
-        }
-      />
+      {isAdmin && (
+        <Route
+          path="/billing"
+          element={
+            <AppLayout>
+              <Billing />
+            </AppLayout>
+          }
+        />
+      )}
       {isAdmin && (
         <Route
           path="/aml/compliance"
