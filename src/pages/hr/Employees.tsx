@@ -148,8 +148,12 @@ export default function HREmployees() {
         <CardContent className="p-4 flex flex-wrap gap-3 items-center">
           <div className="relative flex-1 min-w-[200px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input className="pl-9" placeholder="Search by name, email, role…" value={search} onChange={e => setSearch(e.target.value)} />
+            <Input className="pl-9" placeholder="Search by name, email, role, client…" value={search} onChange={e => setSearch(e.target.value)} />
           </div>
+          <Select value={clientFilter} onValueChange={setClientFilter}>
+            <SelectTrigger className="w-[220px]"><SelectValue /></SelectTrigger>
+            <SelectContent><SelectItem value="all">All clients</SelectItem>{clientList.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
+          </Select>
           <Select value={dept} onValueChange={setDept}>
             <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
             <SelectContent><SelectItem value="all">All departments</SelectItem>{departments.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}</SelectContent>
@@ -161,25 +165,50 @@ export default function HREmployees() {
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {filtered.map(e => (
-          <Card key={e.id} className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => setSelected(e)}>
-            <CardContent className="p-5">
-              <div className="flex items-start gap-3">
-                <Avatar className="h-12 w-12"><AvatarFallback className="bg-gradient-to-br from-primary to-secondary text-white font-semibold">{e.avatar}</AvatarFallback></Avatar>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2"><h3 className="font-semibold truncate">{e.firstName} {e.lastName}</h3><Badge variant="outline" className={statusColor(e.status)}>{e.status}</Badge></div>
-                  <p className="text-sm text-muted-foreground truncate">{e.jobTitle}</p>
-                  <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                    <span className="inline-flex items-center gap-1"><Briefcase className="h-3 w-3" />{e.department}</span>
-                    <span className="inline-flex items-center gap-1"><MapPin className="h-3 w-3" />{e.location}</span>
-                  </div>
+      {(() => {
+        const groups = filtered.reduce<Record<string, Employee[]>>((acc, e) => {
+          (acc[e.clientName] ||= []).push(e);
+          return acc;
+        }, {});
+        const clientNames = Object.keys(groups).sort();
+        if (clientNames.length === 0) {
+          return <Card><CardContent className="p-10 text-center text-sm text-muted-foreground">No employees match your filters.</CardContent></Card>;
+        }
+        return (
+          <div className="space-y-6">
+            {clientNames.map(cn => (
+              <div key={cn} className="space-y-3">
+                <div className="flex items-center gap-2 px-1">
+                  <Building2 className="h-4 w-4 text-primary" />
+                  <h2 className="text-sm font-semibold uppercase tracking-wide">{cn}</h2>
+                  <Badge variant="secondary" className="ml-1">{groups[cn].length}</Badge>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                  {groups[cn].map(e => (
+                    <Card key={e.id} className="hover:shadow-md transition-shadow cursor-pointer border-l-4 border-l-primary/40" onClick={() => setSelected(e)}>
+                      <CardContent className="p-5">
+                        <div className="flex items-start gap-3">
+                          <Avatar className="h-12 w-12"><AvatarFallback className="bg-gradient-to-br from-primary to-secondary text-white font-semibold">{e.avatar}</AvatarFallback></Avatar>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2"><h3 className="font-semibold truncate">{e.firstName} {e.lastName}</h3><Badge variant="outline" className={statusColor(e.status)}>{e.status}</Badge></div>
+                            <p className="text-sm text-muted-foreground truncate">{e.jobTitle}</p>
+                            <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                              <span className="inline-flex items-center gap-1"><Building2 className="h-3 w-3" />{e.clientName}</span>
+                              <span className="inline-flex items-center gap-1"><Briefcase className="h-3 w-3" />{e.department}</span>
+                              <span className="inline-flex items-center gap-1"><MapPin className="h-3 w-3" />{e.location}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
                 </div>
               </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+            ))}
+          </div>
+        );
+      })()}
+
 
       <Sheet open={!!selected} onOpenChange={(o) => !o && setSelected(null)}>
         <SheetContent className="w-full sm:max-w-xl overflow-y-auto">
