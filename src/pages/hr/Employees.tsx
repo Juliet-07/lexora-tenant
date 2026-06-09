@@ -87,15 +87,24 @@ export default function HREmployees() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">Employees</h1>
-          <p className="text-sm text-muted-foreground">Directory of {employees.length} people across {departments.length} departments.</p>
+          <p className="text-sm text-muted-foreground">Manage workforce data on behalf of {clientsServed} client {clientsServed === 1 ? "company" : "companies"} — {employees.length} people across {departments.length} departments.</p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
             <Button className="bg-gradient-to-r from-primary to-secondary"><UserPlus className="h-4 w-4 mr-2" /> Add Employee</Button>
           </DialogTrigger>
           <DialogContent>
-            <DialogHeader><DialogTitle>Add Employee</DialogTitle></DialogHeader>
+            <DialogHeader>
+              <DialogTitle>Add Employee</DialogTitle>
+              <p className="text-xs text-muted-foreground pt-1">Select the client this employee belongs to. They will be onboarded into that client's HR records.</p>
+            </DialogHeader>
             <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1 col-span-2"><Label>Client <span className="text-destructive">*</span></Label>
+                <Select value={form.clientId} onValueChange={v => setForm({ ...form, clientId: v })}>
+                  <SelectTrigger><SelectValue placeholder="Select a client…" /></SelectTrigger>
+                  <SelectContent>{clientList.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
               <div className="space-y-1"><Label>First name</Label><Input value={form.firstName} onChange={e => setForm({ ...form, firstName: e.target.value })} /></div>
               <div className="space-y-1"><Label>Last name</Label><Input value={form.lastName} onChange={e => setForm({ ...form, lastName: e.target.value })} /></div>
               <div className="space-y-1 col-span-2"><Label>Work email</Label><Input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} /></div>
@@ -117,6 +126,7 @@ export default function HREmployees() {
           </DialogContent>
         </Dialog>
       </div>
+
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {stats.map(s => (
