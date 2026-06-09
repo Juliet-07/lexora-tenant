@@ -236,6 +236,7 @@ export default function HREmployees() {
                   </div>
                 </TabsContent>
                 <TabsContent value="employment" className="space-y-3 pt-4">
+                  <Row icon={Building2} label="Client" value={selected.clientName} />
                   <Row icon={Briefcase} label="Department" value={selected.department} />
                   <Row icon={Users} label="Manager" value={selected.manager ?? "—"} />
                   <Row icon={Calendar} label="Start date" value={selected.startDate} />
