@@ -230,6 +230,8 @@ function AppRoutes() {
       <Route path="/hr/learning" element={<AppLayout><HRLearning /></AppLayout>} />
       {isAdmin && <Route path="/hr/contracts" element={<AppLayout><HRContracts /></AppLayout>} />}
       <Route path="/hr/requisitions" element={<AppLayout><HRRequisitions /></AppLayout>} />
+      <Route path="/hr/*" element={<AppLayout><ModulePlaceholder /></AppLayout>} />
+
 
       <Route
         path="/grc/*"

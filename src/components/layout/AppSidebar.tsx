@@ -103,7 +103,9 @@ const NAV_BY_MODULE: Record<
       icon: BarChart3,
       adminOnly: true,
     },
+    { title: "Team", url: "/team", icon: UserCog, adminOnly: true },
   ],
+
 
   // ── GRC ────────────────────────────────────────────────────
   grc: [
