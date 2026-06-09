@@ -10,8 +10,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
-import { Users, UserPlus, Search, Briefcase, MapPin, Mail, Phone, Calendar, ShieldCheck, TrendingUp, UserMinus } from "lucide-react";
+import { Users, UserPlus, Search, Briefcase, MapPin, Mail, Phone, Calendar, ShieldCheck, TrendingUp, UserMinus, Building2 } from "lucide-react";
 import { employees as initial, type Employee } from "@/data/hrMockData";
+import { clients } from "@/data/mockData";
 import { useToast } from "@/hooks/use-toast";
 
 const statusColor = (s: Employee["status"]) =>
@@ -25,32 +26,42 @@ export default function HREmployees() {
   const [search, setSearch] = useState("");
   const [dept, setDept] = useState<string>("all");
   const [status, setStatus] = useState<string>("all");
+  const [clientFilter, setClientFilter] = useState<string>("all");
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<Employee | null>(null);
-  const [form, setForm] = useState({ firstName: "", lastName: "", email: "", department: "Engineering", jobTitle: "", employmentType: "Full-time" as Employee["employmentType"] });
+  const [form, setForm] = useState({ clientId: "", firstName: "", lastName: "", email: "", department: "Engineering", jobTitle: "", employmentType: "Full-time" as Employee["employmentType"] });
   const { toast } = useToast();
 
   const departments = useMemo(() => Array.from(new Set(employees.map(e => e.department))), [employees]);
+  const clientList = useMemo(() => clients.map(c => ({ id: c.id, name: c.name })), []);
 
   const filtered = employees.filter(e =>
+    (clientFilter === "all" || e.clientId === clientFilter) &&
     (dept === "all" || e.department === dept) &&
     (status === "all" || e.status === status) &&
-    (`${e.firstName} ${e.lastName} ${e.email} ${e.jobTitle}`.toLowerCase().includes(search.toLowerCase()))
+    (`${e.firstName} ${e.lastName} ${e.email} ${e.jobTitle} ${e.clientName}`.toLowerCase().includes(search.toLowerCase()))
   );
+
+  const clientsServed = useMemo(() => new Set(employees.map(e => e.clientId)).size, [employees]);
 
   const stats = [
     { label: "Total Headcount", value: employees.length, icon: Users, tone: "from-primary to-secondary" },
+    { label: "Clients Served", value: clientsServed, icon: Building2, tone: "from-violet-500 to-purple-500" },
     { label: "Active", value: employees.filter(e => e.status === "Active").length, icon: ShieldCheck, tone: "from-emerald-500 to-teal-500" },
     { label: "On Leave", value: employees.filter(e => e.status === "On Leave").length, icon: Calendar, tone: "from-amber-500 to-orange-500" },
-    { label: "On Probation", value: employees.filter(e => e.status === "Probation").length, icon: TrendingUp, tone: "from-blue-500 to-cyan-500" },
   ];
 
   const handleAdd = () => {
-    if (!form.firstName || !form.lastName || !form.email) return;
+    if (!form.clientId || !form.firstName || !form.lastName || !form.email) {
+      toast({ title: "Missing fields", description: "Select a client and fill required fields.", variant: "destructive" });
+      return;
+    }
+    const client = clientList.find(c => c.id === form.clientId)!;
     const nextNum = String(employees.length + 1).padStart(4, "0");
     const e: Employee = {
       id: `EMP-${String(employees.length + 1).padStart(3, "0")}`,
-      employeeNumber: `LX-${nextNum}`,
+      employeeNumber: `${client.id.replace("CLT-", "C")}-${nextNum}`,
+      clientId: client.id, clientName: client.name,
       firstName: form.firstName, lastName: form.lastName, email: form.email,
       phone: "—", department: form.department, jobTitle: form.jobTitle,
       manager: null, employmentType: form.employmentType, status: "Probation",
@@ -61,8 +72,8 @@ export default function HREmployees() {
     };
     setEmployees([e, ...employees]);
     setOpen(false);
-    setForm({ firstName: "", lastName: "", email: "", department: "Engineering", jobTitle: "", employmentType: "Full-time" });
-    toast({ title: "Employee added", description: `${e.firstName} ${e.lastName} has been added.` });
+    setForm({ clientId: "", firstName: "", lastName: "", email: "", department: "Engineering", jobTitle: "", employmentType: "Full-time" });
+    toast({ title: "Employee added", description: `${e.firstName} ${e.lastName} added to ${client.name}.` });
   };
 
   const handleTerminate = (e: Employee) => {
@@ -76,15 +87,24 @@ export default function HREmployees() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">Employees</h1>
-          <p className="text-sm text-muted-foreground">Directory of {employees.length} people across {departments.length} departments.</p>
+          <p className="text-sm text-muted-foreground">Manage workforce data on behalf of {clientsServed} client {clientsServed === 1 ? "company" : "companies"} — {employees.length} people across {departments.length} departments.</p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
             <Button className="bg-gradient-to-r from-primary to-secondary"><UserPlus className="h-4 w-4 mr-2" /> Add Employee</Button>
           </DialogTrigger>
           <DialogContent>
-            <DialogHeader><DialogTitle>Add Employee</DialogTitle></DialogHeader>
+            <DialogHeader>
+              <DialogTitle>Add Employee</DialogTitle>
+              <p className="text-xs text-muted-foreground pt-1">Select the client this employee belongs to. They will be onboarded into that client's HR records.</p>
+            </DialogHeader>
             <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1 col-span-2"><Label>Client <span className="text-destructive">*</span></Label>
+                <Select value={form.clientId} onValueChange={v => setForm({ ...form, clientId: v })}>
+                  <SelectTrigger><SelectValue placeholder="Select a client…" /></SelectTrigger>
+                  <SelectContent>{clientList.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
               <div className="space-y-1"><Label>First name</Label><Input value={form.firstName} onChange={e => setForm({ ...form, firstName: e.target.value })} /></div>
               <div className="space-y-1"><Label>Last name</Label><Input value={form.lastName} onChange={e => setForm({ ...form, lastName: e.target.value })} /></div>
               <div className="space-y-1 col-span-2"><Label>Work email</Label><Input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} /></div>
@@ -107,6 +127,7 @@ export default function HREmployees() {
         </Dialog>
       </div>
 
+
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {stats.map(s => (
           <Card key={s.label}>
@@ -127,8 +148,12 @@ export default function HREmployees() {
         <CardContent className="p-4 flex flex-wrap gap-3 items-center">
           <div className="relative flex-1 min-w-[200px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input className="pl-9" placeholder="Search by name, email, role…" value={search} onChange={e => setSearch(e.target.value)} />
+            <Input className="pl-9" placeholder="Search by name, email, role, client…" value={search} onChange={e => setSearch(e.target.value)} />
           </div>
+          <Select value={clientFilter} onValueChange={setClientFilter}>
+            <SelectTrigger className="w-[220px]"><SelectValue /></SelectTrigger>
+            <SelectContent><SelectItem value="all">All clients</SelectItem>{clientList.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
+          </Select>
           <Select value={dept} onValueChange={setDept}>
             <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
             <SelectContent><SelectItem value="all">All departments</SelectItem>{departments.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}</SelectContent>
@@ -140,25 +165,50 @@ export default function HREmployees() {
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {filtered.map(e => (
-          <Card key={e.id} className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => setSelected(e)}>
-            <CardContent className="p-5">
-              <div className="flex items-start gap-3">
-                <Avatar className="h-12 w-12"><AvatarFallback className="bg-gradient-to-br from-primary to-secondary text-white font-semibold">{e.avatar}</AvatarFallback></Avatar>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2"><h3 className="font-semibold truncate">{e.firstName} {e.lastName}</h3><Badge variant="outline" className={statusColor(e.status)}>{e.status}</Badge></div>
-                  <p className="text-sm text-muted-foreground truncate">{e.jobTitle}</p>
-                  <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                    <span className="inline-flex items-center gap-1"><Briefcase className="h-3 w-3" />{e.department}</span>
-                    <span className="inline-flex items-center gap-1"><MapPin className="h-3 w-3" />{e.location}</span>
-                  </div>
+      {(() => {
+        const groups = filtered.reduce<Record<string, Employee[]>>((acc, e) => {
+          (acc[e.clientName] ||= []).push(e);
+          return acc;
+        }, {});
+        const clientNames = Object.keys(groups).sort();
+        if (clientNames.length === 0) {
+          return <Card><CardContent className="p-10 text-center text-sm text-muted-foreground">No employees match your filters.</CardContent></Card>;
+        }
+        return (
+          <div className="space-y-6">
+            {clientNames.map(cn => (
+              <div key={cn} className="space-y-3">
+                <div className="flex items-center gap-2 px-1">
+                  <Building2 className="h-4 w-4 text-primary" />
+                  <h2 className="text-sm font-semibold uppercase tracking-wide">{cn}</h2>
+                  <Badge variant="secondary" className="ml-1">{groups[cn].length}</Badge>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                  {groups[cn].map(e => (
+                    <Card key={e.id} className="hover:shadow-md transition-shadow cursor-pointer border-l-4 border-l-primary/40" onClick={() => setSelected(e)}>
+                      <CardContent className="p-5">
+                        <div className="flex items-start gap-3">
+                          <Avatar className="h-12 w-12"><AvatarFallback className="bg-gradient-to-br from-primary to-secondary text-white font-semibold">{e.avatar}</AvatarFallback></Avatar>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2"><h3 className="font-semibold truncate">{e.firstName} {e.lastName}</h3><Badge variant="outline" className={statusColor(e.status)}>{e.status}</Badge></div>
+                            <p className="text-sm text-muted-foreground truncate">{e.jobTitle}</p>
+                            <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                              <span className="inline-flex items-center gap-1"><Building2 className="h-3 w-3" />{e.clientName}</span>
+                              <span className="inline-flex items-center gap-1"><Briefcase className="h-3 w-3" />{e.department}</span>
+                              <span className="inline-flex items-center gap-1"><MapPin className="h-3 w-3" />{e.location}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
                 </div>
               </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+            ))}
+          </div>
+        );
+      })()}
+
 
       <Sheet open={!!selected} onOpenChange={(o) => !o && setSelected(null)}>
         <SheetContent className="w-full sm:max-w-xl overflow-y-auto">
@@ -170,6 +220,7 @@ export default function HREmployees() {
                   <div>
                     <SheetTitle>{selected.firstName} {selected.lastName}</SheetTitle>
                     <SheetDescription>{selected.jobTitle} · {selected.employeeNumber}</SheetDescription>
+                    <div className="mt-1 inline-flex items-center gap-1 text-xs text-primary"><Building2 className="h-3 w-3" />{selected.clientName}</div>
                   </div>
                 </div>
               </SheetHeader>
@@ -185,6 +236,7 @@ export default function HREmployees() {
                   </div>
                 </TabsContent>
                 <TabsContent value="employment" className="space-y-3 pt-4">
+                  <Row icon={Building2} label="Client" value={selected.clientName} />
                   <Row icon={Briefcase} label="Department" value={selected.department} />
                   <Row icon={Users} label="Manager" value={selected.manager ?? "—"} />
                   <Row icon={Calendar} label="Start date" value={selected.startDate} />
