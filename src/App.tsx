@@ -22,7 +22,17 @@ import RiskEngine from "./pages/aml/RiskEngine";
 import TransactionMonitoring from "./pages/aml/TransactionMonitoring";
 import STR from "./pages/aml/STR";
 import WatchlistManagement from "./pages/aml/WatchlistManagement";
+import HREmployees from "./pages/hr/Employees";
+import HRRecruitment from "./pages/hr/Recruitment";
+import HRAttendance from "./pages/hr/Attendance";
+import HRLeave from "./pages/hr/Leave";
+import HRPerformance from "./pages/hr/Performance";
+import HRPayroll from "./pages/hr/Payroll";
+import HRLearning from "./pages/hr/Learning";
+import HRContracts from "./pages/hr/Contracts";
+import HRRequisitions from "./pages/hr/Requisitions";
 import Settings from "./pages/settings/Index";
+
 import NotFound from "./pages/NotFound";
 import { Loader2 } from "lucide-react";
 
