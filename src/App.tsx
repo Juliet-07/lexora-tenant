@@ -11,10 +11,12 @@ import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import TeamMemberDashboard from "./pages/TeamMemberDashboard";
 import Clients from "./pages/client/Clients";
+import AssignedClients from "./pages/AssignedClients";
 import ClientOnboarding from "./pages/kyc/ClientOnboarding";
 import OnboardingDetail from "./pages/kyc/OnboardingDetail";
 import ClientProfile from "./pages/client/ClientProfile";
 import { ProjectsList, ProjectDetail } from "./pages/Projects";
+import { MyProjectsList, MyProjectDetail } from "./pages/MyProjects";
 import Team from "./pages/Team";
 import Billing from "./pages/Billing";
 import Compliance from "./pages/aml/Compliance";
@@ -83,16 +85,15 @@ function AppRoutes() {
           </AppLayout>
         }
       />
-      {isAdmin && (
-        <Route
-          path="/clients"
-          element={
-            <AppLayout>
-              <Clients />
-            </AppLayout>
-          }
-        />
-      )}
+      <Route
+        path="/clients"
+        element={
+          <AppLayout>
+            {isAdmin ? <Clients /> : <AssignedClients />}
+          </AppLayout>
+        }
+      />
+
       {isAdmin && (
         <Route
           path="/clients/:id"
@@ -290,7 +291,7 @@ function AppRoutes() {
         path="/projects"
         element={
           <AppLayout>
-            <ProjectsList />
+            {isAdmin ? <ProjectsList /> : <MyProjectsList />}
           </AppLayout>
         }
       />
@@ -298,10 +299,11 @@ function AppRoutes() {
         path="/projects/:id"
         element={
           <AppLayout>
-            <ProjectDetail />
+            {isAdmin ? <ProjectDetail /> : <MyProjectDetail />}
           </AppLayout>
         }
       />
+
       {isAdmin && (
         <Route
           path="/billing"
