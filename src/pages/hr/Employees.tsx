@@ -26,32 +26,42 @@ export default function HREmployees() {
   const [search, setSearch] = useState("");
   const [dept, setDept] = useState<string>("all");
   const [status, setStatus] = useState<string>("all");
+  const [clientFilter, setClientFilter] = useState<string>("all");
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<Employee | null>(null);
-  const [form, setForm] = useState({ firstName: "", lastName: "", email: "", department: "Engineering", jobTitle: "", employmentType: "Full-time" as Employee["employmentType"] });
+  const [form, setForm] = useState({ clientId: "", firstName: "", lastName: "", email: "", department: "Engineering", jobTitle: "", employmentType: "Full-time" as Employee["employmentType"] });
   const { toast } = useToast();
 
   const departments = useMemo(() => Array.from(new Set(employees.map(e => e.department))), [employees]);
+  const clientList = useMemo(() => clients.map(c => ({ id: c.id, name: c.name })), []);
 
   const filtered = employees.filter(e =>
+    (clientFilter === "all" || e.clientId === clientFilter) &&
     (dept === "all" || e.department === dept) &&
     (status === "all" || e.status === status) &&
-    (`${e.firstName} ${e.lastName} ${e.email} ${e.jobTitle}`.toLowerCase().includes(search.toLowerCase()))
+    (`${e.firstName} ${e.lastName} ${e.email} ${e.jobTitle} ${e.clientName}`.toLowerCase().includes(search.toLowerCase()))
   );
+
+  const clientsServed = useMemo(() => new Set(employees.map(e => e.clientId)).size, [employees]);
 
   const stats = [
     { label: "Total Headcount", value: employees.length, icon: Users, tone: "from-primary to-secondary" },
+    { label: "Clients Served", value: clientsServed, icon: Building2, tone: "from-violet-500 to-purple-500" },
     { label: "Active", value: employees.filter(e => e.status === "Active").length, icon: ShieldCheck, tone: "from-emerald-500 to-teal-500" },
     { label: "On Leave", value: employees.filter(e => e.status === "On Leave").length, icon: Calendar, tone: "from-amber-500 to-orange-500" },
-    { label: "On Probation", value: employees.filter(e => e.status === "Probation").length, icon: TrendingUp, tone: "from-blue-500 to-cyan-500" },
   ];
 
   const handleAdd = () => {
-    if (!form.firstName || !form.lastName || !form.email) return;
+    if (!form.clientId || !form.firstName || !form.lastName || !form.email) {
+      toast({ title: "Missing fields", description: "Select a client and fill required fields.", variant: "destructive" });
+      return;
+    }
+    const client = clientList.find(c => c.id === form.clientId)!;
     const nextNum = String(employees.length + 1).padStart(4, "0");
     const e: Employee = {
       id: `EMP-${String(employees.length + 1).padStart(3, "0")}`,
-      employeeNumber: `LX-${nextNum}`,
+      employeeNumber: `${client.id.replace("CLT-", "C")}-${nextNum}`,
+      clientId: client.id, clientName: client.name,
       firstName: form.firstName, lastName: form.lastName, email: form.email,
       phone: "—", department: form.department, jobTitle: form.jobTitle,
       manager: null, employmentType: form.employmentType, status: "Probation",
@@ -62,8 +72,8 @@ export default function HREmployees() {
     };
     setEmployees([e, ...employees]);
     setOpen(false);
-    setForm({ firstName: "", lastName: "", email: "", department: "Engineering", jobTitle: "", employmentType: "Full-time" });
-    toast({ title: "Employee added", description: `${e.firstName} ${e.lastName} has been added.` });
+    setForm({ clientId: "", firstName: "", lastName: "", email: "", department: "Engineering", jobTitle: "", employmentType: "Full-time" });
+    toast({ title: "Employee added", description: `${e.firstName} ${e.lastName} added to ${client.name}.` });
   };
 
   const handleTerminate = (e: Employee) => {
