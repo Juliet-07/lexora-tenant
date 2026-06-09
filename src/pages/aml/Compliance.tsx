@@ -551,14 +551,15 @@ export default function ComplianceAlerts() {
         },
         {
           name: "Medium",
-          value: stats.summary.medium ?? 0,
+          value: (stats.summary as any).medium ?? 0,
           color: SEVERITY_COLORS.medium,
         },
         {
           name: "Low",
-          value: stats.summary.low ?? 0,
+          value: (stats.summary as any).low ?? 0,
           color: SEVERITY_COLORS.low,
         },
+
       ].filter((d) => d.value > 0)
     : [];
 
@@ -621,11 +622,12 @@ export default function ComplianceAlerts() {
                     <p className="text-xs text-muted-foreground">{label}</p>
                     <p className={`text-3xl font-bold ${color}`}>{value}</p>
                     {label === "Open" &&
-                      (stats?.summary.acknowledged ?? 0) > 0 && (
+                      ((stats?.summary as any)?.acknowledged ?? 0) > 0 && (
                         <p className="text-[10px] text-primary mt-0.5">
-                          {stats?.summary.acknowledged} client responded
+                          {(stats?.summary as any)?.acknowledged} client responded
                         </p>
                       )}
+
                   </CardContent>
                 </Card>
               ))}

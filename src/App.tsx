@@ -22,7 +22,17 @@ import RiskEngine from "./pages/aml/RiskEngine";
 import TransactionMonitoring from "./pages/aml/TransactionMonitoring";
 import STR from "./pages/aml/STR";
 import WatchlistManagement from "./pages/aml/WatchlistManagement";
+import HREmployees from "./pages/hr/Employees";
+import HRRecruitment from "./pages/hr/Recruitment";
+import HRAttendance from "./pages/hr/Attendance";
+import HRLeave from "./pages/hr/Leave";
+import HRPerformance from "./pages/hr/Performance";
+import HRPayroll from "./pages/hr/Payroll";
+import HRLearning from "./pages/hr/Learning";
+import HRContracts from "./pages/hr/Contracts";
+import HRRequisitions from "./pages/hr/Requisitions";
 import Settings from "./pages/settings/Index";
+
 import NotFound from "./pages/NotFound";
 import { Loader2 } from "lucide-react";
 
@@ -210,6 +220,19 @@ function AppRoutes() {
           </AppLayout>
         }
       />
+      {/* HR module routes */}
+      {isAdmin && <Route path="/hr/employees" element={<AppLayout><HREmployees /></AppLayout>} />}
+      {isAdmin && <Route path="/hr/recruitment" element={<AppLayout><HRRecruitment /></AppLayout>} />}
+      <Route path="/hr/attendance" element={<AppLayout><HRAttendance /></AppLayout>} />
+      <Route path="/hr/leave" element={<AppLayout><HRLeave /></AppLayout>} />
+      {isAdmin && <Route path="/hr/performance" element={<AppLayout><HRPerformance /></AppLayout>} />}
+      {isAdmin && <Route path="/hr/payroll" element={<AppLayout><HRPayroll /></AppLayout>} />}
+      <Route path="/hr/learning" element={<AppLayout><HRLearning /></AppLayout>} />
+      {isAdmin && <Route path="/hr/contracts" element={<AppLayout><HRContracts /></AppLayout>} />}
+      <Route path="/hr/requisitions" element={<AppLayout><HRRequisitions /></AppLayout>} />
+      <Route path="/hr/*" element={<AppLayout><ModulePlaceholder /></AppLayout>} />
+
+
       <Route
         path="/grc/*"
         element={
