@@ -5,6 +5,8 @@
 export interface Employee {
   id: string;
   employeeNumber: string;
+  clientId: string;
+  clientName: string;
   firstName: string;
   lastName: string;
   email: string;
