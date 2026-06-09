@@ -220,6 +220,17 @@ function AppRoutes() {
           </AppLayout>
         }
       />
+      {/* HR module routes */}
+      {isAdmin && <Route path="/hr/employees" element={<AppLayout><HREmployees /></AppLayout>} />}
+      {isAdmin && <Route path="/hr/recruitment" element={<AppLayout><HRRecruitment /></AppLayout>} />}
+      <Route path="/hr/attendance" element={<AppLayout><HRAttendance /></AppLayout>} />
+      <Route path="/hr/leave" element={<AppLayout><HRLeave /></AppLayout>} />
+      {isAdmin && <Route path="/hr/performance" element={<AppLayout><HRPerformance /></AppLayout>} />}
+      {isAdmin && <Route path="/hr/payroll" element={<AppLayout><HRPayroll /></AppLayout>} />}
+      <Route path="/hr/learning" element={<AppLayout><HRLearning /></AppLayout>} />
+      {isAdmin && <Route path="/hr/contracts" element={<AppLayout><HRContracts /></AppLayout>} />}
+      <Route path="/hr/requisitions" element={<AppLayout><HRRequisitions /></AppLayout>} />
+
       <Route
         path="/grc/*"
         element={
