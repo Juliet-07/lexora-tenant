@@ -8,12 +8,17 @@ import {
   CheckCircle2,
   Clock,
   ArrowUpRight,
-  CalendarDays,
   AlertCircle,
   ListChecks,
-  GraduationCap,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+
+// ─────────────────────────────────────────────────────────────
+// Team Member dashboard — scoped strictly to their workspace:
+// assigned clients, assigned tasks/projects, announcements.
+// No HR / admin actions here.
+// ─────────────────────────────────────────────────────────────
+
 
 // ─────────────────────────────────────────────────────────────
 // Team Member ("employee of the tenant") dashboard.
@@ -148,12 +153,13 @@ export default function TeamMemberDashboard() {
       color: "text-secondary",
     },
     {
-      title: "Leave Balance",
-      value: "12d",
-      icon: CalendarDays,
-      change: "Annual remaining",
+      title: "Completed",
+      value: assignedTasks.filter((t) => t.status === "done").length,
+      icon: CheckCircle2,
+      change: "This week",
       color: "text-success",
     },
+
   ];
 
   return (
@@ -261,31 +267,20 @@ export default function TeamMemberDashboard() {
             </CardHeader>
             <CardContent className="space-y-2">
               <Button asChild variant="outline" className="w-full justify-start">
-                <Link to="/hr/leave">
-                  <CalendarDays className="h-4 w-4 mr-2" />
-                  Request Leave
+                <Link to="/clients">
+                  <Users className="h-4 w-4 mr-2" />
+                  View My Clients
                 </Link>
               </Button>
               <Button asChild variant="outline" className="w-full justify-start">
-                <Link to="/hr/attendance">
-                  <Clock className="h-4 w-4 mr-2" />
-                  Clock In / Out
-                </Link>
-              </Button>
-              <Button asChild variant="outline" className="w-full justify-start">
-                <Link to="/hr/requisitions">
-                  <ListChecks className="h-4 w-4 mr-2" />
-                  New Requisition
-                </Link>
-              </Button>
-              <Button asChild variant="outline" className="w-full justify-start">
-                <Link to="/hr/learning">
-                  <GraduationCap className="h-4 w-4 mr-2" />
-                  My Learning
+                <Link to="/projects">
+                  <FolderKanban className="h-4 w-4 mr-2" />
+                  View Projects
                 </Link>
               </Button>
             </CardContent>
           </Card>
+
 
           {/* Announcements */}
           <Card>
