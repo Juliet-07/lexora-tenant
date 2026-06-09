@@ -267,31 +267,20 @@ export default function TeamMemberDashboard() {
             </CardHeader>
             <CardContent className="space-y-2">
               <Button asChild variant="outline" className="w-full justify-start">
-                <Link to="/hr/leave">
-                  <CalendarDays className="h-4 w-4 mr-2" />
-                  Request Leave
+                <Link to="/clients">
+                  <Users className="h-4 w-4 mr-2" />
+                  View My Clients
                 </Link>
               </Button>
               <Button asChild variant="outline" className="w-full justify-start">
-                <Link to="/hr/attendance">
-                  <Clock className="h-4 w-4 mr-2" />
-                  Clock In / Out
-                </Link>
-              </Button>
-              <Button asChild variant="outline" className="w-full justify-start">
-                <Link to="/hr/requisitions">
-                  <ListChecks className="h-4 w-4 mr-2" />
-                  New Requisition
-                </Link>
-              </Button>
-              <Button asChild variant="outline" className="w-full justify-start">
-                <Link to="/hr/learning">
-                  <GraduationCap className="h-4 w-4 mr-2" />
-                  My Learning
+                <Link to="/projects">
+                  <FolderKanban className="h-4 w-4 mr-2" />
+                  View Projects
                 </Link>
               </Button>
             </CardContent>
           </Card>
+
 
           {/* Announcements */}
           <Card>
