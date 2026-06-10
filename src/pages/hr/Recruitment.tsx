@@ -10,8 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Progress } from "@/components/ui/progress";
-import { Briefcase, Plus, Users, Clock, CheckCircle2, Star, MapPin, ArrowRight } from "lucide-react";
-import { jobOpenings as initialJobs, applicants as initialApplicants, type JobOpening, type Applicant } from "@/data/hrMockData";
+import { Briefcase, Plus, Users, Clock, CheckCircle2, Star, MapPin, ArrowRight, LogIn, LogOut, Building2, CheckCircle, XCircle } from "lucide-react";
+import { jobOpenings as initialJobs, applicants as initialApplicants, onboardingItems as initialOnboarding, offboardingItems as initialOffboarding, type JobOpening, type Applicant, type Onboarding, type Offboarding } from "@/data/hrMockData";
 import { useToast } from "@/hooks/use-toast";
 
 const stageColor = (s: Applicant["stage"]) =>
