@@ -4,8 +4,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Users,
-  Clock,
-  FolderKanban,
   AlertTriangle,
   CheckCircle2,
   ArrowUpRight,
@@ -13,10 +11,15 @@ import {
   Loader2,
   CalendarClock,
   ShieldCheck,
+  Briefcase,
+  UserCheck,
+  Building2,
+  TrendingUp,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useModule } from "@/contexts/ModuleContext";
 
+// ─── Trial banner ─────────────────────────────────────────────
 function TrialBanner({
   trialEndsAt,
   plan,
@@ -38,13 +41,19 @@ function TrialBanner({
         <strong>Free trial</strong> — {daysLeft} day{daysLeft !== 1 ? "s" : ""}{" "}
         remaining. Upgrade your plan to keep full access.
       </span>
-      <Button asChild size="sm" variant="outline" className="border-warning/40 text-warning hover:bg-warning/20">
+      <Button
+        asChild
+        size="sm"
+        variant="outline"
+        className="border-warning/40 text-warning hover:bg-warning/20"
+      >
         <Link to="/settings?tab=plan">Upgrade plan</Link>
       </Button>
     </div>
   );
 }
 
+// ─── Component ────────────────────────────────────────────────
 export default function Dashboard() {
   const { user, isAdmin } = useAuth();
   const { dashboardData, subscription, isLoadingDashboard, modules } =
@@ -67,9 +76,15 @@ export default function Dashboard() {
   }
 
   const team = dashboardData?.team;
+  const hr = dashboardData?.hr;
   const activeModules = subscription?.activeModules ?? [];
 
-  // ── Stat cards — built from real data ──────────────────────
+  // Does this tenant have the HR module active?
+  const hasHrModule = activeModules.some(
+    (m: string) => m === "hr_pm" || m === "hr",
+  );
+
+  // ── Stat cards ────────────────────────────────────────────
   const statCards = isAdmin
     ? [
         {
@@ -78,13 +93,6 @@ export default function Dashboard() {
           icon: Users,
           change: `${team?.active ?? 0} active`,
           color: "text-primary",
-        },
-        {
-          title: "Active",
-          value: team?.active ?? 0,
-          icon: CheckCircle2,
-          change: "Online members",
-          color: "text-success",
         },
         {
           title: "Active Modules",
@@ -100,6 +108,26 @@ export default function Dashboard() {
           change: subscription?.plan ?? "—",
           color: "text-info",
         },
+        // HR stat — only shown when HR module is active
+        ...(hasHrModule
+          ? [
+              {
+                title: "Total Employees",
+                value: hr?.totalEmployees ?? 0,
+                icon: Briefcase,
+                change: `${hr?.activeEmployees ?? 0} active`,
+                color: "text-emerald-500",
+              },
+            ]
+          : [
+              {
+                title: "Active",
+                value: team?.active ?? 0,
+                icon: CheckCircle2,
+                change: "Online members",
+                color: "text-success",
+              },
+            ]),
       ]
     : [
         {
@@ -144,7 +172,12 @@ export default function Dashboard() {
           <span className="flex-1 min-w-[200px]">
             You are required to change your password.
           </span>
-          <Button asChild size="sm" variant="outline" className="border-destructive/40 text-destructive hover:bg-destructive/20">
+          <Button
+            asChild
+            size="sm"
+            variant="outline"
+            className="border-destructive/40 text-destructive hover:bg-destructive/20"
+          >
             <Link to="/settings?tab=security">Change password</Link>
           </Button>
         </div>
@@ -231,7 +264,7 @@ export default function Dashboard() {
                       className="flex items-center justify-between text-sm"
                     >
                       <span className="capitalize text-muted-foreground">
-                        {r._id.replace("tenant_", "").replace("_", " ")}
+                        {r._id.replace("tenant_", "").replace(/_/g, " ")}
                       </span>
                       <Badge variant="secondary">{r.count}</Badge>
                     </div>
@@ -253,7 +286,7 @@ export default function Dashboard() {
             <CardContent>
               {team.recentMembers?.length > 0 ? (
                 <div className="space-y-3">
-                  {team.recentMembers.map((m: any) => (
+                  {team.recentMembers.map((m) => (
                     <div key={m._id} className="flex items-center gap-3">
                       <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center text-xs font-bold text-muted-foreground">
                         {m.firstName?.[0]}
@@ -279,6 +312,129 @@ export default function Dashboard() {
               ) : (
                 <p className="text-sm text-muted-foreground text-center py-4">
                   No team members yet. Invite your first member.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* HR overview — only shown when HR module is active and has data */}
+      {isAdmin && hasHrModule && hr && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* HR summary card */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Briefcase className="h-4 w-4 text-emerald-500" />
+                HR Overview
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 gap-4">
+                {[
+                  {
+                    label: "Total Employees",
+                    value: hr.totalEmployees ?? 0,
+                    icon: Users,
+                    color: "text-primary",
+                  },
+                  {
+                    label: "Active",
+                    value: hr.activeEmployees ?? 0,
+                    icon: UserCheck,
+                    color: "text-emerald-500",
+                  },
+                ].map((s) => (
+                  <div
+                    key={s.label}
+                    className="flex items-center gap-3 p-3 rounded-lg bg-muted/30"
+                  >
+                    <s.icon className={`h-4 w-4 shrink-0 ${s.color}`} />
+                    <div>
+                      <p className="text-xs text-muted-foreground">{s.label}</p>
+                      <p className="text-lg font-bold">{s.value}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Employees by client */}
+              {hr.employeesByClient?.length > 0 && (
+                <div className="mt-4 space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                    By Client
+                  </p>
+                  {hr.employeesByClient.map(
+                    (c: { _id: string; count: number }) => (
+                      <div
+                        key={c._id}
+                        className="flex items-center justify-between text-sm"
+                      >
+                        <span className="flex items-center gap-1.5 text-muted-foreground">
+                          <Building2 className="h-3 w-3" />
+                          <span className="text-xs font-mono">
+                            {c._id?.toString().slice(-6)}
+                          </span>
+                        </span>
+                        <Badge variant="secondary">{c.count}</Badge>
+                      </div>
+                    ),
+                  )}
+                </div>
+              )}
+
+              <Button
+                asChild
+                variant="ghost"
+                size="sm"
+                className="w-full mt-3 text-xs text-muted-foreground"
+              >
+                <Link to="/hr/employees">View all employees →</Link>
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* Recent joins */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base flex items-center gap-2">
+                <TrendingUp className="h-4 w-4 text-emerald-500" />
+                Recent Hires
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {hr.recentJoins?.length > 0 ? (
+                <div className="space-y-3">
+                  {hr.recentJoins.map((e) => (
+                    <div key={e._id} className="flex items-center gap-3">
+                      <div className="h-8 w-8 rounded-full bg-emerald-100 flex items-center justify-center text-xs font-bold text-emerald-700 shrink-0">
+                        {e.firstName?.[0]}
+                        {e.lastName?.[0]}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">
+                          {e.firstName} {e.lastName}
+                        </p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {e.jobTitle}
+                          {e.department ? ` · ${e.department}` : ""}
+                        </p>
+                      </div>
+                      <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+                        {e.startDate
+                          ? new Date(e.startDate).toLocaleDateString("en-GB", {
+                              day: "numeric",
+                              month: "short",
+                            })
+                          : "—"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  No employees added yet.
                 </p>
               )}
             </CardContent>

@@ -46,24 +46,6 @@ export default function HRAttendance() {
         <p className="text-sm text-muted-foreground">Daily attendance, shifts and overtime — for {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}.</p>
       </div>
 
-      <Card className="bg-gradient-to-br from-primary/10 via-secondary/5 to-background border-primary/20">
-        <CardContent className="p-6 flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div className="h-14 w-14 rounded-xl bg-gradient-to-br from-primary to-secondary flex items-center justify-center"><Clock className="h-7 w-7 text-white" /></div>
-            <div>
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">Your Shift</p>
-              <p className="text-xl font-bold">{clockedIn ? `In since ${shiftStart}` : "Not clocked in"}</p>
-              <p className="text-xs text-muted-foreground inline-flex items-center gap-1 mt-1"><MapPin className="h-3 w-3" />Office — Lagos · WiFi verified</p>
-            </div>
-          </div>
-          {clockedIn ? (
-            <Button onClick={clockOut} variant="destructive" size="lg"><LogOut className="h-4 w-4 mr-2" /> Clock Out</Button>
-          ) : (
-            <Button onClick={clockIn} size="lg" className="bg-gradient-to-r from-primary to-secondary"><LogIn className="h-4 w-4 mr-2" /> Clock In</Button>
-          )}
-        </CardContent>
-      </Card>
-
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <Stat label="Present" value={present} icon={Users} tone="from-emerald-500 to-teal-500" />
         <Stat label="Late" value={late} icon={Clock} tone="from-amber-500 to-orange-500" />
