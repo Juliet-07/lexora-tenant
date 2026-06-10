@@ -18,6 +18,8 @@ const statusTone = (s: PayrollRun["status"]) =>
 export default function HRPayroll() {
   const [runs, setRuns] = useState<PayrollRun[]>(initial);
   const [openPayslip, setOpenPayslip] = useState<Payslip | null>(null);
+  const [loans, setLoans] = useState<Loan[]>(initialLoans);
+  const [openLoan, setOpenLoan] = useState<Loan | null>(null);
   const { toast } = useToast();
 
   const current = runs.find(r => r.status === "Draft") ?? runs[0];
