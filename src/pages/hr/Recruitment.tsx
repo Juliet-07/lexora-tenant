@@ -113,6 +113,13 @@ export default function HRRecruitment() {
         <Stat label="Avg time-to-hire" value={`${summary.timeToHire}d`} icon={CheckCircle2} tone="from-emerald-500 to-teal-500" />
       </div>
 
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <Stat label="Onboarding" value={onboarding.filter(o => o.status !== "Completed").length} icon={LogIn} tone="from-emerald-500 to-green-600" />
+        <Stat label="In Progress" value={onboarding.filter(o => o.status === "In Progress").length} icon={Clock} tone="from-amber-500 to-yellow-600" />
+        <Stat label="Offboarding" value={offboarding.filter(o => o.status !== "Completed").length} icon={LogOut} tone="from-rose-500 to-red-600" />
+        <Stat label="Completed" value={offboarding.filter(o => o.status === "Completed").length + onboarding.filter(o => o.status === "Completed").length} icon={CheckCircle} tone="from-slate-500 to-zinc-600" />
+      </div>
+
       <Tabs defaultValue="openings" className="space-y-4">
         <TabsList><TabsTrigger value="openings">Job Openings</TabsTrigger><TabsTrigger value="pipeline">Candidate Pipeline</TabsTrigger></TabsList>
 
