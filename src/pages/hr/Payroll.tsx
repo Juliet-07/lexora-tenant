@@ -4,8 +4,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { Wallet, Download, PlayCircle, DollarSign, Calendar, Receipt, FileText } from "lucide-react";
-import { payrollRuns as initial, payslips, type PayrollRun, type Payslip } from "@/data/hrMockData";
+import { Wallet, Download, PlayCircle, DollarSign, Calendar, Receipt, FileText, Landmark, TrendingDown, CheckCircle2, XCircle, Clock } from "lucide-react";
+import { payrollRuns as initial, payslips, loans as initialLoans, type PayrollRun, type Payslip, type Loan } from "@/data/hrMockData";
 import { useToast } from "@/hooks/use-toast";
 
 const fmt = (n: number) => `$${n.toLocaleString()}`;
@@ -18,6 +18,8 @@ const statusTone = (s: PayrollRun["status"]) =>
 export default function HRPayroll() {
   const [runs, setRuns] = useState<PayrollRun[]>(initial);
   const [openPayslip, setOpenPayslip] = useState<Payslip | null>(null);
+  const [loans, setLoans] = useState<Loan[]>(initialLoans);
+  const [openLoan, setOpenLoan] = useState<Loan | null>(null);
   const { toast } = useToast();
 
   const current = runs.find(r => r.status === "Draft") ?? runs[0];
@@ -58,7 +60,7 @@ export default function HRPayroll() {
       </Card>
 
       <Tabs defaultValue="runs" className="space-y-4">
-        <TabsList><TabsTrigger value="runs">Pay Runs</TabsTrigger><TabsTrigger value="payslips">Payslips</TabsTrigger><TabsTrigger value="comp">Compensation</TabsTrigger></TabsList>
+        <TabsList><TabsTrigger value="runs">Pay Runs</TabsTrigger><TabsTrigger value="payslips">Payslips</TabsTrigger><TabsTrigger value="comp">Compensation</TabsTrigger><TabsTrigger value="loans">Loan Management</TabsTrigger></TabsList>
 
         <TabsContent value="runs" className="space-y-3">
           {runs.map(r => (
@@ -106,7 +108,82 @@ export default function HRPayroll() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        <TabsContent value="loans">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+            <Card><CardContent className="p-4 flex items-center justify-between">
+              <div><p className="text-xs text-muted-foreground uppercase">Total Loan Book</p><p className="text-xl font-bold">{fmt(loans.reduce((acc, l) => acc + l.amount, 0))}</p></div>
+              <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-primary to-secondary flex items-center justify-center"><Landmark className="h-5 w-5 text-white" /></div>
+            </CardContent></Card>
+            <Card><CardContent className="p-4 flex items-center justify-between">
+              <div><p className="text-xs text-muted-foreground uppercase">Active Repaying</p><p className="text-xl font-bold">{fmt(loans.filter(l => l.status === "Repaying").reduce((acc, l) => acc + l.remainingBalance, 0))}</p></div>
+              <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center"><TrendingDown className="h-5 w-5 text-white" /></div>
+            </CardContent></Card>
+            <Card><CardContent className="p-4 flex items-center justify-between">
+              <div><p className="text-xs text-muted-foreground uppercase">Pending Requests</p><p className="text-xl font-bold">{loans.filter(l => l.status === "Pending").length}</p></div>
+              <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center"><Clock className="h-5 w-5 text-white" /></div>
+            </CardContent></Card>
+          </div>
+          <Card><CardHeader><CardTitle className="text-base">Employee Loans</CardTitle></CardHeader>
+            <CardContent className="space-y-2">
+              {loans.map(l => (
+                <div key={l.id} className="flex items-center justify-between border-b pb-2 last:border-b-0 cursor-pointer hover:bg-muted/30 px-2 rounded" onClick={() => setOpenLoan(l)}>
+                  <div>
+                    <p className="text-sm font-medium flex items-center gap-2">{l.employeeName}
+                      <Badge variant="outline" className={
+                        l.status === "Pending" ? "bg-warning/10 text-warning border-warning/20 text-[10px]"
+                        : l.status === "Approved" ? "bg-info/10 text-info border-info/20 text-[10px]"
+                        : l.status === "Repaying" ? "bg-primary/10 text-primary border-primary/20 text-[10px]"
+                        : l.status === "Paid Off" ? "bg-success/10 text-success border-success/20 text-[10px]"
+                        : "bg-destructive/10 text-destructive border-destructive/20 text-[10px]"
+                      }>{l.status}</Badge>
+                    </p>
+                    <p className="text-xs text-muted-foreground">{l.purpose} · {l.termMonths} months · {l.interestRate}% interest</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-semibold">{fmt(l.amount)}</p>
+                    <p className="text-[10px] text-muted-foreground">{l.status === "Repaying" || l.status === "Paid Off" ? `${fmt(l.monthlyPayment)}/mo` : "—"}</p>
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
+
+      <Sheet open={!!openLoan} onOpenChange={(o) => !o && setOpenLoan(null)}>
+        <SheetContent className="w-full sm:max-w-md">
+          {openLoan && (<>
+            <SheetHeader><SheetTitle className="flex items-center gap-2"><Landmark className="h-5 w-5" /> Loan Details</SheetTitle></SheetHeader>
+            <div className="mt-5 space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-white text-sm font-bold">{openLoan.employeeName.split(" ").map(n => n[0]).join("").slice(0, 2)}</div>
+                <div>
+                  <p className="font-semibold">{openLoan.employeeName}</p>
+                  <p className="text-xs text-muted-foreground">Requested {openLoan.requestDate}</p>
+                </div>
+              </div>
+              <div className="border rounded-lg divide-y">
+                {[
+                  ["Loan amount", fmt(openLoan.amount)],
+                  ["Purpose", openLoan.purpose],
+                  ["Interest rate", `${openLoan.interestRate}%`],
+                  ["Term", `${openLoan.termMonths} months`],
+                  ["Monthly payment", fmt(openLoan.monthlyPayment)],
+                  ["Remaining balance", fmt(openLoan.remainingBalance)],
+                  ["Status", openLoan.status],
+                ].map(([k, v]) => <div key={k} className="flex justify-between p-3 text-sm"><span className="text-muted-foreground">{k}</span><span className="font-medium">{v}</span></div>)}
+              </div>
+              {openLoan.status === "Pending" && (
+                <div className="flex gap-2">
+                  <Button className="flex-1" onClick={() => { setLoans(loans.map(x => x.id === openLoan.id ? { ...x, status: "Approved", approvedDate: new Date().toISOString().slice(0, 10) } : x)); setOpenLoan(null); toast({ title: "Loan approved", description: `${openLoan.employeeName}'s loan request approved.` }); }}><CheckCircle2 className="h-4 w-4 mr-2" /> Approve</Button>
+                  <Button variant="outline" className="flex-1" onClick={() => { setLoans(loans.map(x => x.id === openLoan.id ? { ...x, status: "Declined" } : x)); setOpenLoan(null); toast({ title: "Loan declined", description: `${openLoan.employeeName}'s loan request declined.` }); }}><XCircle className="h-4 w-4 mr-2" /> Decline</Button>
+                </div>
+              )}
+            </div>
+          </>)}
+        </SheetContent>
+      </Sheet>
 
       <Sheet open={!!openPayslip} onOpenChange={(o) => !o && setOpenPayslip(null)}>
         <SheetContent className="w-full sm:max-w-md">

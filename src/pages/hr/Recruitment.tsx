@@ -10,8 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Progress } from "@/components/ui/progress";
-import { Briefcase, Plus, Users, Clock, CheckCircle2, Star, MapPin, ArrowRight } from "lucide-react";
-import { jobOpenings as initialJobs, applicants as initialApplicants, type JobOpening, type Applicant } from "@/data/hrMockData";
+import { Briefcase, Plus, Users, Clock, CheckCircle2, Star, MapPin, ArrowRight, LogIn, LogOut, Building2, CheckCircle, XCircle } from "lucide-react";
+import { jobOpenings as initialJobs, applicants as initialApplicants, onboardingItems as initialOnboarding, offboardingItems as initialOffboarding, type JobOpening, type Applicant, type Onboarding, type Offboarding } from "@/data/hrMockData";
 import { useToast } from "@/hooks/use-toast";
 
 const stageColor = (s: Applicant["stage"]) =>
@@ -26,6 +26,8 @@ const STAGES: Applicant["stage"][] = ["Sourced", "Screening", "Interview", "Offe
 export default function HRRecruitment() {
   const [jobs, setJobs] = useState<JobOpening[]>(initialJobs);
   const [apps, setApps] = useState<Applicant[]>(initialApplicants);
+  const [onboarding, setOnboarding] = useState<Onboarding[]>(initialOnboarding);
+  const [offboarding, setOffboarding] = useState<Offboarding[]>(initialOffboarding);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ title: "", department: "Engineering", location: "Remote", type: "Full-time" as JobOpening["type"], description: "", hiringManager: "" });
   const { toast } = useToast();
@@ -111,8 +113,15 @@ export default function HRRecruitment() {
         <Stat label="Avg time-to-hire" value={`${summary.timeToHire}d`} icon={CheckCircle2} tone="from-emerald-500 to-teal-500" />
       </div>
 
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <Stat label="Onboarding" value={onboarding.filter(o => o.status !== "Completed").length} icon={LogIn} tone="from-emerald-500 to-green-600" />
+        <Stat label="In Progress" value={onboarding.filter(o => o.status === "In Progress").length} icon={Clock} tone="from-amber-500 to-yellow-600" />
+        <Stat label="Offboarding" value={offboarding.filter(o => o.status !== "Completed").length} icon={LogOut} tone="from-rose-500 to-red-600" />
+        <Stat label="Completed" value={offboarding.filter(o => o.status === "Completed").length + onboarding.filter(o => o.status === "Completed").length} icon={CheckCircle} tone="from-slate-500 to-zinc-600" />
+      </div>
+
       <Tabs defaultValue="openings" className="space-y-4">
-        <TabsList><TabsTrigger value="openings">Job Openings</TabsTrigger><TabsTrigger value="pipeline">Candidate Pipeline</TabsTrigger></TabsList>
+        <TabsList><TabsTrigger value="openings">Job Openings</TabsTrigger><TabsTrigger value="pipeline">Candidate Pipeline</TabsTrigger><TabsTrigger value="onboarding">Onboarding</TabsTrigger><TabsTrigger value="offboarding">Offboarding</TabsTrigger></TabsList>
 
         <TabsContent value="openings" className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {jobs.map(j => (
@@ -167,6 +176,81 @@ export default function HRRecruitment() {
                     );
                   })}
                   {apps.filter(a => a.stage === stage).length === 0 && <p className="text-xs text-muted-foreground text-center py-4">No candidates</p>}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </TabsContent>
+
+        <TabsContent value="onboarding" className="space-y-3">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {onboarding.map(o => (
+              <Card key={o.id} className="hover:shadow-md transition-shadow">
+                <CardContent className="p-5 space-y-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <Avatar className="h-10 w-10"><AvatarFallback className="bg-gradient-to-br from-emerald-500 to-green-600 text-white text-xs">{o.employeeName.split(" ").map(n => n[0]).join("").slice(0, 2)}</AvatarFallback></Avatar>
+                      <div>
+                        <h3 className="font-semibold">{o.employeeName}</h3>
+                        <p className="text-xs text-muted-foreground flex items-center gap-1"><Building2 className="h-3 w-3" />{o.clientName} · {o.jobTitle}</p>
+                      </div>
+                    </div>
+                    <Badge variant="outline" className={o.status === "Completed" ? "bg-success/10 text-success border-success/20" : o.status === "In Progress" ? "bg-info/10 text-info border-info/20" : "bg-muted text-muted-foreground border-border"}>{o.status}</Badge>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                      <span>Step: <strong className="text-foreground">{o.step}</strong></span>
+                      <span>Due {o.dueDate}</span>
+                    </div>
+                    <Progress value={o.progress} className="h-2" />
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span>Start date {o.startDate}</span>
+                    <span>HR Lead · {o.assignedTo}</span>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </TabsContent>
+
+        <TabsContent value="offboarding" className="space-y-3">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {offboarding.map(o => (
+              <Card key={o.id} className="hover:shadow-md transition-shadow">
+                <CardContent className="p-5 space-y-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <Avatar className="h-10 w-10"><AvatarFallback className="bg-gradient-to-br from-rose-500 to-red-600 text-white text-xs">{o.employeeName.split(" ").map(n => n[0]).join("").slice(0, 2)}</AvatarFallback></Avatar>
+                      <div>
+                        <h3 className="font-semibold">{o.employeeName}</h3>
+                        <p className="text-xs text-muted-foreground flex items-center gap-1"><Building2 className="h-3 w-3" />{o.clientName}</p>
+                      </div>
+                    </div>
+                    <Badge variant="outline" className={o.status === "Completed" ? "bg-success/10 text-success border-success/20" : o.status === "In Progress" ? "bg-warning/10 text-warning border-warning/20" : "bg-muted text-muted-foreground border-border"}>{o.status}</Badge>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div className="rounded-md bg-muted/50 p-2 space-y-1">
+                      <p className="text-[10px] text-muted-foreground uppercase">Type</p>
+                      <p className="font-medium">{o.type}</p>
+                    </div>
+                    <div className="rounded-md bg-muted/50 p-2 space-y-1">
+                      <p className="text-[10px] text-muted-foreground uppercase">End Date</p>
+                      <p className="font-medium">{o.endDate}</p>
+                    </div>
+                    <div className="rounded-md bg-muted/50 p-2 space-y-1">
+                      <p className="text-[10px] text-muted-foreground uppercase">Exit Interview</p>
+                      <p className="font-medium flex items-center gap-1">{o.exitInterviewDone ? <CheckCircle className="h-3.5 w-3.5 text-success" /> : <XCircle className="h-3.5 w-3.5 text-muted-foreground" />} {o.exitInterviewDone ? "Done" : "Pending"}</p>
+                    </div>
+                    <div className="rounded-md bg-muted/50 p-2 space-y-1">
+                      <p className="text-[10px] text-muted-foreground uppercase">Clearance</p>
+                      <p className="font-medium flex items-center gap-1">{o.clearanceStatus === "Cleared" ? <CheckCircle className="h-3.5 w-3.5 text-success" /> : <XCircle className="h-3.5 w-3.5 text-warning" />} {o.clearanceStatus}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span>HR Lead · {o.assignedTo}</span>
+                    <span>{o.handoverNotes ? "Handover noted" : "No handover notes"}</span>
+                  </div>
                 </CardContent>
               </Card>
             ))}

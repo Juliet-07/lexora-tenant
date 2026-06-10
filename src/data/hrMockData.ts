@@ -180,6 +180,48 @@ export interface Requisition {
   approvalChain: { role: string; name: string; status: "Pending" | "Approved" | "Rejected"; date?: string }[];
 }
 
+export interface Onboarding {
+  id: string;
+  employeeName: string;
+  clientName: string;
+  jobTitle: string;
+  startDate: string;
+  status: "Pending" | "In Progress" | "Completed";
+  step: "Documents" | "Orientation" | "IT Setup" | "Training" | "Completed";
+  assignedTo: string;
+  dueDate: string;
+  progress: number;
+}
+
+export interface Offboarding {
+  id: string;
+  employeeName: string;
+  clientName: string;
+  endDate: string;
+  status: "Pending" | "In Progress" | "Completed";
+  type: "Resignation" | "Termination" | "Retirement" | "Contract End";
+  exitInterviewDone: boolean;
+  clearanceStatus: "Pending" | "Cleared";
+  assignedTo: string;
+  handoverNotes?: string;
+}
+
+export interface Loan {
+  id: string;
+  employeeName: string;
+  employeeId: string;
+  amount: number;
+  purpose: string;
+  status: "Pending" | "Approved" | "Declined" | "Repaying" | "Paid Off";
+  interestRate: number;
+  termMonths: number;
+  monthlyPayment: number;
+  remainingBalance: number;
+  requestDate: string;
+  approvedDate?: string;
+  currency: string;
+}
+
 // ─────────────────────────────────────────────────────────────
 // SEED DATA
 // ─────────────────────────────────────────────────────────────
@@ -304,6 +346,28 @@ export const requisitions: Requisition[] = [
   { id: "REQ-004", type: "Training", title: "Coursera Enterprise Licenses (20 seats)", requestedBy: "Zara Mensah", department: "People", amount: 8400, currency: "USD", priority: "Low", status: "Submitted", submittedDate: "2026-06-05", justification: "L&D budget — supports IDP commitments.", approvalChain: [{ role: "Manager", name: "Chloe Sullivan", status: "Pending" }, { role: "Finance", name: "Noah Petrov", status: "Pending" }] },
   { id: "REQ-005", type: "Budget", title: "Marketing — Q3 Paid Campaigns", requestedBy: "Sophie Laurent", department: "Marketing", amount: 45000, currency: "USD", priority: "High", status: "Rejected", submittedDate: "2026-05-28", justification: "Brand awareness push.", approvalChain: [{ role: "Manager", name: "Chloe Sullivan", status: "Approved", date: "2026-05-29" }, { role: "Finance", name: "Noah Petrov", status: "Rejected", date: "2026-06-02" }] },
   { id: "REQ-006", type: "Hiring", title: "Hire — Compliance Analyst (Kigali)", requestedBy: "Chloe Sullivan", department: "Operations", amount: 65000, currency: "USD", priority: "Urgent", status: "Approved", submittedDate: "2026-04-12", justification: "Regulatory requirement — local presence needed.", approvalChain: [{ role: "Manager", name: "Chloe Sullivan", status: "Approved", date: "2026-04-12" }, { role: "HR", name: "Zara Mensah", status: "Approved", date: "2026-04-14" }, { role: "Finance", name: "Noah Petrov", status: "Approved", date: "2026-04-15" }] },
+];
+
+export const onboardingItems: Onboarding[] = [
+  { id: "ONB-001", employeeName: "Liam Walsh", clientName: "Meridian Holdings Ltd", jobTitle: "Backend Engineer", startDate: "2026-04-01", status: "In Progress", step: "Training", assignedTo: "Zara Mensah", dueDate: "2026-06-15", progress: 75 },
+  { id: "ONB-002", employeeName: "Elena Volkov", clientName: "Apex Ventures Group", jobTitle: "Senior Frontend Engineer", startDate: "2026-06-15", status: "Pending", step: "Documents", assignedTo: "Zara Mensah", dueDate: "2026-06-20", progress: 10 },
+  { id: "ONB-003", employeeName: "Camila Soto", clientName: "Tanaka Enterprises", jobTitle: "Customer Success Manager", startDate: "2026-06-20", status: "Pending", step: "Documents", assignedTo: "Zara Mensah", dueDate: "2026-06-25", progress: 0 },
+  { id: "ONB-004", employeeName: "Marco Bianchi", clientName: "Meridian Holdings Ltd", jobTitle: "Staff Engineer", startDate: "2022-06-01", status: "Completed", step: "Completed", assignedTo: "Zara Mensah", dueDate: "2022-07-01", progress: 100 },
+  { id: "ONB-005", employeeName: "Priya Iyer", clientName: "Apex Ventures Group", jobTitle: "Head of Product", startDate: "2022-03-20", status: "Completed", step: "Completed", assignedTo: "Zara Mensah", dueDate: "2022-04-20", progress: 100 },
+];
+
+export const offboardingItems: Offboarding[] = [
+  { id: "OFB-001", employeeName: "Tomás Reyes", clientName: "Meridian Holdings Ltd", endDate: "2026-06-30", status: "In Progress", type: "Resignation", exitInterviewDone: true, clearanceStatus: "Pending", assignedTo: "Zara Mensah", handoverNotes: "Handing over design system files." },
+  { id: "OFB-002", employeeName: "Ines Mukamana", clientName: "Tanaka Enterprises", endDate: "2026-07-15", status: "Pending", type: "Contract End", exitInterviewDone: false, clearanceStatus: "Pending", assignedTo: "Zara Mensah", handoverNotes: "" },
+  { id: "OFB-003", employeeName: "Rahim Khan", clientName: "Greenfield Capital Partners", endDate: "2026-05-28", status: "Completed", type: "Termination", exitInterviewDone: true, clearanceStatus: "Cleared", assignedTo: "Zara Mensah", handoverNotes: "Exit completed." },
+];
+
+export const loans: Loan[] = [
+  { id: "LN-001", employeeName: "Amelia Okonkwo", employeeId: "EMP-001", amount: 12000, purpose: "Home down-payment", status: "Repaying", interestRate: 6.5, termMonths: 24, monthlyPayment: 535, remainingBalance: 8500, requestDate: "2025-06-01", approvedDate: "2025-06-10", currency: "USD" },
+  { id: "LN-002", employeeName: "Marco Bianchi", employeeId: "EMP-002", amount: 5000, purpose: "Medical emergency", status: "Repaying", interestRate: 0, termMonths: 12, monthlyPayment: 417, remainingBalance: 2085, requestDate: "2026-01-15", approvedDate: "2026-01-18", currency: "USD" },
+  { id: "LN-003", employeeName: "Diego Hernandez", employeeId: "EMP-005", amount: 3000, purpose: "Car repair", status: "Pending", interestRate: 4.0, termMonths: 6, monthlyPayment: 520, remainingBalance: 3000, requestDate: "2026-06-08", currency: "USD" },
+  { id: "LN-004", employeeName: "Hana Tanaka", employeeId: "EMP-006", amount: 8000, purpose: "Relocation support", status: "Paid Off", interestRate: 3.5, termMonths: 12, monthlyPayment: 680, remainingBalance: 0, requestDate: "2024-08-10", approvedDate: "2024-08-15", currency: "USD" },
+  { id: "LN-005", employeeName: "Chloe Sullivan", employeeId: "EMP-004", amount: 15000, purpose: "Education fees", status: "Approved", interestRate: 5.0, termMonths: 18, monthlyPayment: 870, remainingBalance: 15000, requestDate: "2026-05-20", approvedDate: "2026-06-01", currency: "USD" },
 ];
 
 export const hrStats = {
