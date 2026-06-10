@@ -26,6 +26,8 @@ const STAGES: Applicant["stage"][] = ["Sourced", "Screening", "Interview", "Offe
 export default function HRRecruitment() {
   const [jobs, setJobs] = useState<JobOpening[]>(initialJobs);
   const [apps, setApps] = useState<Applicant[]>(initialApplicants);
+  const [onboarding, setOnboarding] = useState<Onboarding[]>(initialOnboarding);
+  const [offboarding, setOffboarding] = useState<Offboarding[]>(initialOffboarding);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ title: "", department: "Engineering", location: "Remote", type: "Full-time" as JobOpening["type"], description: "", hiringManager: "" });
   const { toast } = useToast();
