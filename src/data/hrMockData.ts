@@ -180,6 +180,48 @@ export interface Requisition {
   approvalChain: { role: string; name: string; status: "Pending" | "Approved" | "Rejected"; date?: string }[];
 }
 
+export interface Onboarding {
+  id: string;
+  employeeName: string;
+  clientName: string;
+  jobTitle: string;
+  startDate: string;
+  status: "Pending" | "In Progress" | "Completed";
+  step: "Documents" | "Orientation" | "IT Setup" | "Training" | "Completed";
+  assignedTo: string;
+  dueDate: string;
+  progress: number;
+}
+
+export interface Offboarding {
+  id: string;
+  employeeName: string;
+  clientName: string;
+  endDate: string;
+  status: "Pending" | "In Progress" | "Completed";
+  type: "Resignation" | "Termination" | "Retirement" | "Contract End";
+  exitInterviewDone: boolean;
+  clearanceStatus: "Pending" | "Cleared";
+  assignedTo: string;
+  handoverNotes?: string;
+}
+
+export interface Loan {
+  id: string;
+  employeeName: string;
+  employeeId: string;
+  amount: number;
+  purpose: string;
+  status: "Pending" | "Approved" | "Declined" | "Repaying" | "Paid Off";
+  interestRate: number;
+  termMonths: number;
+  monthlyPayment: number;
+  remainingBalance: number;
+  requestDate: string;
+  approvedDate?: string;
+  currency: string;
+}
+
 // ─────────────────────────────────────────────────────────────
 // SEED DATA
 // ─────────────────────────────────────────────────────────────
