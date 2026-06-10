@@ -4,8 +4,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { Wallet, Download, PlayCircle, DollarSign, Calendar, Receipt, FileText } from "lucide-react";
-import { payrollRuns as initial, payslips, type PayrollRun, type Payslip } from "@/data/hrMockData";
+import { Wallet, Download, PlayCircle, DollarSign, Calendar, Receipt, FileText, Landmark, TrendingDown, CheckCircle2, XCircle, Clock } from "lucide-react";
+import { payrollRuns as initial, payslips, loans as initialLoans, type PayrollRun, type Payslip, type Loan } from "@/data/hrMockData";
 import { useToast } from "@/hooks/use-toast";
 
 const fmt = (n: number) => `$${n.toLocaleString()}`;
