@@ -148,6 +148,21 @@ function AppRoutes() {
           }
         />
       )}
+
+      {/* Team-member self-service */}
+      {!isAdmin && (
+        <Route path="/my/time" element={<AppLayout><MyTime /></AppLayout>} />
+      )}
+      {!isAdmin && (
+        <Route path="/my/leave" element={<AppLayout><MyLeave /></AppLayout>} />
+      )}
+      {!isAdmin && (
+        <Route path="/my/performance" element={<AppLayout><MyPerformance /></AppLayout>} />
+      )}
+      {!isAdmin && (
+        <Route path="/my/payslips" element={<AppLayout><MyPayslips /></AppLayout>} />
+      )}
+
       <Route path="*" element={<NotFound />} />
       
       {/* AML/KYC module routes */}
