@@ -10,6 +10,9 @@ import {
   ArrowUpRight,
   AlertCircle,
   ListChecks,
+  CalendarDays,
+  Wallet,
+  BarChart3,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -267,15 +270,39 @@ export default function TeamMemberDashboard() {
             </CardHeader>
             <CardContent className="space-y-2">
               <Button asChild variant="outline" className="w-full justify-start">
+                <Link to="/my/time">
+                  <Clock className="h-4 w-4 mr-2" />
+                  Clock In / Time
+                </Link>
+              </Button>
+              <Button asChild variant="outline" className="w-full justify-start">
+                <Link to="/my/leave">
+                  <CalendarDays className="h-4 w-4 mr-2" />
+                  Request Leave
+                </Link>
+              </Button>
+              <Button asChild variant="outline" className="w-full justify-start">
+                <Link to="/my/performance">
+                  <BarChart3 className="h-4 w-4 mr-2" />
+                  My Performance
+                </Link>
+              </Button>
+              <Button asChild variant="outline" className="w-full justify-start">
+                <Link to="/my/payslips">
+                  <Wallet className="h-4 w-4 mr-2" />
+                  Payslips
+                </Link>
+              </Button>
+              <Button asChild variant="outline" className="w-full justify-start">
                 <Link to="/clients">
                   <Users className="h-4 w-4 mr-2" />
-                  View My Clients
+                  My Clients
                 </Link>
               </Button>
               <Button asChild variant="outline" className="w-full justify-start">
                 <Link to="/projects">
                   <FolderKanban className="h-4 w-4 mr-2" />
-                  View Projects
+                  My Projects
                 </Link>
               </Button>
             </CardContent>
