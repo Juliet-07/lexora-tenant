@@ -48,11 +48,17 @@ import {
   Loader2,
   Shield,
   Search,
+  Users,
+  UserCheck2,
+  Clock,
+  Plane,
+  TrendingUp,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { api } from "@/lib/api";
 import { TeamMemberDetailSheet } from "@/components/team/TeamMemberDetailSheet";
+import { leaveRequests } from "@/data/hrMockData";
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -233,6 +239,54 @@ export default function Team() {
             <Plus className="h-4 w-4 mr-2" /> Add Member
           </Button>
         )}
+      </div>
+
+      {/* Summary stat cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {[
+          {
+            label: "Total Members",
+            value: members.length,
+            icon: Users,
+            color: "from-blue-500 to-cyan-500",
+          },
+          {
+            label: "Active",
+            value: members.filter((m) => m.status === "active").length,
+            icon: UserCheck2,
+            color: "from-emerald-500 to-green-500",
+          },
+          {
+            label: "Pending Invites",
+            value: members.filter((m) => m.status === "pending").length,
+            icon: Clock,
+            color: "from-amber-500 to-orange-500",
+          },
+          {
+            label: "Leave Requests",
+            value: leaveRequests.filter((r) => r.status === "Pending").length,
+            icon: Plane,
+            color: "from-violet-500 to-purple-500",
+          },
+        ].map((s) => (
+          <Card key={s.label}>
+            <CardContent className="p-5">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide">
+                    {s.label}
+                  </p>
+                  <p className="text-2xl font-bold mt-1">{s.value}</p>
+                </div>
+                <div
+                  className={`h-10 w-10 rounded-lg bg-gradient-to-br ${s.color} flex items-center justify-center`}
+                >
+                  <s.icon className="h-5 w-5 text-white" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
       {/* Search */}
