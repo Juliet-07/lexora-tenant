@@ -48,11 +48,17 @@ import {
   Loader2,
   Shield,
   Search,
+  Users,
+  UserCheck2,
+  Clock,
+  Plane,
+  TrendingUp,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { api } from "@/lib/api";
 import { TeamMemberDetailSheet } from "@/components/team/TeamMemberDetailSheet";
+import { leaveRequests } from "@/data/hrMockData";
 
 // ─── Types ────────────────────────────────────────────────────
 
