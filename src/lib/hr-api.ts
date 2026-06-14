@@ -147,6 +147,69 @@ export interface TerminateEmployeeDto {
 }
 
 // ─────────────────────────────────────────────────────────────
+// LEAVE — Types
+// ─────────────────────────────────────────────────────────────
+
+export type LeaveStatus = "pending" | "approved" | "rejected" | "cancelled";
+export type LeaveType =
+  | "annual"
+  | "sick"
+  | "maternity"
+  | "paternity"
+  | "compassionate"
+  | "study"
+  | "unpaid";
+
+export interface LeaveBalance {
+  type: LeaveType;
+  label: string;
+  daysAllowed: number;
+  daysUsed: number;
+  daysLeft: number;
+}
+
+export interface LeaveRequest {
+  _id: string;
+  employeeId: {
+    _id: string;
+    firstName: string;
+    lastName: string;
+    jobTitle: string;
+    department: string | null;
+  } | null;
+  clientId: string;
+  tenantId: string;
+  type: LeaveType;
+  startDate: string;
+  endDate: string;
+  days: number;
+  reason: string;
+  status: LeaveStatus;
+  reviewNote: string | null;
+  reviewedAt: string | null;
+  createdAt: string;
+}
+
+export interface LeavePolicy {
+  _id: string;
+  tenantId: string;
+  clientId: string;
+  policies: {
+    type: LeaveType;
+    daysAllowed: number;
+    carryOver: boolean;
+  }[];
+  effectiveFrom: string;
+}
+
+export interface LeaveStats {
+  pending: number;
+  byStatus: { _id: string; count: number }[];
+  byType: { _id: string; count: number }[];
+  recentApproved: LeaveRequest[];
+}
+
+// ─────────────────────────────────────────────────────────────
 // EMPLOYEES — API calls
 // ─────────────────────────────────────────────────────────────
 
@@ -256,9 +319,55 @@ export const fetchCorporateClients = async (): Promise<CorporateClient[]> => {
 // LEAVE — Types & API calls (placeholder — built in next section)
 // ─────────────────────────────────────────────────────────────
 
-// export const fetchLeaveRequests = ...
-// export const createLeaveRequest = ...
-// export const approveLeaveRequest = ...
+export const fetchLeaveStats = async (
+  clientId?: string,
+): Promise<LeaveStats> => {
+  const res = await api.get("/hr/leave/stats", {
+    params: clientId ? { clientId } : {},
+  });
+  return res.data?.data ?? res.data;
+};
+
+export const fetchTenantLeaveRequests = async (params?: {
+  page?: number;
+  limit?: number;
+  status?: string;
+  clientId?: string;
+  employeeId?: string;
+  type?: string;
+}): Promise<Paginated<LeaveRequest>> => {
+  const res = await api.get("/hr/leave/requests", { params });
+  return res.data?.data ?? res.data;
+};
+
+export const reviewLeaveRequest = async (
+  id: string,
+  dto: { status: "approved" | "rejected"; reviewNote?: string },
+): Promise<LeaveRequest> => {
+  const res = await api.patch(`/hr/leave/requests/${id}/review`, dto);
+  return res.data?.data ?? res.data;
+};
+
+export const upsertLeavePolicy = async (dto: {
+  clientId: string;
+  policies: { type: string; daysAllowed: number; carryOver?: boolean }[];
+}): Promise<LeavePolicy> => {
+  const res = await api.post("/hr/leave/policy", dto);
+  return res.data?.data ?? res.data;
+};
+
+export const fetchLeavePolicy = async (
+  clientId: string,
+): Promise<LeavePolicy | null> => {
+  const res = await api.get(`/hr/leave/policy/${clientId}`);
+  return res.data?.data ?? res.data ?? null;
+};
+
+export const fetchAllLeavePolicies = async (): Promise<LeavePolicy[]> => {
+  const res = await api.get("/hr/leave/policy");
+  const d = res.data?.data ?? res.data;
+  return Array.isArray(d) ? d : [];
+};
 
 // ─────────────────────────────────────────────────────────────
 // ATTENDANCE — Types & API calls (placeholder)

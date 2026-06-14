@@ -55,7 +55,12 @@ interface EngagementDoc {
 
 interface SigningRecord {
   _id: string;
-  clientId: { firstName: string; lastName: string; email: string } | null;
+  clientId: {
+    _id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+  } | null;
   status: "pending" | "signed" | "expired";
   createdAt: string;
   signedAt: string | null;
@@ -441,7 +446,8 @@ export default function EngagementDocument() {
                                   size="sm"
                                   variant="outline"
                                   onClick={() =>
-                                    s.clientId && resendMutation.mutate(s._id)
+                                    s.clientId &&
+                                    resendMutation.mutate(s.clientId._id)
                                   }
                                   disabled={resendMutation.isPending}
                                 >
@@ -454,7 +460,7 @@ export default function EngagementDocument() {
                                   variant="ghost"
                                   onClick={() => {
                                     if (s.clientId) {
-                                      setOfflineClientId(s._id);
+                                      setOfflineClientId(s.clientId._id);
                                       setOfflineOpen(true);
                                     }
                                   }}
