@@ -52,6 +52,7 @@ import {
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { api } from "@/lib/api";
+import { TeamMemberDetailSheet } from "@/components/team/TeamMemberDetailSheet";
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -138,6 +139,7 @@ export default function Team() {
   const [form, setForm] = useState<InviteForm>(emptyForm);
   const [search, setSearch] = useState("");
   const [removeTarget, setRemoveTarget] = useState<TeamMember | null>(null);
+  const [detailTarget, setDetailTarget] = useState<TeamMember | null>(null);
 
   // ── Fetch team members ────────────────────────────────────
   const { data, isLoading } = useQuery({
@@ -264,7 +266,8 @@ export default function Team() {
           {members.map((member) => (
             <Card
               key={member._id}
-              className="hover:shadow-md transition-shadow"
+              className="hover:shadow-md transition-shadow cursor-pointer"
+              onClick={() => setDetailTarget(member)}
             >
               <CardContent className="p-5">
                 <div className="flex items-start gap-4">
@@ -309,6 +312,7 @@ export default function Team() {
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8 shrink-0"
+                          onClick={(e) => e.stopPropagation()}
                         >
                           <MoreHorizontal className="h-4 w-4" />
                         </Button>
@@ -521,6 +525,8 @@ export default function Team() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <TeamMemberDetailSheet member={detailTarget} onClose={() => setDetailTarget(null)} />
     </div>
   );
 }

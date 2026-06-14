@@ -23,6 +23,7 @@ import {
   Briefcase,
   ClipboardList,
   Loader2,
+  Clock,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import {
@@ -243,6 +244,10 @@ export function AppSidebar() {
     { title: "Dashboard", url: "/", icon: LayoutDashboard },
     { title: "Clients", url: "/clients", icon: Users },
     { title: "Projects", url: "/projects", icon: FolderKanban },
+    { title: "Time", url: "/my/time", icon: Clock },
+    { title: "Leave", url: "/my/leave", icon: CalendarDays },
+    { title: "Performance", url: "/my/performance", icon: BarChart3 },
+    { title: "Payslips", url: "/my/payslips", icon: Wallet },
   ];
 
   if (!isAdmin) {

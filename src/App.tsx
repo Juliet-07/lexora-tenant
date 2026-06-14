@@ -35,6 +35,10 @@ import HRLearning from "./pages/hr/Learning";
 import HRContracts from "./pages/hr/Contracts";
 import HRRequisitions from "./pages/hr/Requisitions";
 import Settings from "./pages/settings/Index";
+import MyTime from "./pages/team-member/MyTime";
+import MyLeave from "./pages/team-member/MyLeave";
+import MyPerformance from "./pages/team-member/MyPerformance";
+import MyPayslips from "./pages/team-member/MyPayslips";
 
 import NotFound from "./pages/NotFound";
 import { Loader2 } from "lucide-react";
@@ -144,6 +148,21 @@ function AppRoutes() {
           }
         />
       )}
+
+      {/* Team-member self-service */}
+      {!isAdmin && (
+        <Route path="/my/time" element={<AppLayout><MyTime /></AppLayout>} />
+      )}
+      {!isAdmin && (
+        <Route path="/my/leave" element={<AppLayout><MyLeave /></AppLayout>} />
+      )}
+      {!isAdmin && (
+        <Route path="/my/performance" element={<AppLayout><MyPerformance /></AppLayout>} />
+      )}
+      {!isAdmin && (
+        <Route path="/my/payslips" element={<AppLayout><MyPayslips /></AppLayout>} />
+      )}
+
       <Route path="*" element={<NotFound />} />
       
       {/* AML/KYC module routes */}
