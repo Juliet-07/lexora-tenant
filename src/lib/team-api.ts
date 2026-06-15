@@ -5,6 +5,29 @@ import { api } from "./api";
 // ─────────────────────────────────────────────────────────────
 
 // ─────────────────────────────────────────────────────────────
+// TEAM POLICY — Types
+// ─────────────────────────────────────────────────────────────
+
+export interface TeamLeavePolicyEntry {
+  type: string;
+  days: number;
+  carryOver: boolean;
+  requiresApproval: boolean;
+}
+
+export interface TeamWorkingHours {
+  startTime: string;
+  endTime: string;
+  workdays: string;
+  requireClockIn: boolean;
+}
+
+export interface TeamPolicy {
+  leavePolicy: TeamLeavePolicyEntry[];
+  workingHours: TeamWorkingHours;
+}
+
+// ─────────────────────────────────────────────────────────────
 // LEAVE — Types
 // ─────────────────────────────────────────────────────────────
 
@@ -94,7 +117,7 @@ export const fetchMyTeamLeaveBalance = async (): Promise<
 > => {
   const res = await api.get("/tenant/me/leave/balance");
   const d = res.data?.data ?? res.data;
-  console.log(d)
+  console.log(d);
   return Array.isArray(d) ? d : [];
 };
 
@@ -185,5 +208,31 @@ export const endBreak = async (): Promise<AttendanceRecord> => {
 
 export const clockOut = async (): Promise<AttendanceRecord> => {
   const res = await api.post("/tenant/me/attendance/clock-out", {});
+  return res.data?.data ?? res.data;
+};
+
+// ─────────────────────────────────────────────────────────────
+// TEAM POLICY — API calls
+// ─────────────────────────────────────────────────────────────
+
+export const fetchTeamPolicy = async (): Promise<TeamPolicy> => {
+  const res = await api.get("/tenant/team/policy");
+  return res.data?.data ?? res.data;
+};
+
+export const saveTeamLeavePolicy = async (
+  leavePolicy: TeamLeavePolicyEntry[],
+): Promise<TeamPolicy> => {
+  const res = await api.patch("/tenant/team/policy/leave", { leavePolicy });
+  return res.data?.data ?? res.data;
+};
+
+export const saveTeamWorkingHours = async (
+  workingHours: TeamWorkingHours,
+): Promise<TeamPolicy> => {
+  const res = await api.patch(
+    "/tenant/team/policy/working-hours",
+    workingHours,
+  );
   return res.data?.data ?? res.data;
 };
