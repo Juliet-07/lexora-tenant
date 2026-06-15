@@ -15,9 +15,11 @@ import {
   UserCheck,
   Building2,
   TrendingUp,
+  Clock,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useModule } from "@/contexts/ModuleContext";
+import { timeEntries } from "@/data/mockData";
 
 // ─── Trial banner ─────────────────────────────────────────────
 function TrialBanner({
