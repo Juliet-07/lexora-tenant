@@ -39,6 +39,7 @@ import MyTime from "./pages/team-member/MyTime";
 import MyLeave from "./pages/team-member/MyLeave";
 import MyPerformance from "./pages/team-member/MyPerformance";
 import MyPayslips from "./pages/team-member/MyPayslips";
+import MySettings from "./pages/team-member/MySettings";
 
 import NotFound from "./pages/NotFound";
 import { Loader2 } from "lucide-react";
@@ -150,6 +151,9 @@ function AppRoutes() {
       )}
 
       {/* Team-member self-service */}
+      {!isAdmin && (
+        <Route path="/settings" element={<AppLayout><MySettings /></AppLayout>} />
+      )}
       {!isAdmin && (
         <Route path="/my/time" element={<AppLayout><MyTime /></AppLayout>} />
       )}

@@ -1,18 +1,19 @@
 import { useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { User as UserIcon, Lock, Crown, FileText } from "lucide-react";
+import { User as UserIcon, Lock, Crown, FileText, Users } from "lucide-react";
 
 import ProfileTab from "./Profile";
 import SecurityTab from "./Security";
 import PlanTab from "./Plan";
 import EngagementTab from "./EngagementDocument";
+import TeamTab from "./Team";
 
 export default function Settings() {
   const [params, setParams] = useSearchParams();
   const tab = params.get("tab") ?? "profile";
   const validTabs = useMemo(
-    () => new Set(["profile", "security", "plan", "engagement"]),
+    () => new Set(["profile", "security", "team", "plan", "engagement"]),
     [],
   );
   const active = validTabs.has(tab) ? tab : "profile";
@@ -28,7 +29,7 @@ export default function Settings() {
       <div>
         <h1 className="text-2xl font-bold">Settings</h1>
         <p className="text-sm text-muted-foreground">
-          Manage your profile, security and subscription.
+          Manage your profile, security, team and subscription.
         </p>
       </div>
 
@@ -39,6 +40,9 @@ export default function Settings() {
           </TabsTrigger>
           <TabsTrigger value="security">
             <Lock className="h-4 w-4 mr-2" /> Security
+          </TabsTrigger>
+          <TabsTrigger value="team">
+            <Users className="h-4 w-4 mr-2" /> Team
           </TabsTrigger>
           <TabsTrigger value="plan">
             <Crown className="h-4 w-4 mr-2" /> Plan
@@ -54,6 +58,9 @@ export default function Settings() {
         <TabsContent value="security">
           <SecurityTab />
         </TabsContent>
+        <TabsContent value="team">
+          <TeamTab />
+        </TabsContent>
         <TabsContent value="plan">
           <PlanTab />
         </TabsContent>
@@ -64,3 +71,4 @@ export default function Settings() {
     </div>
   );
 }
+
