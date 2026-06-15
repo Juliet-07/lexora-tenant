@@ -7,7 +7,7 @@ import TimeTracking from "@/pages/crm/TimeTracking";
 import Resources from "@/pages/crm/Resources";
 import Invoicing from "@/pages/crm/Invoicing";
 import Contracts from "@/pages/crm/Contracts";
-import Documents from "@/pages/crm/Documents";
+import { Navigate } from "react-router-dom";
 import ClientPortal from "@/pages/crm/ClientPortal";
 import Billing from "@/pages/Billing";
 import { ProjectsList, ProjectDetail } from "@/pages/Projects";
@@ -41,7 +41,7 @@ export const crmRoutes = ({ isAdmin }: RouteContext) => {
       <Route key="crm-resources" path="/crm/resources" element={layout(<Resources />)} />,
       <Route key="crm-invoicing" path="/crm/invoicing" element={layout(<Invoicing />)} />,
       <Route key="crm-contracts" path="/crm/contracts" element={layout(<Contracts />)} />,
-      <Route key="crm-documents" path="/crm/documents" element={layout(<Documents />)} />,
+      <Route key="crm-documents" path="/crm/documents" element={<Navigate to="/crm/contracts" replace />} />,
       <Route key="crm-portal" path="/crm/portal" element={layout(<ClientPortal />)} />,
       <Route key="billing" path="/billing" element={layout(<Billing />)} />,
     );
