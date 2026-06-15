@@ -15,9 +15,11 @@ import {
   UserCheck,
   Building2,
   TrendingUp,
+  Clock,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useModule } from "@/contexts/ModuleContext";
+import { timeEntries } from "@/data/mockData";
 
 // ─── Trial banner ─────────────────────────────────────────────
 function TrialBanner({
@@ -246,6 +248,81 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       )}
+
+      {/* Time tracking summary */}
+      {(() => {
+        const fullName = user ? `${user.firstName} ${user.lastName}` : "";
+        const visible = isAdmin
+          ? timeEntries
+          : timeEntries.filter((e) => e.teamMemberName === fullName);
+        if (visible.length === 0) return null;
+        const totalHours = visible.reduce((s, e) => s + e.hours, 0);
+        const billableHours = visible
+          .filter((e) => e.billable)
+          .reduce((s, e) => s + e.hours, 0);
+        const revenue = visible
+          .filter((e) => e.billable)
+          .reduce((s, e) => s + e.hours * e.rate, 0);
+        const recent = [...visible]
+          .sort((a, b) => (a.date < b.date ? 1 : -1))
+          .slice(0, 5);
+        return (
+          <Card>
+            <CardHeader className="pb-2 flex flex-row items-center justify-between">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Clock className="h-4 w-4 text-primary" />
+                Time Tracking
+              </CardTitle>
+              <Button asChild variant="ghost" size="sm" className="text-xs">
+                <Link to="/crm/time">Open tracker →</Link>
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-3 gap-3 mb-4">
+                <div className="p-3 rounded-lg bg-muted/30">
+                  <p className="text-xs text-muted-foreground">Hours logged</p>
+                  <p className="text-lg font-bold">{totalHours.toFixed(1)}h</p>
+                </div>
+                <div className="p-3 rounded-lg bg-muted/30">
+                  <p className="text-xs text-muted-foreground">Billable</p>
+                  <p className="text-lg font-bold">{billableHours.toFixed(1)}h</p>
+                </div>
+                <div className="p-3 rounded-lg bg-muted/30">
+                  <p className="text-xs text-muted-foreground">Revenue</p>
+                  <p className="text-lg font-bold">
+                    ${revenue.toLocaleString()}
+                  </p>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Recent entries
+                </p>
+                {recent.map((e) => (
+                  <div
+                    key={e.id}
+                    className="flex items-center justify-between text-sm border-b last:border-0 pb-2 last:pb-0"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium truncate">{e.projectName}</p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {isAdmin ? `${e.teamMemberName} · ` : ""}
+                        {e.description}
+                      </p>
+                    </div>
+                    <div className="text-right shrink-0 ml-3">
+                      <p className="font-semibold">{e.hours}h</p>
+                      <p className="text-[10px] text-muted-foreground">
+                        {e.date}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        );
+      })()}
 
       {/* Team overview — admin only */}
       {isAdmin && team && (

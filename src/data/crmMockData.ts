@@ -63,7 +63,7 @@ export interface Contract {
   id: string;
   title: string;
   clientName: string;
-  type: "MSA" | "SOW" | "NDA" | "Engagement Letter";
+  type: "MSA" | "SOW" | "NDA";
   status: "Draft" | "Sent" | "Signed" | "Expired" | "Awaiting Signature";
   value: number;
   startDate: string;
@@ -135,7 +135,6 @@ export const opportunities: Opportunity[] = [
 
 export const contracts: Contract[] = [
   { id: "CTR-001", title: "Meridian — MSA 2026", clientName: "Meridian Holdings Ltd", type: "MSA", status: "Signed", value: 480000, startDate: "2026-01-01", endDate: "2026-12-31", owner: "Sarah Chen", signers: [{ name: "Eleanor Pritchard", email: "e.pritchard@meridianholdings.com", signed: true, signedAt: "2025-12-20" }, { name: "Sarah Chen", email: "s.chen@firm.com", signed: true, signedAt: "2025-12-20" }] },
-  { id: "CTR-002", title: "Apex — Engagement Letter", clientName: "Apex Ventures Group", type: "Engagement Letter", status: "Awaiting Signature", value: 95000, startDate: "2026-06-15", endDate: "2026-09-15", owner: "Sarah Chen", signers: [{ name: "Hassan Al-Mansoori", email: "hassan@apexventures.io", signed: false }, { name: "Sarah Chen", email: "s.chen@firm.com", signed: true, signedAt: "2026-06-11" }] },
   { id: "CTR-003", title: "Tanaka — SOW Q3", clientName: "Tanaka Enterprises", type: "SOW", status: "Sent", value: 120000, startDate: "2026-07-01", endDate: "2026-09-30", owner: "David Park", signers: [{ name: "Yuki Tanaka", email: "y.tanaka@tanaka-ent.jp", signed: false }] },
   { id: "CTR-004", title: "Helios — NDA", clientName: "Helios Renewables", type: "NDA", status: "Signed", value: 0, startDate: "2026-05-22", endDate: "2028-05-22", owner: "Sarah Chen", signers: [{ name: "Isabella Ortega", email: "i.ortega@helios-renew.es", signed: true, signedAt: "2026-05-23" }] },
   { id: "CTR-005", title: "Greenfield — SOW Restructuring", clientName: "Greenfield Capital Partners", type: "SOW", status: "Draft", value: 260000, startDate: "2026-08-01", endDate: "2027-02-01", owner: "Michael Torres", signers: [] },
@@ -143,7 +142,7 @@ export const contracts: Contract[] = [
 
 export const crmDocuments: CrmDocument[] = [
   { id: "DOC-001", name: "Meridian MSA 2026 (signed).pdf", type: "PDF", folder: "Contracts", clientName: "Meridian Holdings Ltd", uploadedBy: "Sarah Chen", uploadedAt: "2025-12-20", size: "1.4 MB", shared: true, eSignRequired: true, eSignStatus: "Signed" },
-  { id: "DOC-002", name: "Apex — Engagement Letter v3.docx", type: "DOCX", folder: "Contracts", clientName: "Apex Ventures Group", uploadedBy: "Sarah Chen", uploadedAt: "2026-06-11", size: "320 KB", shared: true, eSignRequired: true, eSignStatus: "Pending" },
+  { id: "DOC-002", name: "Apex — Audit Workpapers.xlsx", type: "XLSX", folder: "Client Documents", clientName: "Apex Ventures Group", uploadedBy: "Sarah Chen", uploadedAt: "2026-06-11", size: "1.1 MB", shared: false, eSignRequired: false },
   { id: "DOC-003", name: "Tanaka — FY26 Financials.xlsx", type: "XLSX", folder: "Client Documents", clientName: "Tanaka Enterprises", uploadedBy: "David Park", uploadedAt: "2026-06-08", size: "2.1 MB", shared: false, eSignRequired: false },
   { id: "DOC-004", name: "Helios — Project Plan.pdf", type: "PDF", folder: "Projects", clientName: "Helios Renewables", uploadedBy: "Sarah Chen", uploadedAt: "2026-06-09", size: "880 KB", shared: true, eSignRequired: false },
   { id: "DOC-005", name: "Greenfield — Restructuring Memo.docx", type: "DOCX", folder: "Projects", clientName: "Greenfield Capital Partners", uploadedBy: "Michael Torres", uploadedAt: "2026-06-12", size: "540 KB", shared: false, eSignRequired: false },
