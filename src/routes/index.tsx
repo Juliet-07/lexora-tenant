@@ -1,0 +1,31 @@
+import { Route, Routes } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
+import Login from "@/pages/Login";
+import NotFound from "@/pages/NotFound";
+import { coreRoutes } from "./core.routes";
+import { amlRoutes } from "./aml.routes";
+import { hrRoutes } from "./hr.routes";
+import { crmRoutes } from "./crm.routes";
+import { teamMemberRoutes } from "./team-member.routes";
+
+/**
+ * Top-level router. Module-specific routes live in their own files so
+ * App.tsx stays a thin entry point.
+ */
+export function AppRoutes() {
+  const { user, isAdmin } = useAuth();
+  if (!user) return <Login />;
+
+  const ctx = { isAdmin };
+
+  return (
+    <Routes>
+      {coreRoutes(ctx)}
+      {amlRoutes(ctx)}
+      {hrRoutes(ctx)}
+      {crmRoutes(ctx)}
+      {teamMemberRoutes(ctx)}
+      <Route path="*" element={<NotFound />} />
+    </Routes>
+  );
+}
