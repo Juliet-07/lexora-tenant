@@ -158,14 +158,20 @@ const NAV_BY_MODULE: Record<
   ],
 
 
-  // ── CRM ────────────────────────────────────────────────────
+  // ── CRM & Project Management ──────────────────────────────
   crm: [
     { title: "Dashboard", url: "/", icon: LayoutDashboard },
+    { title: "Pipeline", url: "/crm/pipeline", icon: TrendingUp, adminOnly: true },
+    { title: "Contacts & Accounts", url: "/crm/contacts", icon: Contact, adminOnly: true },
     { title: "Clients", url: "/clients", icon: Users, adminOnly: true },
-    { title: "Projects", url: "/projects", icon: FolderKanban },
+    { title: "Projects", url: "/crm/projects", icon: FolderKanban },
+    { title: "Time Tracking", url: "/crm/time", icon: Clock },
+    { title: "Resources", url: "/crm/resources", icon: UsersRound, adminOnly: true },
+    { title: "Invoicing", url: "/crm/invoicing", icon: Receipt, adminOnly: true },
+    { title: "Contracts", url: "/crm/contracts", icon: FileSignature, adminOnly: true },
+    { title: "Documents", url: "/crm/documents", icon: FolderOpen, adminOnly: true },
+    { title: "Client Portal", url: "/crm/portal", icon: Globe, adminOnly: true },
     { title: "Team", url: "/team", icon: UserCog, adminOnly: true },
-    { title: "Billing", url: "/billing", icon: Receipt },
-    { title: "Reports", url: "/reports", icon: BarChart3, adminOnly: true },
   ],
 
   // ── HR & People Management ─────────────────────────────────
