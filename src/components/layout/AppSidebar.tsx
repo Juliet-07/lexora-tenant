@@ -24,6 +24,12 @@ import {
   ClipboardList,
   Loader2,
   Clock,
+  TrendingUp,
+  Contact,
+  UsersRound,
+  FileSignature,
+  FolderOpen,
+  Globe,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import {
