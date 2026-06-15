@@ -176,7 +176,7 @@ const NAV_BY_MODULE: Record<
     { title: "Invoicing", url: "/crm/invoicing", icon: Receipt, adminOnly: true },
     { title: "Contracts", url: "/crm/contracts", icon: FileSignature, adminOnly: true },
     { title: "Documents", url: "/crm/documents", icon: FolderOpen, adminOnly: true },
-    { title: "Client Portal", url: "/crm/portal", icon: Globe, adminOnly: true },
+    // { title: "Client Portal", url: "/crm/portal", icon: Globe, adminOnly: true },
     { title: "Team", url: "/team", icon: UserCog, adminOnly: true },
   ],
 
