@@ -168,7 +168,7 @@ const NAV_BY_MODULE: Record<
   crm: [
     { title: "Dashboard", url: "/", icon: LayoutDashboard },
     { title: "Pipeline", url: "/crm/pipeline", icon: TrendingUp, adminOnly: true },
-    { title: "Contacts & Accounts", url: "/crm/contacts", icon: Contact, adminOnly: true },
+    // { title: "Contacts & Accounts", url: "/crm/contacts", icon: Contact, adminOnly: true },
     { title: "Clients", url: "/clients", icon: Users, adminOnly: true },
     { title: "Projects", url: "/crm/projects", icon: FolderKanban },
     { title: "Time Tracking", url: "/crm/time", icon: Clock },
