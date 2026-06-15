@@ -24,7 +24,9 @@ export default function MySettings() {
   };
 
   const { user } = useAuth();
-  const [fullName, setFullName] = useState(user?.name ?? "");
+  const [fullName, setFullName] = useState(
+    [user?.firstName, user?.lastName].filter(Boolean).join(" ")
+  );
   const [email, setEmail] = useState(user?.email ?? "");
   const [phone, setPhone] = useState("");
   const [title, setTitle] = useState("Team Member");
