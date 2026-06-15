@@ -63,7 +63,7 @@ export interface Contract {
   id: string;
   title: string;
   clientName: string;
-  type: "MSA" | "SOW" | "NDA" | "Engagement Letter";
+  type: "MSA" | "SOW" | "NDA";
   status: "Draft" | "Sent" | "Signed" | "Expired" | "Awaiting Signature";
   value: number;
   startDate: string;
