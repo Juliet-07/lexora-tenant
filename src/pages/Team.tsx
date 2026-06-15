@@ -58,7 +58,6 @@ import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { api } from "@/lib/api";
 import { TeamMemberDetailSheet } from "@/components/team/TeamMemberDetailSheet";
-import { leaveRequests } from "@/data/hrMockData";
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -168,6 +167,18 @@ export default function Team() {
     );
   });
 
+  const { data: teamLeaveCount = 0 } = useQuery({
+    queryKey: ["team-leave-pending-count"],
+    queryFn: async () => {
+      const res = await api.get("/tenant/team/leave", {
+        params: { status: "pending" },
+      });
+      const d = res.data?.data ?? res.data;
+      return Array.isArray(d) ? d.length : 0;
+    },
+    staleTime: 30_000,
+  });
+
   // ── Invite mutation ───────────────────────────────────────
   const inviteMutation = useMutation({
     mutationFn: () => api.post("/tenant/team", form),
@@ -264,7 +275,7 @@ export default function Team() {
           },
           {
             label: "Leave Requests",
-            value: leaveRequests.filter((r) => r.status === "Pending").length,
+            value: teamLeaveCount,
             icon: Plane,
             color: "from-violet-500 to-purple-500",
           },
@@ -580,7 +591,10 @@ export default function Team() {
         </AlertDialogContent>
       </AlertDialog>
 
-      <TeamMemberDetailSheet member={detailTarget} onClose={() => setDetailTarget(null)} />
+      <TeamMemberDetailSheet
+        member={detailTarget}
+        onClose={() => setDetailTarget(null)}
+      />
     </div>
   );
 }
