@@ -115,12 +115,17 @@ export interface ResourceAllocation {
 // ──────────────────────────────────────────────────────────── DATA ──
 
 export const accounts: Account[] = [
-  { id: "ACC-001", name: "Meridian Holdings Ltd", industry: "Financial Services", size: "Enterprise", country: "United Kingdom", owner: "Sarah Chen", arr: 480000, status: "Customer", tier: "Tier 1" },
-  { id: "ACC-002", name: "Apex Ventures Group", industry: "Investment Mgmt", size: "Mid-Market", country: "UAE", owner: "Sarah Chen", arr: 220000, status: "Customer", tier: "Tier 2" },
-  { id: "ACC-003", name: "Tanaka Enterprises", industry: "Technology", size: "Enterprise", country: "Japan", owner: "David Park", arr: 360000, status: "Customer", tier: "Tier 1" },
-  { id: "ACC-004", name: "Greenfield Capital Partners", industry: "Private Equity", size: "Enterprise", country: "United States", owner: "Michael Torres", arr: 540000, status: "Customer", tier: "Tier 1" },
-  { id: "ACC-005", name: "Helios Renewables", industry: "Energy", size: "Mid-Market", country: "Spain", owner: "Sarah Chen", arr: 0, status: "Prospect", tier: "Tier 2" },
-  { id: "ACC-006", name: "Northwind Logistics", industry: "Logistics", size: "SMB", country: "Norway", owner: "Michael Torres", arr: 0, status: "Prospect", tier: "Tier 3" },
+  { id: "ACC-001", name: "Meridian Holdings Ltd", industry: "Financial Services", size: "Enterprise", country: "United Kingdom", owner: "Sarah Chen", arr: 480000, status: "Customer", tier: "Tier 1", lifecycle: "Retained Client", source: "Referral", dealsCount: 4, firstWonDate: "2023-02-14", lastWonDate: "2026-01-05", totalRevenue: 1620000 },
+  { id: "ACC-002", name: "Apex Ventures Group", industry: "Investment Mgmt", size: "Mid-Market", country: "UAE", owner: "Sarah Chen", arr: 220000, status: "Customer", tier: "Tier 2", lifecycle: "Retained Client", source: "Partner", dealsCount: 3, firstWonDate: "2024-03-10", lastWonDate: "2026-06-01", totalRevenue: 540000 },
+  { id: "ACC-003", name: "Tanaka Enterprises", industry: "Technology", size: "Enterprise", country: "Japan", owner: "David Park", arr: 360000, status: "Customer", tier: "Tier 1", lifecycle: "Active Client", source: "Direct", dealsCount: 2, firstWonDate: "2025-01-20", lastWonDate: "2026-02-12", totalRevenue: 720000 },
+  { id: "ACC-004", name: "Greenfield Capital Partners", industry: "Private Equity", size: "Enterprise", country: "United States", owner: "Michael Torres", arr: 540000, status: "Customer", tier: "Tier 1", lifecycle: "Active Client", source: "Referral", dealsCount: 1, firstWonDate: "2025-09-15", lastWonDate: "2025-09-15", totalRevenue: 540000 },
+  { id: "ACC-005", name: "Helios Renewables", industry: "Energy", size: "Mid-Market", country: "Spain", owner: "Sarah Chen", arr: 0, status: "Prospect", tier: "Tier 2", lifecycle: "Prospect", source: "Referral", dealsCount: 0, totalRevenue: 0 },
+  { id: "ACC-006", name: "Northwind Logistics", industry: "Logistics", size: "SMB", country: "Norway", owner: "Michael Torres", arr: 0, status: "Prospect", tier: "Tier 3", lifecycle: "Prospect", source: "Event", dealsCount: 0, totalRevenue: 0 },
+  { id: "ACC-007", name: "Bluewave Fintech", industry: "Fintech", size: "SMB", country: "India", owner: "David Park", arr: 0, status: "Prospect", tier: "Tier 3", lifecycle: "Lead", source: "Web", dealsCount: 0, totalRevenue: 0 },
+  { id: "ACC-008", name: "Whitfield & Sons", industry: "Manufacturing", size: "SMB", country: "United Kingdom", owner: "Michael Torres", arr: 0, status: "Prospect", tier: "Tier 3", lifecycle: "Lead", source: "Cold Outreach", dealsCount: 0, totalRevenue: 0 },
+  { id: "ACC-009", name: "Polar Asset Mgmt", industry: "Asset Mgmt", size: "Mid-Market", country: "Denmark", owner: "Sarah Chen", arr: 0, status: "Prospect", tier: "Tier 2", lifecycle: "Lead", source: "Partner", dealsCount: 0, totalRevenue: 0 },
+  { id: "ACC-010", name: "Sable & Co", industry: "Retail", size: "SMB", country: "France", owner: "Michael Torres", arr: 0, status: "Churned", tier: "Tier 3", lifecycle: "Past Client", source: "Social Media", dealsCount: 1, firstWonDate: "2024-04-18", lastWonDate: "2024-04-18", totalRevenue: 32000 },
+  { id: "ACC-011", name: "Larkspur Media", industry: "Media", size: "SMB", country: "Canada", owner: "David Park", arr: 0, status: "Churned", tier: "Tier 3", lifecycle: "Past Client", source: "Web", dealsCount: 1, firstWonDate: "2023-11-02", lastWonDate: "2023-11-02", totalRevenue: 48000 },
 ];
 
 export const contacts: Contact[] = [
