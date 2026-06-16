@@ -68,7 +68,41 @@ const lifecycleStages: { key: LifecycleStage; label: string; tone: string; sub: 
 export default function Pipeline() {
   const { toast } = useToast();
   const [leads, setLeads] = useState(initialLeads);
-  const [accounts] = useState(initialAccounts);
+  const [accounts, setAccounts] = useState(initialAccounts);
+  const [dragging, setDragging] = useState<{ id: string; from: LifecycleStage } | null>(null);
+  const [dragOver, setDragOver] = useState<LifecycleStage | null>(null);
+
+  const moveItem = (id: string, from: LifecycleStage, to: LifecycleStage) => {
+    if (from === to) return;
+    // If it's a lead being moved out of "Lead" column → promote into accounts
+    const lead = leads.find((l) => l.id === id);
+    if (lead && from === "Lead") {
+      setLeads((prev) => prev.filter((l) => l.id !== id));
+      setAccounts((prev) => [
+        {
+          id: `ACC-${String(prev.length + 1).padStart(3, "0")}`,
+          name: lead.company,
+          industry: "—",
+          size: "SMB",
+          country: "—",
+          owner: lead.owner,
+          arr: 0,
+          status: to === "Past Client" ? "Churned" : to === "Prospect" || to === "Lead" ? "Prospect" : "Customer",
+          tier: "Tier 3",
+          lifecycle: to,
+          source: lead.source,
+          dealsCount: to === "Active Client" || to === "Retained Client" || to === "Past Client" ? 1 : 0,
+          totalRevenue: 0,
+        },
+        ...prev,
+      ]);
+      toast({ title: "Lead promoted", description: `${lead.name} moved to ${to}.` });
+      return;
+    }
+    // Otherwise update the account lifecycle
+    setAccounts((prev) => prev.map((a) => (a.id === id ? { ...a, lifecycle: to } : a)));
+    toast({ title: "Moved", description: `Updated lifecycle to ${to}.` });
+  };
   const [openDialog, setOpenDialog] = useState(false);
   const [form, setForm] = useState<{ name: string; company: string; email: string; source: Lead["source"] }>({
     name: "",
