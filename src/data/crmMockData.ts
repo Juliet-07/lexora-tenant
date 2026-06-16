@@ -16,6 +16,13 @@ export interface Contact {
   lastContacted: string;
 }
 
+export type LifecycleStage =
+  | "Lead"
+  | "Prospect"
+  | "Active Client"
+  | "Retained Client"
+  | "Past Client";
+
 export interface Account {
   id: string;
   name: string;
@@ -26,6 +33,15 @@ export interface Account {
   arr: number;
   status: "Prospect" | "Customer" | "Churned";
   tier: "Tier 1" | "Tier 2" | "Tier 3";
+  /** Where the relationship currently sits in the conversion journey. */
+  lifecycle: LifecycleStage;
+  /** Original channel that produced the lead. */
+  source?: "Referral" | "Web" | "Event" | "Cold Outreach" | "Partner" | "Social Media" | "Direct";
+  /** Number of closed-won deals to date. >1 = retained / repeat business. */
+  dealsCount: number;
+  firstWonDate?: string;
+  lastWonDate?: string;
+  totalRevenue: number;
 }
 
 export interface Lead {
