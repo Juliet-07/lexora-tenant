@@ -143,6 +143,8 @@ export const leads: Lead[] = [
   { id: "LEAD-003", name: "Priya Subramanian", company: "Bluewave Fintech", email: "priya@bluewavefin.in", source: "Web", score: 38, status: "New", owner: "David Park", createdAt: "2026-06-06" },
   { id: "LEAD-004", name: "Tom Whitfield", company: "Whitfield & Sons", email: "tom@whitfield.co.uk", source: "Cold Outreach", score: 21, status: "Unqualified", owner: "Michael Torres", createdAt: "2026-06-02" },
   { id: "LEAD-005", name: "Anika Sørensen", company: "Polar Asset Mgmt", email: "anika@polar-am.dk", source: "Partner", score: 71, status: "Qualified", owner: "Sarah Chen", createdAt: "2026-06-04" },
+  { id: "LEAD-006", name: "Marco Bellini", company: "Bellini Studio", email: "marco@bellinistudio.it", source: "Social Media", score: 54, status: "New", owner: "Sarah Chen", createdAt: "2026-06-13" },
+  { id: "LEAD-007", name: "Grace Okonkwo", company: "Okonkwo Trust", email: "grace@okonkwotrust.ng", source: "Direct", score: 47, status: "New", owner: "David Park", createdAt: "2026-06-14" },
 ];
 
 export const opportunities: Opportunity[] = [
