@@ -49,7 +49,7 @@ export interface Lead {
   name: string;
   company: string;
   email: string;
-  source: "Referral" | "Web" | "Event" | "Cold Outreach" | "Partner";
+  source: "Referral" | "Web" | "Event" | "Cold Outreach" | "Partner" | "Social Media" | "Direct";
   score: number; // 0-100
   status: "New" | "Qualified" | "Unqualified" | "Converted";
   owner: string;
