@@ -6,11 +6,25 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Progress } from "@/components/ui/progress";
 import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Plus,
-  TrendingUp,
   Target,
-  DollarSign,
-  Flame,
   Users,
   UserCheck,
   Repeat,
@@ -18,22 +32,12 @@ import {
   ArrowRight,
 } from "lucide-react";
 import {
-  opportunities as initialOpps,
   leads as initialLeads,
   accounts as initialAccounts,
-  pipelineStages,
-  type Opportunity,
+  type Lead,
   type LifecycleStage,
 } from "@/data/crmMockData";
-
-const stageColor: Record<Opportunity["stage"], string> = {
-  Qualification: "bg-slate-500/10 text-slate-600",
-  Discovery: "bg-blue-500/10 text-blue-600",
-  Proposal: "bg-indigo-500/10 text-indigo-600",
-  Negotiation: "bg-amber-500/10 text-amber-600",
-  "Closed Won": "bg-success/10 text-success",
-  "Closed Lost": "bg-destructive/10 text-destructive",
-};
+import { useToast } from "@/hooks/use-toast";
 
 const lifecycleColor: Record<LifecycleStage, string> = {
   Lead: "bg-slate-500/10 text-slate-600",
@@ -43,64 +47,108 @@ const lifecycleColor: Record<LifecycleStage, string> = {
   "Past Client": "bg-destructive/10 text-destructive",
 };
 
-const scoreTone = (score: number) =>
-  score >= 70 ? "text-success" : score >= 40 ? "text-warning" : "text-muted-foreground";
+const sourceOptions: Lead["source"][] = [
+  "Referral",
+  "Web",
+  "Event",
+  "Cold Outreach",
+  "Partner",
+  "Social Media",
+  "Direct",
+];
+
+const lifecycleStages: { key: LifecycleStage; label: string; tone: string; sub: string }[] = [
+  { key: "Lead", label: "Leads", tone: "bg-slate-500/10 text-slate-600 border-slate-500/20", sub: "Captured, not yet qualified" },
+  { key: "Prospect", label: "Prospects", tone: "bg-blue-500/10 text-blue-600 border-blue-500/20", sub: "Interested & qualified" },
+  { key: "Active Client", label: "Active Clients", tone: "bg-success/10 text-success border-success/20", sub: "Currently engaged" },
+  { key: "Retained Client", label: "Retained", tone: "bg-primary/10 text-primary border-primary/20", sub: "Repeat business" },
+  { key: "Past Client", label: "Past Clients", tone: "bg-destructive/10 text-destructive border-destructive/20", sub: "One-time / churned" },
+];
 
 export default function Pipeline() {
-  const [opps] = useState(initialOpps);
-  const [leads] = useState(initialLeads);
+  const { toast } = useToast();
+  const [leads, setLeads] = useState(initialLeads);
   const [accounts] = useState(initialAccounts);
-
-  const open = opps.filter((o) => !o.stage.startsWith("Closed"));
-  const pipelineValue = open.reduce((s, o) => s + o.amount, 0);
-  const weighted = open.reduce((s, o) => s + (o.amount * o.probability) / 100, 0);
-  const won = opps.filter((o) => o.stage === "Closed Won").reduce((s, o) => s + o.amount, 0);
-  const winRate = Math.round(
-    (opps.filter((o) => o.stage === "Closed Won").length /
-      (opps.filter((o) => o.stage.startsWith("Closed")).length || 1)) *
-      100,
-  );
+  const [openDialog, setOpenDialog] = useState(false);
+  const [form, setForm] = useState<{ name: string; company: string; email: string; source: Lead["source"] }>({
+    name: "",
+    company: "",
+    email: "",
+    source: "Web",
+  });
 
   // ── Lifecycle / conversion story ─────────────────────────────
-  const funnel = useMemo(() => {
-    const leadCount = leads.length + accounts.filter((a) => a.lifecycle === "Lead").length;
-    const prospectCount = accounts.filter((a) => a.lifecycle === "Prospect").length;
-    const activeCount = accounts.filter((a) => a.lifecycle === "Active Client").length;
-    const retainedCount = accounts.filter((a) => a.lifecycle === "Retained Client").length;
-    const pastCount = accounts.filter((a) => a.lifecycle === "Past Client").length;
-    const clientTotal = activeCount + retainedCount + pastCount;
-    return {
-      stages: [
-        { key: "Lead", label: "Leads", count: leadCount, icon: Users, tone: "bg-slate-500/10 text-slate-600" },
-        { key: "Prospect", label: "Prospects", count: prospectCount, icon: Target, tone: "bg-blue-500/10 text-blue-600" },
-        { key: "Client", label: "Paying Clients", count: clientTotal, icon: UserCheck, tone: "bg-success/10 text-success" },
-        { key: "Retained", label: "Retained", count: retainedCount, icon: Repeat, tone: "bg-primary/10 text-primary" },
-        { key: "Past", label: "Past Clients", count: pastCount, icon: UserX, tone: "bg-destructive/10 text-destructive" },
-      ],
-      leadCount,
-      prospectCount,
-      activeCount,
-      retainedCount,
-      pastCount,
-      clientTotal,
+  const counts = useMemo(() => {
+    const c: Record<LifecycleStage, number> = {
+      Lead: accounts.filter((a) => a.lifecycle === "Lead").length + leads.length,
+      Prospect: accounts.filter((a) => a.lifecycle === "Prospect").length,
+      "Active Client": accounts.filter((a) => a.lifecycle === "Active Client").length,
+      "Retained Client": accounts.filter((a) => a.lifecycle === "Retained Client").length,
+      "Past Client": accounts.filter((a) => a.lifecycle === "Past Client").length,
     };
+    return c;
   }, [leads, accounts]);
 
-  const leadToProspect = funnel.leadCount
-    ? Math.round((funnel.prospectCount / funnel.leadCount) * 100)
+  const clientTotal = counts["Active Client"] + counts["Retained Client"] + counts["Past Client"];
+  const leadToProspect = counts.Lead ? Math.round((counts.Prospect / counts.Lead) * 100) : 0;
+  const prospectToClient = counts.Prospect + clientTotal
+    ? Math.round((clientTotal / (counts.Prospect + clientTotal)) * 100)
     : 0;
-  const prospectToClient = funnel.prospectCount + funnel.clientTotal
-    ? Math.round((funnel.clientTotal / (funnel.prospectCount + funnel.clientTotal)) * 100)
-    : 0;
-  const retentionRate = funnel.clientTotal
-    ? Math.round((funnel.retainedCount / funnel.clientTotal) * 100)
+  const retentionRate = clientTotal
+    ? Math.round((counts["Retained Client"] / clientTotal) * 100)
     : 0;
 
-  const maxFunnel = Math.max(...funnel.stages.map((s) => s.count), 1);
+  const maxFunnel = Math.max(...Object.values(counts), 1);
 
-  const activeClients = accounts.filter((a) => a.lifecycle === "Active Client");
-  const retainedClients = accounts.filter((a) => a.lifecycle === "Retained Client");
-  const pastClients = accounts.filter((a) => a.lifecycle === "Past Client");
+  // Items per lifecycle column for the board
+  const itemsByLifecycle = useMemo(() => {
+    const map: Record<LifecycleStage, { id: string; title: string; sub: string; meta?: string }[]> = {
+      Lead: [
+        ...leads.map((l) => ({ id: l.id, title: l.name, sub: l.company, meta: l.source })),
+        ...accounts
+          .filter((a) => a.lifecycle === "Lead")
+          .map((a) => ({ id: a.id, title: a.name, sub: a.industry, meta: a.source })),
+      ],
+      Prospect: accounts
+        .filter((a) => a.lifecycle === "Prospect")
+        .map((a) => ({ id: a.id, title: a.name, sub: a.industry, meta: a.source })),
+      "Active Client": accounts
+        .filter((a) => a.lifecycle === "Active Client")
+        .map((a) => ({ id: a.id, title: a.name, sub: a.industry, meta: `${a.dealsCount} deal${a.dealsCount === 1 ? "" : "s"}` })),
+      "Retained Client": accounts
+        .filter((a) => a.lifecycle === "Retained Client")
+        .map((a) => ({ id: a.id, title: a.name, sub: a.industry, meta: `${a.dealsCount} deals` })),
+      "Past Client": accounts
+        .filter((a) => a.lifecycle === "Past Client")
+        .map((a) => ({ id: a.id, title: a.name, sub: a.industry, meta: a.lastWonDate })),
+    };
+    return map;
+  }, [leads, accounts]);
+
+  const submitLead = () => {
+    if (!form.name || !form.company || !form.email) {
+      toast({ title: "Missing details", description: "Name, company and email are required.", variant: "destructive" });
+      return;
+    }
+    const id = `LEAD-${String(leads.length + 1).padStart(3, "0")}`;
+    setLeads((prev) => [
+      {
+        id,
+        name: form.name,
+        company: form.company,
+        email: form.email,
+        source: form.source,
+        score: 0,
+        status: "New",
+        owner: "—",
+        createdAt: new Date().toISOString().slice(0, 10),
+      },
+      ...prev,
+    ]);
+    toast({ title: "Lead captured", description: `${form.name} from ${form.company} added.` });
+    setForm({ name: "", company: "", email: "", source: "Web" });
+    setOpenDialog(false);
+  };
 
   return (
     <div className="space-y-6">
@@ -111,30 +159,74 @@ export default function Pipeline() {
             Track the full journey — from lead to paying client, retained or churned
           </p>
         </div>
-        <Button className="bg-gradient-to-r from-primary to-secondary">
-          <Plus className="h-4 w-4 mr-2" /> New Opportunity
-        </Button>
+        <Dialog open={openDialog} onOpenChange={setOpenDialog}>
+          <DialogTrigger asChild>
+            <Button className="bg-gradient-to-r from-primary to-secondary">
+              <Plus className="h-4 w-4 mr-2" /> New Lead
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Record a new lead</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="lead-name">Full name</Label>
+                <Input id="lead-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Jane Doe" />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="lead-company">Company</Label>
+                <Input id="lead-company" value={form.company} onChange={(e) => setForm({ ...form, company: e.target.value })} placeholder="Acme Ltd" />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="lead-email">Email</Label>
+                <Input id="lead-email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="jane@acme.com" />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Source</Label>
+                <Select value={form.source} onValueChange={(v) => setForm({ ...form, source: v as Lead["source"] })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {sourceOptions.map((s) => (
+                      <SelectItem key={s} value={s}>{s}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setOpenDialog(false)}>Cancel</Button>
+              <Button onClick={submitLead} className="bg-gradient-to-r from-primary to-secondary">Save lead</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {[
-          { icon: Target, label: "Open Pipeline", value: `$${pipelineValue.toLocaleString()}`, tone: "bg-primary/10 text-primary" },
-          { icon: TrendingUp, label: "Weighted Forecast", value: `$${Math.round(weighted).toLocaleString()}`, tone: "bg-info/10 text-info" },
-          { icon: DollarSign, label: "Closed Won (QTD)", value: `$${won.toLocaleString()}`, tone: "bg-success/10 text-success" },
-          { icon: Flame, label: "Win Rate", value: `${winRate}%`, tone: "bg-warning/10 text-warning" },
-        ].map((s) => (
-          <Card key={s.label}>
-            <CardContent className="p-5 flex items-center gap-3">
-              <div className={`p-3 rounded-xl ${s.tone}`}>
-                <s.icon className="h-5 w-5" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">{s.label}</p>
-                <p className="text-xl font-bold">{s.value}</p>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+      {/* Lifecycle summary cards (replaces money cards) */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+        {lifecycleStages.map((s) => {
+          const Icon =
+            s.key === "Lead" ? Users :
+            s.key === "Prospect" ? Target :
+            s.key === "Active Client" ? UserCheck :
+            s.key === "Retained Client" ? Repeat : UserX;
+          return (
+            <Card key={s.key}>
+              <CardContent className="p-5">
+                <div className="flex items-center gap-3">
+                  <div className={`p-2.5 rounded-xl ${s.tone}`}>
+                    <Icon className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">{s.label}</p>
+                    <p className="text-2xl font-bold leading-none mt-1">{counts[s.key]}</p>
+                  </div>
+                </div>
+                <p className="text-[11px] text-muted-foreground mt-3">{s.sub}</p>
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
 
       <Tabs defaultValue="funnel">
@@ -142,7 +234,6 @@ export default function Pipeline() {
           <TabsTrigger value="funnel">Conversion Funnel</TabsTrigger>
           <TabsTrigger value="kanban">Pipeline Board</TabsTrigger>
           <TabsTrigger value="leads">Leads</TabsTrigger>
-          <TabsTrigger value="list">Opportunities</TabsTrigger>
           <TabsTrigger value="clients">Clients</TabsTrigger>
         </TabsList>
 
@@ -189,26 +280,32 @@ export default function Pipeline() {
               </p>
             </CardHeader>
             <CardContent className="space-y-3">
-              {funnel.stages.map((s, i) => {
-                const width = Math.max((s.count / maxFunnel) * 100, 8);
+              {lifecycleStages.map((s, i) => {
+                const count = counts[s.key];
+                const width = Math.max((count / maxFunnel) * 100, 8);
+                const Icon =
+                  s.key === "Lead" ? Users :
+                  s.key === "Prospect" ? Target :
+                  s.key === "Active Client" ? UserCheck :
+                  s.key === "Retained Client" ? Repeat : UserX;
                 return (
                   <div key={s.key} className="space-y-1">
                     <div className="flex items-center justify-between text-xs">
                       <div className="flex items-center gap-2 font-medium">
-                        <s.icon className="h-4 w-4 text-muted-foreground" />
+                        <Icon className="h-4 w-4 text-muted-foreground" />
                         {s.label}
                       </div>
-                      <span className="text-muted-foreground">{s.count} accounts</span>
+                      <span className="text-muted-foreground">{count} {count === 1 ? "account" : "accounts"}</span>
                     </div>
                     <div className="h-9 rounded-md bg-muted/40 overflow-hidden">
                       <div
                         className={`h-full ${s.tone} flex items-center px-3 text-xs font-semibold transition-all`}
                         style={{ width: `${width}%` }}
                       >
-                        {s.count}
+                        {count}
                       </div>
                     </div>
-                    {i < funnel.stages.length - 1 && (
+                    {i < lifecycleStages.length - 1 && (
                       <div className="flex justify-center text-muted-foreground">
                         <ArrowRight className="h-3 w-3 rotate-90" />
                       </div>
@@ -249,32 +346,33 @@ export default function Pipeline() {
           </Card>
         </TabsContent>
 
-        {/* ── Pipeline board ────────────────────────────────── */}
+        {/* ── Pipeline board — lifecycle journey ─────────────── */}
         <TabsContent value="kanban" className="mt-4">
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-            {pipelineStages.map((stage) => {
-              const stageOpps = opps.filter((o) => o.stage === stage);
-              const stageVal = stageOpps.reduce((s, o) => s + o.amount, 0);
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+            {lifecycleStages.map((stage) => {
+              const items = itemsByLifecycle[stage.key];
               return (
-                <Card key={stage} className="bg-muted/30">
+                <Card key={stage.key} className="bg-muted/30">
                   <CardHeader className="p-3 pb-2">
                     <CardTitle className="text-xs font-semibold flex items-center justify-between">
-                      <span>{stage}</span>
-                      <Badge variant="outline" className="text-[10px]">{stageOpps.length}</Badge>
+                      <span>{stage.label}</span>
+                      <Badge variant="outline" className="text-[10px]">{items.length}</Badge>
                     </CardTitle>
-                    <p className="text-[11px] text-muted-foreground">${stageVal.toLocaleString()}</p>
+                    <p className="text-[11px] text-muted-foreground">{stage.sub}</p>
                   </CardHeader>
                   <CardContent className="p-2 space-y-2 min-h-40">
-                    {stageOpps.map((o) => (
-                      <div key={o.id} className="rounded-lg bg-background p-3 border border-border/50 hover:border-primary/50 cursor-pointer">
-                        <p className="text-xs font-medium leading-tight">{o.name}</p>
-                        <p className="text-[11px] text-muted-foreground mt-1">{o.accountName}</p>
-                        <div className="flex items-center justify-between mt-2">
-                          <span className="text-xs font-semibold">${o.amount.toLocaleString()}</span>
-                          <Badge variant="outline" className="text-[10px]">{o.probability}%</Badge>
-                        </div>
+                    {items.map((it) => (
+                      <div key={it.id} className="rounded-lg bg-background p-3 border border-border/50 hover:border-primary/50 cursor-pointer">
+                        <p className="text-xs font-medium leading-tight">{it.title}</p>
+                        <p className="text-[11px] text-muted-foreground mt-1">{it.sub}</p>
+                        {it.meta && (
+                          <Badge variant="outline" className="text-[10px] mt-2">{it.meta}</Badge>
+                        )}
                       </div>
                     ))}
+                    {items.length === 0 && (
+                      <p className="text-[11px] text-muted-foreground text-center py-6">No accounts</p>
+                    )}
                   </CardContent>
                 </Card>
               );
@@ -292,9 +390,6 @@ export default function Pipeline() {
                     <TableHead>Lead</TableHead>
                     <TableHead>Company</TableHead>
                     <TableHead>Source</TableHead>
-                    <TableHead>Score</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Owner</TableHead>
                     <TableHead>Created</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -307,49 +402,7 @@ export default function Pipeline() {
                       </TableCell>
                       <TableCell className="text-sm">{l.company}</TableCell>
                       <TableCell><Badge variant="outline" className="text-xs">{l.source}</Badge></TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2 w-28">
-                          <Progress value={l.score} className="h-1.5 flex-1" />
-                          <span className={`text-xs font-bold ${scoreTone(l.score)}`}>{l.score}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell><Badge className="text-xs">{l.status}</Badge></TableCell>
-                      <TableCell className="text-sm">{l.owner}</TableCell>
                       <TableCell className="text-sm text-muted-foreground">{l.createdAt}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* ── Opportunities ─────────────────────────────────── */}
-        <TabsContent value="list" className="mt-4">
-          <Card>
-            <CardContent className="p-4">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Opportunity</TableHead>
-                    <TableHead>Account</TableHead>
-                    <TableHead>Stage</TableHead>
-                    <TableHead>Amount</TableHead>
-                    <TableHead>Probability</TableHead>
-                    <TableHead>Close Date</TableHead>
-                    <TableHead>Next Step</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {opps.map((o) => (
-                    <TableRow key={o.id}>
-                      <TableCell className="font-medium text-sm">{o.name}</TableCell>
-                      <TableCell className="text-sm">{o.accountName}</TableCell>
-                      <TableCell><Badge className={`text-xs ${stageColor[o.stage]}`}>{o.stage}</Badge></TableCell>
-                      <TableCell className="font-semibold">${o.amount.toLocaleString()}</TableCell>
-                      <TableCell className="text-sm">{o.probability}%</TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{o.closeDate}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground max-w-[180px] truncate">{o.nextStep}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -360,27 +413,6 @@ export default function Pipeline() {
 
         {/* ── Clients (active / retained / past) ────────────── */}
         <TabsContent value="clients" className="mt-4 space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {[
-              { label: "Active Clients", value: activeClients.length, sub: "Currently engaged", tone: "bg-success/10 text-success", icon: UserCheck },
-              { label: "Retained Clients", value: retainedClients.length, sub: "Multiple engagements", tone: "bg-primary/10 text-primary", icon: Repeat },
-              { label: "Past Clients", value: pastClients.length, sub: "One-time / churned", tone: "bg-destructive/10 text-destructive", icon: UserX },
-            ].map((s) => (
-              <Card key={s.label}>
-                <CardContent className="p-5 flex items-center gap-3">
-                  <div className={`p-3 rounded-xl ${s.tone}`}>
-                    <s.icon className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">{s.label}</p>
-                    <p className="text-xl font-bold">{s.value}</p>
-                    <p className="text-[11px] text-muted-foreground">{s.sub}</p>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-
           <Card>
             <CardContent className="p-4">
               <Table>
@@ -392,14 +424,13 @@ export default function Pipeline() {
                     <TableHead>Deals</TableHead>
                     <TableHead>First Won</TableHead>
                     <TableHead>Last Won</TableHead>
-                    <TableHead className="text-right">Total Revenue</TableHead>
                     <TableHead>Owner</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {accounts
                     .filter((a) => a.lifecycle !== "Lead" && a.lifecycle !== "Prospect")
-                    .sort((a, b) => b.totalRevenue - a.totalRevenue)
+                    .sort((a, b) => b.dealsCount - a.dealsCount)
                     .map((a) => (
                       <TableRow key={a.id}>
                         <TableCell>
@@ -413,7 +444,6 @@ export default function Pipeline() {
                         <TableCell className="text-sm font-semibold">{a.dealsCount}</TableCell>
                         <TableCell className="text-xs text-muted-foreground">{a.firstWonDate ?? "—"}</TableCell>
                         <TableCell className="text-xs text-muted-foreground">{a.lastWonDate ?? "—"}</TableCell>
-                        <TableCell className="text-right font-semibold">${a.totalRevenue.toLocaleString()}</TableCell>
                         <TableCell className="text-sm">{a.owner}</TableCell>
                       </TableRow>
                     ))}
