@@ -16,6 +16,13 @@ export interface Contact {
   lastContacted: string;
 }
 
+export type LifecycleStage =
+  | "Lead"
+  | "Prospect"
+  | "Active Client"
+  | "Retained Client"
+  | "Past Client";
+
 export interface Account {
   id: string;
   name: string;
@@ -26,6 +33,15 @@ export interface Account {
   arr: number;
   status: "Prospect" | "Customer" | "Churned";
   tier: "Tier 1" | "Tier 2" | "Tier 3";
+  /** Where the relationship currently sits in the conversion journey. */
+  lifecycle: LifecycleStage;
+  /** Original channel that produced the lead. */
+  source?: "Referral" | "Web" | "Event" | "Cold Outreach" | "Partner" | "Social Media" | "Direct";
+  /** Number of closed-won deals to date. >1 = retained / repeat business. */
+  dealsCount: number;
+  firstWonDate?: string;
+  lastWonDate?: string;
+  totalRevenue: number;
 }
 
 export interface Lead {
@@ -33,7 +49,7 @@ export interface Lead {
   name: string;
   company: string;
   email: string;
-  source: "Referral" | "Web" | "Event" | "Cold Outreach" | "Partner";
+  source: "Referral" | "Web" | "Event" | "Cold Outreach" | "Partner" | "Social Media" | "Direct";
   score: number; // 0-100
   status: "New" | "Qualified" | "Unqualified" | "Converted";
   owner: string;
@@ -99,12 +115,17 @@ export interface ResourceAllocation {
 // ──────────────────────────────────────────────────────────── DATA ──
 
 export const accounts: Account[] = [
-  { id: "ACC-001", name: "Meridian Holdings Ltd", industry: "Financial Services", size: "Enterprise", country: "United Kingdom", owner: "Sarah Chen", arr: 480000, status: "Customer", tier: "Tier 1" },
-  { id: "ACC-002", name: "Apex Ventures Group", industry: "Investment Mgmt", size: "Mid-Market", country: "UAE", owner: "Sarah Chen", arr: 220000, status: "Customer", tier: "Tier 2" },
-  { id: "ACC-003", name: "Tanaka Enterprises", industry: "Technology", size: "Enterprise", country: "Japan", owner: "David Park", arr: 360000, status: "Customer", tier: "Tier 1" },
-  { id: "ACC-004", name: "Greenfield Capital Partners", industry: "Private Equity", size: "Enterprise", country: "United States", owner: "Michael Torres", arr: 540000, status: "Customer", tier: "Tier 1" },
-  { id: "ACC-005", name: "Helios Renewables", industry: "Energy", size: "Mid-Market", country: "Spain", owner: "Sarah Chen", arr: 0, status: "Prospect", tier: "Tier 2" },
-  { id: "ACC-006", name: "Northwind Logistics", industry: "Logistics", size: "SMB", country: "Norway", owner: "Michael Torres", arr: 0, status: "Prospect", tier: "Tier 3" },
+  { id: "ACC-001", name: "Meridian Holdings Ltd", industry: "Financial Services", size: "Enterprise", country: "United Kingdom", owner: "Sarah Chen", arr: 480000, status: "Customer", tier: "Tier 1", lifecycle: "Retained Client", source: "Referral", dealsCount: 4, firstWonDate: "2023-02-14", lastWonDate: "2026-01-05", totalRevenue: 1620000 },
+  { id: "ACC-002", name: "Apex Ventures Group", industry: "Investment Mgmt", size: "Mid-Market", country: "UAE", owner: "Sarah Chen", arr: 220000, status: "Customer", tier: "Tier 2", lifecycle: "Retained Client", source: "Partner", dealsCount: 3, firstWonDate: "2024-03-10", lastWonDate: "2026-06-01", totalRevenue: 540000 },
+  { id: "ACC-003", name: "Tanaka Enterprises", industry: "Technology", size: "Enterprise", country: "Japan", owner: "David Park", arr: 360000, status: "Customer", tier: "Tier 1", lifecycle: "Active Client", source: "Direct", dealsCount: 2, firstWonDate: "2025-01-20", lastWonDate: "2026-02-12", totalRevenue: 720000 },
+  { id: "ACC-004", name: "Greenfield Capital Partners", industry: "Private Equity", size: "Enterprise", country: "United States", owner: "Michael Torres", arr: 540000, status: "Customer", tier: "Tier 1", lifecycle: "Active Client", source: "Referral", dealsCount: 1, firstWonDate: "2025-09-15", lastWonDate: "2025-09-15", totalRevenue: 540000 },
+  { id: "ACC-005", name: "Helios Renewables", industry: "Energy", size: "Mid-Market", country: "Spain", owner: "Sarah Chen", arr: 0, status: "Prospect", tier: "Tier 2", lifecycle: "Prospect", source: "Referral", dealsCount: 0, totalRevenue: 0 },
+  { id: "ACC-006", name: "Northwind Logistics", industry: "Logistics", size: "SMB", country: "Norway", owner: "Michael Torres", arr: 0, status: "Prospect", tier: "Tier 3", lifecycle: "Prospect", source: "Event", dealsCount: 0, totalRevenue: 0 },
+  { id: "ACC-007", name: "Bluewave Fintech", industry: "Fintech", size: "SMB", country: "India", owner: "David Park", arr: 0, status: "Prospect", tier: "Tier 3", lifecycle: "Lead", source: "Web", dealsCount: 0, totalRevenue: 0 },
+  { id: "ACC-008", name: "Whitfield & Sons", industry: "Manufacturing", size: "SMB", country: "United Kingdom", owner: "Michael Torres", arr: 0, status: "Prospect", tier: "Tier 3", lifecycle: "Lead", source: "Cold Outreach", dealsCount: 0, totalRevenue: 0 },
+  { id: "ACC-009", name: "Polar Asset Mgmt", industry: "Asset Mgmt", size: "Mid-Market", country: "Denmark", owner: "Sarah Chen", arr: 0, status: "Prospect", tier: "Tier 2", lifecycle: "Lead", source: "Partner", dealsCount: 0, totalRevenue: 0 },
+  { id: "ACC-010", name: "Sable & Co", industry: "Retail", size: "SMB", country: "France", owner: "Michael Torres", arr: 0, status: "Churned", tier: "Tier 3", lifecycle: "Past Client", source: "Social Media", dealsCount: 1, firstWonDate: "2024-04-18", lastWonDate: "2024-04-18", totalRevenue: 32000 },
+  { id: "ACC-011", name: "Larkspur Media", industry: "Media", size: "SMB", country: "Canada", owner: "David Park", arr: 0, status: "Churned", tier: "Tier 3", lifecycle: "Past Client", source: "Web", dealsCount: 1, firstWonDate: "2023-11-02", lastWonDate: "2023-11-02", totalRevenue: 48000 },
 ];
 
 export const contacts: Contact[] = [
@@ -122,6 +143,8 @@ export const leads: Lead[] = [
   { id: "LEAD-003", name: "Priya Subramanian", company: "Bluewave Fintech", email: "priya@bluewavefin.in", source: "Web", score: 38, status: "New", owner: "David Park", createdAt: "2026-06-06" },
   { id: "LEAD-004", name: "Tom Whitfield", company: "Whitfield & Sons", email: "tom@whitfield.co.uk", source: "Cold Outreach", score: 21, status: "Unqualified", owner: "Michael Torres", createdAt: "2026-06-02" },
   { id: "LEAD-005", name: "Anika Sørensen", company: "Polar Asset Mgmt", email: "anika@polar-am.dk", source: "Partner", score: 71, status: "Qualified", owner: "Sarah Chen", createdAt: "2026-06-04" },
+  { id: "LEAD-006", name: "Marco Bellini", company: "Bellini Studio", email: "marco@bellinistudio.it", source: "Social Media", score: 54, status: "New", owner: "Sarah Chen", createdAt: "2026-06-13" },
+  { id: "LEAD-007", name: "Grace Okonkwo", company: "Okonkwo Trust", email: "grace@okonkwotrust.ng", source: "Direct", score: 47, status: "New", owner: "David Park", createdAt: "2026-06-14" },
 ];
 
 export const opportunities: Opportunity[] = [
