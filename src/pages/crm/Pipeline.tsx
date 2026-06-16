@@ -380,13 +380,33 @@ export default function Pipeline() {
           </Card>
         </TabsContent>
 
-        {/* ── Pipeline board — lifecycle journey ─────────────── */}
+        {/* ── Pipeline board — lifecycle journey (drag & drop) ─ */}
         <TabsContent value="kanban" className="mt-4">
+          <p className="text-xs text-muted-foreground mb-3">
+            Drag cards between columns to move them through the lifecycle.
+          </p>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
             {lifecycleStages.map((stage) => {
               const items = itemsByLifecycle[stage.key];
+              const isOver = dragOver === stage.key;
               return (
-                <Card key={stage.key} className="bg-muted/30">
+                <Card
+                  key={stage.key}
+                  className={`bg-muted/30 transition-colors ${isOver ? "ring-2 ring-primary bg-primary/5" : ""}`}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    if (dragOver !== stage.key) setDragOver(stage.key);
+                  }}
+                  onDragLeave={() => setDragOver((cur) => (cur === stage.key ? null : cur))}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setDragOver(null);
+                    if (dragging) {
+                      moveItem(dragging.id, dragging.from, stage.key);
+                      setDragging(null);
+                    }
+                  }}
+                >
                   <CardHeader className="p-3 pb-2">
                     <CardTitle className="text-xs font-semibold flex items-center justify-between">
                       <span>{stage.label}</span>
@@ -396,7 +416,21 @@ export default function Pipeline() {
                   </CardHeader>
                   <CardContent className="p-2 space-y-2 min-h-40">
                     {items.map((it) => (
-                      <div key={it.id} className="rounded-lg bg-background p-3 border border-border/50 hover:border-primary/50 cursor-pointer">
+                      <div
+                        key={it.id}
+                        draggable
+                        onDragStart={(e) => {
+                          setDragging({ id: it.id, from: stage.key });
+                          e.dataTransfer.effectAllowed = "move";
+                        }}
+                        onDragEnd={() => {
+                          setDragging(null);
+                          setDragOver(null);
+                        }}
+                        className={`rounded-lg bg-background p-3 border border-border/50 hover:border-primary/50 cursor-grab active:cursor-grabbing transition-opacity ${
+                          dragging?.id === it.id ? "opacity-40" : ""
+                        }`}
+                      >
                         <p className="text-xs font-medium leading-tight">{it.title}</p>
                         <p className="text-[11px] text-muted-foreground mt-1">{it.sub}</p>
                         {it.meta && (
@@ -405,7 +439,9 @@ export default function Pipeline() {
                       </div>
                     ))}
                     {items.length === 0 && (
-                      <p className="text-[11px] text-muted-foreground text-center py-6">No accounts</p>
+                      <p className="text-[11px] text-muted-foreground text-center py-6">
+                        {isOver ? "Drop here" : "No accounts"}
+                      </p>
                     )}
                   </CardContent>
                 </Card>
