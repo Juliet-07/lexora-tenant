@@ -110,7 +110,6 @@ const NAV_BY_MODULE: Record<
       icon: BarChart3,
       adminOnly: true,
     },
-    { title: "Team", url: "/team", icon: UserCog, adminOnly: true },
   ],
 
 
@@ -160,7 +159,6 @@ const NAV_BY_MODULE: Record<
       icon: ShieldAlert,
       adminOnly: true,
     },
-    { title: "Team", url: "/team", icon: UserCog, adminOnly: true },
   ],
 
 
@@ -176,7 +174,6 @@ const NAV_BY_MODULE: Record<
     { title: "Invoicing", url: "/crm/invoicing", icon: Receipt, adminOnly: true },
     { title: "Contracts & Docs", url: "/crm/contracts", icon: FileSignature, adminOnly: true },
     // { title: "Client Portal", url: "/crm/portal", icon: Globe, adminOnly: true },
-    { title: "Team", url: "/team", icon: UserCog, adminOnly: true },
   ],
 
   // ── HR & People Management ─────────────────────────────────
@@ -229,7 +226,7 @@ const NAV_BY_MODULE: Record<
       url: "/hr/requisitions",
       icon: ClipboardList,
     },
-    { title: "Team", url: "/team", icon: UserCog, adminOnly: true },
+    
   ],
 
 
