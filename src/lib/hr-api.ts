@@ -222,7 +222,45 @@ export interface TerminateEmployeeDto {
   reason: string;
   status: "terminated" | "resigned";
 }
+export interface EmployeeAttendanceRecord {
+  _id: string;
+  date: string;
+  clockIn: string;
+  clockOut: string | null;
+  breakMinutes: number;
+  hoursWorked: number | null;
+  location: string;
+  status: string;
+}
 
+export interface EmployeeAttendanceStats {
+  weekHours: number;
+  monthHours: number;
+  daysPresent: number;
+  punctuality: number;
+}
+
+export interface EmployeeLeaveHistoryEntry {
+  _id: string;
+  type: string;
+  startDate: string;
+  endDate: string;
+  days: number;
+  status: string;
+  reason: string;
+}
+
+export interface EmployeeDetailResponse {
+  employee: Employee;
+  leave: {
+    balances: LeaveBalance[];
+    history: EmployeeLeaveHistoryEntry[];
+  };
+  attendance: {
+    recent: EmployeeAttendanceRecord[];
+    stats: EmployeeAttendanceStats;
+  };
+}
 // ─────────────────────────────────────────────────────────────
 // EMPLOYEES — API calls
 // ─────────────────────────────────────────────────────────────
@@ -273,6 +311,12 @@ export const terminateEmployee = async (
   return res.data?.data ?? res.data;
 };
 
+export const fetchEmployeeDetail = async (
+  id: string,
+): Promise<EmployeeDetailResponse> => {
+  const res = await api.get(`/hr/employees/${id}/detail`);
+  return res.data?.data ?? res.data;
+};
 // ─────────────────────────────────────────────────────────────
 // LEAVE — Types & API (keep as-is, clientId removed internally)
 // ─────────────────────────────────────────────────────────────
@@ -346,7 +390,6 @@ export interface LeavePolicy {
   effectiveFrom: string;
   createdAt: string;
 }
-
 
 export interface MyLeaveBalanceResponse {
   balances: LeaveBalance[];

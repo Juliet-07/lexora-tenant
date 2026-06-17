@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -49,9 +50,11 @@ import {
   Gavel,
   Plus,
   AlertTriangle,
+  Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 import type { Employee, HrTeam, HrLocation } from "@/lib/hr-api";
+import { fetchEmployeeDetail } from "@/lib/hr-api";
 import { downloadEmployeeReport } from "@/lib/employeeReport";
 
 // ─── Types ────────────────────────────────────────────────────
@@ -70,11 +73,10 @@ interface Props {
   onClose: () => void;
 }
 
-// ─── Mock data (dummy until APIs are wired) ───────────────────
+// ─── Dummy data — for modules with no backend yet ──────────────
+// (clients, projects, performance, payroll, documents, activity feed)
 
-const ACTIVITY = {
-  manager: "Sarah Lee",
-  employeeNumber: "EMP-0142",
+const DUMMY = {
   assignedClients: [
     { name: "Acme Holdings Ltd", status: "in_review", risk: "medium" },
     { name: "Jane Smith", status: "pending", risk: "low" },
@@ -82,38 +84,33 @@ const ACTIVITY = {
   ],
   projects: [
     { name: "Q2 KYC Refresh", role: "Lead", progress: 72, openTasks: 4 },
-    { name: "AML Investigations", role: "Contributor", progress: 45, openTasks: 2 },
-    { name: "Onboarding — Bright Futures", role: "Contributor", progress: 90, openTasks: 1 },
+    {
+      name: "AML Investigations",
+      role: "Contributor",
+      progress: 45,
+      openTasks: 2,
+    },
+    {
+      name: "Onboarding — Bright Futures",
+      role: "Contributor",
+      progress: 90,
+      openTasks: 1,
+    },
   ],
-  attendance: {
-    last7: [
-      { d: "Mon", in: "08:55", out: "17:32", h: 7.8, s: "Present" },
-      { d: "Tue", in: "09:18", out: "18:05", h: 7.8, s: "Late" },
-      { d: "Wed", in: "08:48", out: "17:11", h: 7.9, s: "Remote" },
-      { d: "Thu", in: "09:01", out: "17:48", h: 8.0, s: "Present" },
-      { d: "Fri", in: "08:50", out: "17:33", h: 8.0, s: "Present" },
-    ],
-    monthHours: 162.4,
-    overtime: 12.5,
-    punctuality: 94,
-  },
-  leave: {
-    annualLeft: 14,
-    sickLeft: 8,
-    upcoming: [
-      { type: "Annual", from: "2026-08-15", to: "2026-08-19", days: 5 },
-    ],
-    history: [
-      { type: "Annual", from: "2026-04-10", to: "2026-04-12", days: 3, status: "approved" },
-      { type: "Sick", from: "2026-02-05", to: "2026-02-05", days: 1, status: "approved" },
-    ],
-  },
   performance: {
     overall: 78,
     rating: 4.3,
     goals: [
-      { title: "Reduce KYC turnaround to <48h", progress: 75, status: "On Track" },
-      { title: "Complete CAMS certification", progress: 60, status: "On Track" },
+      {
+        title: "Reduce KYC turnaround to <48h",
+        progress: 75,
+        status: "On Track",
+      },
+      {
+        title: "Complete CAMS certification",
+        progress: 60,
+        status: "On Track",
+      },
       { title: "Zero SLA breaches", progress: 40, status: "At Risk" },
     ],
   },
@@ -136,27 +133,31 @@ const ACTIVITY = {
     { name: "Right to Work", date: "2024-03-10" },
   ],
   activity: [
-    { t: "2h ago", text: "Clocked in at 08:55" },
-    { t: "Yesterday", text: "Completed task: Source of funds review — Acme Holdings" },
+    { t: "2h ago", text: "Clocked in" },
+    {
+      t: "Yesterday",
+      text: "Completed task: Source of funds review — Acme Holdings",
+    },
     { t: "Yesterday", text: "Submitted timesheet for week 24" },
     { t: "2 days ago", text: "Logged 6.5h billable on Q2 KYC Refresh" },
-    { t: "3 days ago", text: "Closed 2 KYC cases" },
-    { t: "Last week", text: "Submitted leave request: 15–19 Aug (Annual)" },
   ],
 };
 
 // ─── Helpers ──────────────────────────────────────────────────
 
 const ATTENDANCE_STYLE: Record<string, string> = {
-  Late: "bg-warning/10 text-warning border-warning/20",
-  Remote: "bg-info/10 text-info border-info/20",
-  Present: "bg-success/10 text-success border-success/20",
+  late: "bg-warning/10 text-warning border-warning/20",
+  remote: "bg-info/10 text-info border-info/20",
+  present: "bg-success/10 text-success border-success/20",
+  absent: "bg-destructive/10 text-destructive border-destructive/20",
+  on_leave: "bg-muted text-muted-foreground border-border",
 };
 
 const LEAVE_STATUS_STYLE: Record<string, string> = {
   pending: "bg-warning/10 text-warning border-warning/20",
   approved: "bg-success/10 text-success border-success/20",
   rejected: "bg-destructive/10 text-destructive border-destructive/20",
+  cancelled: "bg-muted text-muted-foreground border-border",
 };
 
 const DISPUTE_TONE: Record<Dispute["status"], string> = {
@@ -168,32 +169,71 @@ const DISPUTE_TONE: Record<Dispute["status"], string> = {
 };
 
 const fmt = (d: string) =>
-  new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  new Date(d).toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
 const fmtShort = (d: string) =>
   new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+const fmtTime = (d: string) =>
+  new Date(d).toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 const currency = (n: number) => `£${n.toLocaleString("en-GB")}`;
 
 const teamName = (e: Employee) =>
-  typeof e.teamId === "object" && e.teamId !== null ? (e.teamId as HrTeam).name : "—";
+  typeof e.teamId === "object" && e.teamId !== null
+    ? (e.teamId as HrTeam).name
+    : "—";
 const locName = (e: Employee) =>
-  typeof e.locationId === "object" && e.locationId !== null ? (e.locationId as HrLocation).name : "—";
+  typeof e.locationId === "object" && e.locationId !== null
+    ? (e.locationId as HrLocation).name
+    : "—";
+const teamLead = (e: Employee) =>
+  typeof e.teamId === "object" && e.teamId !== null
+    ? (e.teamId as HrTeam).lead || "Unassigned"
+    : "—";
 
 // ─── Component ────────────────────────────────────────────────
 
 export function EmployeeDetailSheet({ employee, onClose }: Props) {
   const [disputes, setDisputes] = useState<Dispute[]>([]);
   const [openDispute, setOpenDispute] = useState(false);
-  const [dForm, setDForm] = useState<Omit<Dispute, "id" | "filedOn" | "status">>({
+  const [dForm, setDForm] = useState<
+    Omit<Dispute, "id" | "filedOn" | "status">
+  >({
     type: "Grievance",
     title: "",
     note: "",
   });
 
+  const { data: detail, isLoading: detailLoading } = useQuery({
+    queryKey: ["employee-detail", employee?._id],
+    queryFn: () => fetchEmployeeDetail(employee!._id),
+    enabled: !!employee,
+    staleTime: 30_000,
+  });
+
   if (!employee) return null;
 
-  const initials = `${employee.firstName[0] ?? ""}${employee.lastName[0] ?? ""}`.toUpperCase();
-  const a = ACTIVITY;
-  const openCount = disputes.filter((d) => d.status !== "Resolved").length;
+  const initials =
+    `${employee.firstName[0] ?? ""}${employee.lastName[0] ?? ""}`.toUpperCase();
+  const d = DUMMY;
+  const openCount = disputes.filter((x) => x.status !== "Resolved").length;
+
+  const leaveBalances = detail?.leave.balances ?? [];
+  const leaveHistory = detail?.leave.history ?? [];
+  const attRecent = detail?.attendance.recent ?? [];
+  const attStats = detail?.attendance.stats;
+
+  const annualLeft =
+    leaveBalances.find((b) => b.type === "annual")?.daysLeft ?? 0;
+  const sickLeft = leaveBalances.find((b) => b.type === "sick")?.daysLeft ?? 0;
+  const upcoming = leaveHistory.filter(
+    (r) => r.status === "approved" && new Date(r.startDate) > new Date(),
+  );
 
   const addDispute = () => {
     if (!dForm.title) return toast.error("Add a short title.");
@@ -211,10 +251,17 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
     toast.success("Dispute logged.");
   };
 
-  const cycle = (d: Dispute) => {
-    const order: Dispute["status"][] = ["Open", "Investigating", "Mediation", "Resolved"];
-    const next = order[(order.indexOf(d.status) + 1) % order.length];
-    setDisputes(disputes.map((x) => (x.id === d.id ? { ...x, status: next } : x)));
+  const cycle = (item: Dispute) => {
+    const order: Dispute["status"][] = [
+      "Open",
+      "Investigating",
+      "Mediation",
+      "Resolved",
+    ];
+    const next = order[(order.indexOf(item.status) + 1) % order.length];
+    setDisputes(
+      disputes.map((x) => (x.id === item.id ? { ...x, status: next } : x)),
+    );
   };
 
   return (
@@ -237,14 +284,23 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
                   {employee.jobTitle} · {teamName(employee)}
                 </SheetDescription>
                 <div className="flex flex-wrap gap-2 mt-2">
-                  <Badge variant="outline" className="bg-white/10 text-white border-white/30 capitalize">
+                  <Badge
+                    variant="outline"
+                    className="bg-white/10 text-white border-white/30 capitalize"
+                  >
                     {employee.employmentStatus?.replace("_", " ")}
                   </Badge>
-                  <Badge variant="outline" className="bg-white/10 text-white border-white/30">
-                    {a.employeeNumber}
+                  <Badge
+                    variant="outline"
+                    className="bg-white/10 text-white border-white/30"
+                  >
+                    {employee.employeeNumber}
                   </Badge>
-                  <Badge variant="outline" className="bg-white/10 text-white border-white/30">
-                    Reports to {a.manager}
+                  <Badge
+                    variant="outline"
+                    className="bg-white/10 text-white border-white/30"
+                  >
+                    Reports to {teamLead(employee)}
                   </Badge>
                 </div>
               </div>
@@ -253,16 +309,18 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
           <div className="grid grid-cols-3 gap-3 mt-5 text-sm">
             <div className="bg-white/10 rounded-lg p-3">
               <p className="text-xs opacity-80">Perf</p>
-              <p className="font-bold text-lg">{a.performance.overall}%</p>
+              <p className="font-bold text-lg">{d.performance.overall}%</p>
             </div>
             <div className="bg-white/10 rounded-lg p-3">
-              <p className="text-xs opacity-80">Attendance</p>
-              <p className="font-bold text-lg">{a.attendance.punctuality}%</p>
+              <p className="text-xs opacity-80">Punctuality</p>
+              <p className="font-bold text-lg">
+                {detailLoading ? "—" : `${attStats?.punctuality ?? 100}%`}
+              </p>
             </div>
             <div className="bg-white/10 rounded-lg p-3">
               <p className="text-xs opacity-80">Open Tasks</p>
               <p className="font-bold text-lg">
-                {a.projects.reduce((s, p) => s + p.openTasks, 0)}
+                {d.projects.reduce((s, p) => s + p.openTasks, 0)}
               </p>
             </div>
           </div>
@@ -272,7 +330,7 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
               variant="secondary"
               className="bg-white/15 hover:bg-white/25 text-white border-white/20"
               onClick={() => {
-                downloadEmployeeReport(employee);
+                downloadEmployeeReport(employee, detail);
                 toast.success("Employee report downloaded.");
               }}
             >
@@ -283,36 +341,64 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
 
         <div className="p-6">
           <Tabs defaultValue="overview" className="space-y-4">
-            <TabsList className="w-full justify-start overflow-x-auto">
-              <TabsTrigger value="overview">Overview</TabsTrigger>
-              <TabsTrigger value="work">Work</TabsTrigger>
-              <TabsTrigger value="time">Time & Leave</TabsTrigger>
-              <TabsTrigger value="performance">Performance</TabsTrigger>
-              <TabsTrigger value="payroll">Payroll</TabsTrigger>
-              <TabsTrigger value="disputes">
-                Disputes
-                {openCount > 0 && (
-                  <span className="ml-1.5 h-4 w-4 rounded-full bg-warning text-white text-[9px] flex items-center justify-center">
-                    {openCount}
-                  </span>
-                )}
-              </TabsTrigger>
-              <TabsTrigger value="documents">Docs</TabsTrigger>
-              <TabsTrigger value="activity">Activity</TabsTrigger>
-            </TabsList>
+            <div className="-mx-1 px-1">
+              <TabsList className="w-full flex-wrap h-auto gap-1 bg-muted/50 p-1">
+                <TabsTrigger value="overview" className="text-xs">
+                  Overview
+                </TabsTrigger>
+                <TabsTrigger value="work" className="text-xs">
+                  Work
+                </TabsTrigger>
+                <TabsTrigger value="time" className="text-xs">
+                  Time & Leave
+                </TabsTrigger>
+                <TabsTrigger value="performance" className="text-xs">
+                  Performance
+                </TabsTrigger>
+                <TabsTrigger value="payroll" className="text-xs">
+                  Payroll
+                </TabsTrigger>
+                <TabsTrigger value="disputes" className="text-xs">
+                  Disputes
+                  {openCount > 0 && (
+                    <span className="ml-1.5 h-4 w-4 rounded-full bg-warning text-white text-[9px] flex items-center justify-center">
+                      {openCount}
+                    </span>
+                  )}
+                </TabsTrigger>
+                <TabsTrigger value="documents" className="text-xs">
+                  Docs
+                </TabsTrigger>
+                <TabsTrigger value="activity" className="text-xs">
+                  Activity
+                </TabsTrigger>
+              </TabsList>
+            </div>
 
             {/* ── Overview ── */}
             <TabsContent value="overview" className="space-y-3">
               <Card>
                 <CardContent className="p-4 space-y-2 text-sm">
                   <Row icon={Mail} label="Email" value={employee.email} />
-                  {employee.phone && <Row icon={Phone} label="Phone" value={employee.phone} />}
-                  <Row icon={MapPin} label="Location" value={locName(employee)} />
-                  <Row icon={Briefcase} label="Manager" value={a.manager} />
+                  {employee.phone && (
+                    <Row icon={Phone} label="Phone" value={employee.phone} />
+                  )}
+                  <Row
+                    icon={MapPin}
+                    label="Location"
+                    value={locName(employee)}
+                  />
+                  <Row
+                    icon={Briefcase}
+                    label="Reports to"
+                    value={teamLead(employee)}
+                  />
                   <Row
                     icon={CalendarDays}
                     label="Joined"
-                    value={new Date(employee.createdAt ?? Date.now()).toLocaleDateString("en-GB", {
+                    value={new Date(
+                      employee.startDate ?? employee.createdAt ?? Date.now(),
+                    ).toLocaleDateString("en-GB", {
                       day: "numeric",
                       month: "long",
                       year: "numeric",
@@ -326,10 +412,26 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
                 </CardContent>
               </Card>
               <div className="grid grid-cols-2 gap-3">
-                <MiniStat label="Clients" value={a.assignedClients.length} icon={Users} />
-                <MiniStat label="Projects" value={a.projects.length} icon={FolderKanban} />
-                <MiniStat label="This month" value={`${a.attendance.monthHours}h`} icon={Clock} />
-                <MiniStat label="Overtime" value={`${a.attendance.overtime}h`} icon={Clock} />
+                <MiniStat
+                  label="Clients"
+                  value={d.assignedClients.length}
+                  icon={Users}
+                />
+                <MiniStat
+                  label="Projects"
+                  value={d.projects.length}
+                  icon={FolderKanban}
+                />
+                <MiniStat
+                  label="This month"
+                  value={detailLoading ? "…" : `${attStats?.monthHours ?? 0}h`}
+                  icon={Clock}
+                />
+                <MiniStat
+                  label="Annual left"
+                  value={detailLoading ? "…" : `${annualLeft}d`}
+                  icon={CalendarDays}
+                />
               </div>
               <div className="flex gap-2">
                 <Button variant="outline" className="flex-1">
@@ -341,19 +443,22 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
               </div>
             </TabsContent>
 
-            {/* ── Work ── */}
+            {/* ── Work (dummy — no CRM/Projects backend yet) ── */}
             <TabsContent value="work" className="space-y-3">
+              <DummyNotice />
               <div>
                 <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2">
                   Assigned Clients
                 </p>
                 <div className="space-y-2">
-                  {a.assignedClients.map((c) => (
+                  {d.assignedClients.map((c) => (
                     <Card key={c.name}>
                       <CardContent className="p-3 flex items-center justify-between">
                         <div>
                           <p className="text-sm font-medium">{c.name}</p>
-                          <p className="text-xs text-muted-foreground capitalize">Risk: {c.risk}</p>
+                          <p className="text-xs text-muted-foreground capitalize">
+                            Risk: {c.risk}
+                          </p>
                         </div>
                         <Badge variant="outline" className="capitalize">
                           {c.status.replace("_", " ")}
@@ -368,17 +473,20 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
                   Projects
                 </p>
                 <div className="space-y-2">
-                  {a.projects.map((p) => (
+                  {d.projects.map((p) => (
                     <Card key={p.name}>
                       <CardContent className="p-3">
                         <div className="flex items-center justify-between mb-1.5">
                           <div>
                             <p className="text-sm font-medium">{p.name}</p>
                             <p className="text-xs text-muted-foreground">
-                              {p.role} · {p.openTasks} open task{p.openTasks !== 1 ? "s" : ""}
+                              {p.role} · {p.openTasks} open task
+                              {p.openTasks !== 1 ? "s" : ""}
                             </p>
                           </div>
-                          <span className="text-xs font-medium">{p.progress}%</span>
+                          <span className="text-xs font-medium">
+                            {p.progress}%
+                          </span>
                         </div>
                         <Progress value={p.progress} className="h-1.5" />
                       </CardContent>
@@ -388,95 +496,148 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
               </div>
             </TabsContent>
 
-            {/* ── Time & Leave ── */}
+            {/* ── Time & Leave — REAL DATA ── */}
             <TabsContent value="time" className="space-y-3">
-              <Card>
-                <CardContent className="p-4">
-                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-3">
-                    Last 5 days
-                  </p>
-                  {a.attendance.last7.map((r) => (
-                    <div
-                      key={r.d}
-                      className="flex items-center justify-between py-2 border-b last:border-b-0 text-sm"
-                    >
-                      <span className="font-medium w-12">{r.d}</span>
-                      <span className="font-mono text-xs text-muted-foreground">
-                        {r.in} → {r.out}
-                      </span>
-                      <span className="font-mono text-xs">{r.h}h</span>
-                      <Badge variant="outline" className={ATTENDANCE_STYLE[r.s] ?? ""}>
-                        {r.s}
-                      </Badge>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
-
-              <div className="grid grid-cols-2 gap-3">
-                <MiniStat label="Annual left" value={`${a.leave.annualLeft}d`} icon={CalendarDays} />
-                <MiniStat label="Sick left" value={`${a.leave.sickLeft}d`} icon={CalendarDays} />
-              </div>
-
-              {a.leave.upcoming.length > 0 && (
-                <Card>
-                  <CardContent className="p-4">
-                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-3">
-                      Upcoming approved leave
-                    </p>
-                    <div className="space-y-2">
-                      {a.leave.upcoming.map((r, i) => (
-                        <div key={i} className="flex items-center justify-between text-sm py-1.5">
-                          <div>
-                            <p className="font-medium">{r.type}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {fmtShort(r.from)} → {fmt(r.to)} · {r.days}d
-                            </p>
+              {detailLoading ? (
+                <LoadingBlock />
+              ) : (
+                <>
+                  <Card>
+                    <CardContent className="p-4">
+                      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-3">
+                        Recent shifts
+                      </p>
+                      {attRecent.length === 0 ? (
+                        <p className="text-sm text-muted-foreground py-2">
+                          No attendance recorded yet.
+                        </p>
+                      ) : (
+                        attRecent.map((r) => (
+                          <div
+                            key={r._id}
+                            className="flex items-center justify-between py-2 border-b last:border-b-0 text-sm"
+                          >
+                            <span className="font-medium w-16 shrink-0">
+                              {fmtShort(r.date)}
+                            </span>
+                            <span className="font-mono text-xs text-muted-foreground">
+                              {fmtTime(r.clockIn)} →{" "}
+                              {r.clockOut ? fmtTime(r.clockOut) : "—"}
+                            </span>
+                            <span className="font-mono text-xs">
+                              {r.hoursWorked?.toFixed(1) ?? "—"}h
+                            </span>
+                            <Badge
+                              variant="outline"
+                              className={ATTENDANCE_STYLE[r.status] ?? ""}
+                            >
+                              <span className="capitalize">{r.status}</span>
+                            </Badge>
                           </div>
-                          <Badge variant="outline" className="bg-success/10 text-success border-success/20">
-                            Approved
-                          </Badge>
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
+                        ))
+                      )}
+                    </CardContent>
+                  </Card>
 
-              <Card>
-                <CardContent className="p-4">
-                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-3">
-                    Leave history
-                  </p>
-                  <div className="space-y-2">
-                    {a.leave.history.map((r, i) => (
-                      <div
-                        key={i}
-                        className="flex items-center justify-between text-sm py-1.5 border-b last:border-b-0"
-                      >
-                        <div>
-                          <p className="font-medium">{r.type} · {r.days}d</p>
-                          <p className="text-xs text-muted-foreground">
-                            {fmtShort(r.from)} → {fmt(r.to)}
-                          </p>
-                        </div>
-                        <Badge variant="outline" className={LEAVE_STATUS_STYLE[r.status] ?? ""}>
-                          <span className="capitalize">{r.status}</span>
-                        </Badge>
-                      </div>
-                    ))}
+                  <div className="grid grid-cols-2 gap-3">
+                    <MiniStat
+                      label="Annual left"
+                      value={`${annualLeft}d`}
+                      icon={CalendarDays}
+                    />
+                    <MiniStat
+                      label="Sick left"
+                      value={`${sickLeft}d`}
+                      icon={CalendarDays}
+                    />
                   </div>
-                </CardContent>
-              </Card>
+
+                  {upcoming.length > 0 && (
+                    <Card>
+                      <CardContent className="p-4">
+                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-3">
+                          Upcoming approved leave
+                        </p>
+                        <div className="space-y-2">
+                          {upcoming.map((r) => (
+                            <div
+                              key={r._id}
+                              className="flex items-center justify-between text-sm py-1.5"
+                            >
+                              <div>
+                                <p className="font-medium capitalize">
+                                  {r.type}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  {fmtShort(r.startDate)} → {fmt(r.endDate)} ·{" "}
+                                  {r.days}d
+                                </p>
+                              </div>
+                              <Badge
+                                variant="outline"
+                                className="bg-success/10 text-success border-success/20"
+                              >
+                                Approved
+                              </Badge>
+                            </div>
+                          ))}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  <Card>
+                    <CardContent className="p-4">
+                      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-3">
+                        Leave history
+                      </p>
+                      {leaveHistory.length === 0 ? (
+                        <p className="text-sm text-muted-foreground py-2">
+                          No leave requests yet.
+                        </p>
+                      ) : (
+                        <div className="space-y-2">
+                          {leaveHistory.map((r) => (
+                            <div
+                              key={r._id}
+                              className="flex items-center justify-between text-sm py-1.5 border-b last:border-b-0"
+                            >
+                              <div>
+                                <p className="font-medium capitalize">
+                                  {r.type} · {r.days}d
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  {fmtShort(r.startDate)} → {fmt(r.endDate)}
+                                </p>
+                              </div>
+                              <Badge
+                                variant="outline"
+                                className={LEAVE_STATUS_STYLE[r.status] ?? ""}
+                              >
+                                <span className="capitalize">{r.status}</span>
+                              </Badge>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </>
+              )}
             </TabsContent>
 
-            {/* ── Performance ── */}
+            {/* ── Performance (dummy — no Performance module yet) ── */}
             <TabsContent value="performance" className="space-y-3">
+              <DummyNotice />
               <Card>
                 <CardContent className="p-4 flex items-center justify-between">
                   <div>
-                    <p className="text-xs text-muted-foreground">Latest Review Rating</p>
-                    <p className="text-2xl font-bold">{a.performance.rating}/5</p>
+                    <p className="text-xs text-muted-foreground">
+                      Latest Review Rating
+                    </p>
+                    <p className="text-2xl font-bold">
+                      {d.performance.rating}/5
+                    </p>
                   </div>
                   <div className="flex items-center gap-1 bg-gradient-to-r from-amber-500 to-orange-500 text-white px-3 py-2 rounded-lg">
                     <Star className="h-4 w-4 fill-white" />
@@ -485,7 +646,7 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
                 </CardContent>
               </Card>
               <div className="space-y-2">
-                {a.performance.goals.map((g) => (
+                {d.performance.goals.map((g) => (
                   <Card key={g.title}>
                     <CardContent className="p-3">
                       <div className="flex justify-between items-start mb-1.5">
@@ -511,31 +672,47 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
               </Button>
             </TabsContent>
 
-            {/* ── Payroll ── */}
+            {/* ── Payroll (dummy — no Payroll module yet) ── */}
             <TabsContent value="payroll" className="space-y-3">
+              <DummyNotice />
               <Card>
                 <CardContent className="p-4 space-y-2 text-sm">
-                  <Row icon={Wallet} label="Base salary" value={`${currency(a.payroll.salary)} / month`} />
-                  <Row icon={Wallet} label="YTD gross" value={currency(a.payroll.ytdGross)} />
+                  <Row
+                    icon={Wallet}
+                    label="Base salary"
+                    value={`${currency(d.payroll.salary)} / month`}
+                  />
+                  <Row
+                    icon={Wallet}
+                    label="YTD gross"
+                    value={currency(d.payroll.ytdGross)}
+                  />
                   <Row
                     icon={CalendarDays}
                     label="Next pay date"
-                    value={new Date(a.payroll.nextPayDate).toLocaleDateString("en-GB", {
-                      day: "numeric",
-                      month: "long",
-                    })}
+                    value={new Date(d.payroll.nextPayDate).toLocaleDateString(
+                      "en-GB",
+                      { day: "numeric", month: "long" },
+                    )}
                   />
-                  <Row icon={Wallet} label="Pension pot" value={currency(a.payroll.pensionPot)} />
+                  <Row
+                    icon={Wallet}
+                    label="Pension pot"
+                    value={currency(d.payroll.pensionPot)}
+                  />
                 </CardContent>
               </Card>
-              {a.payroll.loans.length > 0 && (
+              {d.payroll.loans.length > 0 && (
                 <Card>
                   <CardContent className="p-4">
                     <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2">
                       Active loans
                     </p>
-                    {a.payroll.loans.map((l, i) => (
-                      <div key={i} className="flex justify-between text-sm py-1">
+                    {d.payroll.loans.map((l, i) => (
+                      <div
+                        key={i}
+                        className="flex justify-between text-sm py-1"
+                      >
                         <span>{l.type}</span>
                         <span className="font-mono">{currency(l.balance)}</span>
                       </div>
@@ -548,14 +725,16 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
                   <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2">
                     Recent payslips
                   </p>
-                  {a.payroll.payslips.map((p) => (
+                  {d.payroll.payslips.map((p) => (
                     <div
                       key={p.period}
                       className="flex items-center justify-between text-sm py-2 border-b last:border-b-0"
                     >
                       <div>
                         <p className="font-medium">{p.period}</p>
-                        <p className="text-xs text-muted-foreground">Net {currency(p.net)} · {fmt(p.date)}</p>
+                        <p className="text-xs text-muted-foreground">
+                          Net {currency(p.net)} · {fmt(p.date)}
+                        </p>
                       </div>
                       <Button size="sm" variant="ghost">
                         <Download className="h-3.5 w-3.5" />
@@ -587,26 +766,30 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
                   </CardContent>
                 </Card>
               ) : (
-                disputes.map((d) => (
-                  <Card key={d.id}>
+                disputes.map((item) => (
+                  <Card key={item.id}>
                     <CardContent className="p-4">
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <div className="flex items-center gap-2">
                             <Gavel className="h-4 w-4 text-muted-foreground" />
-                            <p className="text-sm font-medium truncate">{d.title}</p>
+                            <p className="text-sm font-medium truncate">
+                              {item.title}
+                            </p>
                           </div>
                           <p className="text-xs text-muted-foreground mt-1">
-                            {d.type} · filed {d.filedOn}
+                            {item.type} · filed {item.filedOn}
                           </p>
-                          {d.note && <p className="text-xs mt-2">{d.note}</p>}
+                          {item.note && (
+                            <p className="text-xs mt-2">{item.note}</p>
+                          )}
                         </div>
                         <Badge
                           variant="outline"
-                          className={`${DISPUTE_TONE[d.status]} cursor-pointer`}
-                          onClick={() => cycle(d)}
+                          className={`${DISPUTE_TONE[item.status]} cursor-pointer`}
+                          onClick={() => cycle(item)}
                         >
-                          {d.status}
+                          {item.status}
                         </Badge>
                       </div>
                     </CardContent>
@@ -615,16 +798,19 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
               )}
             </TabsContent>
 
-            {/* ── Documents ── */}
+            {/* ── Documents (dummy) ── */}
             <TabsContent value="documents" className="space-y-2">
-              {a.documents.map((d) => (
-                <Card key={d.name}>
+              <DummyNotice />
+              {d.documents.map((doc) => (
+                <Card key={doc.name}>
                   <CardContent className="p-3 flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <FileText className="h-4 w-4 text-primary" />
                       <div>
-                        <p className="text-sm font-medium">{d.name}</p>
-                        <p className="text-xs text-muted-foreground">{fmt(d.date)}</p>
+                        <p className="text-sm font-medium">{doc.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {fmt(doc.date)}
+                        </p>
                       </div>
                     </div>
                     <Button size="sm" variant="ghost">
@@ -635,9 +821,10 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
               ))}
             </TabsContent>
 
-            {/* ── Activity ── */}
+            {/* ── Activity (dummy) ── */}
             <TabsContent value="activity" className="space-y-2">
-              {a.activity.map((act, i) => (
+              <DummyNotice />
+              {d.activity.map((act, i) => (
                 <div key={i} className="flex gap-3 p-3 border rounded-lg">
                   <CheckCircle2 className="h-4 w-4 text-primary mt-0.5 shrink-0" />
                   <div className="flex-1">
@@ -659,18 +846,36 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
             <div className="space-y-3">
               <div className="space-y-1">
                 <Label>Type</Label>
-                <Select value={dForm.type} onValueChange={(v: any) => setDForm({ ...dForm, type: v })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                <Select
+                  value={dForm.type}
+                  onValueChange={(v: any) => setDForm({ ...dForm, type: v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
-                    {["Grievance", "Disciplinary", "Harassment", "Performance", "Other"].map((t) => (
-                      <SelectItem key={t} value={t}>{t}</SelectItem>
+                    {[
+                      "Grievance",
+                      "Disciplinary",
+                      "Harassment",
+                      "Performance",
+                      "Other",
+                    ].map((t) => (
+                      <SelectItem key={t} value={t}>
+                        {t}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-1">
                 <Label>Title</Label>
-                <Input value={dForm.title} onChange={(e) => setDForm({ ...dForm, title: e.target.value })} />
+                <Input
+                  value={dForm.title}
+                  onChange={(e) =>
+                    setDForm({ ...dForm, title: e.target.value })
+                  }
+                />
               </div>
               <div className="space-y-1">
                 <Label>Notes</Label>
@@ -681,12 +886,15 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
                 />
               </div>
               <div className="rounded-md bg-warning/10 border border-warning/20 text-warning text-xs p-2 flex gap-2">
-                <AlertTriangle className="h-4 w-4 shrink-0" />
-                Visible to HR admins only.
+                <AlertTriangle className="h-4 w-4 shrink-0" /> Visible to HR
+                admins only.
               </div>
             </div>
             <DialogFooter>
-              <Button onClick={addDispute} className="bg-gradient-to-r from-primary to-secondary">
+              <Button
+                onClick={addDispute}
+                className="bg-gradient-to-r from-primary to-secondary"
+              >
                 Log Dispute
               </Button>
             </DialogFooter>
@@ -699,7 +907,15 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
 
 // ─── Sub-components ───────────────────────────────────────────
 
-function Row({ icon: Icon, label, value }: { icon: any; label: string; value: string }) {
+function Row({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: any;
+  label: string;
+  value: string;
+}) {
   return (
     <div className="flex items-center justify-between gap-3 py-1.5">
       <span className="text-muted-foreground flex items-center gap-2 text-xs">
@@ -710,7 +926,15 @@ function Row({ icon: Icon, label, value }: { icon: any; label: string; value: st
   );
 }
 
-function MiniStat({ label, value, icon: Icon }: { label: string; value: any; icon: any }) {
+function MiniStat({
+  label,
+  value,
+  icon: Icon,
+}: {
+  label: string;
+  value: any;
+  icon: any;
+}) {
   return (
     <Card>
       <CardContent className="p-3 flex items-center justify-between">
@@ -721,5 +945,23 @@ function MiniStat({ label, value, icon: Icon }: { label: string; value: any; ico
         <Icon className="h-4 w-4 text-muted-foreground" />
       </CardContent>
     </Card>
+  );
+}
+
+function DummyNotice() {
+  return (
+    <div className="text-xs text-muted-foreground bg-muted/40 border rounded-lg px-3 py-2">
+      This section uses placeholder data — the underlying module isn't built
+      yet.
+    </div>
+  );
+}
+
+function LoadingBlock() {
+  return (
+    <div className="flex items-center justify-center h-32 gap-2 text-muted-foreground">
+      <Loader2 className="h-4 w-4 animate-spin" />
+      <span className="text-sm">Loading…</span>
+    </div>
   );
 }
