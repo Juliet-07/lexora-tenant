@@ -222,11 +222,22 @@ const NAV_BY_MODULE: Record<
       adminOnly: true,
     },
     {
+      title: "Disputes",
+      url: "/hr/disputes",
+      icon: ShieldAlert,
+      adminOnly: true,
+    },
+    {
       title: "Requisitions",
       url: "/hr/requisitions",
       icon: ClipboardList,
     },
-    
+    {
+      title: "Reports",
+      url: "/hr/reports",
+      icon: BarChart3,
+      adminOnly: true,
+    },
   ],
 
 
