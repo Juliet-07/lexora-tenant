@@ -66,6 +66,7 @@ import {
   type CreateEmployeeDto,
   type EmploymentStatus,
 } from "@/lib/hr-api";
+import { EmployeeDetailSheet } from "@/components/hr/EmployeeDetailSheet";
 
 // ─── Helpers ──────────────────────────────────────────────────
 
@@ -120,6 +121,7 @@ export default function HREmployees() {
   const [deleteLocTarget, setDeleteLocTarget] = useState<HrLocation | null>(
     null,
   );
+  const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
 
   // Forms
   const EMPTY_EMP: CreateEmployeeDto = {
@@ -388,7 +390,8 @@ export default function HREmployees() {
                 return (
                   <Card
                     key={emp._id}
-                    className="hover:shadow-md transition-shadow border-l-4 border-l-primary/40"
+                    onClick={() => setSelectedEmployee(emp)}
+                    className="hover:shadow-md transition-shadow border-l-4 border-l-primary/40 cursor-pointer"
                   >
                     <CardContent className="p-5">
                       <div className="flex items-start gap-3">
@@ -954,6 +957,8 @@ export default function HREmployees() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <EmployeeDetailSheet employee={selectedEmployee} onClose={() => setSelectedEmployee(null)} />
     </div>
   );
 }
