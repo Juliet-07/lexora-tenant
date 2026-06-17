@@ -1,5 +1,4 @@
-import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -21,13 +20,6 @@ import {
   DialogFooter,
   DialogDescription,
 } from "@/components/ui/dialog";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-} from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Users,
@@ -37,262 +29,205 @@ import {
   MapPin,
   Mail,
   Phone,
-  Calendar,
-  ShieldCheck,
-  TrendingUp,
-  UserMinus,
-  Building2,
-  Loader2,
+  Plus,
+  Globe,
+  UsersRound,
+  Pencil,
+  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
-import {
-  fetchEmployeesGrouped,
-  fetchDepartments,
-  fetchCorporateClients,
-  fetchEmployeeById,
-  createEmployee,
-  terminateEmployee,
-  type Employee,
-  type CreateEmployeeDto,
-  type EmployeeClientGroup,
-} from "@/lib/hr-api";
+
+// ─── Types ────────────────────────────────────────────────────
+
+interface Team {
+  id: string;
+  name: string;
+  description?: string;
+  lead?: string;
+}
+
+interface Location {
+  id: string;
+  name: string;
+  country: string;
+  city?: string;
+}
+
+interface Employee {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone?: string;
+  jobTitle: string;
+  teamId: string;
+  locationId: string;
+  employmentType: "Full-time" | "Part-time" | "Contractor" | "Intern";
+  status: "Active" | "On Leave" | "Probation" | "Terminated";
+  startDate: string;
+}
+
+// ─── Seed data ────────────────────────────────────────────────
+
+const seedTeams: Team[] = [
+  { id: "T1", name: "Engineering", description: "Product engineering", lead: "Amelia Okonkwo" },
+  { id: "T2", name: "Product", description: "Product management & design", lead: "Priya Iyer" },
+  { id: "T3", name: "Operations", description: "Internal operations", lead: "Chloe Sullivan" },
+  { id: "T4", name: "Finance", description: "Finance & accounting", lead: "Noah Petrov" },
+];
+
+const seedLocations: Location[] = [
+  { id: "L1", name: "Lagos HQ", country: "Nigeria", city: "Lagos" },
+  { id: "L2", name: "Kigali Office", country: "Rwanda", city: "Kigali" },
+  { id: "L3", name: "Remote — EMEA", country: "Remote" },
+  { id: "L4", name: "London", country: "United Kingdom", city: "London" },
+];
+
+const seedEmployees: Employee[] = [
+  { id: "E1", firstName: "Amelia", lastName: "Okonkwo", email: "amelia@lexora.io", phone: "+234 802 555 0101", jobTitle: "VP of Engineering", teamId: "T1", locationId: "L1", employmentType: "Full-time", status: "Active", startDate: "2022-01-15" },
+  { id: "E2", firstName: "Marco", lastName: "Bianchi", email: "marco@lexora.io", phone: "+39 320 555 0202", jobTitle: "Staff Engineer", teamId: "T1", locationId: "L3", employmentType: "Full-time", status: "Active", startDate: "2022-06-01" },
+  { id: "E3", firstName: "Priya", lastName: "Iyer", email: "priya@lexora.io", phone: "+91 98765 43210", jobTitle: "Head of Product", teamId: "T2", locationId: "L4", employmentType: "Full-time", status: "Active", startDate: "2022-03-20" },
+  { id: "E4", firstName: "Chloe", lastName: "Sullivan", email: "chloe@lexora.io", jobTitle: "Operations Manager", teamId: "T3", locationId: "L2", employmentType: "Full-time", status: "Active", startDate: "2023-02-01" },
+  { id: "E5", firstName: "Noah", lastName: "Petrov", email: "noah@lexora.io", jobTitle: "Financial Controller", teamId: "T4", locationId: "L3", employmentType: "Full-time", status: "Active", startDate: "2022-08-22" },
+  { id: "E6", firstName: "Liam", lastName: "Walsh", email: "liam@lexora.io", jobTitle: "Backend Engineer", teamId: "T1", locationId: "L4", employmentType: "Full-time", status: "Probation", startDate: "2026-04-01" },
+];
 
 // ─── Helpers ──────────────────────────────────────────────────
 
-const statusColor = (s: string) =>
-  s === "active"
+const statusColor = (s: Employee["status"]) =>
+  s === "Active"
     ? "bg-success/10 text-success border-success/20"
-    : s === "on_leave"
+    : s === "On Leave"
       ? "bg-warning/10 text-warning border-warning/20"
-      : s === "suspended"
-        ? "bg-orange-100 text-orange-700 border-orange-200"
-        : s === "terminated" || s === "resigned"
-          ? "bg-destructive/10 text-destructive border-destructive/20"
-          : "bg-info/10 text-info border-info/20"; // probation / other
+      : s === "Probation"
+        ? "bg-info/10 text-info border-info/20"
+        : "bg-destructive/10 text-destructive border-destructive/20";
 
-const statusLabel = (s: string) => {
-  const map: Record<string, string> = {
-    active: "Active",
-    on_leave: "On Leave",
-    suspended: "Suspended",
-    terminated: "Terminated",
-    resigned: "Resigned",
-  };
-  return map[s] ?? s;
-};
+const initials = (f: string, l: string) =>
+  `${f[0] ?? ""}${l[0] ?? ""}`.toUpperCase();
 
-const avatarColors = [
-  "from-primary to-secondary",
-  "from-violet-500 to-purple-500",
-  "from-emerald-500 to-teal-500",
-  "from-amber-500 to-orange-500",
-  "from-blue-500 to-indigo-500",
-  "from-pink-500 to-rose-500",
-];
-
-const getAvatarColor = (name: string) =>
-  avatarColors[name.charCodeAt(0) % avatarColors.length];
-
-const getInitials = (first: string, last: string) =>
-  `${first[0] ?? ""}${last[0] ?? ""}`.toUpperCase();
-
-const emptyForm: CreateEmployeeDto = {
-  clientId: "",
-  firstName: "",
-  lastName: "",
-  email: "",
-  phone: "",
-  jobTitle: "",
-  department: "",
-  employmentType: "full_time",
-  startDate: "",
-  salary: undefined,
-  salaryCurrency: "RWF",
-  nationality: "",
-};
-
-// ─── Row helper for the detail sheet ─────────────────────────
-
-function Row({
-  icon: Icon,
-  label,
-  value,
-}: {
-  icon: React.ElementType;
-  label: string;
-  value: string | null | undefined;
-}) {
-  return (
-    <div className="flex items-start gap-3 py-1.5">
-      <Icon className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
-      <div className="flex-1">
-        <p className="text-xs text-muted-foreground">{label}</p>
-        <p className="text-sm font-medium">{value ?? "—"}</p>
-      </div>
-    </div>
-  );
-}
+const uid = (p: string) => `${p}${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
 
 // ─── Component ────────────────────────────────────────────────
 
 export default function HREmployees() {
-  const queryClient = useQueryClient();
+  const [teams, setTeams] = useState<Team[]>(seedTeams);
+  const [locations, setLocations] = useState<Location[]>(seedLocations);
+  const [employees, setEmployees] = useState<Employee[]>(seedEmployees);
 
+  const [tab, setTab] = useState("employees");
+
+  // Filters / search for employees
   const [search, setSearch] = useState("");
-  const [clientFilter, setClientFilter] = useState("all");
-  const [deptFilter, setDeptFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [teamFilter, setTeamFilter] = useState("all");
+  const [locFilter, setLocFilter] = useState("all");
 
-  const [addOpen, setAddOpen] = useState(false);
-  const [form, setForm] = useState<CreateEmployeeDto>(emptyForm);
+  // Dialog state
+  const [empOpen, setEmpOpen] = useState(false);
+  const [teamOpen, setTeamOpen] = useState(false);
+  const [locOpen, setLocOpen] = useState(false);
 
-  const [selected, setSelected] = useState<Employee | null>(null);
-  const [terminateOpen, setTerminateOpen] = useState(false);
-  const [terminateForm, setTerminateForm] = useState({
-    reason: "",
-    status: "terminated" as "terminated" | "resigned",
+  const [empForm, setEmpForm] = useState<Omit<Employee, "id">>({
+    firstName: "", lastName: "", email: "", phone: "",
+    jobTitle: "", teamId: "", locationId: "",
+    employmentType: "Full-time", status: "Active",
+    startDate: new Date().toISOString().slice(0, 10),
   });
+  const [teamForm, setTeamForm] = useState<Omit<Team, "id">>({ name: "", description: "", lead: "" });
+  const [locForm, setLocForm] = useState<Omit<Location, "id">>({ name: "", country: "", city: "" });
 
-  // ── Queries ───────────────────────────────────────────────
-  const { data, isLoading } = useQuery({
-    queryKey: ["hr-employees", search, clientFilter, deptFilter, statusFilter],
-    queryFn: () =>
-      fetchEmployeesGrouped({
-        search: search || undefined,
-        clientId: clientFilter !== "all" ? clientFilter : undefined,
-        department: deptFilter !== "all" ? deptFilter : undefined,
-        employmentStatus: statusFilter !== "all" ? statusFilter : undefined,
-      }),
-    staleTime: 30_000,
-  });
+  const filtered = useMemo(() => {
+    return employees.filter((e) => {
+      if (teamFilter !== "all" && e.teamId !== teamFilter) return false;
+      if (locFilter !== "all" && e.locationId !== locFilter) return false;
+      if (!search.trim()) return true;
+      const s = search.toLowerCase();
+      return (
+        e.firstName.toLowerCase().includes(s) ||
+        e.lastName.toLowerCase().includes(s) ||
+        e.email.toLowerCase().includes(s) ||
+        e.jobTitle.toLowerCase().includes(s)
+      );
+    });
+  }, [employees, teamFilter, locFilter, search]);
 
-  const { data: departments = [] } = useQuery({
-    queryKey: ["hr-departments"],
-    queryFn: fetchDepartments,
-    staleTime: 5 * 60_000,
-  });
+  const teamById = (id: string) => teams.find((t) => t.id === id);
+  const locById = (id: string) => locations.find((l) => l.id === id);
 
-  const { data: corporateClients = [] } = useQuery({
-    queryKey: ["hr-corporate-clients"],
-    queryFn: fetchCorporateClients,
-    staleTime: 5 * 60_000,
-  });
+  const countByTeam = (id: string) => employees.filter((e) => e.teamId === id).length;
+  const countByLocation = (id: string) => employees.filter((e) => e.locationId === id).length;
 
-  // ── Create mutation ───────────────────────────────────────
-  const createMutation = useMutation({
-    mutationFn: () => createEmployee(form),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["hr-employees"] });
-      queryClient.invalidateQueries({ queryKey: ["hr-departments"] });
-      setAddOpen(false);
-      setForm(emptyForm);
-      toast.success("Employee added. Login credentials sent to their email.");
-    },
-    onError: (err: any) =>
-      toast.error(err?.response?.data?.message ?? "Failed to add employee"),
-  });
+  // ── Submit handlers ───────────────────────────────────────
+  const submitEmployee = () => {
+    if (!empForm.firstName || !empForm.lastName || !empForm.email || !empForm.jobTitle || !empForm.teamId || !empForm.locationId) {
+      toast.error("Please fill all required fields.");
+      return;
+    }
+    setEmployees((prev) => [...prev, { ...empForm, id: uid("E") }]);
+    setEmpOpen(false);
+    setEmpForm({
+      firstName: "", lastName: "", email: "", phone: "",
+      jobTitle: "", teamId: "", locationId: "",
+      employmentType: "Full-time", status: "Active",
+      startDate: new Date().toISOString().slice(0, 10),
+    });
+    toast.success("Employee added.");
+  };
 
-  // ── Terminate mutation ────────────────────────────────────
-  const terminateMutation = useMutation({
-    mutationFn: () =>
-      terminateEmployee(selected!._id, {
-        endDate: new Date().toISOString().slice(0, 10),
-        reason: terminateForm.reason,
-        status: terminateForm.status,
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["hr-employees"] });
-      setSelected(null);
-      setTerminateOpen(false);
-      toast.success("Employment ended successfully.");
-    },
-    onError: (err: any) =>
-      toast.error(
-        err?.response?.data?.message ?? "Failed to terminate employee",
-      ),
-  });
+  const submitTeam = () => {
+    if (!teamForm.name) return toast.error("Team name is required.");
+    setTeams((prev) => [...prev, { ...teamForm, id: uid("T") }]);
+    setTeamOpen(false);
+    setTeamForm({ name: "", description: "", lead: "" });
+    toast.success("Team created.");
+  };
 
-  const stats = data?.stats;
-  const groups = data?.groups ?? [];
+  const submitLocation = () => {
+    if (!locForm.name || !locForm.country) return toast.error("Name and country are required.");
+    setLocations((prev) => [...prev, { ...locForm, id: uid("L") }]);
+    setLocOpen(false);
+    setLocForm({ name: "", country: "", city: "" });
+    toast.success("Location added.");
+  };
 
-  const clientOptions = groups.map((g) => g.client);
-
-  const canSubmit =
-    !!form.clientId &&
-    !!form.firstName &&
-    !!form.lastName &&
-    !!form.email &&
-    !!form.jobTitle &&
-    !!form.startDate &&
-    !createMutation.isPending;
+  const removeTeam = (id: string) => {
+    if (countByTeam(id) > 0) return toast.error("Reassign employees before deleting this team.");
+    setTeams((prev) => prev.filter((t) => t.id !== id));
+    toast.success("Team removed.");
+  };
+  const removeLocation = (id: string) => {
+    if (countByLocation(id) > 0) return toast.error("Reassign employees before deleting this location.");
+    setLocations((prev) => prev.filter((l) => l.id !== id));
+    toast.success("Location removed.");
+  };
 
   // ─────────────────────────────────────────────────────────
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">Employees</h1>
           <p className="text-sm text-muted-foreground">
-            {isLoading
-              ? "Loading…"
-              : `Manage workforce data on behalf of ${stats?.clientsServed ?? 0} client ${
-                  stats?.clientsServed === 1 ? "company" : "companies"
-                } — ${stats?.totalHeadcount ?? 0} ${
-                  stats?.totalHeadcount === 1 ? "person" : "people"
-                } across ${departments.length} department${departments.length !== 1 ? "s" : ""}.`}
+            {employees.length} people across {teams.length} teams and {locations.length} locations.
           </p>
         </div>
-        <Button
-          className="bg-gradient-to-r from-primary to-secondary"
-          onClick={() => {
-            setForm(emptyForm);
-            setAddOpen(true);
-          }}
-        >
-          <UserPlus className="h-4 w-4 mr-2" /> Add Employee
-        </Button>
       </div>
 
       {/* Stat cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          {
-            label: "Total Headcount",
-            value: stats?.totalHeadcount ?? 0,
-            icon: Users,
-            tone: "from-primary to-secondary",
-          },
-          {
-            label: "Clients Served",
-            value: stats?.clientsServed ?? 0,
-            icon: Building2,
-            tone: "from-violet-500 to-purple-500",
-          },
-          {
-            label: "Active",
-            value: stats?.active ?? 0,
-            icon: ShieldCheck,
-            tone: "from-emerald-500 to-teal-500",
-          },
-          {
-            label: "On Leave",
-            value: stats?.onLeave ?? 0,
-            icon: Calendar,
-            tone: "from-amber-500 to-orange-500",
-          },
+          { label: "Headcount", value: employees.length, icon: Users, tone: "from-primary to-secondary" },
+          { label: "Teams", value: teams.length, icon: UsersRound, tone: "from-violet-500 to-purple-500" },
+          { label: "Locations", value: locations.length, icon: Globe, tone: "from-emerald-500 to-teal-500" },
+          { label: "Active", value: employees.filter((e) => e.status === "Active").length, icon: Briefcase, tone: "from-amber-500 to-orange-500" },
         ].map((s) => (
           <Card key={s.label}>
             <CardContent className="p-5 flex items-center justify-between">
               <div>
-                <p className="text-xs text-muted-foreground uppercase tracking-wide">
-                  {s.label}
-                </p>
+                <p className="text-xs text-muted-foreground uppercase tracking-wide">{s.label}</p>
                 <p className="text-2xl font-bold mt-1">{s.value}</p>
               </div>
-              <div
-                className={`h-10 w-10 rounded-lg bg-gradient-to-br ${s.tone} flex items-center justify-center`}
-              >
+              <div className={`h-10 w-10 rounded-lg bg-gradient-to-br ${s.tone} flex items-center justify-center`}>
                 <s.icon className="h-5 w-5 text-white" />
               </div>
             </CardContent>
@@ -300,625 +235,279 @@ export default function HREmployees() {
         ))}
       </div>
 
-      {/* Filters */}
-      <Card>
-        <CardContent className="p-4 flex flex-wrap gap-3 items-center">
-          <div className="relative flex-1 min-w-[200px]">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              className="pl-9"
-              placeholder="Search by name, email, role, client…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
+      <Tabs value={tab} onValueChange={setTab}>
+        <TabsList>
+          <TabsTrigger value="employees">Employees</TabsTrigger>
+          <TabsTrigger value="teams">Teams</TabsTrigger>
+          <TabsTrigger value="locations">Locations</TabsTrigger>
+        </TabsList>
 
-          <Select value={clientFilter} onValueChange={setClientFilter}>
-            <SelectTrigger className="w-[200px]">
-              <SelectValue placeholder="All clients" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All clients</SelectItem>
-              {clientOptions.map((c) => (
-                <SelectItem key={c._id} value={c._id}>
-                  {c.businessName}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <Select value={deptFilter} onValueChange={setDeptFilter}>
-            <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="All departments" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All departments</SelectItem>
-              {departments.map((d) => (
-                <SelectItem key={d} value={d}>
-                  {d}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-[160px]">
-              <SelectValue placeholder="All statuses" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All statuses</SelectItem>
-              <SelectItem value="active">Active</SelectItem>
-              <SelectItem value="on_leave">On Leave</SelectItem>
-              <SelectItem value="suspended">Suspended</SelectItem>
-              <SelectItem value="terminated">Terminated</SelectItem>
-              <SelectItem value="resigned">Resigned</SelectItem>
-            </SelectContent>
-          </Select>
-        </CardContent>
-      </Card>
-
-      {/* Grouped employee list */}
-      {isLoading ? (
-        <div className="flex items-center justify-center h-48 gap-3 text-muted-foreground">
-          <Loader2 className="h-5 w-5 animate-spin" />
-          <span className="text-sm">Loading employees…</span>
-        </div>
-      ) : groups.length === 0 ? (
-        <Card>
-          <CardContent className="p-10 text-center text-sm text-muted-foreground">
-            {search ||
-            clientFilter !== "all" ||
-            deptFilter !== "all" ||
-            statusFilter !== "all"
-              ? "No employees match your filters."
-              : "No employees yet. Add your first employee."}
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="space-y-6">
-          {groups.map((group) => (
-            <div key={group.client._id} className="space-y-3">
-              {/* Client group header */}
-              <div className="flex items-center gap-2 px-1">
-                <Building2 className="h-4 w-4 text-primary" />
-                <h2 className="text-sm font-semibold uppercase tracking-wide">
-                  {group.client.businessName}
-                </h2>
-                <Badge variant="secondary" className="ml-1">
-                  {group.employees.length}
-                </Badge>
+        {/* ── Employees tab ── */}
+        <TabsContent value="employees" className="space-y-4 mt-4">
+          <Card>
+            <CardContent className="p-4 flex flex-wrap gap-3 items-center">
+              <div className="relative flex-1 min-w-[200px]">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  className="pl-9"
+                  placeholder="Search by name, email, role…"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
               </div>
+              <Select value={teamFilter} onValueChange={setTeamFilter}>
+                <SelectTrigger className="w-[180px]"><SelectValue placeholder="All teams" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All teams</SelectItem>
+                  {teams.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <Select value={locFilter} onValueChange={setLocFilter}>
+                <SelectTrigger className="w-[200px]"><SelectValue placeholder="All locations" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All locations</SelectItem>
+                  {locations.map((l) => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <Button
+                className="bg-gradient-to-r from-primary to-secondary"
+                onClick={() => {
+                  if (teams.length === 0) return toast.error("Create a team first.");
+                  if (locations.length === 0) return toast.error("Create a location first.");
+                  setEmpOpen(true);
+                }}
+              >
+                <UserPlus className="h-4 w-4 mr-2" /> Add Employee
+              </Button>
+            </CardContent>
+          </Card>
 
-              {/* Employee cards */}
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                {group.employees.map((emp) => {
-                  const initials = getInitials(emp.firstName, emp.lastName);
-                  const color = getAvatarColor(emp.firstName + emp.lastName);
-                  const location = [emp.address?.city, emp.address?.country]
-                    .filter(Boolean)
-                    .join(", ");
-
-                  return (
-                    <Card
-                      key={emp._id}
-                      className="hover:shadow-md transition-shadow cursor-pointer border-l-4 border-l-primary/40"
-                      onClick={() => setSelected(emp)}
-                    >
-                      <CardContent className="p-5">
-                        <div className="flex items-start gap-3">
-                          <Avatar className="h-12 w-12">
-                            <AvatarFallback
-                              className={`bg-gradient-to-br ${color} text-white font-semibold`}
-                            >
-                              {initials}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <h3 className="font-semibold text-sm truncate">
-                                {emp.firstName} {emp.lastName}
-                              </h3>
-                              <Badge
-                                variant="outline"
-                                className={`text-[10px] ${statusColor(emp.employmentStatus)}`}
-                              >
-                                {statusLabel(emp.employmentStatus)}
-                              </Badge>
-                            </div>
-                            <p className="text-sm text-muted-foreground truncate">
-                              {emp.jobTitle}
-                            </p>
-                            <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                              <span className="inline-flex items-center gap-1">
-                                <Building2 className="h-3 w-3" />
-                                {group.client.businessName}
-                              </span>
-                              {emp.department && (
-                                <span className="inline-flex items-center gap-1">
-                                  <Briefcase className="h-3 w-3" />
-                                  {emp.department}
-                                </span>
-                              )}
-                              {location && (
-                                <span className="inline-flex items-center gap-1">
-                                  <MapPin className="h-3 w-3" />
-                                  {location}
-                                </span>
-                              )}
-                            </div>
+          {filtered.length === 0 ? (
+            <Card><CardContent className="p-10 text-center text-sm text-muted-foreground">No employees match your filters.</CardContent></Card>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+              {filtered.map((emp) => {
+                const team = teamById(emp.teamId);
+                const loc = locById(emp.locationId);
+                return (
+                  <Card key={emp.id} className="hover:shadow-md transition-shadow border-l-4 border-l-primary/40">
+                    <CardContent className="p-5">
+                      <div className="flex items-start gap-3">
+                        <Avatar className="h-12 w-12">
+                          <AvatarFallback className="bg-gradient-to-br from-primary to-secondary text-white font-semibold">
+                            {initials(emp.firstName, emp.lastName)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h3 className="font-semibold text-sm truncate">{emp.firstName} {emp.lastName}</h3>
+                            <Badge variant="outline" className={`text-[10px] ${statusColor(emp.status)}`}>{emp.status}</Badge>
+                          </div>
+                          <p className="text-sm text-muted-foreground truncate">{emp.jobTitle}</p>
+                          <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                            {team && <span className="inline-flex items-center gap-1"><UsersRound className="h-3 w-3" />{team.name}</span>}
+                            {loc && <span className="inline-flex items-center gap-1"><MapPin className="h-3 w-3" />{loc.name}</span>}
+                            <span className="inline-flex items-center gap-1"><Mail className="h-3 w-3" />{emp.email}</span>
+                            {emp.phone && <span className="inline-flex items-center gap-1"><Phone className="h-3 w-3" />{emp.phone}</span>}
                           </div>
                         </div>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-              </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
             </div>
-          ))}
-        </div>
-      )}
+          )}
+        </TabsContent>
+
+        {/* ── Teams tab ── */}
+        <TabsContent value="teams" className="space-y-4 mt-4">
+          <div className="flex justify-between items-center">
+            <p className="text-sm text-muted-foreground">Teams are equivalent to departments. Employees must be assigned to a team.</p>
+            <Button className="bg-gradient-to-r from-primary to-secondary" onClick={() => setTeamOpen(true)}>
+              <Plus className="h-4 w-4 mr-2" /> New Team
+            </Button>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {teams.map((t) => (
+              <Card key={t.id}>
+                <CardContent className="p-5">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <UsersRound className="h-4 w-4 text-primary" />
+                        <h3 className="font-semibold">{t.name}</h3>
+                        <Badge variant="secondary">{countByTeam(t.id)}</Badge>
+                      </div>
+                      {t.description && <p className="text-xs text-muted-foreground mt-1">{t.description}</p>}
+                      {t.lead && <p className="text-xs mt-2"><span className="text-muted-foreground">Lead:</span> <span className="font-medium">{t.lead}</span></p>}
+                    </div>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => removeTeam(t.id)}>
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </TabsContent>
+
+        {/* ── Locations tab ── */}
+        <TabsContent value="locations" className="space-y-4 mt-4">
+          <div className="flex justify-between items-center">
+            <p className="text-sm text-muted-foreground">Locations support businesses that operate across multiple countries.</p>
+            <Button className="bg-gradient-to-r from-primary to-secondary" onClick={() => setLocOpen(true)}>
+              <Plus className="h-4 w-4 mr-2" /> New Location
+            </Button>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {locations.map((l) => (
+              <Card key={l.id}>
+                <CardContent className="p-5">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <MapPin className="h-4 w-4 text-primary" />
+                        <h3 className="font-semibold">{l.name}</h3>
+                        <Badge variant="secondary">{countByLocation(l.id)}</Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {[l.city, l.country].filter(Boolean).join(", ")}
+                      </p>
+                    </div>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => removeLocation(l.id)}>
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </TabsContent>
+      </Tabs>
 
       {/* ── Add Employee Dialog ── */}
-      <Dialog
-        open={addOpen}
-        onOpenChange={(v) => {
-          setAddOpen(v);
-          if (!v) setForm(emptyForm);
-        }}
-      >
+      <Dialog open={empOpen} onOpenChange={setEmpOpen}>
         <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Add Employee</DialogTitle>
-            <DialogDescription>
-              Select the client this employee belongs to. They will be onboarded
-              into that client's HR records and receive login credentials.
-            </DialogDescription>
+            <DialogDescription>Assign the employee to a team and location.</DialogDescription>
           </DialogHeader>
-
           <div className="grid grid-cols-2 gap-3 py-2">
-            {/* Client */}
-            <div className="col-span-2 space-y-1">
-              <Label>
-                Client <span className="text-destructive">*</span>
-              </Label>
-              <Select
-                value={form.clientId}
-                onValueChange={(v) => setForm((f) => ({ ...f, clientId: v }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a client…" />
-                </SelectTrigger>
-                <SelectContent>
-                  {corporateClients.length === 0 ? (
-                    <SelectItem value="none" disabled>
-                      No corporate clients found
-                    </SelectItem>
-                  ) : (
-                    corporateClients.map((c: any) => {
-                      const profileId = c.profile?._id ?? c._id;
-                      const name =
-                        c.profile?.businessName ?? c.fullName ?? c.email;
-                      return (
-                        <SelectItem key={profileId} value={profileId}>
-                          {name}
-                        </SelectItem>
-                      );
-                    })
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Name */}
             <div className="space-y-1">
-              <Label>
-                First name <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                value={form.firstName}
-                placeholder="John"
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, firstName: e.target.value }))
-                }
-              />
+              <Label>First Name *</Label>
+              <Input value={empForm.firstName} onChange={(e) => setEmpForm((f) => ({ ...f, firstName: e.target.value }))} />
             </div>
             <div className="space-y-1">
-              <Label>
-                Last name <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                value={form.lastName}
-                placeholder="Doe"
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, lastName: e.target.value }))
-                }
-              />
+              <Label>Last Name *</Label>
+              <Input value={empForm.lastName} onChange={(e) => setEmpForm((f) => ({ ...f, lastName: e.target.value }))} />
             </div>
-
-            {/* Email + Phone */}
-            <div className="col-span-2 space-y-1">
-              <Label>
-                Work email <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                type="email"
-                value={form.email}
-                placeholder="john@company.com"
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, email: e.target.value }))
-                }
-              />
+            <div className="space-y-1 col-span-2">
+              <Label>Email *</Label>
+              <Input type="email" value={empForm.email} onChange={(e) => setEmpForm((f) => ({ ...f, email: e.target.value }))} />
             </div>
-            <div className="col-span-2 space-y-1">
+            <div className="space-y-1">
               <Label>Phone</Label>
-              <Input
-                value={form.phone ?? ""}
-                placeholder="+250700000000"
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, phone: e.target.value }))
-                }
-              />
-            </div>
-
-            {/* Job title + Department */}
-            <div className="space-y-1">
-              <Label>
-                Job title <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                value={form.jobTitle}
-                placeholder="Software Engineer"
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, jobTitle: e.target.value }))
-                }
-              />
+              <Input value={empForm.phone} onChange={(e) => setEmpForm((f) => ({ ...f, phone: e.target.value }))} />
             </div>
             <div className="space-y-1">
-              <Label>Department</Label>
-              <Select
-                value={form.department ?? ""}
-                onValueChange={(v) => setForm((f) => ({ ...f, department: v }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select…" />
-                </SelectTrigger>
+              <Label>Job Title *</Label>
+              <Input value={empForm.jobTitle} onChange={(e) => setEmpForm((f) => ({ ...f, jobTitle: e.target.value }))} />
+            </div>
+            <div className="space-y-1">
+              <Label>Team *</Label>
+              <Select value={empForm.teamId} onValueChange={(v) => setEmpForm((f) => ({ ...f, teamId: v }))}>
+                <SelectTrigger><SelectValue placeholder="Select team" /></SelectTrigger>
                 <SelectContent>
-                  {[
-                    "Engineering",
-                    "Product",
-                    "Design",
-                    "Sales",
-                    "Marketing",
-                    "Operations",
-                    "Finance",
-                    "People",
-                    "Legal",
-                    "Other",
-                  ].map((d) => (
-                    <SelectItem key={d} value={d}>
-                      {d}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Employment type + Start date */}
-            <div className="space-y-1">
-              <Label>Employment type</Label>
-              <Select
-                value={form.employmentType ?? "full_time"}
-                onValueChange={(v: any) =>
-                  setForm((f) => ({ ...f, employmentType: v }))
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="full_time">Full-time</SelectItem>
-                  <SelectItem value="part_time">Part-time</SelectItem>
-                  <SelectItem value="contract">Contract</SelectItem>
-                  <SelectItem value="intern">Intern</SelectItem>
-                  <SelectItem value="consultant">Consultant</SelectItem>
+                  {teams.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-1">
-              <Label>
-                Start date <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                type="date"
-                value={form.startDate}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, startDate: e.target.value }))
-                }
-              />
-            </div>
-
-            {/* Salary + Currency */}
-            <div className="space-y-1">
-              <Label>Salary (optional)</Label>
-              <Input
-                type="number"
-                min={0}
-                placeholder="500000"
-                value={form.salary ?? ""}
-                onChange={(e) =>
-                  setForm((f) => ({
-                    ...f,
-                    salary: e.target.value ? Number(e.target.value) : undefined,
-                  }))
-                }
-              />
-            </div>
-            <div className="space-y-1">
-              <Label>Currency</Label>
-              <Select
-                value={form.salaryCurrency ?? "RWF"}
-                onValueChange={(v) =>
-                  setForm((f) => ({ ...f, salaryCurrency: v }))
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
+              <Label>Location *</Label>
+              <Select value={empForm.locationId} onValueChange={(v) => setEmpForm((f) => ({ ...f, locationId: v }))}>
+                <SelectTrigger><SelectValue placeholder="Select location" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="RWF">RWF</SelectItem>
-                  <SelectItem value="USD">USD</SelectItem>
+                  {locations.map((l) => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}
                 </SelectContent>
               </Select>
+            </div>
+            <div className="space-y-1">
+              <Label>Employment Type</Label>
+              <Select value={empForm.employmentType} onValueChange={(v: any) => setEmpForm((f) => ({ ...f, employmentType: v }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Full-time">Full-time</SelectItem>
+                  <SelectItem value="Part-time">Part-time</SelectItem>
+                  <SelectItem value="Contractor">Contractor</SelectItem>
+                  <SelectItem value="Intern">Intern</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label>Start Date</Label>
+              <Input type="date" value={empForm.startDate} onChange={(e) => setEmpForm((f) => ({ ...f, startDate: e.target.value }))} />
             </div>
           </div>
-
           <DialogFooter>
-            <Button variant="outline" onClick={() => setAddOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              className="bg-gradient-to-r from-primary to-secondary"
-              disabled={!canSubmit}
-              onClick={() => createMutation.mutate()}
-            >
-              {createMutation.isPending ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Creating…
-                </>
-              ) : (
-                "Create employee"
-              )}
-            </Button>
+            <Button variant="outline" onClick={() => setEmpOpen(false)}>Cancel</Button>
+            <Button onClick={submitEmployee}>Add Employee</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* ── Employee Detail Sheet ── */}
-      <Sheet open={!!selected} onOpenChange={(o) => !o && setSelected(null)}>
-        <SheetContent className="w-full sm:max-w-xl overflow-y-auto">
-          {selected && (
-            <>
-              <SheetHeader>
-                <div className="flex items-center gap-3">
-                  <Avatar className="h-14 w-14">
-                    <AvatarFallback
-                      className={`bg-gradient-to-br ${getAvatarColor(selected.firstName + selected.lastName)} text-white font-bold text-lg`}
-                    >
-                      {getInitials(selected.firstName, selected.lastName)}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div>
-                    <SheetTitle>
-                      {selected.firstName} {selected.lastName}
-                    </SheetTitle>
-                    <SheetDescription>
-                      {selected.jobTitle} · {selected.employeeNumber}
-                    </SheetDescription>
-                    <div className="mt-1 inline-flex items-center gap-1 text-xs text-primary">
-                      <Building2 className="h-3 w-3" />
-                      {/* Client name comes from the group — look it up */}
-                      {groups.find((g) =>
-                        g.employees.some((e) => e._id === selected._id),
-                      )?.client.businessName ?? "—"}
-                    </div>
-                  </div>
-                </div>
-              </SheetHeader>
-
-              <Tabs defaultValue="profile" className="mt-6">
-                <TabsList className="grid grid-cols-3 w-full">
-                  <TabsTrigger value="profile">Profile</TabsTrigger>
-                  <TabsTrigger value="employment">Employment</TabsTrigger>
-                  <TabsTrigger value="emergency">Emergency</TabsTrigger>
-                </TabsList>
-
-                <TabsContent value="profile" className="space-y-1 pt-4">
-                  <Row icon={Mail} label="Email" value={selected.email} />
-                  <Row icon={Phone} label="Phone" value={selected.phone} />
-                  <Row
-                    icon={MapPin}
-                    label="Location"
-                    value={[selected.address?.city, selected.address?.country]
-                      .filter(Boolean)
-                      .join(", ")}
-                  />
-                  <Row
-                    icon={Calendar}
-                    label="Date of birth"
-                    value={
-                      selected.dateOfBirth
-                        ? new Date(selected.dateOfBirth).toLocaleDateString(
-                            "en-GB",
-                          )
-                        : null
-                    }
-                  />
-                  <Row
-                    icon={ShieldCheck}
-                    label="Nationality"
-                    value={selected.nationality}
-                  />
-                  <Row
-                    icon={Users}
-                    label="National ID"
-                    value={selected.nationalId}
-                  />
-                </TabsContent>
-
-                <TabsContent value="employment" className="space-y-1 pt-4">
-                  <Row
-                    icon={Briefcase}
-                    label="Department"
-                    value={selected.department}
-                  />
-                  <Row
-                    icon={Users}
-                    label="Reports to"
-                    value={selected.reportsTo}
-                  />
-                  <Row
-                    icon={Calendar}
-                    label="Start date"
-                    value={new Date(selected.startDate).toLocaleDateString(
-                      "en-GB",
-                    )}
-                  />
-                  <Row
-                    icon={Calendar}
-                    label="Probation ends"
-                    value={
-                      selected.probationEndDate
-                        ? new Date(
-                            selected.probationEndDate,
-                          ).toLocaleDateString("en-GB")
-                        : null
-                    }
-                  />
-                  <Row
-                    icon={ShieldCheck}
-                    label="Employment type"
-                    value={selected.employmentType?.replace("_", " ")}
-                  />
-                  <Row
-                    icon={TrendingUp}
-                    label="Salary"
-                    value={
-                      selected.salary != null
-                        ? `${selected.salaryCurrency} ${selected.salary.toLocaleString()}`
-                        : null
-                    }
-                  />
-                  <Row
-                    icon={Building2}
-                    label="Bank"
-                    value={selected.bankName}
-                  />
-                  <Row
-                    icon={Briefcase}
-                    label="Bank account"
-                    value={selected.bankAccountNumber}
-                  />
-                  <Row
-                    icon={ShieldCheck}
-                    label="Tax ID"
-                    value={selected.taxId}
-                  />
-                </TabsContent>
-
-                <TabsContent value="emergency" className="space-y-1 pt-4">
-                  <Row
-                    icon={Users}
-                    label="Contact name"
-                    value={selected.emergencyContactName}
-                  />
-                  <Row
-                    icon={Phone}
-                    label="Contact phone"
-                    value={selected.emergencyContactPhone}
-                  />
-                </TabsContent>
-              </Tabs>
-
-              <div className="mt-6 flex justify-end gap-2">
-                {selected.employmentStatus !== "terminated" &&
-                  selected.employmentStatus !== "resigned" && (
-                    <Button
-                      variant="destructive"
-                      onClick={() => setTerminateOpen(true)}
-                    >
-                      <UserMinus className="h-4 w-4 mr-2" /> Offboard
-                    </Button>
-                  )}
-              </div>
-            </>
-          )}
-        </SheetContent>
-      </Sheet>
-
-      {/* ── Terminate / Offboard Dialog ── */}
-      <Dialog open={terminateOpen} onOpenChange={setTerminateOpen}>
-        <DialogContent className="max-w-sm">
+      {/* ── New Team Dialog ── */}
+      <Dialog open={teamOpen} onOpenChange={setTeamOpen}>
+        <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Offboard Employee</DialogTitle>
-            <DialogDescription>
-              End employment for{" "}
-              <strong>
-                {selected?.firstName} {selected?.lastName}
-              </strong>
-              . Their portal access will be revoked immediately.
-            </DialogDescription>
+            <DialogTitle>New Team</DialogTitle>
+            <DialogDescription>Teams are the same as departments.</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div>
-              <Label>Type</Label>
-              <Select
-                value={terminateForm.status}
-                onValueChange={(v: any) =>
-                  setTerminateForm((f) => ({ ...f, status: v }))
-                }
-              >
-                <SelectTrigger className="mt-1.5">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="terminated">Termination</SelectItem>
-                  <SelectItem value="resigned">Resignation</SelectItem>
-                </SelectContent>
-              </Select>
+          <div className="space-y-3 py-2">
+            <div className="space-y-1">
+              <Label>Name *</Label>
+              <Input value={teamForm.name} onChange={(e) => setTeamForm((f) => ({ ...f, name: e.target.value }))} />
             </div>
-            <div>
-              <Label>
-                Reason <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                className="mt-1.5"
-                placeholder="Reason for offboarding…"
-                value={terminateForm.reason}
-                onChange={(e) =>
-                  setTerminateForm((f) => ({ ...f, reason: e.target.value }))
-                }
-              />
+            <div className="space-y-1">
+              <Label>Description</Label>
+              <Input value={teamForm.description} onChange={(e) => setTeamForm((f) => ({ ...f, description: e.target.value }))} />
+            </div>
+            <div className="space-y-1">
+              <Label>Team Lead</Label>
+              <Input value={teamForm.lead} onChange={(e) => setTeamForm((f) => ({ ...f, lead: e.target.value }))} />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setTerminateOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              disabled={
-                !terminateForm.reason.trim() || terminateMutation.isPending
-              }
-              onClick={() => terminateMutation.mutate()}
-            >
-              {terminateMutation.isPending ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Processing…
-                </>
-              ) : (
-                "Confirm Offboard"
-              )}
-            </Button>
+            <Button variant="outline" onClick={() => setTeamOpen(false)}>Cancel</Button>
+            <Button onClick={submitTeam}>Create Team</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── New Location Dialog ── */}
+      <Dialog open={locOpen} onOpenChange={setLocOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>New Location</DialogTitle>
+            <DialogDescription>Add an office or country where your business operates.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="space-y-1">
+              <Label>Name *</Label>
+              <Input placeholder="e.g. Lagos HQ" value={locForm.name} onChange={(e) => setLocForm((f) => ({ ...f, name: e.target.value }))} />
+            </div>
+            <div className="space-y-1">
+              <Label>Country *</Label>
+              <Input value={locForm.country} onChange={(e) => setLocForm((f) => ({ ...f, country: e.target.value }))} />
+            </div>
+            <div className="space-y-1">
+              <Label>City</Label>
+              <Input value={locForm.city} onChange={(e) => setLocForm((f) => ({ ...f, city: e.target.value }))} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setLocOpen(false)}>Cancel</Button>
+            <Button onClick={submitLocation}>Add Location</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
