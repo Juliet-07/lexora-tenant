@@ -293,6 +293,7 @@ export interface LeaveBalance {
   daysAllowed: number;
   daysUsed: number;
   daysLeft: number;
+  carryOver?: boolean;
 }
 
 export interface LeaveRequest {
