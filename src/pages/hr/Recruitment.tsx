@@ -121,7 +121,7 @@ export default function HRRecruitment() {
       </div>
 
       <Tabs defaultValue="openings" className="space-y-4">
-        <TabsList><TabsTrigger value="openings">Job Openings</TabsTrigger><TabsTrigger value="pipeline">Candidate Pipeline</TabsTrigger><TabsTrigger value="onboarding">Onboarding</TabsTrigger><TabsTrigger value="offboarding">Offboarding</TabsTrigger></TabsList>
+        <TabsList><TabsTrigger value="openings">Job Openings</TabsTrigger><TabsTrigger value="pipeline">Candidate Pipeline</TabsTrigger><TabsTrigger value="onboarding">Onboarding</TabsTrigger><TabsTrigger value="offboarding">Offboarding</TabsTrigger><TabsTrigger value="succession">Succession Planning</TabsTrigger></TabsList>
 
         <TabsContent value="openings" className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {jobs.map(j => (
@@ -256,7 +256,154 @@ export default function HRRecruitment() {
             ))}
           </div>
         </TabsContent>
+
+        <TabsContent value="succession" className="space-y-3">
+          <SuccessionPlanning />
+        </TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+// ─── Succession Planning ─────────────────────────────────────
+
+interface SuccessionPlan {
+  id: string;
+  role: string;
+  incumbent: string;
+  riskOfLoss: "Low" | "Medium" | "High";
+  readiness: "Ready now" | "Ready 1-2 yrs" | "Ready 3+ yrs" | "Gap";
+  successors: { name: string; readiness: "Ready now" | "1-2 yrs" | "3+ yrs"; potential: "High" | "Medium" | "Low" }[];
+}
+
+const SEED_SUCCESSION: SuccessionPlan[] = [
+  {
+    id: "SP-001",
+    role: "Head of Compliance",
+    incumbent: "Sarah Lee",
+    riskOfLoss: "Medium",
+    readiness: "Ready 1-2 yrs",
+    successors: [
+      { name: "James Okafor", readiness: "1-2 yrs", potential: "High" },
+      { name: "Aisha Bello", readiness: "3+ yrs", potential: "High" },
+    ],
+  },
+  {
+    id: "SP-002",
+    role: "Finance Director",
+    incumbent: "Daniel Karenzi",
+    riskOfLoss: "High",
+    readiness: "Gap",
+    successors: [{ name: "Priya Rana", readiness: "3+ yrs", potential: "Medium" }],
+  },
+  {
+    id: "SP-003",
+    role: "Engineering Manager",
+    incumbent: "Tariq Hassan",
+    riskOfLoss: "Low",
+    readiness: "Ready now",
+    successors: [
+      { name: "Marie Uwase", readiness: "Ready now", potential: "High" },
+      { name: "Liam Carter", readiness: "1-2 yrs", potential: "Medium" },
+    ],
+  },
+];
+
+function SuccessionPlanning() {
+  const [plans, setPlans] = useState<SuccessionPlan[]>(SEED_SUCCESSION);
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState({ role: "", incumbent: "", riskOfLoss: "Medium" as SuccessionPlan["riskOfLoss"], readiness: "Ready 1-2 yrs" as SuccessionPlan["readiness"] });
+  const { toast } = useToast();
+
+  const riskTone = (r: SuccessionPlan["riskOfLoss"]) =>
+    r === "High" ? "bg-destructive/10 text-destructive border-destructive/20"
+    : r === "Medium" ? "bg-warning/10 text-warning border-warning/20"
+    : "bg-success/10 text-success border-success/20";
+
+  const readinessTone = (r: SuccessionPlan["readiness"]) =>
+    r === "Ready now" ? "bg-success/10 text-success border-success/20"
+    : r === "Gap" ? "bg-destructive/10 text-destructive border-destructive/20"
+    : "bg-info/10 text-info border-info/20";
+
+  const create = () => {
+    if (!form.role || !form.incumbent) return;
+    setPlans([{ id: `SP-${String(plans.length + 1).padStart(3, "0")}`, ...form, successors: [] }, ...plans]);
+    setForm({ role: "", incumbent: "", riskOfLoss: "Medium", readiness: "Ready 1-2 yrs" });
+    setOpen(false);
+    toast({ title: "Succession plan created", description: `Plan added for ${form.role}.` });
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-muted-foreground">
+          Identify critical roles, name successors, and track bench readiness.
+        </p>
+        <Dialog open={open} onOpenChange={setOpen}>
+          <DialogTrigger asChild>
+            <Button className="bg-gradient-to-r from-primary to-secondary"><Plus className="h-4 w-4 mr-2" /> New Plan</Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader><DialogTitle>New Succession Plan</DialogTitle></DialogHeader>
+            <div className="space-y-3">
+              <div className="space-y-1"><Label>Critical role</Label><Input value={form.role} onChange={e => setForm({ ...form, role: e.target.value })} /></div>
+              <div className="space-y-1"><Label>Incumbent</Label><Input value={form.incumbent} onChange={e => setForm({ ...form, incumbent: e.target.value })} /></div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1"><Label>Risk of loss</Label>
+                  <Select value={form.riskOfLoss} onValueChange={(v: any) => setForm({ ...form, riskOfLoss: v })}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>{["Low", "Medium", "High"].map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1"><Label>Bench readiness</Label>
+                  <Select value={form.readiness} onValueChange={(v: any) => setForm({ ...form, readiness: v })}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>{["Ready now", "Ready 1-2 yrs", "Ready 3+ yrs", "Gap"].map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+            <DialogFooter><Button onClick={create} className="bg-gradient-to-r from-primary to-secondary">Create</Button></DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {plans.map(p => (
+          <Card key={p.id}>
+            <CardContent className="p-5 space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="font-semibold">{p.role}</h3>
+                  <p className="text-xs text-muted-foreground">Incumbent · {p.incumbent}</p>
+                </div>
+                <div className="flex flex-col gap-1 items-end">
+                  <Badge variant="outline" className={riskTone(p.riskOfLoss)}>Risk: {p.riskOfLoss}</Badge>
+                  <Badge variant="outline" className={readinessTone(p.readiness)}>{p.readiness}</Badge>
+                </div>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">Successors</p>
+                {p.successors.length === 0 ? (
+                  <p className="text-xs text-muted-foreground italic">No successors identified — critical gap.</p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {p.successors.map(s => (
+                      <div key={s.name} className="flex items-center justify-between text-xs border rounded-md px-2 py-1.5">
+                        <span className="font-medium">{s.name}</span>
+                        <div className="flex gap-1">
+                          <Badge variant="outline" className="text-[10px]">{s.readiness}</Badge>
+                          <Badge variant="outline" className="text-[10px]">{s.potential} potential</Badge>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
     </div>
   );
 }
