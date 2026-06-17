@@ -957,6 +957,8 @@ export default function HREmployees() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <EmployeeDetailSheet employee={selectedEmployee} onClose={() => setSelectedEmployee(null)} />
     </div>
   );
 }
