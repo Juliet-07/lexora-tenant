@@ -13,12 +13,107 @@ export interface Paginated<T> {
 }
 
 // ─────────────────────────────────────────────────────────────
+// TEAM (DEPARTMENT) — Types & API
+// ─────────────────────────────────────────────────────────────
+
+export interface HrTeam {
+  _id: string;
+  tenantId: string;
+  name: string;
+  description: string | null;
+  lead: string | null;
+  memberCount: number;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export const fetchTeams = async (): Promise<HrTeam[]> => {
+  const res = await api.get("/hr/teams");
+  const d = res.data?.data ?? res.data;
+  return Array.isArray(d) ? d : [];
+};
+
+export const createTeam = async (dto: {
+  name: string;
+  description?: string;
+  lead?: string;
+}): Promise<HrTeam> => {
+  const res = await api.post("/hr/teams", dto);
+  return res.data?.data ?? res.data;
+};
+
+export const updateTeam = async (
+  id: string,
+  dto: { name?: string; description?: string; lead?: string },
+): Promise<HrTeam> => {
+  const res = await api.patch(`/hr/teams/${id}`, dto);
+  return res.data?.data ?? res.data;
+};
+
+export const deleteTeam = async (id: string): Promise<void> => {
+  await api.delete(`/hr/teams/${id}`);
+};
+
+// ─────────────────────────────────────────────────────────────
+// LOCATION (BRANCH) — Types & API
+// ─────────────────────────────────────────────────────────────
+
+export interface HrLocation {
+  _id: string;
+  tenantId: string;
+  name: string;
+  country: string;
+  city: string | null;
+  address: string | null;
+  timezone: string | null;
+  memberCount: number;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export const fetchLocations = async (): Promise<HrLocation[]> => {
+  const res = await api.get("/hr/locations");
+  const d = res.data?.data ?? res.data;
+  return Array.isArray(d) ? d : [];
+};
+
+export const createLocation = async (dto: {
+  name: string;
+  country: string;
+  city?: string;
+  address?: string;
+  timezone?: string;
+}): Promise<HrLocation> => {
+  const res = await api.post("/hr/locations", dto);
+  return res.data?.data ?? res.data;
+};
+
+export const updateLocation = async (
+  id: string,
+  dto: {
+    name?: string;
+    country?: string;
+    city?: string;
+    address?: string;
+    timezone?: string;
+  },
+): Promise<HrLocation> => {
+  const res = await api.patch(`/hr/locations/${id}`, dto);
+  return res.data?.data ?? res.data;
+};
+
+export const deleteLocation = async (id: string): Promise<void> => {
+  await api.delete(`/hr/locations/${id}`);
+};
+
+// ─────────────────────────────────────────────────────────────
 // EMPLOYEES — Types
 // ─────────────────────────────────────────────────────────────
 
 export type EmploymentStatus =
   | "active"
   | "on_leave"
+  | "probation"
   | "suspended"
   | "terminated"
   | "resigned";
@@ -33,7 +128,8 @@ export type EmploymentType =
 export interface Employee {
   _id: string;
   tenantId: string;
-  clientId: string;
+  teamId: HrTeam | string | null;
+  locationId: HrLocation | string | null;
   userId: string | null;
   firstName: string;
   lastName: string;
@@ -53,7 +149,6 @@ export interface Employee {
   emergencyContactPhone: string | null;
   employeeNumber: string;
   jobTitle: string;
-  department: string | null;
   reportsTo: string | null;
   employmentType: EmploymentType;
   employmentStatus: EmploymentStatus;
@@ -75,44 +170,27 @@ export interface Employee {
   createdAt: string;
 }
 
-export interface EmployeeClientGroup {
-  client: {
-    _id: string;
-    businessName: string;
-    classifications?: string;
-  };
-  employees: Employee[];
-}
-
-export interface EmployeeGroupedResponse {
-  stats: {
-    totalHeadcount: number;
-    clientsServed: number;
-    active: number;
-    onLeave: number;
-  };
-  groups: EmployeeClientGroup[];
-  total: number;
-}
-
 export interface EmployeeStats {
   total: number;
   active: number;
   onLeave: number;
+  probation: number;
   terminated: number;
-  byDepartment: { _id: string; count: number }[];
-  byEmploymentType: { _id: string; count: number }[];
-  byClient: { _id: string; count: number }[];
+  teamCount: number;
+  locationCount: number;
+  byTeam: { _id: string; count: number }[];
+  byLocation: { _id: string; count: number }[];
   recentJoins: Partial<Employee>[];
 }
 
 export interface CreateEmployeeDto {
-  clientId: string;
   firstName: string;
   lastName: string;
   email: string;
   jobTitle: string;
   startDate: string;
+  teamId?: string;
+  locationId?: string;
   phone?: string;
   gender?: string;
   dateOfBirth?: string;
@@ -126,7 +204,6 @@ export interface CreateEmployeeDto {
   };
   emergencyContactName?: string;
   emergencyContactPhone?: string;
-  department?: string;
   reportsTo?: string;
   employmentType?: EmploymentType;
   probationEndDate?: string;
@@ -147,7 +224,57 @@ export interface TerminateEmployeeDto {
 }
 
 // ─────────────────────────────────────────────────────────────
-// LEAVE — Types
+// EMPLOYEES — API calls
+// ─────────────────────────────────────────────────────────────
+
+export const fetchEmployeeStats = async (): Promise<EmployeeStats> => {
+  const res = await api.get("/hr/stats");
+  return res.data?.data ?? res.data;
+};
+
+export const fetchEmployees = async (params?: {
+  page?: number;
+  limit?: number;
+  search?: string;
+  teamId?: string;
+  locationId?: string;
+  employmentStatus?: EmploymentStatus;
+  employmentType?: EmploymentType;
+}): Promise<Paginated<Employee>> => {
+  const res = await api.get("/hr/employees", { params });
+  return res.data?.data ?? res.data;
+};
+
+export const fetchEmployeeById = async (id: string): Promise<Employee> => {
+  const res = await api.get(`/hr/employees/${id}`);
+  return res.data?.data ?? res.data;
+};
+
+export const createEmployee = async (
+  dto: CreateEmployeeDto,
+): Promise<Employee> => {
+  const res = await api.post("/hr/employees", dto);
+  return res.data?.data ?? res.data;
+};
+
+export const updateEmployee = async (
+  id: string,
+  dto: Partial<CreateEmployeeDto>,
+): Promise<Employee> => {
+  const res = await api.patch(`/hr/employees/${id}`, dto);
+  return res.data?.data ?? res.data;
+};
+
+export const terminateEmployee = async (
+  id: string,
+  dto: TerminateEmployeeDto,
+): Promise<Employee> => {
+  const res = await api.patch(`/hr/employees/${id}/terminate`, dto);
+  return res.data?.data ?? res.data;
+};
+
+// ─────────────────────────────────────────────────────────────
+// LEAVE — Types & API (keep as-is, clientId removed internally)
 // ─────────────────────────────────────────────────────────────
 
 export type LeaveStatus = "pending" | "approved" | "rejected" | "cancelled";
@@ -175,9 +302,7 @@ export interface LeaveRequest {
     firstName: string;
     lastName: string;
     jobTitle: string;
-    department: string | null;
   } | null;
-  clientId: string;
   tenantId: string;
   type: LeaveType;
   startDate: string;
@@ -190,18 +315,6 @@ export interface LeaveRequest {
   createdAt: string;
 }
 
-export interface LeavePolicy {
-  _id: string;
-  tenantId: string;
-  clientId: string;
-  policies: {
-    type: LeaveType;
-    daysAllowed: number;
-    carryOver: boolean;
-  }[];
-  effectiveFrom: string;
-}
-
 export interface LeaveStats {
   pending: number;
   byStatus: { _id: string; count: number }[];
@@ -209,122 +322,47 @@ export interface LeaveStats {
   recentApproved: LeaveRequest[];
 }
 
-// ─────────────────────────────────────────────────────────────
-// EMPLOYEES — API calls
-// ─────────────────────────────────────────────────────────────
+// ── Leave Policy — Types ──────────────────────────────────────
 
-export const fetchEmployeesGrouped = async (params?: {
-  search?: string;
-  clientId?: string;
-  department?: string;
-  employmentStatus?: string;
-  employmentType?: string;
-}): Promise<EmployeeGroupedResponse> => {
-  const res = await api.get("/hr/employees/grouped", { params });
-  return res.data?.data ?? res.data;
-};
-
-export const fetchEmployeeStats = async (): Promise<EmployeeStats> => {
-  const res = await api.get("/hr/stats");
-  return res.data?.data ?? res.data;
-};
-
-export const fetchEmployees = async (params?: {
-  page?: number;
-  limit?: number;
-  search?: string;
-  clientId?: string;
-  department?: string;
-  employmentStatus?: EmploymentStatus;
-  employmentType?: EmploymentType;
-}): Promise<Paginated<Employee>> => {
-  const res = await api.get("/hr/employees", { params });
-  return res.data?.data ?? res.data;
-};
-
-export const fetchEmployeeById = async (id: string): Promise<Employee> => {
-  const res = await api.get(`/hr/employees/${id}`);
-  return res.data?.data ?? res.data;
-};
-
-export const fetchEmployeesByClient = async (
-  clientId: string,
-  params?: { page?: number; limit?: number },
-): Promise<Paginated<Employee>> => {
-  const res = await api.get(`/hr/clients/${clientId}/employees`, { params });
-  return res.data?.data ?? res.data;
-};
-
-export const createEmployee = async (
-  dto: CreateEmployeeDto,
-): Promise<Employee> => {
-  const res = await api.post("/hr/employees", dto);
-  return res.data?.data ?? res.data;
-};
-
-export const updateEmployee = async (
-  id: string,
-  dto: Partial<CreateEmployeeDto>,
-): Promise<Employee> => {
-  const res = await api.patch(`/hr/employees/${id}`, dto);
-  return res.data?.data ?? res.data;
-};
-
-export const terminateEmployee = async (
-  id: string,
-  dto: TerminateEmployeeDto,
-): Promise<Employee> => {
-  const res = await api.patch(`/hr/employees/${id}/terminate`, dto);
-  return res.data?.data ?? res.data;
-};
-
-export const fetchDepartments = async (): Promise<string[]> => {
-  const res = await api.get("/hr/employees/departments");
-  const d = res.data?.data ?? res.data;
-  return Array.isArray(d) ? d : [];
-};
-
-// ─────────────────────────────────────────────────────────────
-// CORPORATE CLIENTS — fetch for employee assignment
-// Returns only corporate clients belonging to this tenant
-// ─────────────────────────────────────────────────────────────
-
-export interface CorporateClient {
-  _id: string;
-  fullName: string;
-  email: string;
-  profile: {
-    _id: string;
-    businessName?: string;
-    classifications: string;
-  } | null;
+export interface LeavePolicyEntry {
+  type: string;
+  daysAllowed: number;
+  carryOver: boolean;
+  maxCarryOverDays: number;
 }
 
-export const fetchCorporateClients = async (): Promise<CorporateClient[]> => {
-  const res = await api.get("/tenant/my-clients", {
-    params: { classification: "corporate", limit: 200 },
-  });
-  const d = res.data?.data ?? res.data;
-  // my-clients returns paginated — extract items
-  const items = d?.items ?? d ?? [];
-  // Only return corporate clients
-  return items.filter(
-    (c: any) =>
-      c.classifications === "corporate" ||
-      c.profile?.classifications === "corporate",
-  );
-};
+export interface LeavePolicy {
+  _id: string;
+  tenantId: string;
+  locationId: {
+    _id: string;
+    name: string;
+    country: string;
+    city: string | null;
+  } | null;
+  policies: LeavePolicyEntry[];
+  memberCount: number;
+  effectiveFrom: string;
+  createdAt: string;
+}
 
-// ─────────────────────────────────────────────────────────────
-// LEAVE — Types & API calls (placeholder — built in next section)
-// ─────────────────────────────────────────────────────────────
+export interface LeaveBalance {
+  type: string;
+  label: string;
+  daysAllowed: number;
+  daysUsed: number;
+  daysLeft: number;
+  carryOver: boolean;
+}
 
-export const fetchLeaveStats = async (
-  clientId?: string,
-): Promise<LeaveStats> => {
-  const res = await api.get("/hr/leave/stats", {
-    params: clientId ? { clientId } : {},
-  });
+export interface MyLeaveBalanceResponse {
+  balances: LeaveBalance[];
+  locationId: string | null;
+  policyId: string | null;
+}
+
+export const fetchLeaveStats = async (): Promise<LeaveStats> => {
+  const res = await api.get("/hr/leave/stats");
   return res.data?.data ?? res.data;
 };
 
@@ -332,7 +370,6 @@ export const fetchTenantLeaveRequests = async (params?: {
   page?: number;
   limit?: number;
   status?: string;
-  clientId?: string;
   employeeId?: string;
   type?: string;
 }): Promise<Paginated<LeaveRequest>> => {
@@ -348,20 +385,7 @@ export const reviewLeaveRequest = async (
   return res.data?.data ?? res.data;
 };
 
-export const upsertLeavePolicy = async (dto: {
-  clientId: string;
-  policies: { type: string; daysAllowed: number; carryOver?: boolean }[];
-}): Promise<LeavePolicy> => {
-  const res = await api.post("/hr/leave/policy", dto);
-  return res.data?.data ?? res.data;
-};
-
-export const fetchLeavePolicy = async (
-  clientId: string,
-): Promise<LeavePolicy | null> => {
-  const res = await api.get(`/hr/leave/policy/${clientId}`);
-  return res.data?.data ?? res.data ?? null;
-};
+// ── Leave Policy — API calls ──────────────────────────────────
 
 export const fetchAllLeavePolicies = async (): Promise<LeavePolicy[]> => {
   const res = await api.get("/hr/leave/policy");
@@ -369,53 +393,123 @@ export const fetchAllLeavePolicies = async (): Promise<LeavePolicy[]> => {
   return Array.isArray(d) ? d : [];
 };
 
-// ─────────────────────────────────────────────────────────────
-// ATTENDANCE — Types & API calls (placeholder)
-// ─────────────────────────────────────────────────────────────
+export const fetchLeavePolicy = async (
+  locationId: string | "default",
+): Promise<LeavePolicy | null> => {
+  const res = await api.get(`/hr/leave/policy/${locationId}`);
+  return res.data?.data ?? res.data ?? null;
+};
 
-// export const fetchAttendance = ...
-// export const clockIn = ...
-// export const clockOut = ...
+export const fetchUncoveredLocations = async (): Promise<HrLocation[]> => {
+  const res = await api.get("/hr/leave/policy/uncovered");
+  const d = res.data?.data ?? res.data;
+  return Array.isArray(d) ? d : [];
+};
 
-// ─────────────────────────────────────────────────────────────
-// PAYROLL — Types & API calls (placeholder)
-// ─────────────────────────────────────────────────────────────
+export const upsertLeavePolicy = async (dto: {
+  locationId: string | null;
+  policies: { type: string; daysAllowed: number; carryOver?: boolean }[];
+}): Promise<LeavePolicy> => {
+  const res = await api.post("/hr/leave/policy", dto);
+  return res.data?.data ?? res.data;
+};
 
-// export const fetchPayrollRecords = ...
-// export const runPayroll = ...
+// ── Employee leave balance ─────────────────────────────────────
 
-// ─────────────────────────────────────────────────────────────
-// PERFORMANCE — Types & API calls (placeholder)
-// ─────────────────────────────────────────────────────────────
+export const fetchMyLeaveBalance =
+  async (): Promise<MyLeaveBalanceResponse> => {
+    const res = await api.get("/employee/leave/balance");
+    return res.data?.data ?? res.data;
+  };
 
-// export const fetchPerformanceReviews = ...
-// export const createPerformanceReview = ...
+export const fetchMyLeaveRequests = async (): Promise<LeaveRequest[]> => {
+  const res = await api.get("/employee/leave");
+  const d = res.data?.data ?? res.data;
+  return Array.isArray(d) ? d : [];
+};
 
-// ─────────────────────────────────────────────────────────────
-// CONTRACTS — Types & API calls (placeholder)
-// ─────────────────────────────────────────────────────────────
+export const submitLeaveRequest = async (dto: {
+  type: string;
+  startDate: string;
+  endDate: string;
+  reason: string;
+}): Promise<LeaveRequest> => {
+  const res = await api.post("/employee/leave", dto);
+  return res.data?.data ?? res.data;
+};
 
-// export const fetchContracts = ...
-// export const createContract = ...
+export const cancelLeaveRequest = async (id: string): Promise<void> => {
+  await api.patch(`/employee/leave/${id}/cancel`, {});
+};
 
-// ─────────────────────────────────────────────────────────────
-// LEARNING — Types & API calls (placeholder)
-// ─────────────────────────────────────────────────────────────
+// ── Attendance — Types ────────────────────────────────────────
 
-// export const fetchLearningRecords = ...
-// export const assignCourse = ...
+export type AttendanceStatus =
+  | "present"
+  | "late"
+  | "remote"
+  | "absent"
+  | "on_leave";
 
-// ─────────────────────────────────────────────────────────────
-// REQUISITIONS — Types & API calls (placeholder)
-// ─────────────────────────────────────────────────────────────
+export interface AttendanceRecord {
+  _id: string;
+  employeeId: string;
+  tenantId: string;
+  date: string;
+  clockIn: string;
+  clockOut: string | null;
+  breakMinutes: number;
+  breakStartedAt: string | null;
+  hoursWorked: number | null;
+  location: string;
+  status: AttendanceStatus;
+  note: string | null;
+}
 
-// export const fetchRequisitions = ...
-// export const createRequisition = ...
+export interface AttendanceStats {
+  weekHours: number;
+  monthHours: number;
+  daysPresent: number;
+}
 
-// ─────────────────────────────────────────────────────────────
-// RECRUITMENT — Types & API calls (placeholder)
-// ─────────────────────────────────────────────────────────────
+// ── Attendance — API calls ────────────────────────────────────
 
-// export const fetchJobPostings = ...
-// export const createJobPosting = ...
-// export const fetchApplications = ...
+export const fetchActiveShift = async (): Promise<AttendanceRecord | null> => {
+  const res = await api.get("/employee/attendance/active");
+  return res.data?.data ?? res.data ?? null;
+};
+
+export const fetchAttendanceStats = async (): Promise<AttendanceStats> => {
+  const res = await api.get("/employee/attendance/stats");
+  return res.data?.data ?? res.data;
+};
+
+export const fetchAttendanceHistory = async (
+  limit = 30,
+): Promise<AttendanceRecord[]> => {
+  const res = await api.get("/employee/attendance", { params: { limit } });
+  const d = res.data?.data ?? res.data;
+  return Array.isArray(d) ? d : [];
+};
+
+export const clockIn = async (dto: {
+  location?: string;
+}): Promise<AttendanceRecord> => {
+  const res = await api.post("/employee/attendance/clock-in", dto);
+  return res.data?.data ?? res.data;
+};
+
+export const startBreak = async (): Promise<AttendanceRecord> => {
+  const res = await api.post("/employee/attendance/break/start", {});
+  return res.data?.data ?? res.data;
+};
+
+export const endBreak = async (): Promise<AttendanceRecord> => {
+  const res = await api.post("/employee/attendance/break/end", {});
+  return res.data?.data ?? res.data;
+};
+
+export const clockOut = async (): Promise<AttendanceRecord> => {
+  const res = await api.post("/employee/attendance/clock-out", {});
+  return res.data?.data ?? res.data;
+};

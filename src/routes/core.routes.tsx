@@ -2,15 +2,14 @@ import { Route } from "react-router-dom";
 import { layout, RouteContext } from "./_helpers";
 import { ModulePlaceholder } from "@/components/layout/ModulePlaceholder";
 import Dashboard from "@/pages/Dashboard";
-import TeamMemberDashboard from "@/pages/TeamMemberDashboard";
+import EmployeeDashboard from "@/pages/EmployeeDashboard";
 import Clients from "@/pages/client/Clients";
-import AssignedClients from "@/pages/AssignedClients";
+import AssignedClients from "@/pages/hr/employee/AssignedClients";
 import ClientProfile from "@/pages/client/ClientProfile";
 import ClientOnboarding from "@/pages/kyc/ClientOnboarding";
 import OnboardingDetail from "@/pages/kyc/OnboardingDetail";
-import Team from "@/pages/Team";
 import Settings from "@/pages/settings/Index";
-import MySettings from "@/pages/team-member/MySettings";
+import MySettings from "@/pages/hr/employee/MySettings";
 import { ProjectsList, ProjectDetail } from "@/pages/Projects";
 import { MyProjectsList, MyProjectDetail } from "@/pages/MyProjects";
 
@@ -19,7 +18,7 @@ import { MyProjectsList, MyProjectDetail } from "@/pages/MyProjects";
  * team, settings, and the generic projects fallback.
  */
 export const coreRoutes = ({ isAdmin }: RouteContext) => {
-  const HomeEl = isAdmin ? <Dashboard /> : <TeamMemberDashboard />;
+  const HomeEl = isAdmin ? <Dashboard /> : <EmployeeDashboard />;
 
   const routes = [
     <Route key="home" path="/" element={layout(HomeEl)} />,
@@ -48,10 +47,21 @@ export const coreRoutes = ({ isAdmin }: RouteContext) => {
 
   if (isAdmin) {
     routes.push(
-      <Route key="client-profile" path="/clients/:id" element={layout(<ClientProfile />)} />,
-      <Route key="onboarding" path="/clients/onboarding" element={layout(<ClientOnboarding />)} />,
-      <Route key="onboarding-detail" path="/clients/onboarding/:id" element={layout(<OnboardingDetail />)} />,
-      <Route key="team" path="/team" element={layout(<Team />)} />,
+      <Route
+        key="client-profile"
+        path="/clients/:id"
+        element={layout(<ClientProfile />)}
+      />,
+      <Route
+        key="onboarding"
+        path="/clients/onboarding"
+        element={layout(<ClientOnboarding />)}
+      />,
+      <Route
+        key="onboarding-detail"
+        path="/clients/onboarding/:id"
+        element={layout(<OnboardingDetail />)}
+      />,
     );
   }
 

@@ -4,9 +4,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Progress } from "@/components/ui/progress";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -15,20 +12,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import {
   Clock,
   LogIn,
   LogOut,
   Coffee,
   MapPin,
   Timer,
-  Plus,
   TrendingUp,
   Loader2,
 } from "lucide-react";
@@ -43,7 +32,7 @@ import {
   clockOut,
   type AttendanceRecord,
   type AttendanceStats,
-} from "@/lib/team-api";
+} from "@/lib/hr-api";
 
 // ─── Helpers ──────────────────────────────────────────────────
 
@@ -65,6 +54,7 @@ const STATUS_STYLE: Record<string, string> = {
   late: "bg-warning/10 text-warning border-warning/20",
   remote: "bg-info/10 text-info border-info/20",
   absent: "bg-destructive/10 text-destructive border-destructive/20",
+  on_leave: "bg-muted text-muted-foreground border-border",
 };
 
 // ─── Component ────────────────────────────────────────────────
@@ -73,15 +63,6 @@ export default function MyTime() {
   const queryClient = useQueryClient();
   const [now, setNow] = useState(new Date());
   const [location, setLocation] = useState("Office");
-  const [logOpen, setLogOpen] = useState(false);
-  const [draft, setDraft] = useState({
-    date: new Date().toISOString().slice(0, 10),
-    project: "Internal",
-    task: "",
-    hours: 1,
-    billable: true,
-    note: "",
-  });
 
   // Tick every 30 seconds to update elapsed display
   useEffect(() => {
@@ -169,7 +150,7 @@ export default function MyTime() {
     onSuccess: (record) => {
       invalidate();
       toast.success(
-        `Clocked out. Logged ${record.hoursWorked?.toFixed(1)}h today.`,
+        `Clocked out. Logged ${record.hoursWorked?.toFixed(1) ?? "0.0"}h today.`,
       );
     },
     onError: (err: any) =>
@@ -186,19 +167,11 @@ export default function MyTime() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold">My Time</h1>
-          <p className="text-sm text-muted-foreground">
-            Clock in/out, track breaks and view attendance history.
-          </p>
-        </div>
-        <Button
-          onClick={() => setLogOpen(true)}
-          className="bg-gradient-to-r from-primary to-secondary"
-        >
-          <Plus className="h-4 w-4 mr-2" /> Log Time
-        </Button>
+      <div>
+        <h1 className="text-2xl font-bold">My Time</h1>
+        <p className="text-sm text-muted-foreground">
+          Clock in/out, track breaks and view attendance history.
+        </p>
       </div>
 
       {/* Live clock card */}
@@ -236,7 +209,6 @@ export default function MyTime() {
             </div>
 
             <div className="flex flex-wrap items-center gap-3">
-              {/* Location selector when not clocked in */}
               {!clockedIn && (
                 <Select value={location} onValueChange={setLocation}>
                   <SelectTrigger className="w-32 h-9 text-sm">
@@ -254,7 +226,7 @@ export default function MyTime() {
                 <Button
                   size="lg"
                   className="bg-gradient-to-r from-emerald-500 to-teal-500"
-                  disabled={anyMutating}
+                  disabled={anyMutating || shiftLoading}
                   onClick={() => clockInMutation.mutate()}
                 >
                   {clockInMutation.isPending ? (
@@ -421,108 +393,6 @@ export default function MyTime() {
           </Card>
         </TabsContent>
       </Tabs>
-
-      {/* ── Log Time Dialog (manual entry — static for now) ── */}
-      <Dialog open={logOpen} onOpenChange={setLogOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Log Time</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3 py-2">
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label>Date</Label>
-                <Input
-                  type="date"
-                  className="mt-1.5"
-                  value={draft.date}
-                  onChange={(e) =>
-                    setDraft((d) => ({ ...d, date: e.target.value }))
-                  }
-                />
-              </div>
-              <div>
-                <Label>Hours</Label>
-                <Input
-                  type="number"
-                  step="0.25"
-                  className="mt-1.5"
-                  value={draft.hours}
-                  onChange={(e) =>
-                    setDraft((d) => ({ ...d, hours: +e.target.value }))
-                  }
-                />
-              </div>
-            </div>
-            <div>
-              <Label>Project</Label>
-              <Select
-                value={draft.project}
-                onValueChange={(v) => setDraft((d) => ({ ...d, project: v }))}
-              >
-                <SelectTrigger className="mt-1.5">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Internal">Internal</SelectItem>
-                  <SelectItem value="Client Work">Client Work</SelectItem>
-                  <SelectItem value="Training">Training</SelectItem>
-                  <SelectItem value="Admin">Admin</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Task</Label>
-              <Input
-                className="mt-1.5"
-                value={draft.task}
-                placeholder="What did you work on?"
-                onChange={(e) =>
-                  setDraft((d) => ({ ...d, task: e.target.value }))
-                }
-              />
-            </div>
-            <div>
-              <Label>Note</Label>
-              <Input
-                className="mt-1.5"
-                value={draft.note}
-                onChange={(e) =>
-                  setDraft((d) => ({ ...d, note: e.target.value }))
-                }
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <input
-                id="bill"
-                type="checkbox"
-                checked={draft.billable}
-                onChange={(e) =>
-                  setDraft((d) => ({ ...d, billable: e.target.checked }))
-                }
-              />
-              <Label htmlFor="bill" className="cursor-pointer">
-                Billable
-              </Label>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setLogOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              className="bg-gradient-to-r from-primary to-secondary"
-              disabled={!draft.task.trim()}
-              onClick={() => {
-                toast.success(`${draft.hours}h logged.`);
-                setLogOpen(false);
-              }}
-            >
-              Save
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

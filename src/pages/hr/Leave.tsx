@@ -4,9 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Progress } from "@/components/ui/progress";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -30,24 +29,26 @@ import {
   XCircle,
   Clock,
   Plane,
-  Settings,
   Loader2,
   X,
   Check,
+  Plus,
+  MapPin,
+  Settings2,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
   fetchLeaveStats,
   fetchTenantLeaveRequests,
   reviewLeaveRequest,
-  upsertLeavePolicy,
-  fetchLeavePolicy,
-  fetchCorporateClients,
   fetchAllLeavePolicies,
+  fetchUncoveredLocations,
+  upsertLeavePolicy,
+  fetchLocations,
   type LeaveRequest,
   type LeaveStats,
   type LeavePolicy,
-  type CorporateClient,
+  type HrLocation,
 } from "@/lib/hr-api";
 
 // ─── Constants ────────────────────────────────────────────────
@@ -86,7 +87,7 @@ const LEAVE_TYPES = [
   { value: "unpaid", label: "Unpaid", color: "bg-muted text-muted-foreground" },
 ];
 
-const DEFAULT_POLICY_DAYS: Record<string, number> = {
+const DEFAULT_DAYS: Record<string, number> = {
   annual: 21,
   sick: 10,
   maternity: 90,
@@ -96,82 +97,88 @@ const DEFAULT_POLICY_DAYS: Record<string, number> = {
   unpaid: 0,
 };
 
-const typeColor = (type: string) =>
-  LEAVE_TYPES.find((t) => t.value === type)?.color ??
+const typeColor = (t: string) =>
+  LEAVE_TYPES.find((x) => x.value === t)?.color ??
   "bg-muted text-muted-foreground";
-
-const typeLabel = (type: string) =>
-  LEAVE_TYPES.find((t) => t.value === type)?.label ?? type;
-
+const typeLabel = (t: string) =>
+  LEAVE_TYPES.find((x) => x.value === t)?.label ?? t;
 const fmt = (d: string) =>
   new Date(d).toLocaleDateString("en-GB", {
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
   });
-
-const getInitials = (name: string) =>
-  name
+const getInit = (n: string) =>
+  n
     .split(" ")
-    .map((n) => n[0])
+    .map((x) => x[0])
     .join("")
     .slice(0, 2)
     .toUpperCase();
+
+const EMPTY_POLICY_ENTRIES = LEAVE_TYPES.map((t) => ({
+  type: t.value,
+  daysAllowed: DEFAULT_DAYS[t.value] ?? 0,
+  carryOver: false,
+}));
 
 // ─── Component ────────────────────────────────────────────────
 
 export default function HRLeave() {
   const queryClient = useQueryClient();
 
-  // ── Review state ──────────────────────────────────────────
+  // Review state
   const [reviewTarget, setReviewTarget] = useState<{
     request: LeaveRequest;
     action: "approved" | "rejected";
   } | null>(null);
   const [reviewNote, setReviewNote] = useState("");
 
-  // ── Policy state ──────────────────────────────────────────
+  // Policy dialog state
   const [policyOpen, setPolicyOpen] = useState(false);
-  const [policyClientId, setPolicyClientId] = useState("");
-  const [policyEntries, setPolicyEntries] = useState(
-    LEAVE_TYPES.map((t) => ({
-      type: t.value,
-      daysAllowed: DEFAULT_POLICY_DAYS[t.value] ?? 0,
-      carryOver: false,
-    })),
-  );
+  const [policyLocId, setPolicyLocId] = useState<string | null>(null);
+  const [policyEntries, setPolicyEntries] = useState(EMPTY_POLICY_ENTRIES);
 
-  // ── Filters ───────────────────────────────────────────────
+  // Filters
   const [statusFilter, setStatusFilter] = useState("all");
-  const [clientFilter, setClientFilter] = useState("all");
+  const [typeFilter, setTypeFilter] = useState("all");
 
   // ── Queries ───────────────────────────────────────────────
+
   const { data: stats } = useQuery<LeaveStats>({
     queryKey: ["hr-leave-stats"],
-    queryFn: () => fetchLeaveStats(),
+    queryFn: fetchLeaveStats,
     staleTime: 30_000,
   });
 
   const { data: requestsData, isLoading } = useQuery({
-    queryKey: ["hr-leave-requests", statusFilter, clientFilter],
+    queryKey: ["hr-leave-requests", statusFilter, typeFilter],
     queryFn: () =>
       fetchTenantLeaveRequests({
-        limit: 100,
+        limit: 200,
         status: statusFilter !== "all" ? statusFilter : undefined,
-        clientId: clientFilter !== "all" ? clientFilter : undefined,
+        type: typeFilter !== "all" ? typeFilter : undefined,
       }),
     staleTime: 30_000,
   });
 
-  const { data: corporateClients = [] } = useQuery<CorporateClient[]>({
-    queryKey: ["hr-corporate-clients"],
-    queryFn: fetchCorporateClients,
-    staleTime: 5 * 60_000,
-  });
-
-  const { data: allPolicies = [] } = useQuery<LeavePolicy[]>({
+  const { data: policies = [], isLoading: policiesLoading } = useQuery<
+    LeavePolicy[]
+  >({
     queryKey: ["hr-leave-policies"],
     queryFn: fetchAllLeavePolicies,
+    staleTime: 60_000,
+  });
+
+  const { data: allLocations = [] } = useQuery<HrLocation[]>({
+    queryKey: ["hr-locations"],
+    queryFn: fetchLocations,
+    staleTime: 60_000,
+  });
+
+  const { data: uncoveredLocations = [] } = useQuery<HrLocation[]>({
+    queryKey: ["hr-uncovered-locations"],
+    queryFn: fetchUncoveredLocations,
     staleTime: 60_000,
   });
 
@@ -181,7 +188,32 @@ export default function HRLeave() {
     (r) => r.status === "approved" && new Date(r.startDate) > new Date(),
   );
 
-  // ── Review mutation ───────────────────────────────────────
+  // ── Open policy dialog pre-filled with existing data ─────
+
+  const openPolicyDialog = (
+    loc: HrLocation | null,
+    existingPolicy?: LeavePolicy,
+  ) => {
+    setPolicyLocId(loc?._id ?? null);
+    if (existingPolicy?.policies?.length) {
+      setPolicyEntries(
+        LEAVE_TYPES.map((t) => {
+          const found = existingPolicy.policies.find((p) => p.type === t.value);
+          return {
+            type: t.value,
+            daysAllowed: found?.daysAllowed ?? DEFAULT_DAYS[t.value] ?? 0,
+            carryOver: found?.carryOver ?? false,
+          };
+        }),
+      );
+    } else {
+      setPolicyEntries(EMPTY_POLICY_ENTRIES);
+    }
+    setPolicyOpen(true);
+  };
+
+  // ── Mutations ─────────────────────────────────────────────
+
   const reviewMutation = useMutation({
     mutationFn: () =>
       reviewLeaveRequest(reviewTarget!.request._id, {
@@ -204,115 +236,67 @@ export default function HRLeave() {
       toast.error(err?.response?.data?.message ?? "Failed to review request"),
   });
 
-  // ── Policy mutation ───────────────────────────────────────
   const policyMutation = useMutation({
     mutationFn: () =>
       upsertLeavePolicy({
-        clientId: policyClientId,
-        policies: policyEntries.filter((p) => p.daysAllowed > 0),
+        locationId: policyLocId,
+        policies: policyEntries,
       }),
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["hr-leave-policies"] });
+      queryClient.invalidateQueries({ queryKey: ["hr-uncovered-locations"] });
       setPolicyOpen(false);
-      toast.success("Leave policy saved successfully.");
+      const locName = policyLocId
+        ? (allLocations.find((l) => l._id === policyLocId)?.name ?? "location")
+        : "default";
+      toast.success(`Leave policy saved for ${locName}.`);
     },
     onError: (err: any) =>
       toast.error(err?.response?.data?.message ?? "Failed to save policy"),
   });
 
-  // ── Load existing policy when client selected ─────────────
-  const { data: existingPolicy } = useQuery<LeavePolicy | null>({
-    queryKey: ["leave-policy", policyClientId],
-    queryFn: () => fetchLeavePolicy(policyClientId),
-    enabled: !!policyClientId,
-    staleTime: 60_000,
-    onSuccess: (policy) => {
-      if (policy?.policies?.length) {
-        setPolicyEntries(
-          LEAVE_TYPES.map((t) => {
-            const existing = policy.policies.find((p) => p.type === t.value);
-            return {
-              type: t.value,
-              daysAllowed:
-                existing?.daysAllowed ?? DEFAULT_POLICY_DAYS[t.value] ?? 0,
-              carryOver: existing?.carryOver ?? false,
-            };
-          }),
-        );
-      } else {
-        // Reset to defaults when no policy found
-        setPolicyEntries(
-          LEAVE_TYPES.map((t) => ({
-            type: t.value,
-            daysAllowed: DEFAULT_POLICY_DAYS[t.value] ?? 0,
-            carryOver: false,
-          })),
-        );
-      }
-    },
-  } as any);
-
-  const clientNameMap = corporateClients.reduce(
-    (m, c) => {
-      const profileId = c.profile?._id ?? c._id;
-      const name = c.profile?.businessName ?? c.fullName ?? c.email;
-      m[profileId] = name;
-      return m;
-    },
-    {} as Record<string, string>,
-  );
-
   // ─────────────────────────────────────────────────────────
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold">Leave Management</h1>
-          <p className="text-sm text-muted-foreground">
-            Balances, requests and team calendar.
-          </p>
-        </div>
-        <Button variant="outline" onClick={() => setPolicyOpen(true)}>
-          <Settings className="h-4 w-4 mr-2" /> Leave Policy
-        </Button>
+      <div>
+        <h1 className="text-2xl font-bold">Leave Management</h1>
+        <p className="text-sm text-muted-foreground">
+          Review requests, set location policies and track the team calendar.
+        </p>
       </div>
 
-      {/* Summary stat cards */}
+      {/* Stat cards */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {[
           {
             label: "Annual Leave",
-            key: "annual",
             color: "from-blue-500 to-cyan-500",
             count: stats?.byType?.find((t) => t._id === "annual")?.count ?? 0,
           },
           {
             label: "Sick Leave",
-            key: "sick",
             color: "from-rose-500 to-red-500",
             count: stats?.byType?.find((t) => t._id === "sick")?.count ?? 0,
           },
           {
             label: "Pending Approval",
-            key: "pending",
             color: "from-amber-500 to-orange-500",
             count: stats?.pending ?? 0,
           },
         ].map((b) => (
-          <Card key={b.key}>
-            <CardContent className="p-5 space-y-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-muted-foreground uppercase tracking-wide">
-                    {b.label}
-                  </p>
-                  <p className="text-2xl font-bold mt-1">{b.count}</p>
-                </div>
-                <div
-                  className={`h-10 w-10 rounded-lg bg-gradient-to-br ${b.color} flex items-center justify-center`}
-                >
-                  <Plane className="h-5 w-5 text-white" />
-                </div>
+          <Card key={b.label}>
+            <CardContent className="p-5 flex items-center justify-between">
+              <div>
+                <p className="text-xs text-muted-foreground uppercase tracking-wide">
+                  {b.label}
+                </p>
+                <p className="text-2xl font-bold mt-1">{b.count}</p>
+              </div>
+              <div
+                className={`h-10 w-10 rounded-lg bg-gradient-to-br ${b.color} flex items-center justify-center`}
+              >
+                <Plane className="h-5 w-5 text-white" />
               </div>
             </CardContent>
           </Card>
@@ -333,22 +317,17 @@ export default function HRLeave() {
             <SelectItem value="cancelled">Cancelled</SelectItem>
           </SelectContent>
         </Select>
-
-        <Select value={clientFilter} onValueChange={setClientFilter}>
-          <SelectTrigger className="h-8 w-44 text-sm">
-            <SelectValue placeholder="All clients" />
+        <Select value={typeFilter} onValueChange={setTypeFilter}>
+          <SelectTrigger className="h-8 w-40 text-sm">
+            <SelectValue placeholder="All types" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All clients</SelectItem>
-            {corporateClients.map((c) => {
-              const profileId = c.profile?._id ?? c._id;
-              const name = c.profile?.businessName ?? c.fullName ?? c.email;
-              return (
-                <SelectItem key={profileId} value={profileId}>
-                  {name}
-                </SelectItem>
-              );
-            })}
+            <SelectItem value="all">All types</SelectItem>
+            {LEAVE_TYPES.map((t) => (
+              <SelectItem key={t.value} value={t.value}>
+                {t.label}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>
@@ -366,10 +345,20 @@ export default function HRLeave() {
           </TabsTrigger>
           <TabsTrigger value="all">All Requests</TabsTrigger>
           <TabsTrigger value="calendar">Team Calendar</TabsTrigger>
-          <TabsTrigger value="policies">Policies</TabsTrigger>
+          <TabsTrigger value="policies">
+            Policies
+            {uncoveredLocations.length > 0 && (
+              <Badge
+                variant="secondary"
+                className="ml-2 bg-warning/20 text-warning"
+              >
+                {uncoveredLocations.length}
+              </Badge>
+            )}
+          </TabsTrigger>
         </TabsList>
 
-        {/* Pending */}
+        {/* ── Pending ── */}
         <TabsContent value="pending" className="space-y-2">
           {isLoading ? (
             <LoadingState />
@@ -397,7 +386,7 @@ export default function HRLeave() {
           )}
         </TabsContent>
 
-        {/* All requests */}
+        {/* ── All Requests ── */}
         <TabsContent value="all" className="space-y-2">
           {isLoading ? (
             <LoadingState />
@@ -425,7 +414,7 @@ export default function HRLeave() {
           )}
         </TabsContent>
 
-        {/* Team Calendar */}
+        {/* ── Team Calendar ── */}
         <TabsContent value="calendar">
           <Card>
             <CardHeader>
@@ -450,7 +439,7 @@ export default function HRLeave() {
                       <div className="flex items-center gap-3">
                         <Avatar className="h-8 w-8">
                           <AvatarFallback className="bg-gradient-to-br from-primary to-secondary text-white text-xs">
-                            {getInitials(name)}
+                            {getInit(name)}
                           </AvatarFallback>
                         </Avatar>
                         <div>
@@ -471,82 +460,148 @@ export default function HRLeave() {
           </Card>
         </TabsContent>
 
-        {/* Policies */}
+        {/* ── Policies ── */}
         <TabsContent value="policies" className="space-y-4">
-          {allPolicies.length === 0 ? (
-            <Card>
-              <CardContent className="p-8 text-center text-sm text-muted-foreground">
-                No leave policies set yet. Click{" "}
-                <button
-                  className="text-primary underline underline-offset-2"
-                  onClick={() => setPolicyOpen(true)}
-                >
-                  Leave Policy
-                </button>{" "}
-                to configure one for a client.
-              </CardContent>
-            </Card>
-          ) : (
-            allPolicies.map((policy) => {
-              const clientName =
-                clientNameMap[policy.clientId?.toString()] ?? "Unknown Client";
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <p className="text-sm text-muted-foreground">
+              Leave entitlements are set per location. Employees inherit their
+              location's policy.
+            </p>
+            {uncoveredLocations.length > 0 && (
+              <Select
+                value=""
+                onValueChange={(locId) => {
+                  const loc = uncoveredLocations.find((l) => l._id === locId);
+                  if (loc) openPolicyDialog(loc);
+                }}
+              >
+                <SelectTrigger className="w-auto gap-2 h-9 px-4 bg-gradient-to-r from-primary to-secondary text-white border-0">
+                  <Plus className="h-4 w-4" />
+                  <SelectValue placeholder="Set policy for…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {uncoveredLocations.map((l) => (
+                    <SelectItem key={l._id} value={l._id}>
+                      {l.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
 
-              return (
-                <Card key={policy._id}>
-                  <CardHeader className="pb-3">
-                    <div className="flex items-center justify-between flex-wrap gap-2">
-                      <CardTitle className="text-sm font-semibold">
-                        {clientName}
-                      </CardTitle>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] text-muted-foreground">
-                          Effective{" "}
-                          {new Date(policy.effectiveFrom).toLocaleDateString(
-                            "en-GB",
-                            { day: "numeric", month: "short", year: "numeric" },
-                          )}
-                        </span>
+          {/* Default policy card */}
+          {(() => {
+            const defaultPolicy = policies.find((p) => !p.locationId);
+            return (
+              <Card className="border-dashed">
+                <CardContent className="p-4 flex items-center justify-between flex-wrap gap-3">
+                  <div>
+                    <p className="text-sm font-semibold">Default Policy</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Applies to employees with no location assigned.
+                    </p>
+                    {defaultPolicy && (
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {defaultPolicy.policies.slice(0, 4).map((p) => (
+                          <span
+                            key={p.type}
+                            className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${typeColor(p.type)}`}
+                          >
+                            {typeLabel(p.type)}: {p.daysAllowed}d
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => openPolicyDialog(null, defaultPolicy)}
+                  >
+                    <Settings2 className="h-3.5 w-3.5 mr-1.5" />
+                    {defaultPolicy ? "Edit" : "Set default"}
+                  </Button>
+                </CardContent>
+              </Card>
+            );
+          })()}
+
+          {/* Location policy cards */}
+          {policiesLoading ? (
+            <LoadingState />
+          ) : (
+            policies
+              .filter((p) => !!p.locationId)
+              .map((policy) => {
+                const loc = policy.locationId as any;
+                return (
+                  <Card key={policy._id}>
+                    <CardContent className="p-4">
+                      <div className="flex items-start justify-between flex-wrap gap-3">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <MapPin className="h-4 w-4 text-primary" />
+                            <p className="text-sm font-semibold">
+                              {loc?.name ?? "Unknown"}
+                            </p>
+                            <Badge variant="secondary">
+                              {policy.memberCount} employee
+                              {policy.memberCount !== 1 ? "s" : ""}
+                            </Badge>
+                            <span className="text-xs text-muted-foreground">
+                              {[loc?.city, loc?.country]
+                                .filter(Boolean)
+                                .join(", ")}
+                            </span>
+                          </div>
+                          <div className="flex flex-wrap gap-2 mt-3">
+                            {policy.policies.map((p) => (
+                              <div
+                                key={p.type}
+                                className={`inline-flex items-center gap-1 text-[10px] px-2.5 py-1 rounded-full font-medium ${typeColor(p.type)}`}
+                              >
+                                {typeLabel(p.type)}
+                                <span className="font-bold ml-1">
+                                  {p.daysAllowed}d
+                                </span>
+                                {p.carryOver && (
+                                  <span className="opacity-70">↻</span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
                         <Button
-                          size="sm"
                           variant="outline"
-                          className="h-7 text-xs"
+                          size="sm"
                           onClick={() => {
-                            setPolicyClientId(policy.clientId?.toString());
-                            setPolicyOpen(true);
+                            const loc =
+                              allLocations.find(
+                                (l) =>
+                                  l._id === (policy.locationId as any)?._id,
+                              ) ?? null;
+                            openPolicyDialog(loc, policy);
                           }}
                         >
-                          Edit
+                          <Settings2 className="h-3.5 w-3.5 mr-1.5" /> Edit
                         </Button>
                       </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
-                      {policy.policies.map((p) => (
-                        <div
-                          key={p.type}
-                          className="flex items-center justify-between px-3 py-2 rounded-lg border bg-muted/20"
-                        >
-                          <span
-                            className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
-                              LEAVE_TYPES.find((t) => t.value === p.type)
-                                ?.color ?? "bg-muted text-muted-foreground"
-                            }`}
-                          >
-                            {LEAVE_TYPES.find((t) => t.value === p.type)
-                              ?.label ?? p.type}
-                          </span>
-                          <span className="text-sm font-bold ml-2">
-                            {p.daysAllowed}d
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })
+                    </CardContent>
+                  </Card>
+                );
+              })
           )}
+
+          {policies.filter((p) => !!p.locationId).length === 0 &&
+            !policiesLoading && (
+              <Card>
+                <CardContent className="p-8 text-center text-sm text-muted-foreground">
+                  No location policies yet. Use "Set policy for…" to configure
+                  entitlements per location.
+                </CardContent>
+              </Card>
+            )}
         </TabsContent>
       </Tabs>
 
@@ -578,10 +633,8 @@ export default function HRLeave() {
                 })()}
             </DialogDescription>
           </DialogHeader>
-
           {reviewTarget && (
             <div className="space-y-4 py-2">
-              {/* Request summary */}
               <div className="rounded-lg border bg-muted/30 p-3 space-y-1.5 text-sm">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Dates</span>
@@ -590,12 +643,17 @@ export default function HRLeave() {
                     {fmt(reviewTarget.request.endDate)}
                   </span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Reason</span>
-                  <span>{reviewTarget.request.reason}</span>
-                </div>
+                {reviewTarget.request.reason && (
+                  <div className="flex justify-between gap-4">
+                    <span className="text-muted-foreground shrink-0">
+                      Reason
+                    </span>
+                    <span className="text-right">
+                      {reviewTarget.request.reason}
+                    </span>
+                  </div>
+                )}
               </div>
-
               <div>
                 <Label>
                   Note{" "}
@@ -621,7 +679,6 @@ export default function HRLeave() {
               </div>
             </div>
           )}
-
           <DialogFooter className="gap-2">
             <Button
               variant="outline"
@@ -669,75 +726,65 @@ export default function HRLeave() {
         </DialogContent>
       </Dialog>
 
-      {/* ── Leave Policy Dialog ── */}
+      {/* ── Policy Dialog ── */}
       <Dialog open={policyOpen} onOpenChange={setPolicyOpen}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Leave Policy</DialogTitle>
+            <DialogTitle>
+              {policyLocId
+                ? `Leave Policy — ${allLocations.find((l) => l._id === policyLocId)?.name ?? "Location"}`
+                : "Default Leave Policy"}
+            </DialogTitle>
             <DialogDescription>
-              Set leave day allowances per type for a specific client. Changes
-              take effect immediately for new leave requests.
+              {policyLocId
+                ? "Set annual leave entitlements for employees at this location."
+                : "Default policy applied to employees with no location assigned."}
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-5 py-2">
-            {/* Client selector */}
-            <div>
-              <Label>
-                Client <span className="text-destructive">*</span>
-              </Label>
-              <Select value={policyClientId} onValueChange={setPolicyClientId}>
-                <SelectTrigger className="mt-1.5">
-                  <SelectValue placeholder="Select a corporate client…" />
-                </SelectTrigger>
-                <SelectContent>
-                  {corporateClients.map((c) => {
-                    const profileId = c.profile?._id ?? c._id;
-                    const name =
-                      c.profile?.businessName ?? c.fullName ?? c.email;
-                    return (
-                      <SelectItem key={profileId} value={profileId}>
-                        {name}
-                      </SelectItem>
-                    );
-                  })}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Leave type entries */}
-            <div>
-              <Label className="mb-3 block">Days per leave type</Label>
-              <div className="space-y-2">
-                {LEAVE_TYPES.map((t, i) => (
-                  <div key={t.value} className="flex items-center gap-3">
-                    <span
-                      className={`text-[11px] px-2.5 py-1 rounded-full font-medium w-32 text-center shrink-0 ${t.color}`}
-                    >
-                      {t.label}
-                    </span>
-                    <Input
-                      type="number"
-                      min={0}
-                      className="h-8 w-20"
-                      value={policyEntries[i]?.daysAllowed || ""}
-                      placeholder="0"
-                      onChange={(e) => {
-                        const next = [...policyEntries];
-                        next[i] = {
-                          ...next[i],
-                          daysAllowed: Number(e.target.value),
-                        };
-                        setPolicyEntries(next);
-                      }}
-                    />
-                    <span className="text-xs text-muted-foreground whitespace-nowrap">
-                      days / year
-                    </span>
-                  </div>
-                ))}
+          <div className="space-y-2 py-2">
+            {policyEntries.map((entry, i) => (
+              <div
+                key={entry.type}
+                className="flex items-center gap-3 py-1.5 border-b last:border-b-0"
+              >
+                <span
+                  className={`text-[11px] px-2.5 py-1 rounded-full font-medium w-28 text-center shrink-0 ${typeColor(entry.type)}`}
+                >
+                  {typeLabel(entry.type)}
+                </span>
+                <Input
+                  type="number"
+                  min={0}
+                  className="h-8 w-20"
+                  value={entry.daysAllowed}
+                  onChange={(e) => {
+                    const next = [...policyEntries];
+                    next[i] = {
+                      ...next[i],
+                      daysAllowed: Number(e.target.value),
+                    };
+                    setPolicyEntries(next);
+                  }}
+                />
+                <span className="text-xs text-muted-foreground whitespace-nowrap">
+                  days / year
+                </span>
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground ml-auto cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={entry.carryOver}
+                    onChange={(e) => {
+                      const next = [...policyEntries];
+                      next[i] = { ...next[i], carryOver: e.target.checked };
+                      setPolicyEntries(next);
+                    }}
+                    className="rounded"
+                  />
+                  Carry over
+                </label>
               </div>
-            </div>
+            ))}
           </div>
 
           <DialogFooter>
@@ -745,8 +792,8 @@ export default function HRLeave() {
               Cancel
             </Button>
             <Button
-              className="gradient-primary"
-              disabled={!policyClientId || policyMutation.isPending}
+              className="bg-gradient-to-r from-primary to-secondary"
+              disabled={policyMutation.isPending}
               onClick={() => policyMutation.mutate()}
             >
               {policyMutation.isPending ? (
@@ -786,14 +833,13 @@ function RequestRow({
 }) {
   const emp = r.employeeId;
   const name = emp ? `${emp.firstName} ${emp.lastName}` : "—";
-
   return (
     <Card>
       <CardContent className="p-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
           <Avatar className="h-9 w-9 shrink-0">
             <AvatarFallback className="bg-gradient-to-br from-primary to-secondary text-white text-xs font-semibold">
-              {getInitials(name)}
+              {getInit(name)}
             </AvatarFallback>
           </Avatar>
           <div className="min-w-0">
@@ -807,12 +853,11 @@ function RequestRow({
               </Badge>
             </p>
             <p className="text-xs text-muted-foreground mt-0.5">
-              {fmt(r.startDate)} → {fmt(r.endDate)} · {r.days}d ·{" "}
-              {r.reason || "No reason given"}
+              {fmt(r.startDate)} → {fmt(r.endDate)} · {r.days}d
+              {r.reason ? ` · ${r.reason}` : ""}
             </p>
           </div>
         </div>
-
         <div className="flex items-center gap-2 shrink-0">
           <Badge
             variant="outline"
@@ -829,7 +874,6 @@ function RequestRow({
             <Clock className="h-3 w-3 mr-1 inline" />
             <span className="capitalize">{r.status}</span>
           </Badge>
-
           {r.status === "pending" && (
             <>
               <Button

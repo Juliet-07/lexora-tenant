@@ -29,7 +29,7 @@ import {
   Sun,
   Heart,
   Baby,
-  Plane,
+  GraduationCap,
   Clock,
   CheckCircle2,
   XCircle,
@@ -38,20 +38,21 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import {
-  fetchMyTeamLeaveBalance,
-  fetchMyTeamLeaveHistory,
-  submitTeamLeaveRequest,
-  cancelTeamLeaveRequest,
-  type TeamLeaveBalance,
-  type TeamLeaveRequest,
-} from "@/lib/team-api";
+  fetchMyLeaveBalance,
+  fetchMyLeaveRequests,
+  submitLeaveRequest,
+  cancelLeaveRequest,
+  type LeaveBalance,
+  type LeaveRequest,
+} from "@/lib/hr-api";
 
 // ─── Constants ────────────────────────────────────────────────
 
 const LEAVE_TYPES = [
   { value: "annual", label: "Annual" },
   { value: "sick", label: "Sick" },
-  { value: "parental", label: "Parental" },
+  { value: "maternity", label: "Maternity" },
+  { value: "paternity", label: "Paternity" },
   { value: "compassionate", label: "Compassionate" },
   { value: "study", label: "Study" },
   { value: "unpaid", label: "Unpaid" },
@@ -60,9 +61,10 @@ const LEAVE_TYPES = [
 const BALANCE_CONFIG: Record<string, { tone: string; icon: any }> = {
   annual: { tone: "from-blue-500 to-cyan-500", icon: Sun },
   sick: { tone: "from-rose-500 to-red-500", icon: Heart },
-  parental: { tone: "from-pink-500 to-fuchsia-500", icon: Baby },
-  compassionate: { tone: "from-violet-500 to-purple-600", icon: Plane },
-  study: { tone: "from-emerald-500 to-teal-500", icon: CalendarDays },
+  maternity: { tone: "from-pink-500 to-fuchsia-500", icon: Baby },
+  paternity: { tone: "from-indigo-500 to-violet-500", icon: Baby },
+  compassionate: { tone: "from-violet-500 to-purple-600", icon: Heart },
+  study: { tone: "from-emerald-500 to-teal-500", icon: GraduationCap },
   unpaid: { tone: "from-slate-400 to-slate-600", icon: Clock },
 };
 
@@ -119,34 +121,34 @@ export default function MyLeave() {
   });
 
   // ── Queries ───────────────────────────────────────────────
-  const { data: balances = [], isLoading: balLoading } = useQuery<
-    TeamLeaveBalance[]
-  >({
-    queryKey: ["team-leave-balance"],
-    queryFn: fetchMyTeamLeaveBalance,
+  const { data: balanceData, isLoading: balLoading } = useQuery({
+    queryKey: ["employee-leave-balance"],
+    queryFn: fetchMyLeaveBalance,
     staleTime: 60_000,
   });
 
+  const balances: LeaveBalance[] = balanceData?.balances ?? [];
+
   const { data: requests = [], isLoading: reqLoading } = useQuery<
-    TeamLeaveRequest[]
+    LeaveRequest[]
   >({
-    queryKey: ["team-leave-history"],
-    queryFn: fetchMyTeamLeaveHistory,
+    queryKey: ["employee-leave-requests"],
+    queryFn: fetchMyLeaveRequests,
     staleTime: 30_000,
   });
 
   // ── Submit mutation ───────────────────────────────────────
   const submitMutation = useMutation({
     mutationFn: () =>
-      submitTeamLeaveRequest({
+      submitLeaveRequest({
         type: draft.type,
         startDate: draft.from,
         endDate: draft.to,
         reason: draft.reason,
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["team-leave-history"] });
-      queryClient.invalidateQueries({ queryKey: ["team-leave-balance"] });
+      queryClient.invalidateQueries({ queryKey: ["employee-leave-requests"] });
+      queryClient.invalidateQueries({ queryKey: ["employee-leave-balance"] });
       setOpen(false);
       setDraft({ type: "annual", from: "", to: "", reason: "" });
       toast.success("Leave request submitted. Your manager will be notified.");
@@ -157,9 +159,9 @@ export default function MyLeave() {
 
   // ── Cancel mutation ───────────────────────────────────────
   const cancelMutation = useMutation({
-    mutationFn: (id: string) => cancelTeamLeaveRequest(id),
+    mutationFn: (id: string) => cancelLeaveRequest(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["team-leave-history"] });
+      queryClient.invalidateQueries({ queryKey: ["employee-leave-requests"] });
       toast.success("Request cancelled.");
     },
     onError: (err: any) =>
@@ -174,6 +176,15 @@ export default function MyLeave() {
   const estimatedDays = workingDays(draft.from, draft.to);
   const canSubmit =
     draft.from && draft.to && draft.reason.trim() && !submitMutation.isPending;
+
+  // Primary 4 balances shown on top cards — annual, sick, then whichever
+  // else has a non-zero entitlement.
+  const primaryBalances = [
+    ...balances.filter((b) => ["annual", "sick"].includes(b.type)),
+    ...balances.filter(
+      (b) => !["annual", "sick"].includes(b.type) && b.daysAllowed > 0,
+    ),
+  ].slice(0, 4);
 
   // ─────────────────────────────────────────────────────────
   return (
@@ -199,12 +210,20 @@ export default function MyLeave() {
         <div className="flex items-center gap-2 text-muted-foreground text-sm">
           <Loader2 className="h-4 w-4 animate-spin" /> Loading balances…
         </div>
+      ) : primaryBalances.length === 0 ? (
+        <Card>
+          <CardContent className="p-6 text-center text-sm text-muted-foreground">
+            No leave policy has been set for your location yet. Contact your
+            administrator.
+          </CardContent>
+        </Card>
       ) : (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {balances.slice(0, 4).map((b) => {
+          {primaryBalances.map((b) => {
             const cfg = BALANCE_CONFIG[b.type] ?? BALANCE_CONFIG.unpaid;
             const Icon = cfg.icon;
-            const pct = b.entitled > 0 ? (b.used / b.entitled) * 100 : 0;
+            const pct =
+              b.daysAllowed > 0 ? (b.daysUsed / b.daysAllowed) * 100 : 0;
             return (
               <Card key={b.type}>
                 <CardContent className="p-5">
@@ -214,10 +233,10 @@ export default function MyLeave() {
                         {b.label}
                       </p>
                       <p className="text-2xl font-bold mt-1">
-                        {b.remaining}
+                        {b.daysLeft}
                         <span className="text-sm font-normal text-muted-foreground">
                           {" "}
-                          / {b.entitled} days
+                          / {b.daysAllowed} days
                         </span>
                       </p>
                     </div>
@@ -229,7 +248,7 @@ export default function MyLeave() {
                   </div>
                   <Progress value={pct} className="h-1.5" />
                   <p className="text-xs text-muted-foreground mt-2">
-                    {b.used} taken this year
+                    {b.daysUsed} taken this year
                   </p>
                 </CardContent>
               </Card>
@@ -304,9 +323,11 @@ export default function MyLeave() {
                               <p className="text-xs text-muted-foreground">
                                 {fmtShort(r.startDate)} – {fmt(r.endDate)}
                               </p>
-                              <p className="text-xs text-foreground/80 italic mt-1 truncate">
-                                "{r.reason}"
-                              </p>
+                              {r.reason && (
+                                <p className="text-xs text-foreground/80 italic mt-1 truncate">
+                                  "{r.reason}"
+                                </p>
+                              )}
                               {r.reviewNote && (
                                 <p className="text-xs text-muted-foreground mt-1">
                                   Note: {r.reviewNote}
@@ -385,26 +406,46 @@ export default function MyLeave() {
         <TabsContent value="policy">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Leave Policy Summary</CardTitle>
+              <CardTitle className="text-base">
+                Your Leave Entitlements
+              </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-2 text-sm text-muted-foreground">
-              <p>
-                • Annual leave accrues at 1.75 days per month (21 days/year).
-              </p>
-              <p>
-                • Sick leave: up to 10 paid days/year. Medical certificate
-                required after 2 consecutive days.
-              </p>
-              <p>• Parental leave: 90 days for primary caregivers.</p>
-              <p>• Compassionate leave: up to 5 days per year.</p>
-              <p>
-                • Requests should be submitted at least 7 days in advance where
-                possible.
-              </p>
-              <p>• Carry-over: up to 5 unused annual days into next year.</p>
-              <p className="text-xs italic mt-2">
-                Contact your administrator for specific policy details
-                applicable to your role.
+            <CardContent className="space-y-2">
+              {balLoading ? (
+                <div className="flex items-center gap-2 text-muted-foreground text-sm py-4">
+                  <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+                </div>
+              ) : balances.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No policy configured for your location yet. Contact your
+                  administrator.
+                </p>
+              ) : (
+                balances.map((b) => (
+                  <div
+                    key={b.type}
+                    className="flex items-center justify-between py-2 border-b last:border-b-0"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium">{b.label}</span>
+                      {b.carryOver && (
+                        <span className="text-[10px] text-muted-foreground">
+                          ↻ carry over
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-right">
+                      <span className="text-sm font-bold">{b.daysLeft}d</span>
+                      <span className="text-xs text-muted-foreground ml-1">
+                        of {b.daysAllowed}d
+                      </span>
+                    </div>
+                  </div>
+                ))
+              )}
+              <p className="text-xs italic mt-2 text-muted-foreground">
+                Contact your administrator if you believe your entitlements are
+                incorrect.
               </p>
             </CardContent>
           </Card>
@@ -458,6 +499,7 @@ export default function MyLeave() {
                   type="date"
                   className="mt-1.5"
                   value={draft.from}
+                  min={new Date().toISOString().slice(0, 10)}
                   onChange={(e) =>
                     setDraft((d) => ({ ...d, from: e.target.value }))
                   }
@@ -471,7 +513,7 @@ export default function MyLeave() {
                   type="date"
                   className="mt-1.5"
                   value={draft.to}
-                  min={draft.from}
+                  min={draft.from || new Date().toISOString().slice(0, 10)}
                   onChange={(e) =>
                     setDraft((d) => ({ ...d, to: e.target.value }))
                   }
@@ -492,11 +534,11 @@ export default function MyLeave() {
             {draft.type &&
               (() => {
                 const b = balances.find((x) => x.type === draft.type);
-                if (!b || b.remaining >= 999) return null;
+                if (!b) return null;
                 return (
                   <p className="text-xs text-muted-foreground bg-muted/30 rounded px-3 py-2">
-                    {b.label} balance: <strong>{b.remaining}</strong> of{" "}
-                    {b.entitled} days remaining
+                    {b.label} balance: <strong>{b.daysLeft}</strong> of{" "}
+                    {b.daysAllowed} days remaining
                   </p>
                 );
               })()}

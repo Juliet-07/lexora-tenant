@@ -6,7 +6,7 @@ import { coreRoutes } from "./core.routes";
 import { amlRoutes } from "./aml.routes";
 import { hrRoutes } from "./hr.routes";
 import { crmRoutes } from "./crm.routes";
-import { teamMemberRoutes } from "./team-member.routes";
+import { employeeRoutes } from "./employee.routes";
 
 /**
  * Top-level router. Module-specific routes live in their own files so
@@ -24,7 +24,7 @@ export function AppRoutes() {
       {amlRoutes(ctx)}
       {hrRoutes(ctx)}
       {crmRoutes(ctx)}
-      {teamMemberRoutes(ctx)}
+      {employeeRoutes(ctx)}
       <Route path="*" element={<NotFound />} />
     </Routes>
   );

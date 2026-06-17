@@ -8,7 +8,7 @@ import {
 import { api } from "@/lib/api";
 
 // ─── Role mapping ─────────────────────────────────────────────
-export type UserRole = "admin" | "team_member";
+export type UserRole = "admin" | "employee";
 
 export interface AuthUser {
   id: string;
@@ -34,9 +34,12 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-function deriveRole(roles: string[]): UserRole {
+function deriveRole(userType: string, roles: string[]): UserRole {
+  if (userType === "employee") return "employee";
+
   const adminRoles = ["tenant_owner", "tenant_admin"];
-  return roles.some((r) => adminRoles.includes(r)) ? "admin" : "team_member";
+
+  return roles.some((r) => adminRoles.includes(r)) ? "admin" : "employee";
 }
 
 function mapUser(raw: any): AuthUser {
@@ -47,7 +50,7 @@ function mapUser(raw: any): AuthUser {
     email: raw.email,
     userType: raw.userType,
     roles: raw.roles ?? [],
-    role: deriveRole(raw.roles ?? []),
+    role: deriveRole(raw.userType, raw.roles ?? []),
     tenantId: raw.tenantId ?? null,
     businessName: raw.tenantProfile?.businessName ?? "",
     mustChangePassword: raw.mustChangePassword ?? false,
@@ -56,7 +59,7 @@ function mapUser(raw: any): AuthUser {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
-  const [isLoading, setIsLoading] = useState(true); // start true — hydrate from storage
+  const [isLoading, setIsLoading] = useState(true); 
   const [error, setError] = useState<string | null>(null);
 
   // ── Hydrate from localStorage on mount ───────────────────
