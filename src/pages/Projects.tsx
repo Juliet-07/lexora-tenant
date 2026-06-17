@@ -203,7 +203,7 @@ export function ProjectDetail() {
   ];
 
   const userFullName = user ? `${user.firstName} ${user.lastName}` : "";
-  const myTasks = user?.role === "team_member" ? tasks.filter(t => t.assignee === userFullName) : tasks;
+  const myTasks = user?.role === "employee" ? tasks.filter(t => t.assignee === userFullName) : tasks;
 
   return (
     <div className="space-y-6">
@@ -231,7 +231,7 @@ export function ProjectDetail() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
-          <CardHeader><CardTitle className="text-base">{user?.role === "team_member" ? "My Tasks" : "Tasks"}</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-base">{user?.role === "employee" ? "My Tasks" : "Tasks"}</CardTitle></CardHeader>
           <CardContent className="space-y-2">
             {myTasks.map(t => (
               <div key={t.id} className="flex items-center gap-3 p-2 rounded hover:bg-muted/50 cursor-pointer" onClick={() => toggleTask(t.id)}>
