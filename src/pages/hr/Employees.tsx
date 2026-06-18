@@ -123,7 +123,9 @@ export default function HREmployees() {
   const [deleteLocTarget, setDeleteLocTarget] = useState<HrLocation | null>(
     null,
   );
-  const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
+  const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(
+    null,
+  );
 
   // Forms
   const EMPTY_EMP: CreateEmployeeDto = {
@@ -138,6 +140,7 @@ export default function HREmployees() {
     startDate: new Date().toISOString().slice(0, 10),
     salary: undefined,
     salaryCurrency: "USD",
+    taxId: undefined,
   };
   const [empForm, setEmpForm] = useState<CreateEmployeeDto>(EMPTY_EMP);
   const [teamForm, setTeamForm] = useState({
@@ -745,7 +748,10 @@ export default function HREmployees() {
                 onChange={(e) =>
                   setEmpForm((f) => ({
                     ...f,
-                    salary: e.target.value === "" ? undefined : Number(e.target.value),
+                    salary:
+                      e.target.value === ""
+                        ? undefined
+                        : Number(e.target.value),
                   }))
                 }
               />
@@ -762,15 +768,33 @@ export default function HREmployees() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {["USD", "EUR", "GBP", "NGN", "RWF", "KES", "ZAR", "GHS", "INR", "JPY"].map(
-                    (c) => (
-                      <SelectItem key={c} value={c}>
-                        {c}
-                      </SelectItem>
-                    ),
-                  )}
+                  {[
+                    "USD",
+                    "EUR",
+                    "GBP",
+                    "NGN",
+                    "RWF",
+                    "KES",
+                    "ZAR",
+                    "GHS",
+                    "INR",
+                    "JPY",
+                  ].map((c) => (
+                    <SelectItem key={c} value={c}>
+                      {c}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
+            </div>
+            <div className="space-y-1">
+              <Label>Tax ID</Label>
+              <Input
+                value={empForm.taxId ?? ""}
+                onChange={(e) =>
+                  setEmpForm((f) => ({ ...f, taxId: e.target.value }))
+                }
+              />
             </div>
           </div>
           <DialogFooter>
@@ -1005,7 +1029,10 @@ export default function HREmployees() {
         </AlertDialogContent>
       </AlertDialog>
 
-      <EmployeeDetailSheet employee={selectedEmployee} onClose={() => setSelectedEmployee(null)} />
+      <EmployeeDetailSheet
+        employee={selectedEmployee}
+        onClose={() => setSelectedEmployee(null)}
+      />
     </div>
   );
 }

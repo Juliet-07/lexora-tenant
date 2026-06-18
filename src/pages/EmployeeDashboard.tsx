@@ -15,13 +15,13 @@ import {
   BarChart3,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { QuickClockCard } from "@/components/hr/QuickClockCard";
 
 // ─────────────────────────────────────────────────────────────
 // Team Member dashboard — scoped strictly to their workspace:
 // assigned clients, assigned tasks/projects, announcements.
 // No HR / admin actions here.
 // ─────────────────────────────────────────────────────────────
-
 
 // ─────────────────────────────────────────────────────────────
 // Team Member ("employee of the tenant") dashboard.
@@ -162,7 +162,6 @@ export default function TeamMemberDashboard() {
       change: "This week",
       color: "text-success",
     },
-
   ];
 
   return (
@@ -269,37 +268,52 @@ export default function TeamMemberDashboard() {
               <CardTitle className="text-base">Quick Actions</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
-              <Button asChild variant="outline" className="w-full justify-start">
-                <Link to="/my/time">
-                  <Clock className="h-4 w-4 mr-2" />
-                  Clock In / Time
-                </Link>
-              </Button>
-              <Button asChild variant="outline" className="w-full justify-start">
+              <QuickClockCard />
+              <Button
+                asChild
+                variant="outline"
+                className="w-full justify-start"
+              >
                 <Link to="/my/leave">
                   <CalendarDays className="h-4 w-4 mr-2" />
                   Request Leave
                 </Link>
               </Button>
-              <Button asChild variant="outline" className="w-full justify-start">
+              <Button
+                asChild
+                variant="outline"
+                className="w-full justify-start"
+              >
                 <Link to="/my/performance">
                   <BarChart3 className="h-4 w-4 mr-2" />
                   My Performance
                 </Link>
               </Button>
-              <Button asChild variant="outline" className="w-full justify-start">
+              <Button
+                asChild
+                variant="outline"
+                className="w-full justify-start"
+              >
                 <Link to="/my/payslips">
                   <Wallet className="h-4 w-4 mr-2" />
                   Payslips
                 </Link>
               </Button>
-              <Button asChild variant="outline" className="w-full justify-start">
+              <Button
+                asChild
+                variant="outline"
+                className="w-full justify-start"
+              >
                 <Link to="/clients">
                   <Users className="h-4 w-4 mr-2" />
                   My Clients
                 </Link>
               </Button>
-              <Button asChild variant="outline" className="w-full justify-start">
+              <Button
+                asChild
+                variant="outline"
+                className="w-full justify-start"
+              >
                 <Link to="/projects">
                   <FolderKanban className="h-4 w-4 mr-2" />
                   My Projects
@@ -307,7 +321,6 @@ export default function TeamMemberDashboard() {
               </Button>
             </CardContent>
           </Card>
-
 
           {/* Announcements */}
           <Card>

@@ -549,3 +549,129 @@ export const clockOut = async (): Promise<AttendanceRecord> => {
   const res = await api.post("/employee/attendance/clock-out", {});
   return res.data?.data ?? res.data;
 };
+
+// ── Onboarding — Types ────────────────────────────────────────
+
+export type OnboardingDocType = "text" | "pdf";
+
+export interface OnboardingDocument {
+  _id: string;
+  tenantId: string;
+  title: string;
+  type: OnboardingDocType;
+  content: string | null; // populated when type === "text"
+  fileUrl: string | null; // populated when type === "pdf"
+  originalFileName: string | null;
+  order: number;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface OnboardingAcknowledgement {
+  documentId: string;
+  documentTitle: string;
+  acknowledged: boolean;
+}
+
+export interface EmployeeOnboardingRecord {
+  _id: string;
+  employeeId: string;
+  tenantId: string;
+  signatureName: string;
+  signedAt: string;
+  ipAddress: string | null;
+  acknowledgements: OnboardingAcknowledgement[];
+  completedAt: string;
+}
+
+export interface OnboardingStatusResponse {
+  completed: boolean;
+  documents: OnboardingDocument[]; // empty when completed === true
+}
+
+export interface EmployeeOnboardingTabResponse {
+  completed: boolean;
+  record: EmployeeOnboardingRecord | null;
+}
+
+// ── Onboarding — Tenant admin API ───────────────────────────────
+
+export const fetchOnboardingDocuments = async (
+  includeInactive = false,
+): Promise<OnboardingDocument[]> => {
+  const res = await api.get("/hr/onboarding-documents", {
+    params: includeInactive ? { includeInactive: "true" } : undefined,
+  });
+  const d = res.data?.data ?? res.data;
+  return Array.isArray(d) ? d : [];
+};
+
+export const createOnboardingDocument = async (dto: {
+  title: string;
+  type: OnboardingDocType;
+  content?: string;
+  order?: number;
+  file?: File;
+}): Promise<OnboardingDocument> => {
+  const form = new FormData();
+  form.append("title", dto.title);
+  form.append("type", dto.type);
+  if (dto.content) form.append("content", dto.content);
+  if (dto.order !== undefined) form.append("order", String(dto.order));
+  if (dto.file) form.append("file", dto.file);
+
+  const res = await api.post("/hr/onboarding-documents", form, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return res.data?.data ?? res.data;
+};
+
+export const updateOnboardingDocument = async (
+  id: string,
+  dto: {
+    title?: string;
+    content?: string;
+    order?: number;
+    isActive?: boolean;
+    file?: File;
+  },
+): Promise<OnboardingDocument> => {
+  const form = new FormData();
+  if (dto.title !== undefined) form.append("title", dto.title);
+  if (dto.content !== undefined) form.append("content", dto.content);
+  if (dto.order !== undefined) form.append("order", String(dto.order));
+  if (dto.isActive !== undefined) form.append("isActive", String(dto.isActive));
+  if (dto.file) form.append("file", dto.file);
+
+  const res = await api.patch(`/hr/onboarding-documents/${id}`, form, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return res.data?.data ?? res.data;
+};
+
+export const deleteOnboardingDocument = async (id: string): Promise<void> => {
+  await api.delete(`/hr/onboarding-documents/${id}`);
+};
+
+export const fetchEmployeeOnboardingRecord = async (
+  employeeId: string,
+): Promise<EmployeeOnboardingTabResponse> => {
+  const res = await api.get(`/hr/onboarding-documents/employee/${employeeId}`);
+  return res.data?.data ?? res.data;
+};
+
+// ── Onboarding — Employee self-service API ──────────────────────
+
+export const fetchMyOnboardingStatus =
+  async (): Promise<OnboardingStatusResponse> => {
+    const res = await api.get("/employee/onboarding/status");
+    return res.data?.data ?? res.data;
+  };
+
+export const completeMyOnboarding = async (dto: {
+  signatureName: string;
+  acknowledgedDocumentIds: string[];
+}): Promise<EmployeeOnboardingRecord> => {
+  const res = await api.post("/employee/onboarding/complete", dto);
+  return res.data?.data ?? res.data;
+};

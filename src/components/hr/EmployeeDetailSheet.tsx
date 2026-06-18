@@ -184,6 +184,23 @@ const fmtTime = (d: string) =>
   });
 const currency = (n: number) => `£${n.toLocaleString("en-GB")}`;
 
+const fmtSalary = (
+  amount: number | null | undefined,
+  currencyCode?: string | null,
+) => {
+  if (amount == null) return "—";
+  try {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: currencyCode || "USD",
+      maximumFractionDigits: 0,
+    }).format(amount);
+  } catch {
+    // Fallback if currencyCode isn't a valid ISO code Intl recognizes
+    return `${currencyCode ?? ""} ${amount.toLocaleString()}`.trim();
+  }
+};
+
 const teamName = (e: Employee) =>
   typeof e.teamId === "object" && e.teamId !== null
     ? (e.teamId as HrTeam).name
@@ -219,8 +236,14 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
 
   if (!employee) return null;
 
+  // Prefer the freshly-fetched detail.employee (fully populated, incl.
+  // team lead, salary, taxId) over the prop, which may come from a list
+  // endpoint with a thinner populate/select. Falls back to the prop
+  // while detail is loading.
+  const emp = detail?.employee ?? employee;
+
   const initials =
-    `${employee.firstName[0] ?? ""}${employee.lastName[0] ?? ""}`.toUpperCase();
+    `${emp.firstName[0] ?? ""}${emp.lastName[0] ?? ""}`.toUpperCase();
   const d = DUMMY;
   const openCount = disputes.filter((x) => x.status !== "Resolved").length;
 
@@ -279,29 +302,29 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
               </Avatar>
               <div className="flex-1 min-w-0 text-left">
                 <SheetTitle className="text-white text-xl">
-                  {employee.firstName} {employee.lastName}
+                  {emp.firstName} {emp.lastName}
                 </SheetTitle>
                 <SheetDescription className="text-white/80">
-                  {employee.jobTitle} · {teamName(employee)}
+                  {emp.jobTitle} · {teamName(emp)}
                 </SheetDescription>
                 <div className="flex flex-wrap gap-2 mt-2">
                   <Badge
                     variant="outline"
                     className="bg-white/10 text-white border-white/30 capitalize"
                   >
-                    {employee.employmentStatus?.replace("_", " ")}
+                    {emp.employmentStatus?.replace("_", " ")}
                   </Badge>
                   <Badge
                     variant="outline"
                     className="bg-white/10 text-white border-white/30"
                   >
-                    {employee.employeeNumber}
+                    {emp.employeeNumber}
                   </Badge>
                   <Badge
                     variant="outline"
                     className="bg-white/10 text-white border-white/30"
                   >
-                    Reports to {teamLead(employee)}
+                    Reports to {teamLead(emp)}
                   </Badge>
                 </div>
               </div>
@@ -331,7 +354,7 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
               variant="secondary"
               className="bg-white/15 hover:bg-white/25 text-white border-white/20"
               onClick={() => {
-                downloadEmployeeReport(employee, detail);
+                downloadEmployeeReport(emp, detail);
                 toast.success("Employee report downloaded.");
               }}
             >
@@ -383,25 +406,21 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
             <TabsContent value="overview" className="space-y-3">
               <Card>
                 <CardContent className="p-4 space-y-2 text-sm">
-                  <Row icon={Mail} label="Email" value={employee.email} />
-                  {employee.phone && (
-                    <Row icon={Phone} label="Phone" value={employee.phone} />
+                  <Row icon={Mail} label="Email" value={emp.email} />
+                  {emp.phone && (
+                    <Row icon={Phone} label="Phone" value={emp.phone} />
                   )}
-                  <Row
-                    icon={MapPin}
-                    label="Location"
-                    value={locName(employee)}
-                  />
+                  <Row icon={MapPin} label="Location" value={locName(emp)} />
                   <Row
                     icon={Briefcase}
                     label="Reports to"
-                    value={teamLead(employee)}
+                    value={teamLead(emp)}
                   />
                   <Row
                     icon={CalendarDays}
                     label="Joined"
                     value={new Date(
-                      employee.startDate ?? employee.createdAt ?? Date.now(),
+                      emp.startDate ?? emp.createdAt ?? Date.now(),
                     ).toLocaleDateString("en-GB", {
                       day: "numeric",
                       month: "long",
@@ -411,7 +430,17 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
                   <Row
                     icon={Shield}
                     label="Type"
-                    value={(employee.employmentType ?? "").replace("_", " ")}
+                    value={(emp.employmentType ?? "").replace("_", " ")}
+                  />
+                  <Row
+                    icon={Wallet}
+                    label="Salary"
+                    value={fmtSalary(emp.salary, emp.salaryCurrency)}
+                  />
+                  <Row
+                    icon={FileText}
+                    label="Tax ID"
+                    value={emp.taxId ?? "—"}
                   />
                 </CardContent>
               </Card>
@@ -828,7 +857,7 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
             {/* ── Onboarding ── */}
             <TabsContent value="onboarding" className="space-y-2">
               {(() => {
-                const sub = getSubmission(employee.email);
+                const sub = getSubmission(emp.email);
                 if (!sub) {
                   return (
                     <Card>
@@ -895,7 +924,6 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
                 );
               })()}
             </TabsContent>
-
 
             {/* ── Activity (dummy) ── */}
             <TabsContent value="activity" className="space-y-2">

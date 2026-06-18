@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -21,92 +22,106 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { FileText, Link2, FileUp, Plus, Trash2, Eye } from "lucide-react";
+import { FileText, FileUp, Plus, Trash2, Eye, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import {
-  getOnboardingDocs,
-  upsertOnboardingDoc,
-  removeOnboardingDoc,
-  saveOnboardingDocs,
-  type OnboardingDoc,
-  type OnboardingDocKind,
-} from "@/lib/onboardingStore";
+  fetchOnboardingDocuments,
+  createOnboardingDocument,
+  updateOnboardingDocument,
+  deleteOnboardingDocument,
+  type OnboardingDocument,
+  type OnboardingDocType,
+} from "@/lib/hr-api";
 
-const KIND_ICON: Record<OnboardingDocKind, any> = {
+const KIND_ICON: Record<OnboardingDocType, any> = {
   text: FileText,
-  link: Link2,
   pdf: FileUp,
 };
 
-const fileToDataUrl = (f: File) =>
-  new Promise<string>((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => resolve(String(r.result));
-    r.onerror = reject;
-    r.readAsDataURL(f);
-  });
-
 export default function OnboardingDocumentsTab() {
-  const [docs, setDocs] = useState<OnboardingDoc[]>([]);
+  const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
-  const [preview, setPreview] = useState<OnboardingDoc | null>(null);
+  const [preview, setPreview] = useState<OnboardingDocument | null>(null);
 
   const [form, setForm] = useState<{
     title: string;
-    kind: OnboardingDocKind;
+    type: OnboardingDocType;
     content: string;
-    fileName?: string;
-  }>({ title: "", kind: "text", content: "" });
+    file?: File;
+  }>({ title: "", type: "text", content: "" });
 
-  useEffect(() => {
-    setDocs(getOnboardingDocs());
-  }, []);
+  // ── Queries ───────────────────────────────────────────────
 
-  const refresh = () => setDocs(getOnboardingDocs());
+  const { data: docs = [], isLoading } = useQuery({
+    queryKey: ["onboarding-documents"],
+    queryFn: () => fetchOnboardingDocuments(true), // include inactive for admin view
+    staleTime: 30_000,
+  });
 
-  const handleFile = async (file: File) => {
+  // ── Mutations ─────────────────────────────────────────────
+
+  const createMutation = useMutation({
+    mutationFn: createOnboardingDocument,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["onboarding-documents"] });
+      setForm({ title: "", type: "text", content: "" });
+      setOpen(false);
+      toast.success("Document added.");
+    },
+    onError: (err: any) =>
+      toast.error(err?.response?.data?.message ?? "Failed to add document"),
+  });
+
+  const toggleActiveMutation = useMutation({
+    mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
+      updateOnboardingDocument(id, { isActive }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["onboarding-documents"] });
+    },
+    onError: (err: any) =>
+      toast.error(err?.response?.data?.message ?? "Failed to update document"),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteOnboardingDocument,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["onboarding-documents"] });
+      toast.success("Document removed.");
+    },
+    onError: (err: any) =>
+      toast.error(err?.response?.data?.message ?? "Failed to remove document"),
+  });
+
+  // ── Handlers ──────────────────────────────────────────────
+
+  const handleFile = (file: File) => {
     if (file.type !== "application/pdf") {
       toast.error("PDF files only.");
       return;
     }
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error("PDF must be under 5MB.");
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error("PDF must be under 10MB.");
       return;
     }
-    const dataUrl = await fileToDataUrl(file);
-    setForm((f) => ({ ...f, content: dataUrl, fileName: file.name }));
+    setForm((f) => ({ ...f, file }));
   };
 
   const submit = () => {
     if (!form.title.trim()) return toast.error("Add a title.");
-    if (!form.content) return toast.error("Add content, link or upload PDF.");
-    upsertOnboardingDoc({
-      id: `OD-${Date.now()}`,
+    if (form.type === "text" && !form.content.trim())
+      return toast.error("Add the policy text.");
+    if (form.type === "pdf" && !form.file)
+      return toast.error("Select a PDF file to upload.");
+
+    createMutation.mutate({
       title: form.title.trim(),
-      kind: form.kind,
-      content: form.content,
-      fileName: form.fileName,
-      active: true,
-      createdAt: new Date().toISOString(),
+      type: form.type,
+      content: form.type === "text" ? form.content : undefined,
+      file: form.type === "pdf" ? form.file : undefined,
     });
-    setForm({ title: "", kind: "text", content: "" });
-    setOpen(false);
-    refresh();
-    toast.success("Document added.");
   };
 
-  const toggleActive = (id: string, active: boolean) => {
-    const next = docs.map((d) => (d.id === id ? { ...d, active } : d));
-    setDocs(next);
-    saveOnboardingDocs(next);
-  };
-
-  const remove = (id: string) => {
-    removeOnboardingDoc(id);
-    refresh();
-    toast.success("Document removed.");
-  };
-
+  // ─────────────────────────────────────────────────────────
   return (
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-3">
@@ -125,7 +140,11 @@ export default function OnboardingDocumentsTab() {
         </Button>
       </div>
 
-      {docs.length === 0 ? (
+      {isLoading ? (
+        <div className="flex items-center gap-2 text-muted-foreground text-sm">
+          <Loader2 className="h-4 w-4 animate-spin" /> Loading documents…
+        </div>
+      ) : docs.length === 0 ? (
         <Card>
           <CardContent className="p-10 text-center text-sm text-muted-foreground">
             No onboarding documents yet.
@@ -134,36 +153,40 @@ export default function OnboardingDocumentsTab() {
       ) : (
         <div className="space-y-2">
           {docs.map((d) => {
-            const Icon = KIND_ICON[d.kind];
+            const Icon = KIND_ICON[d.type];
             return (
-              <Card key={d.id}>
+              <Card key={d._id}>
                 <CardContent className="p-4 flex items-center gap-3">
                   <Icon className="h-5 w-5 text-primary shrink-0" />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="font-medium truncate">{d.title}</p>
-                      <Badge variant="outline" className="text-[10px] uppercase">
-                        {d.kind}
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] uppercase"
+                      >
+                        {d.type}
                       </Badge>
-                      {!d.active && (
+                      {!d.isActive && (
                         <Badge variant="secondary" className="text-[10px]">
                           Inactive
                         </Badge>
                       )}
                     </div>
                     <p className="text-xs text-muted-foreground truncate">
-                      {d.kind === "link"
-                        ? d.content
-                        : d.kind === "pdf"
-                          ? d.fileName ?? "PDF document"
-                          : d.content.slice(0, 120) +
-                            (d.content.length > 120 ? "…" : "")}
+                      {d.type === "pdf"
+                        ? (d.originalFileName ?? "PDF document")
+                        : (d.content ?? "").slice(0, 120) +
+                          ((d.content?.length ?? 0) > 120 ? "…" : "")}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
                     <Switch
-                      checked={d.active}
-                      onCheckedChange={(v) => toggleActive(d.id, v)}
+                      checked={d.isActive}
+                      disabled={toggleActiveMutation.isPending}
+                      onCheckedChange={(v) =>
+                        toggleActiveMutation.mutate({ id: d._id, isActive: v })
+                      }
                     />
                     <Button
                       size="icon"
@@ -175,7 +198,8 @@ export default function OnboardingDocumentsTab() {
                     <Button
                       size="icon"
                       variant="ghost"
-                      onClick={() => remove(d.id)}
+                      disabled={deleteMutation.isPending}
+                      onClick={() => deleteMutation.mutate(d._id)}
                     >
                       <Trash2 className="h-4 w-4 text-destructive" />
                     </Button>
@@ -193,7 +217,7 @@ export default function OnboardingDocumentsTab() {
           <DialogHeader>
             <DialogTitle>New Onboarding Document</DialogTitle>
             <DialogDescription>
-              Provide a title and either pasted text, a link, or upload a PDF.
+              Provide a title and either pasted text or an uploaded PDF.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-2">
@@ -210,9 +234,9 @@ export default function OnboardingDocumentsTab() {
             <div className="space-y-1">
               <Label>Type</Label>
               <Select
-                value={form.kind}
-                onValueChange={(v: OnboardingDocKind) =>
-                  setForm({ title: form.title, kind: v, content: "" })
+                value={form.type}
+                onValueChange={(v: OnboardingDocType) =>
+                  setForm({ title: form.title, type: v, content: "" })
                 }
               >
                 <SelectTrigger>
@@ -220,12 +244,11 @@ export default function OnboardingDocumentsTab() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="text">Pasted Text</SelectItem>
-                  <SelectItem value="link">External Link</SelectItem>
                   <SelectItem value="pdf">Upload PDF</SelectItem>
                 </SelectContent>
               </Select>
             </div>
-            {form.kind === "text" && (
+            {form.type === "text" && (
               <div className="space-y-1">
                 <Label>Content</Label>
                 <Textarea
@@ -238,20 +261,7 @@ export default function OnboardingDocumentsTab() {
                 />
               </div>
             )}
-            {form.kind === "link" && (
-              <div className="space-y-1">
-                <Label>URL</Label>
-                <Input
-                  type="url"
-                  value={form.content}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, content: e.target.value }))
-                  }
-                  placeholder="https://…"
-                />
-              </div>
-            )}
-            {form.kind === "pdf" && (
+            {form.type === "pdf" && (
               <div className="space-y-1">
                 <Label>PDF File</Label>
                 <Input
@@ -262,9 +272,9 @@ export default function OnboardingDocumentsTab() {
                     if (f) handleFile(f);
                   }}
                 />
-                {form.fileName && (
+                {form.file && (
                   <p className="text-xs text-muted-foreground">
-                    Selected: {form.fileName}
+                    Selected: {form.file.name}
                   </p>
                 )}
               </div>
@@ -276,9 +286,16 @@ export default function OnboardingDocumentsTab() {
             </Button>
             <Button
               onClick={submit}
+              disabled={createMutation.isPending}
               className="bg-gradient-to-r from-primary to-secondary"
             >
-              Add Document
+              {createMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Adding…
+                </>
+              ) : (
+                "Add Document"
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -292,22 +309,12 @@ export default function OnboardingDocumentsTab() {
           </DialogHeader>
           {preview && (
             <div className="text-sm">
-              {preview.kind === "text" && (
+              {preview.type === "text" && (
                 <div className="whitespace-pre-wrap">{preview.content}</div>
               )}
-              {preview.kind === "link" && (
-                <a
-                  href={preview.content}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-primary underline break-all"
-                >
-                  {preview.content}
-                </a>
-              )}
-              {preview.kind === "pdf" && (
+              {preview.type === "pdf" && preview.fileUrl && (
                 <iframe
-                  src={preview.content}
+                  src={preview.fileUrl}
                   className="w-full h-[60vh] border rounded"
                   title={preview.title}
                 />
