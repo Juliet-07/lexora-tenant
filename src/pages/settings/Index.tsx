@@ -1,20 +1,19 @@
 import { useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { User as UserIcon, Lock, Crown, FileText, Users, ClipboardCheck } from "lucide-react";
+import { User as UserIcon, Lock, Crown, FileText, Users } from "lucide-react";
 
 import ProfileTab from "./Profile";
 import SecurityTab from "./Security";
 import PlanTab from "./Plan";
 import EngagementTab from "./EngagementDocument";
 import TeamTab from "./Team";
-import OnboardingDocumentsTab from "./OnboardingDocuments";
 
 export default function Settings() {
   const [params, setParams] = useSearchParams();
   const tab = params.get("tab") ?? "profile";
   const validTabs = useMemo(
-    () => new Set(["profile", "security", "team", "plan", "engagement", "onboarding"]),
+    () => new Set(["profile", "security", "team", "plan", "engagement"]),
     [],
   );
   const active = validTabs.has(tab) ? tab : "profile";
@@ -51,9 +50,6 @@ export default function Settings() {
           <TabsTrigger value="engagement">
             <FileText className="h-4 w-4 mr-2" /> Engagement
           </TabsTrigger>
-          <TabsTrigger value="onboarding">
-            <ClipboardCheck className="h-4 w-4 mr-2" /> Onboarding
-          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="profile">
@@ -70,9 +66,6 @@ export default function Settings() {
         </TabsContent>
         <TabsContent value="engagement">
           <EngagementTab />
-        </TabsContent>
-        <TabsContent value="onboarding">
-          <OnboardingDocumentsTab />
         </TabsContent>
       </Tabs>
     </div>
