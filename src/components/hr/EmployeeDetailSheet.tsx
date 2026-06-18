@@ -56,6 +56,7 @@ import { toast } from "sonner";
 import type { Employee, HrTeam, HrLocation } from "@/lib/hr-api";
 import { fetchEmployeeDetail } from "@/lib/hr-api";
 import { downloadEmployeeReport } from "@/lib/employeeReport";
+import { getSubmission } from "@/lib/onboardingStore";
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -368,6 +369,9 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
                 </TabsTrigger>
                 <TabsTrigger value="documents" className="text-xs">
                   Docs
+                </TabsTrigger>
+                <TabsTrigger value="onboarding" className="text-xs">
+                  Onboarding
                 </TabsTrigger>
                 <TabsTrigger value="activity" className="text-xs">
                   Activity
