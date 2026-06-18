@@ -675,3 +675,33 @@ export const completeMyOnboarding = async (dto: {
   const res = await api.post("/employee/onboarding/complete", dto);
   return res.data?.data ?? res.data;
 };
+// ── My Profile — self-service employee profile ─────────────────
+
+export interface UpdateMyProfileDto {
+  phone?: string;
+  dateOfBirth?: string;
+  address?: {
+    street?: string;
+    city?: string;
+    state?: string;
+    country?: string;
+  };
+  emergencyContactName?: string;
+  emergencyContactPhone?: string;
+  bankName?: string;
+  bankAccountNumber?: string;
+  nationality?: string;
+  nationalId?: string;
+}
+
+export const fetchMyProfile = async (): Promise<Employee> => {
+  const res = await api.get("/employee/profile");
+  return res.data?.data ?? res.data;
+};
+
+export const updateMyProfile = async (
+  dto: UpdateMyProfileDto,
+): Promise<Employee> => {
+  const res = await api.patch("/employee/profile", dto);
+  return res.data?.data ?? res.data;
+};

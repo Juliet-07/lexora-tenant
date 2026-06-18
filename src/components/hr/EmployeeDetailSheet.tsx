@@ -196,9 +196,14 @@ const fmtSalary = (
       maximumFractionDigits: 0,
     }).format(amount);
   } catch {
-    // Fallback if currencyCode isn't a valid ISO code Intl recognizes
     return `${currencyCode ?? ""} ${amount.toLocaleString()}`.trim();
   }
+};
+
+const fmtAddress = (a: Employee["address"]) => {
+  if (!a) return "—";
+  const parts = [a.street, a.city, a.state, a.country].filter(Boolean);
+  return parts.length ? parts.join(", ") : "—";
 };
 
 const teamName = (e: Employee) =>
@@ -237,9 +242,9 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
   if (!employee) return null;
 
   // Prefer the freshly-fetched detail.employee (fully populated, incl.
-  // team lead, salary, taxId) over the prop, which may come from a list
-  // endpoint with a thinner populate/select. Falls back to the prop
-  // while detail is loading.
+  // team lead, salary, taxId, and employee-self-reported fields) over
+  // the prop, which may come from a list endpoint with a thinner
+  // populate/select. Falls back to the prop while detail is loading.
   const emp = detail?.employee ?? employee;
 
   const initials =
@@ -444,6 +449,42 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
                   />
                 </CardContent>
               </Card>
+
+              {/* Self-reported fields — filled in by the employee via their own
+                  profile, not at creation time. Shows "—" until they update it. */}
+              <Card>
+                <CardContent className="p-4 space-y-2 text-sm">
+                  <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-1">
+                    Personal details (self-reported)
+                  </h3>
+                  <Row
+                    icon={CalendarDays}
+                    label="Date of birth"
+                    value={emp.dateOfBirth ? fmt(emp.dateOfBirth) : "—"}
+                  />
+                  <Row
+                    icon={Shield}
+                    label="Nationality"
+                    value={emp.nationality ?? "—"}
+                  />
+                  <Row
+                    icon={MapPin}
+                    label="Address"
+                    value={fmtAddress(emp.address)}
+                  />
+                  <Row
+                    icon={Phone}
+                    label="Emergency contact"
+                    value={emp.emergencyContactName ?? "—"}
+                  />
+                  <Row
+                    icon={Phone}
+                    label="Emergency phone"
+                    value={emp.emergencyContactPhone ?? "—"}
+                  />
+                </CardContent>
+              </Card>
+
               <div className="grid grid-cols-2 gap-3">
                 <MiniStat
                   label="Clients"
