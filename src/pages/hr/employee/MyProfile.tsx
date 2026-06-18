@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Sheet,
   SheetContent,
@@ -30,12 +32,13 @@ import {
   Download,
   MessageSquare,
   Building2,
-  GraduationCap,
   PiggyBank,
   CreditCard,
-  Receipt,
   Banknote,
   TrendingUp,
+  Pencil,
+  Save,
+  X,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -179,6 +182,24 @@ export default function MyProfile() {
   const [activePayslip, setActivePayslip] = useState<(typeof DUMMY.payroll.payslips)[0] | null>(null);
   const d = DUMMY;
 
+  const [emergency, setEmergency] = useState({
+    name: EMPLOYEE.emergencyContactName,
+    phone: EMPLOYEE.emergencyContactPhone,
+  });
+  const [editingEmergency, setEditingEmergency] = useState(false);
+  const [emergencyDraft, setEmergencyDraft] = useState(emergency);
+
+  const startEdit = () => {
+    setEmergencyDraft(emergency);
+    setEditingEmergency(true);
+  };
+  const saveEmergency = () => {
+    setEmergency(emergencyDraft);
+    setEditingEmergency(false);
+    toast({ title: "Emergency contact updated" });
+  };
+  const cancelEdit = () => setEditingEmergency(false);
+
   const download = (label: string) =>
     toast({ title: "Download started", description: label });
 
@@ -241,8 +262,6 @@ export default function MyProfile() {
           <TabsTrigger value="time" className="text-xs">Time & Leave</TabsTrigger>
           <TabsTrigger value="performance" className="text-xs">Performance</TabsTrigger>
           <TabsTrigger value="payroll" className="text-xs">Payroll</TabsTrigger>
-          <TabsTrigger value="documents" className="text-xs">Documents</TabsTrigger>
-          <TabsTrigger value="activity" className="text-xs">Activity</TabsTrigger>
         </TabsList>
 
         {/* ── Overview ── */}
@@ -275,10 +294,49 @@ export default function MyProfile() {
             <MiniStat label="Annual left" value={`${EMPLOYEE.annualLeaveBalance}d`} icon={CalendarDays} />
           </div>
           <Card>
-            <CardContent className="p-4 space-y-2 text-sm">
-              <h3 className="font-semibold text-base mb-2">Emergency Contact</h3>
-              <Row icon={Phone} label="Name" value={EMPLOYEE.emergencyContactName || "—"} />
-              <Row icon={Phone} label="Phone" value={EMPLOYEE.emergencyContactPhone || "—"} />
+            <CardContent className="p-4 space-y-3 text-sm">
+              <div className="flex items-center justify-between mb-1">
+                <h3 className="font-semibold text-base">Emergency Contact</h3>
+                {!editingEmergency ? (
+                  <Button size="sm" variant="outline" onClick={startEdit}>
+                    <Pencil className="h-3.5 w-3.5 mr-1.5" /> Edit
+                  </Button>
+                ) : (
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="ghost" onClick={cancelEdit}>
+                      <X className="h-3.5 w-3.5 mr-1.5" /> Cancel
+                    </Button>
+                    <Button size="sm" onClick={saveEmergency}>
+                      <Save className="h-3.5 w-3.5 mr-1.5" /> Save
+                    </Button>
+                  </div>
+                )}
+              </div>
+              {!editingEmergency ? (
+                <>
+                  <Row icon={Phone} label="Name" value={emergency.name || "—"} />
+                  <Row icon={Phone} label="Phone" value={emergency.phone || "—"} />
+                </>
+              ) : (
+                <div className="grid sm:grid-cols-2 gap-3 pt-1">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="ec-name">Contact name</Label>
+                    <Input
+                      id="ec-name"
+                      value={emergencyDraft.name}
+                      onChange={(e) => setEmergencyDraft({ ...emergencyDraft, name: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="ec-phone">Contact phone</Label>
+                    <Input
+                      id="ec-phone"
+                      value={emergencyDraft.phone}
+                      onChange={(e) => setEmergencyDraft({ ...emergencyDraft, phone: e.target.value })}
+                    />
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -489,59 +547,6 @@ export default function MyProfile() {
           </Card>
         </TabsContent>
 
-        {/* ── Documents ── */}
-        <TabsContent value="documents" className="space-y-4">
-          <Card>
-            <CardContent className="p-4">
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-3">
-                My Documents
-              </p>
-              <div className="space-y-2">
-                {d.documents.map((doc) => (
-                  <div
-                    key={doc.name}
-                    className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/30 transition-colors"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
-                        <FileText className="h-5 w-5 text-white" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium">{doc.name}</p>
-                        <p className="text-xs text-muted-foreground">Uploaded {fmt(doc.date)}</p>
-                      </div>
-                    </div>
-                    <Button size="sm" variant="outline" onClick={() => download(doc.name)}>
-                      <Download className="h-3 w-3 mr-1.5" /> Download
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* ── Activity ── */}
-        <TabsContent value="activity" className="space-y-4">
-          <Card>
-            <CardContent className="p-4">
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-3">
-                Activity Feed
-              </p>
-              <div className="space-y-3">
-                {d.activity.map((a, i) => (
-                  <div key={i} className="flex gap-3 text-sm">
-                    <div className="mt-1 h-2 w-2 rounded-full bg-primary shrink-0" />
-                    <div>
-                      <p>{a.text}</p>
-                      <p className="text-xs text-muted-foreground">{a.t}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
       </Tabs>
 
       {/* Payslip Detail Sheet */}
