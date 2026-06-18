@@ -262,8 +262,6 @@ export default function MyProfile() {
           <TabsTrigger value="time" className="text-xs">Time & Leave</TabsTrigger>
           <TabsTrigger value="performance" className="text-xs">Performance</TabsTrigger>
           <TabsTrigger value="payroll" className="text-xs">Payroll</TabsTrigger>
-          <TabsTrigger value="documents" className="text-xs">Documents</TabsTrigger>
-          <TabsTrigger value="activity" className="text-xs">Activity</TabsTrigger>
         </TabsList>
 
         {/* ── Overview ── */}
