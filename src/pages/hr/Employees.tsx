@@ -134,6 +134,8 @@ export default function HREmployees() {
     locationId: "",
     employmentType: "full_time",
     startDate: new Date().toISOString().slice(0, 10),
+    salary: undefined,
+    salaryCurrency: "USD",
   };
   const [empForm, setEmpForm] = useState<CreateEmployeeDto>(EMPTY_EMP);
   const [teamForm, setTeamForm] = useState({
@@ -724,6 +726,43 @@ export default function HREmployees() {
                   }))
                 }
               />
+            </div>
+            <div className="space-y-1">
+              <Label>Salary Amount</Label>
+              <Input
+                type="number"
+                min={0}
+                placeholder="0"
+                value={empForm.salary ?? ""}
+                onChange={(e) =>
+                  setEmpForm((f) => ({
+                    ...f,
+                    salary: e.target.value === "" ? undefined : Number(e.target.value),
+                  }))
+                }
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>Currency</Label>
+              <Select
+                value={empForm.salaryCurrency ?? "USD"}
+                onValueChange={(v) =>
+                  setEmpForm((f) => ({ ...f, salaryCurrency: v }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {["USD", "EUR", "GBP", "NGN", "RWF", "KES", "ZAR", "GHS", "INR", "JPY"].map(
+                    (c) => (
+                      <SelectItem key={c} value={c}>
+                        {c}
+                      </SelectItem>
+                    ),
+                  )}
+                </SelectContent>
+              </Select>
             </div>
           </div>
           <DialogFooter>
