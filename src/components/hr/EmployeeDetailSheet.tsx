@@ -825,6 +825,78 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
               ))}
             </TabsContent>
 
+            {/* ── Onboarding ── */}
+            <TabsContent value="onboarding" className="space-y-2">
+              {(() => {
+                const sub = getSubmission(employee.email);
+                if (!sub) {
+                  return (
+                    <Card>
+                      <CardContent className="p-8 text-center text-sm text-muted-foreground">
+                        Employee has not completed onboarding yet.
+                      </CardContent>
+                    </Card>
+                  );
+                }
+                return (
+                  <>
+                    <Card>
+                      <CardContent className="p-4 space-y-1 text-sm">
+                        <Row
+                          icon={FileText}
+                          label="Signature"
+                          value={sub.signature}
+                        />
+                        <Row
+                          icon={CalendarDays}
+                          label="Submitted"
+                          value={new Date(sub.submittedAt).toLocaleString(
+                            "en-GB",
+                          )}
+                        />
+                        <Row
+                          icon={CheckCircle2}
+                          label="Documents agreed"
+                          value={`${sub.docs.filter((x) => x.checked).length} / ${sub.docs.length}`}
+                        />
+                      </CardContent>
+                    </Card>
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mt-3 mb-1">
+                      Documents at time of signing
+                    </p>
+                    {sub.docs.map((doc) => (
+                      <Card key={doc.id}>
+                        <CardContent className="p-3 flex items-center justify-between">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <FileText className="h-4 w-4 text-primary shrink-0" />
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium truncate">
+                                {doc.title}
+                              </p>
+                              <p className="text-[10px] uppercase text-muted-foreground">
+                                {doc.kind}
+                              </p>
+                            </div>
+                          </div>
+                          {doc.checked ? (
+                            <Badge
+                              variant="outline"
+                              className="bg-success/10 text-success border-success/20"
+                            >
+                              Agreed
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline">Skipped</Badge>
+                          )}
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </>
+                );
+              })()}
+            </TabsContent>
+
+
             {/* ── Activity (dummy) ── */}
             <TabsContent value="activity" className="space-y-2">
               <DummyNotice />
