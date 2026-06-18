@@ -182,6 +182,24 @@ export default function MyProfile() {
   const [activePayslip, setActivePayslip] = useState<(typeof DUMMY.payroll.payslips)[0] | null>(null);
   const d = DUMMY;
 
+  const [emergency, setEmergency] = useState({
+    name: EMPLOYEE.emergencyContactName,
+    phone: EMPLOYEE.emergencyContactPhone,
+  });
+  const [editingEmergency, setEditingEmergency] = useState(false);
+  const [emergencyDraft, setEmergencyDraft] = useState(emergency);
+
+  const startEdit = () => {
+    setEmergencyDraft(emergency);
+    setEditingEmergency(true);
+  };
+  const saveEmergency = () => {
+    setEmergency(emergencyDraft);
+    setEditingEmergency(false);
+    toast({ title: "Emergency contact updated" });
+  };
+  const cancelEdit = () => setEditingEmergency(false);
+
   const download = (label: string) =>
     toast({ title: "Download started", description: label });
 
