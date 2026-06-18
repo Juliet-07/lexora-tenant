@@ -261,6 +261,7 @@ export function AppSidebar() {
   //    no HR/admin areas. Just their workspace essentials.
   const TEAM_MEMBER_NAV = [
     { title: "Dashboard", url: "/", icon: LayoutDashboard },
+    { title: "My Profile", url: "/my/profile", icon: UserCog },
     { title: "Clients", url: "/clients", icon: Users },
     { title: "Projects", url: "/projects", icon: FolderKanban },
     { title: "Time", url: "/my/time", icon: Clock },
