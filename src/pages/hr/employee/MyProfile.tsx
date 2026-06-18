@@ -294,10 +294,49 @@ export default function MyProfile() {
             <MiniStat label="Annual left" value={`${EMPLOYEE.annualLeaveBalance}d`} icon={CalendarDays} />
           </div>
           <Card>
-            <CardContent className="p-4 space-y-2 text-sm">
-              <h3 className="font-semibold text-base mb-2">Emergency Contact</h3>
-              <Row icon={Phone} label="Name" value={EMPLOYEE.emergencyContactName || "—"} />
-              <Row icon={Phone} label="Phone" value={EMPLOYEE.emergencyContactPhone || "—"} />
+            <CardContent className="p-4 space-y-3 text-sm">
+              <div className="flex items-center justify-between mb-1">
+                <h3 className="font-semibold text-base">Emergency Contact</h3>
+                {!editingEmergency ? (
+                  <Button size="sm" variant="outline" onClick={startEdit}>
+                    <Pencil className="h-3.5 w-3.5 mr-1.5" /> Edit
+                  </Button>
+                ) : (
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="ghost" onClick={cancelEdit}>
+                      <X className="h-3.5 w-3.5 mr-1.5" /> Cancel
+                    </Button>
+                    <Button size="sm" onClick={saveEmergency}>
+                      <Save className="h-3.5 w-3.5 mr-1.5" /> Save
+                    </Button>
+                  </div>
+                )}
+              </div>
+              {!editingEmergency ? (
+                <>
+                  <Row icon={Phone} label="Name" value={emergency.name || "—"} />
+                  <Row icon={Phone} label="Phone" value={emergency.phone || "—"} />
+                </>
+              ) : (
+                <div className="grid sm:grid-cols-2 gap-3 pt-1">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="ec-name">Contact name</Label>
+                    <Input
+                      id="ec-name"
+                      value={emergencyDraft.name}
+                      onChange={(e) => setEmergencyDraft({ ...emergencyDraft, name: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="ec-phone">Contact phone</Label>
+                    <Input
+                      id="ec-phone"
+                      value={emergencyDraft.phone}
+                      onChange={(e) => setEmergencyDraft({ ...emergencyDraft, phone: e.target.value })}
+                    />
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
