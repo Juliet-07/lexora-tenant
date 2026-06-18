@@ -30,12 +30,15 @@ export default function EmployeeOnboarding() {
     queryKey: ["onboarding-status"],
     queryFn: fetchMyOnboardingStatus,
     staleTime: 0,
-    onSuccess: (data) => {
-      if (!active && data.documents.length > 0) setActive(data.documents[0]);
-    },
-  } as any);
+  });
 
-  const docs = status?.documents ?? [];
+  useMemo(() => {
+    if (!active && status && (status as any).documents?.length > 0) {
+      setActive((status as any).documents[0]);
+    }
+  }, [status, active]);
+
+  const docs = (status as any)?.documents ?? [];
 
   const completeMutation = useMutation({
     mutationFn: completeMyOnboarding,
