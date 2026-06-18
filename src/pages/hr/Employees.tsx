@@ -46,6 +46,7 @@ import {
   Trash2,
   Loader2,
   Pencil,
+  ClipboardCheck,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -67,6 +68,7 @@ import {
   type EmploymentStatus,
 } from "@/lib/hr-api";
 import { EmployeeDetailSheet } from "@/components/hr/EmployeeDetailSheet";
+import OnboardingDocumentsTab from "./OnboardingDocuments";
 
 // ─── Helpers ──────────────────────────────────────────────────
 
@@ -315,6 +317,7 @@ export default function HREmployees() {
           <TabsTrigger value="employees">Employees</TabsTrigger>
           <TabsTrigger value="teams">Teams</TabsTrigger>
           <TabsTrigger value="locations">Locations</TabsTrigger>
+          <TabsTrigger value="onboarding">Onboarding</TabsTrigger>
         </TabsList>
 
         {/* ── Employees tab ── */}
@@ -574,6 +577,11 @@ export default function HREmployees() {
               ))}
             </div>
           )}
+        </TabsContent>
+
+        {/* ── Onboarding tab ── */}
+        <TabsContent value="onboarding" className="space-y-4 mt-4">
+          <OnboardingDocumentsTab />
         </TabsContent>
       </Tabs>
 
