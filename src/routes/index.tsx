@@ -2,6 +2,8 @@ import { Route, Routes } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import Login from "@/pages/Login";
 import NotFound from "@/pages/NotFound";
+import EmployeeOnboarding from "@/pages/EmployeeOnboarding";
+import { hasCompletedOnboarding } from "@/lib/onboardingStore";
 import { coreRoutes } from "./core.routes";
 import { amlRoutes } from "./aml.routes";
 import { hrRoutes } from "./hr.routes";
@@ -15,6 +17,11 @@ import { employeeRoutes } from "./employee.routes";
 export function AppRoutes() {
   const { user, isAdmin } = useAuth();
   if (!user) return <Login />;
+
+  // Non-admin employees must complete onboarding before accessing the app.
+  if (!isAdmin && !hasCompletedOnboarding(user.email)) {
+    return <EmployeeOnboarding />;
+  }
 
   const ctx = { isAdmin };
 
