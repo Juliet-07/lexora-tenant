@@ -547,59 +547,6 @@ export default function MyProfile() {
           </Card>
         </TabsContent>
 
-        {/* ── Documents ── */}
-        <TabsContent value="documents" className="space-y-4">
-          <Card>
-            <CardContent className="p-4">
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-3">
-                My Documents
-              </p>
-              <div className="space-y-2">
-                {d.documents.map((doc) => (
-                  <div
-                    key={doc.name}
-                    className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/30 transition-colors"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
-                        <FileText className="h-5 w-5 text-white" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium">{doc.name}</p>
-                        <p className="text-xs text-muted-foreground">Uploaded {fmt(doc.date)}</p>
-                      </div>
-                    </div>
-                    <Button size="sm" variant="outline" onClick={() => download(doc.name)}>
-                      <Download className="h-3 w-3 mr-1.5" /> Download
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* ── Activity ── */}
-        <TabsContent value="activity" className="space-y-4">
-          <Card>
-            <CardContent className="p-4">
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-3">
-                Activity Feed
-              </p>
-              <div className="space-y-3">
-                {d.activity.map((a, i) => (
-                  <div key={i} className="flex gap-3 text-sm">
-                    <div className="mt-1 h-2 w-2 rounded-full bg-primary shrink-0" />
-                    <div>
-                      <p>{a.text}</p>
-                      <p className="text-xs text-muted-foreground">{a.t}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
       </Tabs>
 
       {/* Payslip Detail Sheet */}
