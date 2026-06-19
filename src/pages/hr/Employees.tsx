@@ -141,6 +141,7 @@ export default function HREmployees() {
     salary: undefined,
     salaryCurrency: "USD",
     taxId: undefined,
+    allowances: [],
   };
   const [empForm, setEmpForm] = useState<CreateEmployeeDto>(EMPTY_EMP);
   const [teamForm, setTeamForm] = useState({
@@ -795,6 +796,85 @@ export default function HREmployees() {
                   setEmpForm((f) => ({ ...f, taxId: e.target.value }))
                 }
               />
+            </div>
+            <div className="space-y-1 col-span-2">
+              <div className="flex items-center justify-between">
+                <Label>Allowances (optional)</Label>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() =>
+                    setEmpForm((f) => ({
+                      ...f,
+                      allowances: [
+                        ...(f.allowances ?? []),
+                        {
+                          key: `allowance_${Date.now()}`,
+                          label: "",
+                          amount: 0,
+                        },
+                      ],
+                    }))
+                  }
+                >
+                  <Plus className="h-3.5 w-3.5 mr-1" /> Add Allowance
+                </Button>
+              </div>
+              {(empForm.allowances ?? []).map((a, i) => (
+                <div
+                  key={a.key}
+                  className="grid grid-cols-[1fr_auto_auto] gap-2 items-center"
+                >
+                  <Input
+                    placeholder="e.g. Transport Allowance"
+                    value={a.label}
+                    onChange={(e) =>
+                      setEmpForm((f) => ({
+                        ...f,
+                        allowances: f.allowances!.map((x, idx) =>
+                          idx === i ? { ...x, label: e.target.value } : x,
+                        ),
+                      }))
+                    }
+                  />
+                  <Input
+                    type="number"
+                    placeholder="Amount"
+                    className="w-28"
+                    value={a.amount}
+                    onChange={(e) =>
+                      setEmpForm((f) => ({
+                        ...f,
+                        allowances: f.allowances!.map((x, idx) =>
+                          idx === i
+                            ? { ...x, amount: Number(e.target.value) || 0 }
+                            : x,
+                        ),
+                      }))
+                    }
+                  />
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    onClick={() =>
+                      setEmpForm((f) => ({
+                        ...f,
+                        allowances: f.allowances!.filter((_, idx) => idx !== i),
+                      }))
+                    }
+                  >
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  </Button>
+                </div>
+              ))}
+              {(empForm.allowances ?? []).length === 0 && (
+                <p className="text-xs text-muted-foreground">
+                  Not standard practice in Rwanda — leave empty unless this
+                  employee receives a fixed allowance (transport, housing, etc).
+                </p>
+              )}
             </div>
           </div>
           <DialogFooter>

@@ -832,3 +832,408 @@ export const saveOnboardingReferences = async (
   const res = await api.patch("/employee/onboarding/references", dto);
   return res.data?.data ?? res.data;
 };
+
+// ── Payroll Policy — Types ──────────────────────────────────────
+
+export type DeductionCalculationBase =
+  | "gross"
+  | "gross_minus_transport"
+  | "net"
+  | "taxable_income"
+  | "basic";
+
+export type DeductionKind = "percentage" | "flat" | "progressive_brackets";
+
+export interface TaxBracket {
+  minAmount: number;
+  maxAmount: number | null;
+  rate: number;
+}
+
+export interface PayrollDeductionRule {
+  key: string;
+  label: string;
+  kind: DeductionKind;
+  calculationBase: DeductionCalculationBase;
+  employeeRate: number;
+  employerRate: number;
+  employeeFlatAmount: number;
+  employerFlatAmount: number;
+  brackets: TaxBracket[];
+  visibleToEmployee: boolean;
+  isActive: boolean;
+  isStatutoryPreset: boolean;
+}
+
+export interface AllowanceType {
+  key: string;
+  label: string;
+  isTransportAllowance: boolean;
+  isTaxable: boolean;
+}
+
+export interface PayrollPolicy {
+  _id: string;
+  tenantId: string;
+  locationId: {
+    _id: string;
+    name: string;
+    country: string;
+    city: string | null;
+  } | null;
+  currency: string;
+  payFrequency: string;
+  allowanceTypes: AllowanceType[];
+  deductions: PayrollDeductionRule[];
+  effectiveFrom: string;
+  createdAt: string;
+}
+
+export interface UpsertPayrollPolicyDto {
+  locationId?: string;
+  currency: string;
+  payFrequency?: string;
+  allowanceTypes?: AllowanceType[];
+  deductions?: PayrollDeductionRule[];
+  effectiveFrom?: string;
+}
+
+// ── Payroll Policy — API calls ──────────────────────────────────
+
+export const fetchAllPayrollPolicies = async (): Promise<PayrollPolicy[]> => {
+  const res = await api.get("/hr/payroll/policy");
+  const d = res.data?.data ?? res.data;
+  return Array.isArray(d) ? d : [];
+};
+
+export const fetchPayrollPolicyForLocation = async (
+  locationId: string,
+): Promise<PayrollPolicy | null> => {
+  const res = await api.get(`/hr/payroll/policy/for-location/${locationId}`);
+  return res.data?.data ?? res.data ?? null;
+};
+
+export const fetchDefaultPayrollPolicy =
+  async (): Promise<PayrollPolicy | null> => {
+    const res = await api.get("/hr/payroll/policy/default");
+    return res.data?.data ?? res.data ?? null;
+  };
+
+export const upsertPayrollPolicy = async (
+  dto: UpsertPayrollPolicyDto,
+): Promise<PayrollPolicy> => {
+  const res = await api.post("/hr/payroll/policy", dto);
+  return res.data?.data ?? res.data;
+};
+
+export const applyRwandaPayrollPreset = async (dto: {
+  locationId?: string;
+  overwrite?: boolean;
+}): Promise<PayrollPolicy> => {
+  const res = await api.post("/hr/payroll/policy/apply-rwanda-preset", dto);
+  return res.data?.data ?? res.data;
+};
+
+export const deletePayrollPolicy = async (policyId: string): Promise<void> => {
+  await api.delete(`/hr/payroll/policy/${policyId}`);
+};
+
+// ── Employee Loans — Types ──────────────────────────────────────
+
+export type LoanStatus = "active" | "paid_off" | "cancelled" | "paused";
+
+export interface EmployeeLoan {
+  _id: string;
+  employeeId:
+    | {
+        _id: string;
+        firstName: string;
+        lastName: string;
+        employeeNumber: string;
+      }
+    | string;
+  tenantId: string;
+  label: string;
+  principalAmount: number;
+  currency: string;
+  monthlyInstallment: number;
+  outstandingBalance: number;
+  status: LoanStatus;
+  startDate: string;
+  note: string | null;
+  deductionHistory: {
+    payrollRunId: string;
+    amount: number;
+    deductedAt: string;
+  }[];
+  createdAt: string;
+}
+
+export interface CreateLoanDto {
+  employeeId: string;
+  label: string;
+  principalAmount: number;
+  currency: string;
+  monthlyInstallment: number;
+  startDate?: string;
+  note?: string;
+}
+
+export interface UpdateLoanDto {
+  label?: string;
+  monthlyInstallment?: number;
+  status?: LoanStatus;
+  note?: string;
+}
+
+// ── Employee Loans — API calls ──────────────────────────────────
+
+export const fetchAllLoans = async (
+  status?: LoanStatus,
+): Promise<EmployeeLoan[]> => {
+  const res = await api.get("/hr/payroll/loans", {
+    params: status ? { status } : undefined,
+  });
+  const d = res.data?.data ?? res.data;
+  return Array.isArray(d) ? d : [];
+};
+
+export const fetchLoansForEmployee = async (
+  employeeId: string,
+): Promise<EmployeeLoan[]> => {
+  const res = await api.get(`/hr/payroll/loans/employee/${employeeId}`);
+  const d = res.data?.data ?? res.data;
+  return Array.isArray(d) ? d : [];
+};
+
+export const createLoan = async (dto: CreateLoanDto): Promise<EmployeeLoan> => {
+  const res = await api.post("/hr/payroll/loans", dto);
+  return res.data?.data ?? res.data;
+};
+
+export const updateLoan = async (
+  loanId: string,
+  dto: UpdateLoanDto,
+): Promise<EmployeeLoan> => {
+  const res = await api.patch(`/hr/payroll/loans/${loanId}`, dto);
+  return res.data?.data ?? res.data;
+};
+
+export const deleteLoan = async (loanId: string): Promise<void> => {
+  await api.delete(`/hr/payroll/loans/${loanId}`);
+};
+
+// ── Payroll Runs — Types ────────────────────────────────────────
+
+export type PayrollRunStatus = "draft" | "processed" | "paid";
+
+export interface PayrollRun {
+  _id: string;
+  tenantId: string;
+  locationId: { _id: string; name: string; country: string } | null;
+  periodLabel: string;
+  periodStart: string;
+  periodEnd: string;
+  runCurrency: string;
+  status: PayrollRunStatus;
+  employeeCount: number;
+  totalGross: number;
+  totalDeductions: number;
+  totalNet: number;
+  totalEmployerContributions: number;
+  processedBy: string | null;
+  processedAt: string | null;
+  paidAt: string | null;
+  createdAt: string;
+}
+
+export interface PayslipAllowanceLine {
+  key: string;
+  label: string;
+  amount: number;
+}
+
+export interface PayslipDeductionLine {
+  key: string;
+  label: string;
+  employeeAmount: number;
+  employerAmount: number;
+  visibleToEmployee: boolean;
+}
+
+export interface PayslipLoanLine {
+  loanId: string;
+  label: string;
+  amountDeducted: number;
+  remainingBalance: number;
+}
+
+export interface Payslip {
+  _id: string;
+  payrollRunId: string;
+  employeeId: string;
+  tenantId: string;
+  employeeName: string;
+  jobTitle: string | null;
+  employeeNumber: string | null;
+  periodLabel: string;
+  periodStart: string;
+  periodEnd: string;
+  payCurrency: string;
+  sourceCurrency: string | null;
+  exchangeRateApplied: number | null;
+  exchangeRateDate: string | null;
+  basicSalary: number;
+  allowances: PayslipAllowanceLine[];
+  grossSalary: number;
+  deductions: PayslipDeductionLine[];
+  loanDeductions: PayslipLoanLine[];
+  totalEmployeeDeductions: number;
+  totalEmployerContributions: number;
+  netSalary: number;
+  notes: string | null;
+  createdAt: string;
+}
+
+export interface CreatePayrollRunDto {
+  periodLabel: string;
+  periodStart: string;
+  periodEnd: string;
+  locationId?: string;
+  runCurrency: string;
+}
+
+// ── Payroll Runs — API calls ────────────────────────────────────
+
+export const fetchAllPayrollRuns = async (): Promise<PayrollRun[]> => {
+  const res = await api.get("/hr/payroll/runs");
+  const d = res.data?.data ?? res.data;
+  return Array.isArray(d) ? d : [];
+};
+
+export const fetchPayrollRunDetail = async (
+  runId: string,
+): Promise<{ run: PayrollRun; payslips: Payslip[] }> => {
+  const res = await api.get(`/hr/payroll/runs/${runId}`);
+  return res.data?.data ?? res.data;
+};
+
+export const createPayrollRun = async (dto: {
+  periodLabel: string;
+  periodStart: string;
+  periodEnd: string;
+  locationId?: string;
+  employeeId?: string;
+  runCurrency: string;
+}): Promise<PayrollRun> => {
+  const res = await api.post("/hr/payroll/runs", dto);
+  return res.data?.data ?? res.data;
+};
+
+export const recalculatePayrollRun = async (
+  runId: string,
+): Promise<PayrollRun> => {
+  const res = await api.post(`/hr/payroll/runs/${runId}/recalculate`, {});
+  return res.data?.data ?? res.data;
+};
+
+export const processPayrollRun = async (runId: string): Promise<PayrollRun> => {
+  const res = await api.post(`/hr/payroll/runs/${runId}/process`, {});
+  return res.data?.data ?? res.data;
+};
+
+export const markPayrollRunPaid = async (
+  runId: string,
+): Promise<PayrollRun> => {
+  const res = await api.post(`/hr/payroll/runs/${runId}/mark-paid`, {});
+  return res.data?.data ?? res.data;
+};
+
+export const discardPayrollRun = async (runId: string): Promise<void> => {
+  await api.delete(`/hr/payroll/runs/${runId}`);
+};
+
+export const fetchPayslipById = async (payslipId: string): Promise<Payslip> => {
+  const res = await api.get(`/hr/payroll/runs/payslip/${payslipId}`);
+  return res.data?.data ?? res.data;
+};
+
+export const fetchPayslipHtml = async (payslipId: string): Promise<string> => {
+  const res = await api.get(`/hr/payroll/runs/payslip/${payslipId}/render`);
+  return typeof res.data === "string" ? res.data : (res.data?.data ?? res.data);
+};
+
+// ── Payslip Template — Types & API ──────────────────────────────
+
+export interface PayslipTemplate {
+  _id: string;
+  tenantId: string;
+  logoUrl: string | null;
+  accentColor: string;
+  companyName: string | null;
+  companyAddress: string | null;
+  footerNote: string | null;
+  showEmployerContributions: boolean;
+  showLoanDeductions: boolean;
+  showYearToDateSummary: boolean;
+}
+
+export interface UpdatePayslipTemplateDto {
+  accentColor?: string;
+  companyName?: string;
+  companyAddress?: string;
+  footerNote?: string;
+  showEmployerContributions?: boolean;
+  showLoanDeductions?: boolean;
+  showYearToDateSummary?: boolean;
+}
+
+export const fetchPayslipTemplate = async (): Promise<PayslipTemplate> => {
+  const res = await api.get("/hr/payroll/template");
+  return res.data?.data ?? res.data;
+};
+
+export const updatePayslipTemplate = async (
+  dto: UpdatePayslipTemplateDto,
+): Promise<PayslipTemplate> => {
+  const res = await api.patch("/hr/payroll/template", dto);
+  return res.data?.data ?? res.data;
+};
+
+// ── Employee self-service — My Payslips ─────────────────────────
+
+export const fetchMyPayslips = async (): Promise<Payslip[]> => {
+  const res = await api.get("/employee/payslips");
+  const d = res.data?.data ?? res.data;
+  return Array.isArray(d) ? d : [];
+};
+
+export const fetchMyPayslipHtml = async (
+  payslipId: string,
+): Promise<string> => {
+  const res = await api.get(`/employee/payslips/${payslipId}/render`);
+  return typeof res.data === "string" ? res.data : (res.data?.data ?? res.data);
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ADD/REPLACE in src/lib/hr-api.ts
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface EmployeePeriodStatus {
+  status: "draft" | "processed" | "paid";
+  payslipId: string;
+  runId: string;
+  netSalary: number;
+  payCurrency: string;
+}
+
+// NEW — returns a map keyed by employeeId. Employees with no entry
+// simply haven't been calculated for this period yet ("not_started").
+export const fetchAllEmployeesPeriodStatus = async (
+  periodLabel: string,
+): Promise<Record<string, EmployeePeriodStatus>> => {
+  const res = await api.get("/hr/payroll/runs/period-status", {
+    params: { periodLabel },
+  });
+  return res.data?.data ?? res.data ?? {};
+};
