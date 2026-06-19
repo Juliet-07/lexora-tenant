@@ -107,7 +107,7 @@ export default function HRPayroll() {
       </Card>
 
       <Tabs defaultValue="runs" className="space-y-4">
-        <TabsList><TabsTrigger value="runs">Pay Runs</TabsTrigger><TabsTrigger value="payslips">Payslips</TabsTrigger><TabsTrigger value="comp">Compensation</TabsTrigger><TabsTrigger value="loans">Loan Management</TabsTrigger></TabsList>
+        <TabsList><TabsTrigger value="runs">Pay Runs</TabsTrigger><TabsTrigger value="payslips">Payslips</TabsTrigger><TabsTrigger value="comp">Compensation</TabsTrigger><TabsTrigger value="loans">Loan Management</TabsTrigger><TabsTrigger value="settings"><Settings2 className="h-3.5 w-3.5 mr-1.5" />Settings</TabsTrigger></TabsList>
 
         <TabsContent value="runs" className="space-y-3">
           {runs.map(r => (
