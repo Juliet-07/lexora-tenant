@@ -7,6 +7,10 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
 import { ModuleSwitcher } from "./ModuleSwitcher";
+import {
+  OnboardingReminder,
+  OnboardingProgressPill,
+} from "@/components/onboarding/OnboardingReminder";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -30,6 +34,7 @@ export function AppLayout({ children }: AppLayoutProps) {
               </div>
             </div>
             <div className="flex items-center gap-3">
+              {!isAdmin && <OnboardingProgressPill />}
               <Badge variant="outline" className="text-xs">{isAdmin ? "Admin" : "Team Member"}</Badge>
               <Button variant="ghost" size="icon" className="relative">
                 <Bell className="h-4 w-4" />
@@ -54,6 +59,7 @@ export function AppLayout({ children }: AppLayoutProps) {
             {children}
           </main>
         </div>
+        {!isAdmin && <OnboardingReminder />}
       </div>
     </SidebarProvider>
   );

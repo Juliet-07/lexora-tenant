@@ -1,6 +1,8 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { writeOnboardingProgress } from "@/components/onboarding/OnboardingReminder";
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -97,6 +99,7 @@ const STEPS = [
 export default function EmployeeOnboarding() {
   const { user, logout } = useAuth();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   const [stepIdx, setStepIdx] = useState(0);
   const [personal, setPersonal] = useState<PersonalForm>(emptyPersonal);
@@ -126,12 +129,14 @@ export default function EmployeeOnboarding() {
     mutationFn: completeMyOnboarding,
     onSuccess: () => {
       toast.success("Onboarding completed.");
+      writeOnboardingProgress(100);
       queryClient.invalidateQueries({ queryKey: ["onboarding-status"] });
-      window.location.href = "/";
+      navigate("/");
     },
     onError: (err: any) =>
       toast.error(err?.response?.data?.message ?? "Failed to submit onboarding"),
   });
+
 
   if (!user) return null;
 
@@ -173,6 +178,12 @@ export default function EmployeeOnboarding() {
     (STEPS.reduce((acc, _, i) => acc + (stepValid(i) ? 1 : 0), 0) / STEPS.length) *
       100,
   );
+
+  // Mirror progress to localStorage so the header pill stays in sync.
+  useEffect(() => {
+    writeOnboardingProgress(progressPct);
+  }, [progressPct]);
+
 
   const next = () => {
     if (!stepValid(stepIdx)) {
@@ -221,23 +232,34 @@ export default function EmployeeOnboarding() {
           <div>
             <h1 className="text-xl font-bold">Welcome, {user.firstName}</h1>
             <p className="text-sm text-white/80">
-              Complete onboarding to access your workspace.
+              Finish onboarding to unlock the full workspace — you can leave and resume anytime.
             </p>
           </div>
-          <Button
-            variant="secondary"
-            size="sm"
-            className="bg-white/15 hover:bg-white/25 text-white border-white/20"
-            onClick={logout}
-          >
-            <LogOut className="h-4 w-4 mr-2" /> Sign out
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              className="bg-white/15 hover:bg-white/25 text-white border-white/20"
+              onClick={() => navigate("/")}
+            >
+              <ArrowLeft className="h-4 w-4 mr-2" /> Back to dashboard
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              className="bg-white/15 hover:bg-white/25 text-white border-white/20"
+              onClick={logout}
+            >
+              <LogOut className="h-4 w-4 mr-2" /> Sign out
+            </Button>
+          </div>
         </div>
       </header>
 
       <main className="max-w-6xl mx-auto p-6 space-y-5">
         {/* Progress header */}
         <Card>
+
           <CardContent className="p-5 space-y-3">
             <div className="flex items-center justify-between gap-3">
               <div>
