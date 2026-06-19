@@ -8,8 +8,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { Wallet, Download, PlayCircle, DollarSign, Calendar, Receipt, FileText, Landmark, TrendingDown, CheckCircle2, XCircle, Clock, Settings2, Plus, Trash2, MapPin, Globe2, Save } from "lucide-react";
-import { payrollRuns as initial, payslips, loans as initialLoans, type PayrollRun, type Payslip, type Loan } from "@/data/hrMockData";
+import { Wallet, Download, PlayCircle, DollarSign, Calendar, Receipt, FileText, Landmark, TrendingDown, CheckCircle2, XCircle, Clock, Settings2, Plus, Trash2, MapPin, Globe2, Save, Calculator, Users, Eye, BadgeCheck } from "lucide-react";
+import { payrollRuns as initial, payslips, loans as initialLoans, employees, type PayrollRun, type Payslip, type Loan, type Employee } from "@/data/hrMockData";
 import { useToast } from "@/hooks/use-toast";
 
 type PayrollRule = {
