@@ -67,7 +67,7 @@ export default function HRPayroll() {
   const addFx = () => setFx(prev => [...prev, { id: `FX-${Date.now()}`, from: "EUR", to: baseCurrency, rate: 1 }]);
   const removeFx = (id: string) => setFx(prev => prev.filter(r => r.id !== id));
 
-  const { toast } = useToast();
+
 
   const current = runs.find(r => r.status === "Draft") ?? runs[0];
 
