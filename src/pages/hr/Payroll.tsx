@@ -42,12 +42,21 @@ const INITIAL_FX: FxRate[] = [
   { id: "FX-5", from: "JPY", to: "USD", rate: 0.0066 },
 ];
 
-const fmt = (n: number) => `$${n.toLocaleString()}`;
+const MONTHS = ["January 2026","February 2026","March 2026","April 2026","May 2026","June 2026"];
+
+const fmt = (n: number, currency = "USD") => {
+  try { return new Intl.NumberFormat("en-US", { style: "currency", currency, maximumFractionDigits: 0 }).format(n); }
+  catch { return `${currency} ${Math.round(n).toLocaleString()}`; }
+};
 const statusTone = (s: PayrollRun["status"]) =>
   s === "Paid" ? "bg-success/10 text-success border-success/20"
   : s === "Approved" ? "bg-info/10 text-info border-info/20"
   : s === "Processing" ? "bg-warning/10 text-warning border-warning/20"
   : "bg-muted text-muted-foreground";
+
+type EmpPayState = "Pending" | "Calculated" | "Paid";
+type EmpPayCalc = { gross: number; bonuses: number; tax: number; pension: number; socialSecurity: number; otherDeductions: number; net: number; currency: string; ruleId: string };
+type EmpPayRecord = { status: EmpPayState; calc?: EmpPayCalc };
 
 export default function HRPayroll() {
   const [runs, setRuns] = useState<PayrollRun[]>(initial);
