@@ -513,6 +513,50 @@ export default function HRPayroll() {
           </>)}
         </SheetContent>
       </Sheet>
+
+      <Sheet open={!!openEmp} onOpenChange={(o) => !o && setOpenEmp(null)}>
+        <SheetContent className="w-full sm:max-w-md">
+          {openEmp && (() => {
+            const rec = getRec(openEmp);
+            const rule = ruleFor(openEmp.location);
+            if (!rec.calc) return null;
+            const c = rec.calc;
+            return (
+              <>
+                <SheetHeader><SheetTitle className="flex items-center gap-2"><FileText className="h-5 w-5" /> Payslip — {month}</SheetTitle></SheetHeader>
+                <div className="mt-5 space-y-3">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-full bg-gradient-to-br from-primary to-secondary text-white text-sm font-bold flex items-center justify-center">{openEmp.avatar}</div>
+                    <div>
+                      <p className="font-semibold">{openEmp.firstName} {openEmp.lastName}</p>
+                      <p className="text-xs text-muted-foreground">{openEmp.jobTitle} · {openEmp.location} · Rule {rule.location}</p>
+                    </div>
+                  </div>
+                  <div className="border rounded-lg divide-y">
+                    {[
+                      ["Gross salary", fmt(c.gross, c.currency)],
+                      ["Bonuses", fmt(c.bonuses, c.currency)],
+                      [`Income tax (${rule.taxRate}%)`, `-${fmt(c.tax, c.currency)}`],
+                      [`Pension (${rule.pensionRate}%)`, `-${fmt(c.pension, c.currency)}`],
+                      [`Social security (${rule.socialSecurityRate}%)`, `-${fmt(c.socialSecurity, c.currency)}`],
+                      ["Other deductions", `-${fmt(c.otherDeductions, c.currency)}`],
+                    ].map(([k, v]) => <div key={k} className="flex justify-between p-3 text-sm"><span className="text-muted-foreground">{k}</span><span className="font-medium">{v}</span></div>)}
+                    <div className="flex justify-between p-3 bg-muted/30"><span className="font-semibold">Net pay</span><span className="font-bold text-success">{fmt(c.net, c.currency)}</span></div>
+                    {c.currency !== baseCurrency && (
+                      <div className="flex justify-between p-3 text-xs"><span className="text-muted-foreground">≈ in {baseCurrency}</span><span className="font-medium">{fmt(fxTo(c.net, c.currency), baseCurrency)}</span></div>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    <Button variant="outline" className="flex-1" onClick={() => calculateOne(openEmp)}><Calculator className="h-4 w-4 mr-2" /> Recalculate</Button>
+                    {rec.status !== "Paid" && <Button className="flex-1" onClick={() => { markPaid(openEmp); setOpenEmp(null); }}><BadgeCheck className="h-4 w-4 mr-2" /> Mark Paid</Button>}
+                  </div>
+                  <Button className="w-full" variant="outline"><Download className="h-4 w-4 mr-2" /> Download PDF</Button>
+                </div>
+              </>
+            );
+          })()}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
