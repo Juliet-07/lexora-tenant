@@ -1,12 +1,46 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { Wallet, Download, PlayCircle, DollarSign, Calendar, Receipt, FileText, Landmark, TrendingDown, CheckCircle2, XCircle, Clock } from "lucide-react";
+import { Wallet, Download, PlayCircle, DollarSign, Calendar, Receipt, FileText, Landmark, TrendingDown, CheckCircle2, XCircle, Clock, Settings2, Plus, Trash2, MapPin, Globe2, Save } from "lucide-react";
 import { payrollRuns as initial, payslips, loans as initialLoans, type PayrollRun, type Payslip, type Loan } from "@/data/hrMockData";
 import { useToast } from "@/hooks/use-toast";
+
+type PayrollRule = {
+  id: string;
+  location: string;
+  currency: string;
+  payFrequency: "Monthly" | "Bi-weekly" | "Weekly";
+  payDay: number;
+  taxRate: number;
+  pensionRate: number;
+  socialSecurityRate: number;
+  overtimeMultiplier: number;
+  thirteenthMonth: boolean;
+  rounding: "None" | "Nearest 1" | "Nearest 10" | "Nearest 100";
+};
+type FxRate = { id: string; from: string; to: string; rate: number };
+
+const CURRENCIES = ["USD", "EUR", "GBP", "NGN", "INR", "JPY", "MXN", "RWF", "GHS", "RUB"];
+const INITIAL_RULES: PayrollRule[] = [
+  { id: "PR-1", location: "Lagos, NG", currency: "NGN", payFrequency: "Monthly", payDay: 25, taxRate: 24, pensionRate: 8, socialSecurityRate: 2.5, overtimeMultiplier: 1.5, thirteenthMonth: true, rounding: "Nearest 100" },
+  { id: "PR-2", location: "Milan, IT", currency: "EUR", payFrequency: "Monthly", payDay: 27, taxRate: 38, pensionRate: 9.19, socialSecurityRate: 3.5, overtimeMultiplier: 1.3, thirteenthMonth: true, rounding: "Nearest 1" },
+  { id: "PR-3", location: "Bangalore, IN", currency: "INR", payFrequency: "Monthly", payDay: 1, taxRate: 20, pensionRate: 12, socialSecurityRate: 0, overtimeMultiplier: 2.0, thirteenthMonth: false, rounding: "Nearest 10" },
+  { id: "PR-4", location: "Remote", currency: "USD", payFrequency: "Monthly", payDay: 28, taxRate: 22, pensionRate: 6, socialSecurityRate: 6.2, overtimeMultiplier: 1.5, thirteenthMonth: false, rounding: "None" },
+];
+const INITIAL_FX: FxRate[] = [
+  { id: "FX-1", from: "EUR", to: "USD", rate: 1.08 },
+  { id: "FX-2", from: "GBP", to: "USD", rate: 1.27 },
+  { id: "FX-3", from: "NGN", to: "USD", rate: 0.00065 },
+  { id: "FX-4", from: "INR", to: "USD", rate: 0.012 },
+  { id: "FX-5", from: "JPY", to: "USD", rate: 0.0066 },
+];
 
 const fmt = (n: number) => `$${n.toLocaleString()}`;
 const statusTone = (s: PayrollRun["status"]) =>
