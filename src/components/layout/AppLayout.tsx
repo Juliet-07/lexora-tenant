@@ -7,6 +7,10 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
 import { ModuleSwitcher } from "./ModuleSwitcher";
+import {
+  OnboardingReminder,
+  OnboardingProgressPill,
+} from "@/components/onboarding/OnboardingReminder";
 
 interface AppLayoutProps {
   children: React.ReactNode;
