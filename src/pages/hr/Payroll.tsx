@@ -54,6 +54,19 @@ export default function HRPayroll() {
   const [openPayslip, setOpenPayslip] = useState<Payslip | null>(null);
   const [loans, setLoans] = useState<Loan[]>(initialLoans);
   const [openLoan, setOpenLoan] = useState<Loan | null>(null);
+  const [rules, setRules] = useState<PayrollRule[]>(INITIAL_RULES);
+  const [fx, setFx] = useState<FxRate[]>(INITIAL_FX);
+  const [baseCurrency, setBaseCurrency] = useState("USD");
+  const { toast } = useToast();
+
+  const updateRule = (id: string, patch: Partial<PayrollRule>) =>
+    setRules(prev => prev.map(r => r.id === id ? { ...r, ...patch } : r));
+  const addRule = () => setRules(prev => [...prev, { id: `PR-${Date.now()}`, location: "New Location", currency: baseCurrency, payFrequency: "Monthly", payDay: 25, taxRate: 20, pensionRate: 5, socialSecurityRate: 0, overtimeMultiplier: 1.5, thirteenthMonth: false, rounding: "None" }]);
+  const removeRule = (id: string) => setRules(prev => prev.filter(r => r.id !== id));
+  const updateFx = (id: string, patch: Partial<FxRate>) => setFx(prev => prev.map(r => r.id === id ? { ...r, ...patch } : r));
+  const addFx = () => setFx(prev => [...prev, { id: `FX-${Date.now()}`, from: "EUR", to: baseCurrency, rate: 1 }]);
+  const removeFx = (id: string) => setFx(prev => prev.filter(r => r.id !== id));
+
   const { toast } = useToast();
 
   const current = runs.find(r => r.status === "Draft") ?? runs[0];
