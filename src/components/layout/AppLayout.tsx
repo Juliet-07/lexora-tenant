@@ -34,6 +34,7 @@ export function AppLayout({ children }: AppLayoutProps) {
               </div>
             </div>
             <div className="flex items-center gap-3">
+              {!isAdmin && <OnboardingProgressPill />}
               <Badge variant="outline" className="text-xs">{isAdmin ? "Admin" : "Team Member"}</Badge>
               <Button variant="ghost" size="icon" className="relative">
                 <Bell className="h-4 w-4" />
