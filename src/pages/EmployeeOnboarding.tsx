@@ -232,23 +232,34 @@ export default function EmployeeOnboarding() {
           <div>
             <h1 className="text-xl font-bold">Welcome, {user.firstName}</h1>
             <p className="text-sm text-white/80">
-              Complete onboarding to access your workspace.
+              Finish onboarding to unlock the full workspace — you can leave and resume anytime.
             </p>
           </div>
-          <Button
-            variant="secondary"
-            size="sm"
-            className="bg-white/15 hover:bg-white/25 text-white border-white/20"
-            onClick={logout}
-          >
-            <LogOut className="h-4 w-4 mr-2" /> Sign out
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              className="bg-white/15 hover:bg-white/25 text-white border-white/20"
+              onClick={() => navigate("/")}
+            >
+              <ArrowLeft className="h-4 w-4 mr-2" /> Back to dashboard
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              className="bg-white/15 hover:bg-white/25 text-white border-white/20"
+              onClick={logout}
+            >
+              <LogOut className="h-4 w-4 mr-2" /> Sign out
+            </Button>
+          </div>
         </div>
       </header>
 
       <main className="max-w-6xl mx-auto p-6 space-y-5">
         {/* Progress header */}
         <Card>
+
           <CardContent className="p-5 space-y-3">
             <div className="flex items-center justify-between gap-3">
               <div>
