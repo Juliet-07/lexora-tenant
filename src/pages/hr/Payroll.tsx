@@ -2,11 +2,45 @@ import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { Wallet, Download, PlayCircle, DollarSign, Calendar, Receipt, FileText, Landmark, TrendingDown, CheckCircle2, XCircle, Clock } from "lucide-react";
+import { Wallet, Download, PlayCircle, DollarSign, Calendar, Receipt, FileText, Landmark, TrendingDown, CheckCircle2, XCircle, Clock, Settings2, Plus, Trash2, MapPin, Globe2, Save } from "lucide-react";
 import { payrollRuns as initial, payslips, loans as initialLoans, type PayrollRun, type Payslip, type Loan } from "@/data/hrMockData";
 import { useToast } from "@/hooks/use-toast";
+
+type PayrollRule = {
+  id: string;
+  location: string;
+  currency: string;
+  payFrequency: "Monthly" | "Bi-weekly" | "Weekly";
+  payDay: number;
+  taxRate: number;
+  pensionRate: number;
+  socialSecurityRate: number;
+  overtimeMultiplier: number;
+  thirteenthMonth: boolean;
+  rounding: "None" | "Nearest 1" | "Nearest 10" | "Nearest 100";
+};
+type FxRate = { id: string; from: string; to: string; rate: number };
+
+const CURRENCIES = ["USD", "EUR", "GBP", "NGN", "INR", "JPY", "MXN", "RWF", "GHS", "RUB"];
+const INITIAL_RULES: PayrollRule[] = [
+  { id: "PR-1", location: "Lagos, NG", currency: "NGN", payFrequency: "Monthly", payDay: 25, taxRate: 24, pensionRate: 8, socialSecurityRate: 2.5, overtimeMultiplier: 1.5, thirteenthMonth: true, rounding: "Nearest 100" },
+  { id: "PR-2", location: "Milan, IT", currency: "EUR", payFrequency: "Monthly", payDay: 27, taxRate: 38, pensionRate: 9.19, socialSecurityRate: 3.5, overtimeMultiplier: 1.3, thirteenthMonth: true, rounding: "Nearest 1" },
+  { id: "PR-3", location: "Bangalore, IN", currency: "INR", payFrequency: "Monthly", payDay: 1, taxRate: 20, pensionRate: 12, socialSecurityRate: 0, overtimeMultiplier: 2.0, thirteenthMonth: false, rounding: "Nearest 10" },
+  { id: "PR-4", location: "Remote", currency: "USD", payFrequency: "Monthly", payDay: 28, taxRate: 22, pensionRate: 6, socialSecurityRate: 6.2, overtimeMultiplier: 1.5, thirteenthMonth: false, rounding: "None" },
+];
+const INITIAL_FX: FxRate[] = [
+  { id: "FX-1", from: "EUR", to: "USD", rate: 1.08 },
+  { id: "FX-2", from: "GBP", to: "USD", rate: 1.27 },
+  { id: "FX-3", from: "NGN", to: "USD", rate: 0.00065 },
+  { id: "FX-4", from: "INR", to: "USD", rate: 0.012 },
+  { id: "FX-5", from: "JPY", to: "USD", rate: 0.0066 },
+];
 
 const fmt = (n: number) => `$${n.toLocaleString()}`;
 const statusTone = (s: PayrollRun["status"]) =>
@@ -20,7 +54,20 @@ export default function HRPayroll() {
   const [openPayslip, setOpenPayslip] = useState<Payslip | null>(null);
   const [loans, setLoans] = useState<Loan[]>(initialLoans);
   const [openLoan, setOpenLoan] = useState<Loan | null>(null);
+  const [rules, setRules] = useState<PayrollRule[]>(INITIAL_RULES);
+  const [fx, setFx] = useState<FxRate[]>(INITIAL_FX);
+  const [baseCurrency, setBaseCurrency] = useState("USD");
   const { toast } = useToast();
+
+  const updateRule = (id: string, patch: Partial<PayrollRule>) =>
+    setRules(prev => prev.map(r => r.id === id ? { ...r, ...patch } : r));
+  const addRule = () => setRules(prev => [...prev, { id: `PR-${Date.now()}`, location: "New Location", currency: baseCurrency, payFrequency: "Monthly", payDay: 25, taxRate: 20, pensionRate: 5, socialSecurityRate: 0, overtimeMultiplier: 1.5, thirteenthMonth: false, rounding: "None" }]);
+  const removeRule = (id: string) => setRules(prev => prev.filter(r => r.id !== id));
+  const updateFx = (id: string, patch: Partial<FxRate>) => setFx(prev => prev.map(r => r.id === id ? { ...r, ...patch } : r));
+  const addFx = () => setFx(prev => [...prev, { id: `FX-${Date.now()}`, from: "EUR", to: baseCurrency, rate: 1 }]);
+  const removeFx = (id: string) => setFx(prev => prev.filter(r => r.id !== id));
+
+
 
   const current = runs.find(r => r.status === "Draft") ?? runs[0];
 
@@ -60,7 +107,7 @@ export default function HRPayroll() {
       </Card>
 
       <Tabs defaultValue="runs" className="space-y-4">
-        <TabsList><TabsTrigger value="runs">Pay Runs</TabsTrigger><TabsTrigger value="payslips">Payslips</TabsTrigger><TabsTrigger value="comp">Compensation</TabsTrigger><TabsTrigger value="loans">Loan Management</TabsTrigger></TabsList>
+        <TabsList><TabsTrigger value="runs">Pay Runs</TabsTrigger><TabsTrigger value="payslips">Payslips</TabsTrigger><TabsTrigger value="comp">Compensation</TabsTrigger><TabsTrigger value="loans">Loan Management</TabsTrigger><TabsTrigger value="settings"><Settings2 className="h-3.5 w-3.5 mr-1.5" />Settings</TabsTrigger></TabsList>
 
         <TabsContent value="runs" className="space-y-3">
           {runs.map(r => (
@@ -149,7 +196,124 @@ export default function HRPayroll() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        <TabsContent value="settings" className="space-y-4">
+          <Card>
+            <CardHeader className="flex-row items-center justify-between space-y-0">
+              <div className="flex items-center gap-2"><Globe2 className="h-4 w-4 text-primary" /><CardTitle className="text-base">Base Currency & Exchange Rates</CardTitle></div>
+              <Button size="sm" variant="outline" onClick={addFx}><Plus className="h-3.5 w-3.5 mr-1" /> Add Rate</Button>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center gap-3">
+                <Label className="text-sm">Tenant base currency</Label>
+                <Select value={baseCurrency} onValueChange={setBaseCurrency}>
+                  <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+                  <SelectContent>{CURRENCIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">All payroll runs roll up into this currency for consolidated reporting.</p>
+              </div>
+              <div className="border rounded-lg divide-y">
+                <div className="grid grid-cols-12 gap-2 px-3 py-2 text-[11px] uppercase text-muted-foreground bg-muted/40">
+                  <div className="col-span-3">From</div><div className="col-span-3">To</div><div className="col-span-4">Rate (1 from = N to)</div><div className="col-span-2 text-right">Actions</div>
+                </div>
+                {fx.map(r => (
+                  <div key={r.id} className="grid grid-cols-12 gap-2 px-3 py-2 items-center">
+                    <Select value={r.from} onValueChange={v => updateFx(r.id, { from: v })}>
+                      <SelectTrigger className="col-span-3 h-9"><SelectValue /></SelectTrigger>
+                      <SelectContent>{CURRENCIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+                    </Select>
+                    <Select value={r.to} onValueChange={v => updateFx(r.id, { to: v })}>
+                      <SelectTrigger className="col-span-3 h-9"><SelectValue /></SelectTrigger>
+                      <SelectContent>{CURRENCIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+                    </Select>
+                    <Input type="number" step="0.0001" value={r.rate} onChange={e => updateFx(r.id, { rate: parseFloat(e.target.value) || 0 })} className="col-span-4 h-9" />
+                    <div className="col-span-2 flex justify-end"><Button size="sm" variant="ghost" onClick={() => removeFx(r.id)}><Trash2 className="h-3.5 w-3.5 text-destructive" /></Button></div>
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">Rates last updated manually. Connect a live FX feed to auto-refresh daily.</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex-row items-center justify-between space-y-0">
+              <div className="flex items-center gap-2"><MapPin className="h-4 w-4 text-primary" /><CardTitle className="text-base">Payroll Rules by Location</CardTitle></div>
+              <Button size="sm" onClick={addRule}><Plus className="h-3.5 w-3.5 mr-1" /> Add Location Rule</Button>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {rules.map(r => (
+                <div key={r.id} className="border rounded-lg p-4 space-y-3 bg-muted/20">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 flex-1">
+                      <MapPin className="h-4 w-4 text-muted-foreground" />
+                      <Input value={r.location} onChange={e => updateRule(r.id, { location: e.target.value })} className="h-9 max-w-xs font-medium" />
+                      <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20">{r.currency}</Badge>
+                    </div>
+                    <Button size="sm" variant="ghost" onClick={() => removeRule(r.id)}><Trash2 className="h-3.5 w-3.5 text-destructive" /></Button>
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div className="space-y-1"><Label className="text-xs">Currency</Label>
+                      <Select value={r.currency} onValueChange={v => updateRule(r.id, { currency: v })}>
+                        <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                        <SelectContent>{CURRENCIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1"><Label className="text-xs">Pay frequency</Label>
+                      <Select value={r.payFrequency} onValueChange={v => updateRule(r.id, { payFrequency: v as PayrollRule["payFrequency"] })}>
+                        <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                        <SelectContent><SelectItem value="Monthly">Monthly</SelectItem><SelectItem value="Bi-weekly">Bi-weekly</SelectItem><SelectItem value="Weekly">Weekly</SelectItem></SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1"><Label className="text-xs">Pay day (of month)</Label>
+                      <Input type="number" min={1} max={31} value={r.payDay} onChange={e => updateRule(r.id, { payDay: parseInt(e.target.value) || 1 })} className="h-9" />
+                    </div>
+                    <div className="space-y-1"><Label className="text-xs">Rounding</Label>
+                      <Select value={r.rounding} onValueChange={v => updateRule(r.id, { rounding: v as PayrollRule["rounding"] })}>
+                        <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                        <SelectContent><SelectItem value="None">None</SelectItem><SelectItem value="Nearest 1">Nearest 1</SelectItem><SelectItem value="Nearest 10">Nearest 10</SelectItem><SelectItem value="Nearest 100">Nearest 100</SelectItem></SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1"><Label className="text-xs">Income tax %</Label>
+                      <Input type="number" step="0.1" value={r.taxRate} onChange={e => updateRule(r.id, { taxRate: parseFloat(e.target.value) || 0 })} className="h-9" />
+                    </div>
+                    <div className="space-y-1"><Label className="text-xs">Pension %</Label>
+                      <Input type="number" step="0.1" value={r.pensionRate} onChange={e => updateRule(r.id, { pensionRate: parseFloat(e.target.value) || 0 })} className="h-9" />
+                    </div>
+                    <div className="space-y-1"><Label className="text-xs">Social security %</Label>
+                      <Input type="number" step="0.1" value={r.socialSecurityRate} onChange={e => updateRule(r.id, { socialSecurityRate: parseFloat(e.target.value) || 0 })} className="h-9" />
+                    </div>
+                    <div className="space-y-1"><Label className="text-xs">Overtime multiplier</Label>
+                      <Input type="number" step="0.1" value={r.overtimeMultiplier} onChange={e => updateRule(r.id, { overtimeMultiplier: parseFloat(e.target.value) || 1 })} className="h-9" />
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between pt-2 border-t">
+                    <div className="flex items-center gap-2">
+                      <Switch checked={r.thirteenthMonth} onCheckedChange={v => updateRule(r.id, { thirteenthMonth: v })} id={`13m-${r.id}`} />
+                      <Label htmlFor={`13m-${r.id}`} className="text-sm">13th-month bonus</Label>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      ≈ 1 {r.currency} = {(() => {
+                        if (r.currency === baseCurrency) return `1 ${baseCurrency}`;
+                        const direct = fx.find(f => f.from === r.currency && f.to === baseCurrency);
+                        if (direct) return `${direct.rate} ${baseCurrency}`;
+                        const inverse = fx.find(f => f.from === baseCurrency && f.to === r.currency);
+                        if (inverse && inverse.rate) return `${(1 / inverse.rate).toFixed(4)} ${baseCurrency}`;
+                        return "no FX rate set";
+                      })()}
+                    </p>
+                  </div>
+                </div>
+              ))}
+              <div className="flex justify-end">
+                <Button onClick={() => toast({ title: "Payroll rules saved", description: `${rules.length} location rule${rules.length === 1 ? "" : "s"} updated.` })}>
+                  <Save className="h-4 w-4 mr-2" /> Save Changes
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
+
 
       <Sheet open={!!openLoan} onOpenChange={(o) => !o && setOpenLoan(null)}>
         <SheetContent className="w-full sm:max-w-md">
