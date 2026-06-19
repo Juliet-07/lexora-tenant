@@ -66,6 +66,10 @@ export default function HRPayroll() {
   const [rules, setRules] = useState<PayrollRule[]>(INITIAL_RULES);
   const [fx, setFx] = useState<FxRate[]>(INITIAL_FX);
   const [baseCurrency, setBaseCurrency] = useState("USD");
+  const [month, setMonth] = useState<string>("June 2026");
+  // key: `${month}::${employeeId}`
+  const [empPay, setEmpPay] = useState<Record<string, EmpPayRecord>>({});
+  const [openEmp, setOpenEmp] = useState<Employee | null>(null);
   const { toast } = useToast();
 
   const updateRule = (id: string, patch: Partial<PayrollRule>) =>
@@ -76,24 +80,94 @@ export default function HRPayroll() {
   const addFx = () => setFx(prev => [...prev, { id: `FX-${Date.now()}`, from: "EUR", to: baseCurrency, rate: 1 }]);
   const removeFx = (id: string) => setFx(prev => prev.filter(r => r.id !== id));
 
-
-
-  const current = runs.find(r => r.status === "Draft") ?? runs[0];
-
-  const runPayroll = (r: PayrollRun) => {
-    setRuns(runs.map(x => x.id === r.id ? { ...x, status: "Processing" } : x));
-    toast({ title: "Payroll running", description: `${r.period} run is now processing.` });
-    setTimeout(() => {
-      setRuns(prev => prev.map(x => x.id === r.id ? { ...x, status: "Approved" } : x));
-      toast({ title: "Payroll approved", description: `${r.period} ready for disbursement on ${r.payDate}.` });
-    }, 1200);
+  const fxTo = (amount: number, from: string): number => {
+    if (from === baseCurrency) return amount;
+    const direct = fx.find(f => f.from === from && f.to === baseCurrency);
+    if (direct) return amount * direct.rate;
+    const inverse = fx.find(f => f.from === baseCurrency && f.to === from);
+    if (inverse && inverse.rate) return amount / inverse.rate;
+    return amount;
   };
+
+  const ruleFor = (location: string): PayrollRule => {
+    return rules.find(r => location.toLowerCase().includes(r.location.toLowerCase()) || r.location.toLowerCase().includes(location.toLowerCase()))
+      ?? rules.find(r => r.location === "Remote")
+      ?? rules[0];
+  };
+
+  const round = (n: number, mode: PayrollRule["rounding"]) => {
+    if (mode === "Nearest 100") return Math.round(n / 100) * 100;
+    if (mode === "Nearest 10") return Math.round(n / 10) * 10;
+    if (mode === "Nearest 1") return Math.round(n);
+    return n;
+  };
+
+  const calcFor = (e: Employee): EmpPayCalc => {
+    const rule = ruleFor(e.location);
+    // employee salary stored as annual USD in mock — convert to rule currency monthly
+    const annualInRuleCurrency = e.currency === rule.currency
+      ? e.salary
+      : fxTo(e.salary, e.currency) * (() => {
+          // base -> rule currency conversion
+          if (baseCurrency === rule.currency) return 1;
+          const direct = fx.find(f => f.from === baseCurrency && f.to === rule.currency);
+          if (direct) return direct.rate;
+          const inverse = fx.find(f => f.from === rule.currency && f.to === baseCurrency);
+          if (inverse && inverse.rate) return 1 / inverse.rate;
+          return 1;
+        })();
+    const monthly = annualInRuleCurrency / 12;
+    const gross = round(monthly, rule.rounding);
+    const bonuses = 0;
+    const tax = round(gross * (rule.taxRate / 100), rule.rounding);
+    const pension = round(gross * (rule.pensionRate / 100), rule.rounding);
+    const socialSecurity = round(gross * (rule.socialSecurityRate / 100), rule.rounding);
+    const otherDeductions = 0;
+    const net = gross + bonuses - tax - pension - socialSecurity - otherDeductions;
+    return { gross, bonuses, tax, pension, socialSecurity, otherDeductions, net, currency: rule.currency, ruleId: rule.id };
+  };
+
+  const keyOf = (e: Employee) => `${month}::${e.id}`;
+  const getRec = (e: Employee): EmpPayRecord => empPay[keyOf(e)] ?? { status: "Pending" };
+
+  const calculateOne = (e: Employee) => {
+    const calc = calcFor(e);
+    setEmpPay(prev => ({ ...prev, [keyOf(e)]: { status: "Calculated", calc } }));
+    toast({ title: "Payslip calculated", description: `${e.firstName} ${e.lastName} · ${month} · ${fmt(calc.net, calc.currency)} net` });
+  };
+  const markPaid = (e: Employee) => {
+    const rec = getRec(e);
+    if (!rec.calc) return;
+    setEmpPay(prev => ({ ...prev, [keyOf(e)]: { status: "Paid", calc: rec.calc } }));
+    toast({ title: "Marked as paid", description: `${e.firstName} ${e.lastName} · ${month}` });
+  };
+  const calculateAll = () => {
+    const next = { ...empPay };
+    activeEmployees.forEach(e => { next[keyOf(e)] = { status: "Calculated", calc: calcFor(e) }; });
+    setEmpPay(next);
+    toast({ title: "All payslips calculated", description: `${activeEmployees.length} employees for ${month}` });
+  };
+
+  const activeEmployees = employees.filter(e => e.status !== "On Leave" || true);
+
+  // Hero totals in base currency for selected month
+  const monthRecords = activeEmployees.map(e => getRec(e));
+  const grossBase = monthRecords.reduce((acc, r) => acc + (r.calc ? fxTo(r.calc.gross, r.calc.currency) : 0), 0);
+  const dedBase = monthRecords.reduce((acc, r) => acc + (r.calc ? fxTo(r.calc.tax + r.calc.pension + r.calc.socialSecurity + r.calc.otherDeductions, r.calc.currency) : 0), 0);
+  const netBase = monthRecords.reduce((acc, r) => acc + (r.calc ? fxTo(r.calc.net, r.calc.currency) : 0), 0);
+  const calcCount = monthRecords.filter(r => r.status !== "Pending").length;
+  const paidCount = monthRecords.filter(r => r.status === "Paid").length;
+
+  const empStatusTone = (s: EmpPayState) =>
+    s === "Paid" ? "bg-success/10 text-success border-success/20"
+    : s === "Calculated" ? "bg-info/10 text-info border-info/20"
+    : "bg-muted text-muted-foreground";
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Payroll</h1>
-        <p className="text-sm text-muted-foreground">Run payroll, manage payslips and compensation.</p>
+        <p className="text-sm text-muted-foreground">Calculate and run monthly payroll per employee, with location-based rules and multi-currency support.</p>
       </div>
 
       <Card className="bg-gradient-to-br from-primary/10 via-secondary/5 to-background border-primary/20">
@@ -101,36 +175,96 @@ export default function HRPayroll() {
           <div className="flex items-center gap-4">
             <div className="h-14 w-14 rounded-xl bg-gradient-to-br from-primary to-secondary flex items-center justify-center"><Wallet className="h-7 w-7 text-white" /></div>
             <div>
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">Current Payroll</p>
-              <p className="text-xl font-bold">{current.period}</p>
-              <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1"><Calendar className="h-3 w-3" />Pay date {current.payDate} · {current.employees} employees</p>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">Payroll Period</p>
+              <Select value={month} onValueChange={setMonth}>
+                <SelectTrigger className="h-9 w-44 font-bold text-base mt-1"><SelectValue /></SelectTrigger>
+                <SelectContent>{MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1"><Users className="h-3 w-3" />{calcCount}/{activeEmployees.length} calculated · {paidCount} paid</p>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-6">
-            <div><p className="text-xs text-muted-foreground">Gross</p><p className="text-lg font-bold">{fmt(current.gross)}</p></div>
-            <div><p className="text-xs text-muted-foreground">Deductions</p><p className="text-lg font-bold text-destructive">-{fmt(current.deductions)}</p></div>
-            <div><p className="text-xs text-muted-foreground">Net</p><p className="text-lg font-bold text-success">{fmt(current.net)}</p></div>
-            {current.status === "Draft" && <Button size="lg" className="bg-gradient-to-r from-primary to-secondary" onClick={() => runPayroll(current)}><PlayCircle className="h-4 w-4 mr-2" /> Run Payroll</Button>}
+            <div><p className="text-xs text-muted-foreground">Gross ({baseCurrency})</p><p className="text-lg font-bold">{fmt(grossBase, baseCurrency)}</p></div>
+            <div><p className="text-xs text-muted-foreground">Deductions</p><p className="text-lg font-bold text-destructive">-{fmt(dedBase, baseCurrency)}</p></div>
+            <div><p className="text-xs text-muted-foreground">Net</p><p className="text-lg font-bold text-success">{fmt(netBase, baseCurrency)}</p></div>
+            <Button size="lg" className="bg-gradient-to-r from-primary to-secondary" onClick={calculateAll}><Calculator className="h-4 w-4 mr-2" /> Calculate All</Button>
           </div>
         </CardContent>
       </Card>
 
-      <Tabs defaultValue="runs" className="space-y-4">
-        <TabsList><TabsTrigger value="runs">Pay Runs</TabsTrigger><TabsTrigger value="payslips">Payslips</TabsTrigger><TabsTrigger value="comp">Compensation</TabsTrigger><TabsTrigger value="loans">Loan Management</TabsTrigger><TabsTrigger value="settings"><Settings2 className="h-3.5 w-3.5 mr-1.5" />Settings</TabsTrigger></TabsList>
+      <Tabs defaultValue="employees" className="space-y-4">
+        <TabsList><TabsTrigger value="employees"><Users className="h-3.5 w-3.5 mr-1.5" />Employees</TabsTrigger><TabsTrigger value="runs">Pay Runs</TabsTrigger><TabsTrigger value="payslips">Payslips</TabsTrigger><TabsTrigger value="comp">Compensation</TabsTrigger><TabsTrigger value="loans">Loan Management</TabsTrigger><TabsTrigger value="settings"><Settings2 className="h-3.5 w-3.5 mr-1.5" />Settings</TabsTrigger></TabsList>
+
+        <TabsContent value="employees" className="space-y-3">
+          <Card>
+            <CardHeader className="flex-row items-center justify-between space-y-0">
+              <CardTitle className="text-base">Run payroll per employee — {month}</CardTitle>
+              <p className="text-xs text-muted-foreground">Click Calculate to generate this month's payslip using the employee's location rule.</p>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="grid grid-cols-12 gap-2 px-4 py-2 text-[11px] uppercase text-muted-foreground bg-muted/40 border-b">
+                <div className="col-span-4">Employee</div>
+                <div className="col-span-2">Location · Rule</div>
+                <div className="col-span-2 text-right">Monthly Gross</div>
+                <div className="col-span-2 text-right">Net Pay</div>
+                <div className="col-span-2 text-right">Status / Actions</div>
+              </div>
+              {activeEmployees.map(e => {
+                const rec = getRec(e);
+                const rule = ruleFor(e.location);
+                return (
+                  <div key={e.id} className="grid grid-cols-12 gap-2 px-4 py-3 items-center border-b last:border-b-0 hover:bg-muted/20">
+                    <div className="col-span-4 flex items-center gap-3">
+                      <div className="h-9 w-9 rounded-full bg-gradient-to-br from-primary to-secondary text-white text-xs font-bold flex items-center justify-center">{e.avatar}</div>
+                      <div>
+                        <p className="text-sm font-medium">{e.firstName} {e.lastName}</p>
+                        <p className="text-[11px] text-muted-foreground">{e.jobTitle} · {e.department}</p>
+                      </div>
+                    </div>
+                    <div className="col-span-2">
+                      <p className="text-xs flex items-center gap-1"><MapPin className="h-3 w-3 text-muted-foreground" />{e.location}</p>
+                      <p className="text-[10px] text-muted-foreground">Rule: {rule.location} ({rule.currency})</p>
+                    </div>
+                    <div className="col-span-2 text-right">
+                      {rec.calc
+                        ? <><p className="text-sm font-semibold">{fmt(rec.calc.gross, rec.calc.currency)}</p><p className="text-[10px] text-muted-foreground">≈ {fmt(fxTo(rec.calc.gross, rec.calc.currency), baseCurrency)}</p></>
+                        : <p className="text-xs text-muted-foreground">Annual {fmt(e.salary, e.currency)}</p>}
+                    </div>
+                    <div className="col-span-2 text-right">
+                      {rec.calc
+                        ? <><p className="text-sm font-semibold text-success">{fmt(rec.calc.net, rec.calc.currency)}</p><p className="text-[10px] text-muted-foreground">Tax {rule.taxRate}% · Pen {rule.pensionRate}%</p></>
+                        : <span className="text-xs text-muted-foreground">—</span>}
+                    </div>
+                    <div className="col-span-2 flex items-center justify-end gap-2">
+                      <Badge variant="outline" className={empStatusTone(rec.status)}>{rec.status}</Badge>
+                      {rec.status === "Pending" && <Button size="sm" variant="outline" onClick={() => calculateOne(e)}><Calculator className="h-3 w-3 mr-1" />Calculate</Button>}
+                      {rec.status === "Calculated" && (<>
+                        <Button size="sm" variant="ghost" onClick={() => setOpenEmp(e)}><Eye className="h-3 w-3" /></Button>
+                        <Button size="sm" onClick={() => markPaid(e)}><BadgeCheck className="h-3 w-3 mr-1" />Pay</Button>
+                      </>)}
+                      {rec.status === "Paid" && <Button size="sm" variant="ghost" onClick={() => setOpenEmp(e)}><Eye className="h-3 w-3" /></Button>}
+                    </div>
+                  </div>
+                );
+              })}
+            </CardContent>
+          </Card>
+        </TabsContent>
 
         <TabsContent value="runs" className="space-y-3">
           {runs.map(r => (
             <Card key={r.id}><CardContent className="p-4 flex items-center justify-between gap-3 flex-wrap">
               <div className="flex items-center gap-3"><Receipt className="h-5 w-5 text-primary" /><div><p className="font-medium">{r.period}</p><p className="text-xs text-muted-foreground">Pay date {r.payDate} · {r.employees} employees · by {r.createdBy}</p></div></div>
               <div className="flex items-center gap-6 text-sm">
-                <span>Gross <strong>{fmt(r.gross)}</strong></span>
-                <span className="text-success">Net <strong>{fmt(r.net)}</strong></span>
+                <span>Gross <strong>{fmt(r.gross, baseCurrency)}</strong></span>
+                <span className="text-success">Net <strong>{fmt(r.net, baseCurrency)}</strong></span>
                 <Badge variant="outline" className={statusTone(r.status)}>{r.status}</Badge>
                 <Button size="sm" variant="outline"><Download className="h-3 w-3 mr-1" /> Export</Button>
               </div>
             </CardContent></Card>
           ))}
         </TabsContent>
+
 
         <TabsContent value="payslips">
           <Card><CardHeader><CardTitle className="text-base">May 2026 Payslips</CardTitle></CardHeader>
