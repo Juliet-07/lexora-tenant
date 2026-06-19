@@ -179,6 +179,12 @@ export default function EmployeeOnboarding() {
       100,
   );
 
+  // Mirror progress to localStorage so the header pill stays in sync.
+  useEffect(() => {
+    writeOnboardingProgress(progressPct);
+  }, [progressPct]);
+
+
   const next = () => {
     if (!stepValid(stepIdx)) {
       return toast.error("Please complete the required fields before continuing.");
