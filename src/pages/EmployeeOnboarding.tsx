@@ -99,6 +99,7 @@ const STEPS = [
 export default function EmployeeOnboarding() {
   const { user, logout } = useAuth();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   const [stepIdx, setStepIdx] = useState(0);
   const [personal, setPersonal] = useState<PersonalForm>(emptyPersonal);
@@ -128,12 +129,14 @@ export default function EmployeeOnboarding() {
     mutationFn: completeMyOnboarding,
     onSuccess: () => {
       toast.success("Onboarding completed.");
+      writeOnboardingProgress(100);
       queryClient.invalidateQueries({ queryKey: ["onboarding-status"] });
-      window.location.href = "/";
+      navigate("/");
     },
     onError: (err: any) =>
       toast.error(err?.response?.data?.message ?? "Failed to submit onboarding"),
   });
+
 
   if (!user) return null;
 
