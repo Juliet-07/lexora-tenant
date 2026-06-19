@@ -59,6 +59,7 @@ export function AppLayout({ children }: AppLayoutProps) {
             {children}
           </main>
         </div>
+        {!isAdmin && <OnboardingReminder />}
       </div>
     </SidebarProvider>
   );
