@@ -16,61 +16,39 @@ import { fetchMyOnboardingStatus } from "@/lib/hr-api";
 import { useAuth } from "@/contexts/AuthContext";
 
 const SESSION_DISMISS_KEY = "onboarding-reminder-dismissed";
-const PROGRESS_STORE_KEY = "onboarding-progress-pct";
 
-/** Read locally-persisted onboarding progress written by the wizard. */
-export function readOnboardingProgress(): number {
-  try {
-    const raw = localStorage.getItem(PROGRESS_STORE_KEY);
-    if (!raw) return 0;
-    const n = Number(raw);
-    return Number.isFinite(n) ? Math.max(0, Math.min(100, n)) : 0;
-  } catch {
-    return 0;
-  }
-}
+// Total steps in the wizard — kept in one place so the pill's
+// percentage math matches EmployeeOnboarding.tsx's STEPS.length.
+const TOTAL_STEPS = 4;
 
-export function writeOnboardingProgress(pct: number) {
-  try {
-    localStorage.setItem(PROGRESS_STORE_KEY, String(pct));
-    window.dispatchEvent(new Event("onboarding-progress-change"));
-  } catch {
-    /* noop */
-  }
-}
-
-/** Hook returning the current employee onboarding state. */
+/**
+ * Hook returning the current employee onboarding state, sourced
+ * entirely from the backend (employee.onboardingStep / completed).
+ * No localStorage — the query cache (shared across every component
+ * using this hook) is the single source of truth, so the pill, the
+ * reminder popup, and the wizard itself can never disagree.
+ */
 export function useOnboardingState() {
   const { user, isAdmin } = useAuth();
   const { data } = useQuery({
     queryKey: ["onboarding-status"],
     queryFn: fetchMyOnboardingStatus,
     enabled: !!user && !isAdmin,
-    staleTime: 60_000,
+    staleTime: 30_000,
   });
 
-  const [localPct, setLocalPct] = useState(readOnboardingProgress());
-  useEffect(() => {
-    const handler = () => setLocalPct(readOnboardingProgress());
-    window.addEventListener("onboarding-progress-change", handler);
-    window.addEventListener("storage", handler);
-    return () => {
-      window.removeEventListener("onboarding-progress-change", handler);
-      window.removeEventListener("storage", handler);
-    };
-  }, []);
-
-  const completed = !!(data as any)?.completed;
-  const pct = completed ? 100 : localPct;
+  const completed = !!data?.completed;
+  const step = data?.step ?? 0; // 0-4, furthest completed step
+  const pct = completed ? 100 : Math.round((step / TOTAL_STEPS) * 100);
   const enabled = !!user && !isAdmin && data !== undefined;
 
-  return { enabled, completed, pct };
+  return { enabled, completed, step, pct };
 }
 
 /**
- * Renders:
- *  - a welcome popup nudging incomplete employees to /onboarding (dismissable per session)
- *  - nothing else; the header progress pill is a sibling component
+ * Renders a welcome popup nudging incomplete employees to
+ * /onboarding (dismissable per session). The header progress pill
+ * is a sibling component (OnboardingProgressPill, below).
  */
 export function OnboardingReminder() {
   const { enabled, completed } = useOnboardingState();

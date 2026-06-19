@@ -1,8 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { writeOnboardingProgress } from "@/components/onboarding/OnboardingReminder";
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -29,12 +28,17 @@ import {
 import { toast } from "sonner";
 import {
   fetchMyOnboardingStatus,
+  saveOnboardingPersonal,
+  saveOnboardingMedical,
+  uploadOnboardingCertificate,
+  deleteOnboardingCertificate,
+  saveOnboardingReferences,
   completeMyOnboarding,
   type OnboardingDocument,
+  type EmployeeCertificate,
 } from "@/lib/hr-api";
 import { useAuth } from "@/contexts/AuthContext";
 
-// ─── Types ────────────────────────────────────────────────
 interface PersonalForm {
   dob: string;
   nationality: string;
@@ -53,11 +57,6 @@ interface MedicalForm {
   medications: string;
   doctorName: string;
   doctorPhone: string;
-}
-interface UploadItem {
-  id: string;
-  name: string;
-  size: number;
 }
 interface ReferenceItem {
   id: string;
@@ -92,7 +91,11 @@ const emptyMedical: MedicalForm = {
 const STEPS = [
   { key: "personal", title: "Personal & Emergency", icon: User },
   { key: "medical", title: "Medical Information", icon: HeartPulse },
-  { key: "credentials", title: "Certificates & References", icon: GraduationCap },
+  {
+    key: "credentials",
+    title: "Certificates & References",
+    icon: GraduationCap,
+  },
   { key: "policies", title: "Policies & Signature", icon: ShieldCheck },
 ] as const;
 
@@ -104,12 +107,14 @@ export default function EmployeeOnboarding() {
   const [stepIdx, setStepIdx] = useState(0);
   const [personal, setPersonal] = useState<PersonalForm>(emptyPersonal);
   const [medical, setMedical] = useState<MedicalForm>(emptyMedical);
-  const [certificates, setCertificates] = useState<UploadItem[]>([]);
+  const [certificates, setCertificates] = useState<EmployeeCertificate[]>([]);
   const [references, setReferences] = useState<ReferenceItem[]>([]);
+  const [uploadingCert, setUploadingCert] = useState(false);
 
   const [checks, setChecks] = useState<Record<string, boolean>>({});
   const [signature, setSignature] = useState("");
   const [active, setActive] = useState<OnboardingDocument | null>(null);
+  const [hydrated, setHydrated] = useState(false);
 
   const { data: status, isLoading } = useQuery({
     queryKey: ["onboarding-status"],
@@ -117,30 +122,114 @@ export default function EmployeeOnboarding() {
     staleTime: 0,
   });
 
-  useMemo(() => {
-    if (!active && status && (status as any).documents?.length > 0) {
-      setActive((status as any).documents[0]);
-    }
-  }, [status, active]);
+  useEffect(() => {
+    if (hydrated || !status) return;
 
-  const docs = (status as any)?.documents ?? [];
+    const saved = status.saved;
+    if (saved) {
+      setPersonal({
+        dob: saved.dateOfBirth ? saved.dateOfBirth.slice(0, 10) : "",
+        nationality: saved.nationality ?? "",
+        address: saved.address?.street ?? "",
+        nextOfKinName: saved.nextOfKin?.name ?? "",
+        nextOfKinRelationship: saved.nextOfKin?.relationship ?? "",
+        nextOfKinPhone: saved.nextOfKin?.phone ?? "",
+        emergencyName: saved.emergencyContactName ?? "",
+        emergencyRelationship: "",
+        emergencyPhone: saved.emergencyContactPhone ?? "",
+      });
+      if (saved.medicalInfo) {
+        setMedical({
+          bloodGroup: saved.medicalInfo.bloodGroup ?? "",
+          allergies: saved.medicalInfo.allergies ?? "",
+          conditions: saved.medicalInfo.conditions ?? "",
+          medications: saved.medicalInfo.medications ?? "",
+          doctorName: saved.medicalInfo.doctorName ?? "",
+          doctorPhone: saved.medicalInfo.doctorPhone ?? "",
+        });
+      }
+      setCertificates(saved.certificates ?? []);
+      setReferences(
+        (saved.references ?? []).map((r) => ({
+          id: crypto.randomUUID(),
+          name: r.name,
+          relationship: r.relationship ?? "",
+          email: r.email ?? "",
+          phone: r.phone ?? "",
+        })),
+      );
+    }
+
+    const serverStepInit = status.step ?? 0;
+    setStepIdx(Math.min(serverStepInit, STEPS.length - 1));
+
+    if (!active && status.documents.length > 0) {
+      setActive(status.documents[0]);
+    }
+
+    setHydrated(true);
+  }, [status, hydrated, active]);
+
+  const docs = status?.documents ?? [];
+  const serverStep = status?.step ?? 0;
+  const completed = !!status?.completed;
+
+  const progressPct = completed
+    ? 100
+    : Math.round((serverStep / STEPS.length) * 100);
+
+  const invalidateStatus = () =>
+    queryClient.invalidateQueries({ queryKey: ["onboarding-status"] });
+
+  const personalMutation = useMutation({
+    mutationFn: saveOnboardingPersonal,
+    onSuccess: () => {
+      invalidateStatus();
+      toast.success("Personal details saved.");
+      setStepIdx(1);
+    },
+    onError: (err: any) =>
+      toast.error(err?.response?.data?.message ?? "Failed to save."),
+  });
+
+  const medicalMutation = useMutation({
+    mutationFn: saveOnboardingMedical,
+    onSuccess: () => {
+      invalidateStatus();
+      toast.success("Medical information saved.");
+      setStepIdx(2);
+    },
+    onError: (err: any) =>
+      toast.error(err?.response?.data?.message ?? "Failed to save."),
+  });
+
+  const referencesMutation = useMutation({
+    mutationFn: saveOnboardingReferences,
+    onSuccess: () => {
+      invalidateStatus();
+      toast.success("References saved.");
+      setStepIdx(3);
+    },
+    onError: (err: any) =>
+      toast.error(err?.response?.data?.message ?? "Failed to save."),
+  });
 
   const completeMutation = useMutation({
     mutationFn: completeMyOnboarding,
     onSuccess: () => {
       toast.success("Onboarding completed.");
-      writeOnboardingProgress(100);
-      queryClient.invalidateQueries({ queryKey: ["onboarding-status"] });
+      invalidateStatus();
       navigate("/");
     },
     onError: (err: any) =>
-      toast.error(err?.response?.data?.message ?? "Failed to submit onboarding"),
+      toast.error(
+        err?.response?.data?.message ?? "Failed to submit onboarding",
+      ),
   });
-
 
   if (!user) return null;
 
-  if (isLoading) {
+  if (isLoading || !hydrated) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="flex items-center gap-2 text-muted-foreground">
@@ -156,16 +245,15 @@ export default function EmployeeOnboarding() {
   const signatureValid =
     signature.trim().toLowerCase() === fullName.toLowerCase();
 
-  // ─── Step validation ──
   const stepValid = (i: number): boolean => {
     if (i === 0) {
       return Boolean(
         personal.dob &&
-          personal.address &&
-          personal.nextOfKinName &&
-          personal.nextOfKinPhone &&
-          personal.emergencyName &&
-          personal.emergencyPhone,
+        personal.address &&
+        personal.nextOfKinName &&
+        personal.nextOfKinPhone &&
+        personal.emergencyName &&
+        personal.emergencyPhone,
       );
     }
     if (i === 1) return Boolean(medical.bloodGroup);
@@ -174,28 +262,66 @@ export default function EmployeeOnboarding() {
     return false;
   };
 
-  const progressPct = Math.round(
-    (STEPS.reduce((acc, _, i) => acc + (stepValid(i) ? 1 : 0), 0) / STEPS.length) *
-      100,
-  );
+  const stepDone = (i: number) => serverStep > i || completed;
 
-  // Mirror progress to localStorage so the header pill stays in sync.
-  useEffect(() => {
-    writeOnboardingProgress(progressPct);
-  }, [progressPct]);
-
-
-  const next = () => {
-    if (!stepValid(stepIdx)) {
-      return toast.error("Please complete the required fields before continuing.");
-    }
-    setStepIdx((i) => Math.min(STEPS.length - 1, i + 1));
-  };
   const back = () => setStepIdx((i) => Math.max(0, i - 1));
 
+  const saveStep0 = () => {
+    if (!stepValid(0)) {
+      return toast.error(
+        "Please complete the required fields before continuing.",
+      );
+    }
+    personalMutation.mutate({
+      dateOfBirth: personal.dob,
+      nationality: personal.nationality || undefined,
+      address: personal.address,
+      nextOfKin: {
+        name: personal.nextOfKinName,
+        relationship: personal.nextOfKinRelationship || undefined,
+        phone: personal.nextOfKinPhone,
+      },
+      emergencyContactName: personal.emergencyName,
+      emergencyContactRelationship: personal.emergencyRelationship || undefined,
+      emergencyContactPhone: personal.emergencyPhone,
+    });
+  };
+
+  const saveStep1 = () => {
+    if (!stepValid(1)) {
+      return toast.error("Blood group is required before continuing.");
+    }
+    medicalMutation.mutate({
+      bloodGroup: medical.bloodGroup,
+      allergies: medical.allergies || undefined,
+      conditions: medical.conditions || undefined,
+      medications: medical.medications || undefined,
+      doctorName: medical.doctorName || undefined,
+      doctorPhone: medical.doctorPhone || undefined,
+    });
+  };
+
+  const saveStep2 = () => {
+    if (!stepValid(2)) {
+      return toast.error(
+        "Upload at least one certificate and add a reference.",
+      );
+    }
+    referencesMutation.mutate({
+      references: references.map((r) => ({
+        name: r.name,
+        relationship: r.relationship || undefined,
+        email: r.email || undefined,
+        phone: r.phone || undefined,
+      })),
+    });
+  };
+
   const submit = () => {
-    if (!STEPS.every((_, i) => stepValid(i))) {
-      return toast.error("Some steps are incomplete.");
+    if (!allChecked || !signatureValid) {
+      return toast.error(
+        "Agree to every document and sign with your full name.",
+      );
     }
     completeMutation.mutate({
       signatureName: signature.trim(),
@@ -203,14 +329,39 @@ export default function EmployeeOnboarding() {
     });
   };
 
-  const handleFiles = (files: FileList | null) => {
-    if (!files) return;
-    const items = Array.from(files).map((f) => ({
-      id: crypto.randomUUID(),
-      name: f.name,
-      size: f.size,
-    }));
-    setCertificates((prev) => [...prev, ...items]);
+  const next = () => {
+    if (stepIdx === 0) return saveStep0();
+    if (stepIdx === 1) return saveStep1();
+    if (stepIdx === 2) return saveStep2();
+  };
+
+  const handleFiles = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    setUploadingCert(true);
+    try {
+      for (const file of Array.from(files)) {
+        const cert = await uploadOnboardingCertificate(file);
+        setCertificates((prev) => [...prev, cert]);
+      }
+      toast.success("Certificate uploaded.");
+    } catch (err: any) {
+      toast.error(
+        err?.response?.data?.message ?? "Failed to upload certificate.",
+      );
+    } finally {
+      setUploadingCert(false);
+    }
+  };
+
+  const removeCertificate = async (cert: EmployeeCertificate) => {
+    try {
+      await deleteOnboardingCertificate(cert.fileUrl);
+      setCertificates((prev) => prev.filter((c) => c.fileUrl !== cert.fileUrl));
+    } catch (err: any) {
+      toast.error(
+        err?.response?.data?.message ?? "Failed to remove certificate.",
+      );
+    }
   };
 
   const addReference = () =>
@@ -225,6 +376,11 @@ export default function EmployeeOnboarding() {
       },
     ]);
 
+  const anyStepSaving =
+    personalMutation.isPending ||
+    medicalMutation.isPending ||
+    referencesMutation.isPending;
+
   return (
     <div className="min-h-screen bg-muted/30">
       <header className="bg-gradient-to-r from-primary to-secondary text-white px-6 py-5">
@@ -232,7 +388,8 @@ export default function EmployeeOnboarding() {
           <div>
             <h1 className="text-xl font-bold">Welcome, {user.firstName}</h1>
             <p className="text-sm text-white/80">
-              Finish onboarding to unlock the full workspace — you can leave and resume anytime.
+              Finish onboarding to unlock the full workspace — you can leave and
+              resume anytime.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -257,9 +414,7 @@ export default function EmployeeOnboarding() {
       </header>
 
       <main className="max-w-6xl mx-auto p-6 space-y-5">
-        {/* Progress header */}
         <Card>
-
           <CardContent className="p-5 space-y-3">
             <div className="flex items-center justify-between gap-3">
               <div>
@@ -274,28 +429,31 @@ export default function EmployeeOnboarding() {
                 variant="outline"
                 className="text-sm border-primary text-primary"
               >
-                {progressPct === 100 ? "Fully onboarded" : `${progressPct}% complete`}
+                {progressPct === 100
+                  ? "Fully onboarded"
+                  : `${progressPct}% complete`}
               </Badge>
             </div>
             <Progress value={progressPct} className="h-2" />
 
-            {/* Stepper */}
             <div className="grid grid-cols-4 gap-2 pt-2">
               {STEPS.map((s, i) => {
                 const Icon = s.icon;
-                const done = stepValid(i);
+                const done = stepDone(i);
                 const isCurrent = i === stepIdx;
+                const reachable = i <= serverStep;
                 return (
                   <button
                     key={s.key}
-                    onClick={() => setStepIdx(i)}
+                    onClick={() => reachable && setStepIdx(i)}
+                    disabled={!reachable}
                     className={`p-2 rounded-md text-left transition flex items-start gap-2 border ${
                       isCurrent
                         ? "border-primary bg-primary/5"
                         : done
                           ? "border-success/40 bg-success/5"
-                          : "border-transparent bg-muted/50 hover:bg-muted"
-                    }`}
+                          : "border-transparent bg-muted/50"
+                    } ${!reachable ? "opacity-50 cursor-not-allowed" : "hover:bg-muted"}`}
                   >
                     <div
                       className={`h-7 w-7 rounded-full flex items-center justify-center shrink-0 ${
@@ -325,7 +483,6 @@ export default function EmployeeOnboarding() {
           </CardContent>
         </Card>
 
-        {/* Step body */}
         {stepIdx === 0 && (
           <Card>
             <CardContent className="p-6 space-y-6">
@@ -345,7 +502,10 @@ export default function EmployeeOnboarding() {
                     <Input
                       value={personal.nationality}
                       onChange={(e) =>
-                        setPersonal({ ...personal, nationality: e.target.value })
+                        setPersonal({
+                          ...personal,
+                          nationality: e.target.value,
+                        })
                       }
                     />
                   </Field>
@@ -514,12 +674,21 @@ export default function EmployeeOnboarding() {
             <CardContent className="p-6 space-y-6">
               <section className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <h3 className="font-semibold">Certificates & qualifications</h3>
+                  <h3 className="font-semibold">
+                    Certificates & qualifications
+                  </h3>
                   <Label
                     htmlFor="cert-upload"
-                    className="cursor-pointer inline-flex items-center gap-2 text-sm font-medium text-primary hover:underline"
+                    className={`cursor-pointer inline-flex items-center gap-2 text-sm font-medium text-primary hover:underline ${
+                      uploadingCert ? "opacity-50 pointer-events-none" : ""
+                    }`}
                   >
-                    <Upload className="h-4 w-4" /> Upload files
+                    {uploadingCert ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Upload className="h-4 w-4" />
+                    )}
+                    Upload files
                   </Label>
                   <input
                     id="cert-upload"
@@ -527,6 +696,7 @@ export default function EmployeeOnboarding() {
                     multiple
                     accept=".pdf,.jpg,.jpeg,.png"
                     className="hidden"
+                    disabled={uploadingCert}
                     onChange={(e) => handleFiles(e.target.files)}
                   />
                 </div>
@@ -538,24 +708,17 @@ export default function EmployeeOnboarding() {
                   <div className="space-y-2">
                     {certificates.map((c) => (
                       <div
-                        key={c.id}
+                        key={c.fileUrl}
                         className="flex items-center justify-between border rounded-md p-2 text-sm"
                       >
                         <div className="flex items-center gap-2 truncate">
                           <FileText className="h-4 w-4 text-primary shrink-0" />
                           <span className="truncate">{c.name}</span>
-                          <span className="text-xs text-muted-foreground">
-                            {(c.size / 1024).toFixed(0)} KB
-                          </span>
                         </div>
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() =>
-                            setCertificates((prev) =>
-                              prev.filter((x) => x.id !== c.id),
-                            )
-                          }
+                          onClick={() => removeCertificate(c)}
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -579,7 +742,10 @@ export default function EmployeeOnboarding() {
                 ) : (
                   <div className="space-y-3">
                     {references.map((r, idx) => (
-                      <div key={r.id} className="border rounded-md p-3 space-y-2">
+                      <div
+                        key={r.id}
+                        className="border rounded-md p-3 space-y-2"
+                      >
                         <div className="flex items-center justify-between">
                           <p className="text-sm font-medium">
                             Reference {idx + 1}
@@ -790,29 +956,32 @@ export default function EmployeeOnboarding() {
           </>
         )}
 
-        {/* Navigation footer */}
         <div className="flex items-center justify-between pt-2">
-          <Button
-            variant="outline"
-            onClick={back}
-            disabled={stepIdx === 0}
-          >
+          <Button variant="outline" onClick={back} disabled={stepIdx === 0}>
             <ArrowLeft className="h-4 w-4 mr-2" /> Back
           </Button>
 
           {stepIdx < STEPS.length - 1 ? (
             <Button
               onClick={next}
+              disabled={anyStepSaving}
               className="bg-gradient-to-r from-primary to-secondary"
             >
-              Save & Continue <ArrowRight className="h-4 w-4 ml-2" />
+              {anyStepSaving ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Saving…
+                </>
+              ) : (
+                <>
+                  Save & Continue <ArrowRight className="h-4 w-4 ml-2" />
+                </>
+              )}
             </Button>
           ) : (
             <Button
               onClick={submit}
               disabled={
-                !STEPS.every((_, i) => stepValid(i)) ||
-                completeMutation.isPending
+                !allChecked || !signatureValid || completeMutation.isPending
               }
               className="bg-gradient-to-r from-primary to-secondary"
             >

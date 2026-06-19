@@ -168,6 +168,12 @@ export interface Employee {
   avatarUrl: string | null;
   documents: { name: string; url: string; uploadedAt: string }[];
   createdAt: string;
+  nextOfKin: NextOfKin | null;
+  medicalInfo: MedicalInfo | null;
+  certificates: EmployeeCertificate[];
+  references: EmployeeReference[];
+  onboardingStep: number; // 0-4
+  onboardingCompleted: boolean;
 }
 
 export interface EmployeeStats {
@@ -594,6 +600,59 @@ export interface EmployeeOnboardingTabResponse {
   record: EmployeeOnboardingRecord | null;
 }
 
+export interface NextOfKin {
+  name: string;
+  relationship: string | null;
+  phone: string;
+}
+
+export interface MedicalInfo {
+  bloodGroup: string;
+  allergies: string | null;
+  conditions: string | null;
+  medications: string | null;
+  doctorName: string | null;
+  doctorPhone: string | null;
+}
+
+export interface EmployeeReference {
+  name: string;
+  relationship: string | null;
+  email: string | null;
+  phone: string | null;
+}
+
+export interface EmployeeCertificate {
+  name: string;
+  fileUrl: string;
+  originalFileName: string;
+  uploadedAt: string;
+}
+
+export interface OnboardingSavedState {
+  dateOfBirth: string | null;
+  nationality: string | null;
+  address: {
+    street?: string;
+    city?: string;
+    state?: string;
+    country?: string;
+  } | null;
+  nextOfKin: NextOfKin | null;
+  emergencyContactName: string | null;
+  emergencyContactPhone: string | null;
+  medicalInfo: MedicalInfo | null;
+  certificates: EmployeeCertificate[];
+  references: EmployeeReference[];
+}
+
+export interface OnboardingStatusResponse {
+  completed: boolean;
+  step: number; // 0-4
+  documents: OnboardingDocument[];
+  saved: OnboardingSavedState | null;
+}
+
 // ── Onboarding — Tenant admin API ───────────────────────────────
 
 export const fetchOnboardingDocuments = async (
@@ -703,5 +762,73 @@ export const updateMyProfile = async (
   dto: UpdateMyProfileDto,
 ): Promise<Employee> => {
   const res = await api.patch("/employee/profile", dto);
+  return res.data?.data ?? res.data;
+};
+
+export interface SaveOnboardingPersonalDto {
+  dateOfBirth: string;
+  nationality?: string;
+  address: string;
+  nextOfKin: { name: string; relationship?: string; phone: string };
+  emergencyContactName: string;
+  emergencyContactRelationship?: string;
+  emergencyContactPhone: string;
+}
+
+export const saveOnboardingPersonal = async (
+  dto: SaveOnboardingPersonalDto,
+): Promise<OnboardingStatusResponse> => {
+  const res = await api.patch("/employee/onboarding/personal", dto);
+  return res.data?.data ?? res.data;
+};
+
+export interface SaveOnboardingMedicalDto {
+  bloodGroup: string;
+  allergies?: string;
+  conditions?: string;
+  medications?: string;
+  doctorName?: string;
+  doctorPhone?: string;
+}
+
+export const saveOnboardingMedical = async (
+  dto: SaveOnboardingMedicalDto,
+): Promise<OnboardingStatusResponse> => {
+  const res = await api.patch("/employee/onboarding/medical", dto);
+  return res.data?.data ?? res.data;
+};
+
+export const uploadOnboardingCertificate = async (
+  file: File,
+  name?: string,
+): Promise<EmployeeCertificate> => {
+  const form = new FormData();
+  form.append("file", file);
+  if (name) form.append("name", name);
+  const res = await api.post("/employee/onboarding/certificates", form, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return res.data?.data ?? res.data;
+};
+
+export const deleteOnboardingCertificate = async (
+  fileUrl: string,
+): Promise<void> => {
+  await api.delete("/employee/onboarding/certificates", { data: { fileUrl } });
+};
+
+export interface SaveOnboardingReferencesDto {
+  references: {
+    name: string;
+    relationship?: string;
+    email?: string;
+    phone?: string;
+  }[];
+}
+
+export const saveOnboardingReferences = async (
+  dto: SaveOnboardingReferencesDto,
+): Promise<OnboardingStatusResponse> => {
+  const res = await api.patch("/employee/onboarding/references", dto);
   return res.data?.data ?? res.data;
 };

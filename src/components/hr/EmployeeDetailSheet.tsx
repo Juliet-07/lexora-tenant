@@ -51,14 +51,18 @@ import {
   Plus,
   AlertTriangle,
   Loader2,
+  HeartPulse,
+  GraduationCap,
+  UserSquare2,
+  Circle,
 } from "lucide-react";
 import { toast } from "sonner";
 import type { Employee, HrTeam, HrLocation } from "@/lib/hr-api";
-import { fetchEmployeeDetail } from "@/lib/hr-api";
+import {
+  fetchEmployeeDetail,
+  fetchEmployeeOnboardingRecord,
+} from "@/lib/hr-api";
 import { downloadEmployeeReport } from "@/lib/employeeReport";
-import { getSubmission } from "@/lib/onboardingStore";
-
-// ─── Types ────────────────────────────────────────────────────
 
 interface Dispute {
   id: string;
@@ -73,9 +77,6 @@ interface Props {
   employee: Employee | null;
   onClose: () => void;
 }
-
-// ─── Dummy data — for modules with no backend yet ──────────────
-// (clients, projects, performance, payroll, documents, activity feed)
 
 const DUMMY = {
   assignedClients: [
@@ -144,7 +145,13 @@ const DUMMY = {
   ],
 };
 
-// ─── Helpers ──────────────────────────────────────────────────
+const ONBOARDING_STEP_LABELS = [
+  "Not started",
+  "Personal & Emergency",
+  "Medical Information",
+  "Certificates & References",
+  "Fully onboarded",
+];
 
 const ATTENDANCE_STYLE: Record<string, string> = {
   late: "bg-warning/10 text-warning border-warning/20",
@@ -179,6 +186,14 @@ const fmtShort = (d: string) =>
   new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 const fmtTime = (d: string) =>
   new Date(d).toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+const fmtDateTime = (d: string) =>
+  new Date(d).toLocaleString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
   });
@@ -219,8 +234,6 @@ const teamLead = (e: Employee) =>
     ? (e.teamId as HrTeam).lead || "Unassigned"
     : "—";
 
-// ─── Component ────────────────────────────────────────────────
-
 export function EmployeeDetailSheet({ employee, onClose }: Props) {
   const [disputes, setDisputes] = useState<Dispute[]>([]);
   const [openDispute, setOpenDispute] = useState(false);
@@ -239,12 +252,15 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
     staleTime: 30_000,
   });
 
+  const { data: onboardingTab, isLoading: onboardingLoading } = useQuery({
+    queryKey: ["employee-onboarding-record", employee?._id],
+    queryFn: () => fetchEmployeeOnboardingRecord(employee!._id),
+    enabled: !!employee,
+    staleTime: 30_000,
+  });
+
   if (!employee) return null;
 
-  // Prefer the freshly-fetched detail.employee (fully populated, incl.
-  // team lead, salary, taxId, and employee-self-reported fields) over
-  // the prop, which may come from a list endpoint with a thinner
-  // populate/select. Falls back to the prop while detail is loading.
   const emp = detail?.employee ?? employee;
 
   const initials =
@@ -263,6 +279,10 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
   const upcoming = leaveHistory.filter(
     (r) => r.status === "approved" && new Date(r.startDate) > new Date(),
   );
+
+  const onboardingStep = emp.onboardingStep ?? 0;
+  const onboardingCompleted = emp.onboardingCompleted ?? false;
+  const signatureRecord = onboardingTab?.record ?? null;
 
   const addDispute = () => {
     if (!dForm.title) return toast.error("Add a short title.");
@@ -296,7 +316,6 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
   return (
     <Sheet open={!!employee} onOpenChange={(v) => !v && onClose()}>
       <SheetContent className="w-full sm:max-w-2xl overflow-y-auto p-0">
-        {/* Header */}
         <div className="bg-gradient-to-br from-primary to-secondary text-white p-6">
           <SheetHeader>
             <div className="flex items-start gap-4">
@@ -400,6 +419,9 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
                 </TabsTrigger>
                 <TabsTrigger value="onboarding" className="text-xs">
                   Onboarding
+                  {!onboardingCompleted && (
+                    <span className="ml-1.5 h-2 w-2 rounded-full bg-warning" />
+                  )}
                 </TabsTrigger>
                 <TabsTrigger value="activity" className="text-xs">
                   Activity
@@ -407,7 +429,6 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
               </TabsList>
             </div>
 
-            {/* ── Overview ── */}
             <TabsContent value="overview" className="space-y-3">
               <Card>
                 <CardContent className="p-4 space-y-2 text-sm">
@@ -450,8 +471,6 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
                 </CardContent>
               </Card>
 
-              {/* Self-reported fields — filled in by the employee via their own
-                  profile, not at creation time. Shows "—" until they update it. */}
               <Card>
                 <CardContent className="p-4 space-y-2 text-sm">
                   <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-1">
@@ -517,7 +536,6 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
               </div>
             </TabsContent>
 
-            {/* ── Work (dummy — no CRM/Projects backend yet) ── */}
             <TabsContent value="work" className="space-y-3">
               <DummyNotice />
               <div>
@@ -570,7 +588,6 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
               </div>
             </TabsContent>
 
-            {/* ── Time & Leave — REAL DATA ── */}
             <TabsContent value="time" className="space-y-3">
               {detailLoading ? (
                 <LoadingBlock />
@@ -700,7 +717,6 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
               )}
             </TabsContent>
 
-            {/* ── Performance (dummy — no Performance module yet) ── */}
             <TabsContent value="performance" className="space-y-3">
               <DummyNotice />
               <Card>
@@ -746,7 +762,6 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
               </Button>
             </TabsContent>
 
-            {/* ── Payroll (dummy — no Payroll module yet) ── */}
             <TabsContent value="payroll" className="space-y-3">
               <DummyNotice />
               <Card>
@@ -819,7 +834,6 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
               </Card>
             </TabsContent>
 
-            {/* ── Disputes ── */}
             <TabsContent value="disputes" className="space-y-3">
               <div className="flex justify-between items-center">
                 <p className="text-xs text-muted-foreground">
@@ -872,7 +886,6 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
               )}
             </TabsContent>
 
-            {/* ── Documents (dummy) ── */}
             <TabsContent value="documents" className="space-y-2">
               <DummyNotice />
               {d.documents.map((doc) => (
@@ -895,78 +908,276 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
               ))}
             </TabsContent>
 
-            {/* ── Onboarding ── */}
-            <TabsContent value="onboarding" className="space-y-2">
-              {(() => {
-                const sub = getSubmission(emp.email);
-                if (!sub) {
-                  return (
-                    <Card>
-                      <CardContent className="p-8 text-center text-sm text-muted-foreground">
-                        Employee has not completed onboarding yet.
-                      </CardContent>
-                    </Card>
-                  );
-                }
-                return (
-                  <>
-                    <Card>
-                      <CardContent className="p-4 space-y-1 text-sm">
-                        <Row
-                          icon={FileText}
-                          label="Signature"
-                          value={sub.signature}
-                        />
-                        <Row
-                          icon={CalendarDays}
-                          label="Submitted"
-                          value={new Date(sub.submittedAt).toLocaleString(
-                            "en-GB",
+            <TabsContent value="onboarding" className="space-y-3">
+              {detailLoading || onboardingLoading ? (
+                <LoadingBlock />
+              ) : (
+                <>
+                  <Card>
+                    <CardContent className="p-4 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                          Onboarding progress
+                        </p>
+                        <Badge
+                          variant="outline"
+                          className={
+                            onboardingCompleted
+                              ? "bg-success/10 text-success border-success/20"
+                              : "bg-warning/10 text-warning border-warning/20"
+                          }
+                        >
+                          {ONBOARDING_STEP_LABELS[onboardingStep]}
+                        </Badge>
+                      </div>
+                      <Progress
+                        value={(onboardingStep / 4) * 100}
+                        className="h-2"
+                      />
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardContent className="p-4 space-y-2 text-sm">
+                      <SectionHeader
+                        icon={UserSquare2}
+                        title="Personal & emergency"
+                        done={onboardingStep >= 1}
+                      />
+                      {onboardingStep < 1 ? (
+                        <EmptyStepNote />
+                      ) : (
+                        <>
+                          <Row
+                            icon={CalendarDays}
+                            label="Date of birth"
+                            value={emp.dateOfBirth ? fmt(emp.dateOfBirth) : "—"}
+                          />
+                          <Row
+                            icon={Shield}
+                            label="Nationality"
+                            value={emp.nationality ?? "—"}
+                          />
+                          <Row
+                            icon={MapPin}
+                            label="Address"
+                            value={fmtAddress(emp.address)}
+                          />
+                          <div className="pt-2 border-t mt-2">
+                            <p className="text-xs font-medium text-muted-foreground mb-1">
+                              Next of kin
+                            </p>
+                            <Row
+                              icon={Phone}
+                              label="Name"
+                              value={emp.nextOfKin?.name ?? "—"}
+                            />
+                            <Row
+                              icon={Phone}
+                              label="Relationship"
+                              value={emp.nextOfKin?.relationship ?? "—"}
+                            />
+                            <Row
+                              icon={Phone}
+                              label="Phone"
+                              value={emp.nextOfKin?.phone ?? "—"}
+                            />
+                          </div>
+                          <div className="pt-2 border-t mt-2">
+                            <p className="text-xs font-medium text-muted-foreground mb-1">
+                              Emergency contact
+                            </p>
+                            <Row
+                              icon={Phone}
+                              label="Name"
+                              value={emp.emergencyContactName ?? "—"}
+                            />
+                            <Row
+                              icon={Phone}
+                              label="Phone"
+                              value={emp.emergencyContactPhone ?? "—"}
+                            />
+                          </div>
+                        </>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardContent className="p-4 space-y-2 text-sm">
+                      <SectionHeader
+                        icon={HeartPulse}
+                        title="Medical information"
+                        done={onboardingStep >= 2}
+                      />
+                      {onboardingStep < 2 ? (
+                        <EmptyStepNote />
+                      ) : (
+                        <>
+                          <Row
+                            icon={HeartPulse}
+                            label="Blood group"
+                            value={emp.medicalInfo?.bloodGroup ?? "—"}
+                          />
+                          <Row
+                            icon={HeartPulse}
+                            label="Allergies"
+                            value={emp.medicalInfo?.allergies ?? "—"}
+                          />
+                          <Row
+                            icon={HeartPulse}
+                            label="Conditions"
+                            value={emp.medicalInfo?.conditions ?? "—"}
+                          />
+                          <Row
+                            icon={HeartPulse}
+                            label="Medications"
+                            value={emp.medicalInfo?.medications ?? "—"}
+                          />
+                          <Row
+                            icon={Phone}
+                            label="Doctor"
+                            value={emp.medicalInfo?.doctorName ?? "—"}
+                          />
+                          <Row
+                            icon={Phone}
+                            label="Doctor phone"
+                            value={emp.medicalInfo?.doctorPhone ?? "—"}
+                          />
+                        </>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardContent className="p-4 space-y-3 text-sm">
+                      <SectionHeader
+                        icon={GraduationCap}
+                        title="Certificates & references"
+                        done={onboardingStep >= 3}
+                      />
+                      {onboardingStep < 3 ? (
+                        <EmptyStepNote />
+                      ) : (
+                        <>
+                          <div>
+                            <p className="text-xs font-medium text-muted-foreground mb-1.5">
+                              Certificates ({emp.certificates?.length ?? 0})
+                            </p>
+                            {(emp.certificates?.length ?? 0) === 0 ? (
+                              <p className="text-xs text-muted-foreground">
+                                None uploaded.
+                              </p>
+                            ) : (
+                              <div className="space-y-1.5">
+                                {emp.certificates.map((c) => (
+                                  <a
+                                    key={c.fileUrl}
+                                    href={c.fileUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="flex items-center justify-between p-2 border rounded-md hover:bg-muted/40 transition"
+                                  >
+                                    <span className="flex items-center gap-2 truncate">
+                                      <FileText className="h-3.5 w-3.5 text-primary shrink-0" />
+                                      <span className="truncate">{c.name}</span>
+                                    </span>
+                                    <Download className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                                  </a>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                          <div className="pt-2 border-t">
+                            <p className="text-xs font-medium text-muted-foreground mb-1.5">
+                              References ({emp.references?.length ?? 0})
+                            </p>
+                            {(emp.references?.length ?? 0) === 0 ? (
+                              <p className="text-xs text-muted-foreground">
+                                None added.
+                              </p>
+                            ) : (
+                              <div className="space-y-2">
+                                {emp.references.map((r, i) => (
+                                  <div
+                                    key={i}
+                                    className="p-2 border rounded-md"
+                                  >
+                                    <p className="font-medium">{r.name}</p>
+                                    <p className="text-xs text-muted-foreground">
+                                      {r.relationship ?? "—"} · {r.email ?? "—"}{" "}
+                                      · {r.phone ?? "—"}
+                                    </p>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardContent className="p-4 space-y-2 text-sm">
+                      <SectionHeader
+                        icon={Shield}
+                        title="Policies & signature"
+                        done={onboardingCompleted}
+                      />
+                      {!signatureRecord ? (
+                        <EmptyStepNote />
+                      ) : (
+                        <>
+                          <Row
+                            icon={FileText}
+                            label="Signature"
+                            value={signatureRecord.signatureName}
+                          />
+                          <Row
+                            icon={CalendarDays}
+                            label="Signed"
+                            value={fmtDateTime(signatureRecord.signedAt)}
+                          />
+                          {signatureRecord.ipAddress && (
+                            <Row
+                              icon={Shield}
+                              label="IP address"
+                              value={signatureRecord.ipAddress}
+                            />
                           )}
-                        />
-                        <Row
-                          icon={CheckCircle2}
-                          label="Documents agreed"
-                          value={`${sub.docs.filter((x) => x.checked).length} / ${sub.docs.length}`}
-                        />
-                      </CardContent>
-                    </Card>
-                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mt-3 mb-1">
-                      Documents at time of signing
-                    </p>
-                    {sub.docs.map((doc) => (
-                      <Card key={doc.id}>
-                        <CardContent className="p-3 flex items-center justify-between">
-                          <div className="flex items-center gap-3 min-w-0">
-                            <FileText className="h-4 w-4 text-primary shrink-0" />
-                            <div className="min-w-0">
-                              <p className="text-sm font-medium truncate">
-                                {doc.title}
-                              </p>
-                              <p className="text-[10px] uppercase text-muted-foreground">
-                                {doc.kind}
-                              </p>
+                          <div className="pt-2 border-t mt-2">
+                            <p className="text-xs font-medium text-muted-foreground mb-1.5">
+                              Documents acknowledged (
+                              {signatureRecord.acknowledgements.length})
+                            </p>
+                            <div className="space-y-1.5">
+                              {signatureRecord.acknowledgements.map((a, i) => (
+                                <div
+                                  key={i}
+                                  className="flex items-center justify-between p-2 border rounded-md"
+                                >
+                                  <span className="truncate">
+                                    {a.documentTitle}
+                                  </span>
+                                  <Badge
+                                    variant="outline"
+                                    className="bg-success/10 text-success border-success/20"
+                                  >
+                                    Agreed
+                                  </Badge>
+                                </div>
+                              ))}
                             </div>
                           </div>
-                          {doc.checked ? (
-                            <Badge
-                              variant="outline"
-                              className="bg-success/10 text-success border-success/20"
-                            >
-                              Agreed
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline">Skipped</Badge>
-                          )}
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </>
-                );
-              })()}
+                        </>
+                      )}
+                    </CardContent>
+                  </Card>
+                </>
+              )}
             </TabsContent>
 
-            {/* ── Activity (dummy) ── */}
             <TabsContent value="activity" className="space-y-2">
               <DummyNotice />
               {d.activity.map((act, i) => (
@@ -982,7 +1193,6 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
           </Tabs>
         </div>
 
-        {/* Dispute dialog */}
         <Dialog open={openDispute} onOpenChange={setOpenDispute}>
           <DialogContent>
             <DialogHeader>
@@ -1050,8 +1260,6 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
   );
 }
 
-// ─── Sub-components ───────────────────────────────────────────
-
 function Row({
   icon: Icon,
   label,
@@ -1090,6 +1298,44 @@ function MiniStat({
         <Icon className="h-4 w-4 text-muted-foreground" />
       </CardContent>
     </Card>
+  );
+}
+
+function SectionHeader({
+  icon: Icon,
+  title,
+  done,
+}: {
+  icon: any;
+  title: string;
+  done: boolean;
+}) {
+  return (
+    <div className="flex items-center justify-between mb-1">
+      <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+        <Icon className="h-3.5 w-3.5" /> {title}
+      </h3>
+      {done ? (
+        <Badge
+          variant="outline"
+          className="bg-success/10 text-success border-success/20 text-[10px]"
+        >
+          <CheckCircle2 className="h-3 w-3 mr-1" /> Done
+        </Badge>
+      ) : (
+        <Badge variant="outline" className="text-[10px]">
+          <Circle className="h-3 w-3 mr-1" /> Pending
+        </Badge>
+      )}
+    </div>
+  );
+}
+
+function EmptyStepNote() {
+  return (
+    <p className="text-xs text-muted-foreground italic py-1">
+      Employee hasn't reached this step yet.
+    </p>
   );
 }
 
