@@ -1509,27 +1509,12 @@ export default function HRPayroll() {
         open={!!openPayslip}
         onOpenChange={(o) => !o && setOpenPayslip(null)}
       >
-        <SheetContent className="w-full sm:max-w-2xl overflow-y-auto p-0">
+        <SheetContent className="w-full sm:max-w-3xl overflow-y-auto p-0">
           {openPayslip && (
-            <div className="h-full flex flex-col">
-              <div className="p-4 border-b flex items-center justify-between">
-                <h3 className="font-semibold flex items-center gap-2">
-                  <FileText className="h-4 w-4" /> Payslip
-                </h3>
-                <Button size="sm" variant="outline" disabled>
-                  <Download className="h-3.5 w-3.5 mr-1.5" /> Download PDF
-                </Button>
-              </div>
-              {payslipHtmlLoading ? (
-                <LoadingRow label="Rendering payslip…" />
-              ) : (
-                <iframe
-                  srcDoc={payslipHtml}
-                  className="flex-1 w-full border-0"
-                  title="Payslip"
-                />
-              )}
-            </div>
+            <PayslipView
+              slip={openPayslip}
+              onDownload={() => downloadPayslipPdf(openPayslip)}
+            />
           )}
         </SheetContent>
       </Sheet>
