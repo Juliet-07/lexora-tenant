@@ -81,6 +81,7 @@ import {
   discardPayrollRun,
   fetchPayslipHtml,
   fetchAllEmployeesPeriodStatus,
+  fetchLiveFxRate,
   type PayrollPolicy,
   type PayrollDeductionRule,
   type EmployeeLoan,
@@ -88,6 +89,7 @@ import {
   type Payslip,
   type HrLocation,
   type EmployeePeriodStatus,
+  type ManualExchangeRate,
 } from "@/lib/hr-api";
 
 const CURRENCIES = [
@@ -172,6 +174,14 @@ export default function HRPayroll() {
     null,
   );
   const [period, setPeriod] = useState(PERIOD_OPTIONS[2].label); // index 2 = current month (i=0 offset)
+
+  // ── Manual exchange rates for the New Run dialog. Locked-per-run
+  // is the default model (matches real practice — one fixed rate set
+  // per pay period, not refetched live mid-calculation). The "fetch
+  // live rate" button below only PRE-FILLS a row's rate; it never
+  // applies anything automatically. ──
+  const [manualRates, setManualRates] = useState<ManualExchangeRate[]>([]);
+  const [fetchingRateFor, setFetchingRateFor] = useState<string | null>(null);
 
   const { data: locations = [] } = useQuery({
     queryKey: ["hr-locations"],
@@ -284,6 +294,7 @@ export default function HRPayroll() {
     onSuccess: (run) => {
       queryClient.invalidateQueries({ queryKey: ["payroll-runs"] });
       setNewRunOpen(false);
+      setManualRates([]);
       toast.success(
         `Draft run created — ${run.employeeCount} payslip(s) calculated.`,
       );
@@ -373,6 +384,32 @@ export default function HRPayroll() {
     monthlyInstallment: "",
     note: "",
   });
+
+  // Fetches a live rate and pre-fills the row's input — does NOT
+  // apply it automatically. The tenant still has to look at the
+  // number and keep/edit/delete it before the run is created.
+  const fetchAndFillRate = async (fromCurrency: string) => {
+    setFetchingRateFor(fromCurrency);
+    try {
+      const result = await fetchLiveFxRate(fromCurrency, runForm.runCurrency);
+      setManualRates((prev) =>
+        prev.map((r) =>
+          r.fromCurrency === fromCurrency ? { ...r, rate: result.rate } : r,
+        ),
+      );
+      toast.success(
+        `Fetched live rate: 1 ${fromCurrency} = ${result.rate} ${runForm.runCurrency}` +
+          (result.stale ? " (cached, may not be today's rate)" : ""),
+      );
+    } catch (err: any) {
+      toast.error(
+        err?.response?.data?.message ??
+          "Could not fetch a live rate. Enter it manually.",
+      );
+    } finally {
+      setFetchingRateFor(null);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -875,8 +912,15 @@ export default function HRPayroll() {
         </TabsContent>
       </Tabs>
 
-      <Dialog open={newRunOpen} onOpenChange={setNewRunOpen}>
-        <DialogContent className="max-w-md">
+      {/* ── New Payroll Run dialog ── */}
+      <Dialog
+        open={newRunOpen}
+        onOpenChange={(o) => {
+          setNewRunOpen(o);
+          if (!o) setManualRates([]);
+        }}
+      >
+        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>New Payroll Run</DialogTitle>
             <DialogDescription>
@@ -958,6 +1002,116 @@ export default function HRPayroll() {
                 </SelectContent>
               </Select>
             </div>
+
+            {/* ── Manual exchange rates — locked per run ── */}
+            <div className="space-y-2 pt-2 border-t">
+              <div className="flex items-center justify-between">
+                <Label>Exchange rates for this run</Label>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() =>
+                    setManualRates((prev) => [
+                      ...prev,
+                      { fromCurrency: "USD", rate: 0 },
+                    ])
+                  }
+                >
+                  <Plus className="h-3.5 w-3.5 mr-1" /> Add Rate
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                If any employees are paid in a different currency than{" "}
+                {runForm.runCurrency}, set a fixed rate here for this run. This
+                rate is locked for this run only — it won't change
+                automatically. Leave empty to fall back to the live rate at
+                calculation time.
+              </p>
+              {manualRates.map((r, i) => (
+                <div
+                  key={i}
+                  className="grid grid-cols-[1fr_auto_1fr_auto] gap-2 items-end"
+                >
+                  <div className="space-y-1">
+                    <Label className="text-xs">From</Label>
+                    <Select
+                      value={r.fromCurrency}
+                      onValueChange={(v) =>
+                        setManualRates((prev) =>
+                          prev.map((x, idx) =>
+                            idx === i ? { ...x, fromCurrency: v } : x,
+                          ),
+                        )
+                      }
+                    >
+                      <SelectTrigger className="h-9">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {CURRENCIES.map((c) => (
+                          <SelectItem key={c} value={c}>
+                            {c}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <span className="text-xs text-muted-foreground self-center pb-2">
+                    → {runForm.runCurrency}
+                  </span>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Rate</Label>
+                    <Input
+                      type="number"
+                      step="0.0001"
+                      placeholder="e.g. 1455"
+                      className="h-9"
+                      value={r.rate || ""}
+                      onChange={(e) =>
+                        setManualRates((prev) =>
+                          prev.map((x, idx) =>
+                            idx === i
+                              ? { ...x, rate: parseFloat(e.target.value) || 0 }
+                              : x,
+                          ),
+                        )
+                      }
+                    />
+                  </div>
+                  <div className="flex gap-1 pb-0.5">
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      className="h-9 w-9"
+                      disabled={fetchingRateFor === r.fromCurrency}
+                      title="Fetch live rate (pre-fills only — doesn't apply automatically)"
+                      onClick={() => fetchAndFillRate(r.fromCurrency)}
+                    >
+                      {fetchingRateFor === r.fromCurrency ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Globe2 className="h-3.5 w-3.5" />
+                      )}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      className="h-9 w-9"
+                      onClick={() =>
+                        setManualRates((prev) =>
+                          prev.filter((_, idx) => idx !== i),
+                        )
+                      }
+                    >
+                      <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setNewRunOpen(false)}>
@@ -980,6 +1134,7 @@ export default function HRPayroll() {
                       ? runForm.locationId
                       : undefined,
                   runCurrency: runForm.runCurrency,
+                  manualRates: manualRates.filter((r) => r.rate > 0),
                 })
               }
             >

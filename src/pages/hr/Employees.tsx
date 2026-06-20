@@ -47,6 +47,7 @@ import {
   Loader2,
   Pencil,
   ClipboardCheck,
+  Calculator,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -61,6 +62,7 @@ import {
   deleteLocation,
   updateTeam,
   updateLocation,
+  calculateGrossUp,
   type Employee,
   type HrTeam,
   type HrLocation,
@@ -89,6 +91,19 @@ const STATUS_LABEL: Record<string, string> = {
   terminated: "Terminated",
   resigned: "Resigned",
 };
+
+const SALARY_CURRENCIES = [
+  "USD",
+  "EUR",
+  "GBP",
+  "NGN",
+  "RWF",
+  "KES",
+  "ZAR",
+  "GHS",
+  "INR",
+  "JPY",
+];
 
 const initials = (f: string, l: string) =>
   `${f[0] ?? ""}${l[0] ?? ""}`.toUpperCase();
@@ -151,6 +166,18 @@ export default function HREmployees() {
   });
   const [locForm, setLocForm] = useState({ name: "", country: "", city: "" });
 
+  // ── Salary entry mode — "basic" (enter the basic salary directly)
+  // or "net_target" (enter what the employee should actually take
+  // home, solve for the basic salary that achieves it under the
+  // selected location's payroll policy). Either way, empForm.salary
+  // ends up holding a real basic-salary number — net_target mode
+  // doesn't change what gets submitted to the backend, it's purely a
+  // convenience for figuring out the right number to put there. ──
+  const [salaryEntryMode, setSalaryEntryMode] = useState<
+    "basic" | "net_target"
+  >("basic");
+  const [netTargetInput, setNetTargetInput] = useState("");
+
   // ── Queries ───────────────────────────────────────────────
 
   const { data: statsData } = useQuery({
@@ -194,6 +221,8 @@ export default function HREmployees() {
       queryClient.invalidateQueries({ queryKey: ["hr-stats"] });
       setEmpOpen(false);
       setEmpForm(EMPTY_EMP);
+      setSalaryEntryMode("basic");
+      setNetTargetInput("");
       toast.success("Employee added. Login credentials sent to their email.");
     },
     onError: (err: any) =>
@@ -248,6 +277,29 @@ export default function HREmployees() {
     },
     onError: (err: any) =>
       toast.error(err?.response?.data?.message ?? "Failed to remove location"),
+  });
+
+  // Resolves a target net pay into a basic salary using the selected
+  // location's payroll policy. Doesn't auto-submit anything — just
+  // fills empForm.salary/salaryCurrency so the tenant can see and
+  // adjust the number before saving.
+  const grossUpMutation = useMutation({
+    mutationFn: calculateGrossUp,
+    onSuccess: (result) => {
+      setEmpForm((f) => ({
+        ...f,
+        salary: result.grossSalary,
+        salaryCurrency: result.currency,
+      }));
+      toast.success(
+        `Basic salary set to ${result.grossSalary.toLocaleString()} ${result.currency} to achieve that net target.`,
+      );
+    },
+    onError: (err: any) =>
+      toast.error(
+        err?.response?.data?.message ??
+          "Could not calculate gross salary — make sure a payroll policy exists for this location.",
+      ),
   });
 
   // ── Stats ─────────────────────────────────────────────────
@@ -590,7 +642,16 @@ export default function HREmployees() {
       </Tabs>
 
       {/* ── Add Employee Dialog ── */}
-      <Dialog open={empOpen} onOpenChange={setEmpOpen}>
+      <Dialog
+        open={empOpen}
+        onOpenChange={(o) => {
+          setEmpOpen(o);
+          if (!o) {
+            setSalaryEntryMode("basic");
+            setNetTargetInput("");
+          }
+        }}
+      >
         <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Add Employee</DialogTitle>
@@ -739,55 +800,177 @@ export default function HREmployees() {
                 }
               />
             </div>
-            <div className="space-y-1">
-              <Label>Salary Amount</Label>
-              <Input
-                type="number"
-                min={0}
-                placeholder="0"
-                value={empForm.salary ?? ""}
-                onChange={(e) =>
-                  setEmpForm((f) => ({
-                    ...f,
-                    salary:
-                      e.target.value === ""
-                        ? undefined
-                        : Number(e.target.value),
-                  }))
-                }
-              />
+
+            {/* ── Pay entry mode toggle ── */}
+            <div className="space-y-1 col-span-2">
+              <div className="flex items-center gap-4">
+                <Label className="shrink-0">Pay entry mode</Label>
+                <div className="flex gap-1 bg-muted rounded-md p-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setSalaryEntryMode("basic")}
+                    className={`px-3 py-1 text-xs rounded-sm transition ${
+                      salaryEntryMode === "basic"
+                        ? "bg-background shadow-sm font-medium"
+                        : "text-muted-foreground"
+                    }`}
+                  >
+                    Enter basic salary
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSalaryEntryMode("net_target")}
+                    className={`px-3 py-1 text-xs rounded-sm transition ${
+                      salaryEntryMode === "net_target"
+                        ? "bg-background shadow-sm font-medium"
+                        : "text-muted-foreground"
+                    }`}
+                  >
+                    Enter target net pay
+                  </button>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {salaryEntryMode === "basic"
+                  ? "The basic salary before any deductions."
+                  : "What you want this person to actually receive after deductions — we'll calculate the basic salary needed, using the policy for their selected location."}
+              </p>
             </div>
-            <div className="space-y-1">
-              <Label>Currency</Label>
-              <Select
-                value={empForm.salaryCurrency ?? "USD"}
-                onValueChange={(v) =>
-                  setEmpForm((f) => ({ ...f, salaryCurrency: v }))
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {[
-                    "USD",
-                    "EUR",
-                    "GBP",
-                    "NGN",
-                    "RWF",
-                    "KES",
-                    "ZAR",
-                    "GHS",
-                    "INR",
-                    "JPY",
-                  ].map((c) => (
-                    <SelectItem key={c} value={c}>
-                      {c}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+
+            {salaryEntryMode === "basic" ? (
+              <>
+                <div className="space-y-1">
+                  <Label>Salary Amount</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    placeholder="0"
+                    value={empForm.salary ?? ""}
+                    onChange={(e) =>
+                      setEmpForm((f) => ({
+                        ...f,
+                        salary:
+                          e.target.value === ""
+                            ? undefined
+                            : Number(e.target.value),
+                      }))
+                    }
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label>Currency</Label>
+                  <Select
+                    value={empForm.salaryCurrency ?? "USD"}
+                    onValueChange={(v) =>
+                      setEmpForm((f) => ({ ...f, salaryCurrency: v }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {SALARY_CURRENCIES.map((c) => (
+                        <SelectItem key={c} value={c}>
+                          {c}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="space-y-1">
+                  <Label>Target net pay</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    placeholder="e.g. 1600"
+                    value={netTargetInput}
+                    onChange={(e) => setNetTargetInput(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1 flex flex-col justify-end">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full"
+                    disabled={
+                      !netTargetInput ||
+                      !empForm.locationId ||
+                      grossUpMutation.isPending
+                    }
+                    onClick={() =>
+                      grossUpMutation.mutate({
+                        targetNet: Number(netTargetInput),
+                        locationId: empForm.locationId,
+                      })
+                    }
+                  >
+                    {grossUpMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Calculator className="h-4 w-4 mr-2" />
+                    )}
+                    Calculate basic salary
+                  </Button>
+                </div>
+
+                {!empForm.locationId && (
+                  <p className="col-span-2 text-xs text-warning">
+                    Select a location first — the gross-up calculation needs
+                    that location's payroll policy.
+                  </p>
+                )}
+
+                {empForm.salary != null && (
+                  <>
+                    <div className="col-span-2 text-xs text-muted-foreground bg-muted/40 rounded-md p-2">
+                      Basic salary set to{" "}
+                      <span className="font-medium">
+                        {empForm.salary.toLocaleString()}{" "}
+                        {empForm.salaryCurrency}
+                      </span>{" "}
+                      — you can still adjust it manually below if needed.
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Basic Salary (calculated, editable)</Label>
+                      <Input
+                        type="number"
+                        value={empForm.salary}
+                        onChange={(e) =>
+                          setEmpForm((f) => ({
+                            ...f,
+                            salary: Number(e.target.value) || undefined,
+                          }))
+                        }
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Currency</Label>
+                      <Select
+                        value={empForm.salaryCurrency ?? "USD"}
+                        onValueChange={(v) =>
+                          setEmpForm((f) => ({ ...f, salaryCurrency: v }))
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {SALARY_CURRENCIES.map((c) => (
+                            <SelectItem key={c} value={c}>
+                              {c}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </>
+                )}
+              </>
+            )}
+
             <div className="space-y-1">
               <Label>Tax ID</Label>
               <Input

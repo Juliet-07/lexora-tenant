@@ -174,6 +174,7 @@ export interface Employee {
   references: EmployeeReference[];
   onboardingStep: number; // 0-4
   onboardingCompleted: boolean;
+  allowances: EmployeeAllowanceInput[];
 }
 
 export interface EmployeeStats {
@@ -187,6 +188,13 @@ export interface EmployeeStats {
   byTeam: { _id: string; count: number }[];
   byLocation: { _id: string; count: number }[];
   recentJoins: Partial<Employee>[];
+}
+
+export interface EmployeeAllowanceInput {
+  key: string;
+  label: string;
+  amount: number;
+  currency?: string;
 }
 
 export interface CreateEmployeeDto {
@@ -221,6 +229,7 @@ export interface CreateEmployeeDto {
   taxId?: string;
   annualLeaveBalance?: number;
   sickLeaveBalance?: number;
+  allowances?: EmployeeAllowanceInput[];
 }
 
 export interface TerminateEmployeeDto {
@@ -1105,6 +1114,11 @@ export interface CreatePayrollRunDto {
 
 // ── Payroll Runs — API calls ────────────────────────────────────
 
+export interface ManualExchangeRate {
+  fromCurrency: string;
+  rate: number;
+}
+
 export const fetchAllPayrollRuns = async (): Promise<PayrollRun[]> => {
   const res = await api.get("/hr/payroll/runs");
   const d = res.data?.data ?? res.data;
@@ -1125,6 +1139,7 @@ export const createPayrollRun = async (dto: {
   locationId?: string;
   employeeId?: string;
   runCurrency: string;
+  manualRates?: ManualExchangeRate[]; // ← new
 }): Promise<PayrollRun> => {
   const res = await api.post("/hr/payroll/runs", dto);
   return res.data?.data ?? res.data;
@@ -1215,10 +1230,6 @@ export const fetchMyPayslipHtml = async (
   return typeof res.data === "string" ? res.data : (res.data?.data ?? res.data);
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ADD/REPLACE in src/lib/hr-api.ts
-// ─────────────────────────────────────────────────────────────────────────────
-
 export interface EmployeePeriodStatus {
   status: "draft" | "processed" | "paid";
   payslipId: string;
@@ -1236,4 +1247,32 @@ export const fetchAllEmployeesPeriodStatus = async (
     params: { periodLabel },
   });
   return res.data?.data ?? res.data ?? {};
+};
+
+export const fetchLiveFxRate = async (
+  from: string,
+  to: string,
+): Promise<{ rate: number; fetchedAt: string; stale: boolean }> => {
+  const res = await api.get("/hr/payroll/runs/fx-preview", {
+    params: { from, to },
+  });
+  return res.data?.data ?? res.data;
+};
+
+// ═══════════════════════════════════════════════════════════════
+// ADD — gross-up calculator
+// ═══════════════════════════════════════════════════════════════
+
+export interface GrossUpResult {
+  targetNet: number;
+  grossSalary: number;
+  currency: string;
+}
+
+export const calculateGrossUp = async (dto: {
+  targetNet: number;
+  locationId?: string;
+}): Promise<GrossUpResult> => {
+  const res = await api.post("/hr/payroll/policy/gross-up", dto);
+  return res.data?.data ?? res.data;
 };
