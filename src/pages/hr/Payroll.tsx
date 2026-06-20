@@ -59,6 +59,9 @@ import {
   CheckCircle2,
   XCircle,
   FileText,
+  Mail,
+  FileSpreadsheet,
+  Send,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -79,9 +82,8 @@ import {
   processPayrollRun,
   markPayrollRunPaid,
   discardPayrollRun,
-  
+  fetchPayslipHtml,
   fetchAllEmployeesPeriodStatus,
-  fetchLiveFxRate,
   type PayrollPolicy,
   type PayrollDeductionRule,
   type EmployeeLoan,
@@ -89,7 +91,9 @@ import {
   type Payslip,
   type HrLocation,
   type EmployeePeriodStatus,
-  type ManualExchangeRate,
+  emailPayslip,
+  downloadPayrollExcel,
+  emailAllPayslipsInRun,
 } from "@/lib/hr-api";
 
 const CURRENCIES = [
@@ -175,14 +179,6 @@ export default function HRPayroll() {
   );
   const [period, setPeriod] = useState(PERIOD_OPTIONS[2].label); // index 2 = current month (i=0 offset)
 
-  // ── Manual exchange rates for the New Run dialog. Locked-per-run
-  // is the default model (matches real practice — one fixed rate set
-  // per pay period, not refetched live mid-calculation). The "fetch
-  // live rate" button below only PRE-FILLS a row's rate; it never
-  // applies anything automatically. ──
-  const [manualRates, setManualRates] = useState<ManualExchangeRate[]>([]);
-  const [fetchingRateFor, setFetchingRateFor] = useState<string | null>(null);
-
   const { data: locations = [] } = useQuery({
     queryKey: ["hr-locations"],
     queryFn: fetchLocations,
@@ -220,8 +216,11 @@ export default function HRPayroll() {
     enabled: !!openRun,
   });
 
-  // payslip HTML render endpoint no longer needed — we render natively
-
+  const { data: payslipHtml, isLoading: payslipHtmlLoading } = useQuery({
+    queryKey: ["payslip-html", openPayslip?._id],
+    queryFn: () => fetchPayslipHtml(openPayslip!._id),
+    enabled: !!openPayslip,
+  });
 
   const totalLoanBook = loans.reduce((acc, l) => acc + l.principalAmount, 0);
   const activeBalance = loans
@@ -291,7 +290,6 @@ export default function HRPayroll() {
     onSuccess: (run) => {
       queryClient.invalidateQueries({ queryKey: ["payroll-runs"] });
       setNewRunOpen(false);
-      setManualRates([]);
       toast.success(
         `Draft run created — ${run.employeeCount} payslip(s) calculated.`,
       );
@@ -365,6 +363,50 @@ export default function HRPayroll() {
       toast.error(err?.response?.data?.message ?? "Failed to run payroll"),
   });
 
+  const emailPayslipMutation = useMutation({
+    mutationFn: emailPayslip,
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ["payroll-run-detail"] });
+      if (openPayslip) {
+        setOpenPayslip({
+          ...openPayslip,
+          emailedAt: result.sentAt,
+          emailSendCount: (openPayslip.emailSendCount ?? 0) + 1,
+        });
+      }
+      toast.success(`Payslip emailed to ${result.sentTo}.`);
+    },
+    onError: (err: any) =>
+      toast.error(err?.response?.data?.message ?? "Failed to send email."),
+  });
+
+  const emailAllMutation = useMutation({
+    mutationFn: emailAllPayslipsInRun,
+    onSuccess: (result) => {
+      if (result.failed.length === 0) {
+        toast.success(`Emailed ${result.sent} payslip(s).`);
+      } else {
+        toast.error(
+          `Emailed ${result.sent}, but ${result.failed.length} failed: ${result.failed.map((f) => f.employeeName).join(", ")}`,
+        );
+      }
+      queryClient.invalidateQueries({ queryKey: ["payroll-run-detail"] });
+    },
+    onError: (err: any) =>
+      toast.error(err?.response?.data?.message ?? "Failed to email payslips."),
+  });
+
+  const [exportingExcel, setExportingExcel] = useState(false);
+  const handleExportExcel = async (runId: string, periodLabel: string) => {
+    setExportingExcel(true);
+    try {
+      await downloadPayrollExcel(runId, periodLabel);
+    } catch {
+      toast.error("Failed to export. Try again.");
+    } finally {
+      setExportingExcel(false);
+    }
+  };
   const [runForm, setRunForm] = useState({
     periodLabel: "",
     periodStart: "",
@@ -381,32 +423,6 @@ export default function HRPayroll() {
     monthlyInstallment: "",
     note: "",
   });
-
-  // Fetches a live rate and pre-fills the row's input — does NOT
-  // apply it automatically. The tenant still has to look at the
-  // number and keep/edit/delete it before the run is created.
-  const fetchAndFillRate = async (fromCurrency: string) => {
-    setFetchingRateFor(fromCurrency);
-    try {
-      const result = await fetchLiveFxRate(fromCurrency, runForm.runCurrency);
-      setManualRates((prev) =>
-        prev.map((r) =>
-          r.fromCurrency === fromCurrency ? { ...r, rate: result.rate } : r,
-        ),
-      );
-      toast.success(
-        `Fetched live rate: 1 ${fromCurrency} = ${result.rate} ${runForm.runCurrency}` +
-          (result.stale ? " (cached, may not be today's rate)" : ""),
-      );
-    } catch (err: any) {
-      toast.error(
-        err?.response?.data?.message ??
-          "Could not fetch a live rate. Enter it manually.",
-      );
-    } finally {
-      setFetchingRateFor(null);
-    }
-  };
 
   return (
     <div className="space-y-6">
@@ -909,15 +925,8 @@ export default function HRPayroll() {
         </TabsContent>
       </Tabs>
 
-      {/* ── New Payroll Run dialog ── */}
-      <Dialog
-        open={newRunOpen}
-        onOpenChange={(o) => {
-          setNewRunOpen(o);
-          if (!o) setManualRates([]);
-        }}
-      >
-        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
+      <Dialog open={newRunOpen} onOpenChange={setNewRunOpen}>
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>New Payroll Run</DialogTitle>
             <DialogDescription>
@@ -999,116 +1008,6 @@ export default function HRPayroll() {
                 </SelectContent>
               </Select>
             </div>
-
-            {/* ── Manual exchange rates — locked per run ── */}
-            <div className="space-y-2 pt-2 border-t">
-              <div className="flex items-center justify-between">
-                <Label>Exchange rates for this run</Label>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() =>
-                    setManualRates((prev) => [
-                      ...prev,
-                      { fromCurrency: "USD", rate: 0 },
-                    ])
-                  }
-                >
-                  <Plus className="h-3.5 w-3.5 mr-1" /> Add Rate
-                </Button>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                If any employees are paid in a different currency than{" "}
-                {runForm.runCurrency}, set a fixed rate here for this run. This
-                rate is locked for this run only — it won't change
-                automatically. Leave empty to fall back to the live rate at
-                calculation time.
-              </p>
-              {manualRates.map((r, i) => (
-                <div
-                  key={i}
-                  className="grid grid-cols-[1fr_auto_1fr_auto] gap-2 items-end"
-                >
-                  <div className="space-y-1">
-                    <Label className="text-xs">From</Label>
-                    <Select
-                      value={r.fromCurrency}
-                      onValueChange={(v) =>
-                        setManualRates((prev) =>
-                          prev.map((x, idx) =>
-                            idx === i ? { ...x, fromCurrency: v } : x,
-                          ),
-                        )
-                      }
-                    >
-                      <SelectTrigger className="h-9">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {CURRENCIES.map((c) => (
-                          <SelectItem key={c} value={c}>
-                            {c}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <span className="text-xs text-muted-foreground self-center pb-2">
-                    → {runForm.runCurrency}
-                  </span>
-                  <div className="space-y-1">
-                    <Label className="text-xs">Rate</Label>
-                    <Input
-                      type="number"
-                      step="0.0001"
-                      placeholder="e.g. 1455"
-                      className="h-9"
-                      value={r.rate || ""}
-                      onChange={(e) =>
-                        setManualRates((prev) =>
-                          prev.map((x, idx) =>
-                            idx === i
-                              ? { ...x, rate: parseFloat(e.target.value) || 0 }
-                              : x,
-                          ),
-                        )
-                      }
-                    />
-                  </div>
-                  <div className="flex gap-1 pb-0.5">
-                    <Button
-                      type="button"
-                      size="icon"
-                      variant="ghost"
-                      className="h-9 w-9"
-                      disabled={fetchingRateFor === r.fromCurrency}
-                      title="Fetch live rate (pre-fills only — doesn't apply automatically)"
-                      onClick={() => fetchAndFillRate(r.fromCurrency)}
-                    >
-                      {fetchingRateFor === r.fromCurrency ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <Globe2 className="h-3.5 w-3.5" />
-                      )}
-                    </Button>
-                    <Button
-                      type="button"
-                      size="icon"
-                      variant="ghost"
-                      className="h-9 w-9"
-                      onClick={() =>
-                        setManualRates((prev) =>
-                          prev.filter((_, idx) => idx !== i),
-                        )
-                      }
-                    >
-                      <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setNewRunOpen(false)}>
@@ -1131,7 +1030,6 @@ export default function HRPayroll() {
                       ? runForm.locationId
                       : undefined,
                   runCurrency: runForm.runCurrency,
-                  manualRates: manualRates.filter((r) => r.rate > 0),
                 })
               }
             >
@@ -1400,6 +1298,34 @@ export default function HRPayroll() {
                     {openRun.status}
                   </Badge>
                   <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={emailAllMutation.isPending}
+                      onClick={() => emailAllMutation.mutate(openRun._id)}
+                    >
+                      {emailAllMutation.isPending ? (
+                        <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                      ) : (
+                        <Send className="h-3.5 w-3.5 mr-1.5" />
+                      )}
+                      Email All
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={exportingExcel}
+                      onClick={() =>
+                        handleExportExcel(openRun._id, openRun.periodLabel)
+                      }
+                    >
+                      {exportingExcel ? (
+                        <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                      ) : (
+                        <FileSpreadsheet className="h-3.5 w-3.5 mr-1.5" />
+                      )}
+                      Export Excel
+                    </Button>
                     {openRun.status === "draft" && (
                       <>
                         <Button
@@ -1506,12 +1432,57 @@ export default function HRPayroll() {
         open={!!openPayslip}
         onOpenChange={(o) => !o && setOpenPayslip(null)}
       >
-        <SheetContent className="w-full sm:max-w-3xl overflow-y-auto p-0">
+        <SheetContent className="w-full sm:max-w-2xl overflow-y-auto p-0">
           {openPayslip && (
-            <PayslipView
-              slip={openPayslip}
-              onDownload={() => downloadPayslipPdf(openPayslip)}
-            />
+            <div className="h-full flex flex-col">
+              <div className="p-4 border-b flex items-center justify-between">
+                <div>
+                  <h3 className="font-semibold flex items-center gap-2">
+                    <FileText className="h-4 w-4" /> Payslip
+                  </h3>
+                  {openPayslip?.emailedAt && (
+                    <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                      <CheckCircle2 className="h-3 w-3 text-success" />
+                      Sent {new Date(openPayslip.emailedAt).toLocaleString()}
+                      {openPayslip.emailSendCount > 1
+                        ? ` · ${openPayslip.emailSendCount} times`
+                        : ""}
+                    </p>
+                  )}
+                </div>
+
+                <div className="flex gap-2 mx-5">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={emailPayslipMutation.isPending}
+                    onClick={() =>
+                      openPayslip &&
+                      emailPayslipMutation.mutate(openPayslip._id)
+                    }
+                  >
+                    {emailPayslipMutation.isPending ? (
+                      <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                    ) : (
+                      <Mail className="h-3.5 w-3.5 mr-1.5" />
+                    )}
+                    {openPayslip?.emailedAt ? "Resend Email" : "Send Email"}
+                  </Button>
+                  {/* <Button size="sm" variant="outline" disabled>
+                    <Download className="h-3.5 w-3.5 mr-1.5" /> Download PDF
+                  </Button> */}
+                </div>
+              </div>
+              {payslipHtmlLoading ? (
+                <LoadingRow label="Rendering payslip…" />
+              ) : (
+                <iframe
+                  srcDoc={payslipHtml}
+                  className="flex-1 w-full border-0"
+                  title="Payslip"
+                />
+              )}
+            </div>
           )}
         </SheetContent>
       </Sheet>
@@ -1917,241 +1888,4 @@ function EmptyCard({ text }: { text: string }) {
       </CardContent>
     </Card>
   );
-}
-
-// ─────────────────────────────────────────────────────────────
-// PAYSLIP — native rendering + print-to-PDF
-// ─────────────────────────────────────────────────────────────
-
-function PayslipView({
-  slip,
-  onDownload,
-}: {
-  slip: Payslip;
-  onDownload: () => void;
-}) {
-  const fx = slip.exchangeRateApplied;
-  const src = slip.sourceCurrency;
-  const showFx = !!(fx && src && src !== slip.payCurrency);
-  const inSrc = (n: number) => (showFx && fx ? n / fx : n);
-
-  const employerLines = slip.deductions.filter((d) => d.employerAmount > 0);
-
-  return (
-    <div className="h-full flex flex-col">
-      <div className="p-4 border-b flex items-center justify-between print:hidden">
-        <h3 className="font-semibold flex items-center gap-2">
-          <FileText className="h-4 w-4" /> Payslip
-        </h3>
-        <Button size="sm" variant="outline" onClick={onDownload}>
-          <Download className="h-3.5 w-3.5 mr-1.5" /> Download PDF
-        </Button>
-      </div>
-
-      <div id="payslip-print-area" className="p-6 space-y-5 bg-white text-foreground">
-        <div className="text-center border-b pb-4">
-          <h2 className="text-lg font-bold tracking-wide">
-            EMPLOYEE PAYSLIP — {slip.periodLabel}
-          </h2>
-        </div>
-
-        <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
-          <Field label="Employee Name" value={slip.employeeName} />
-          <Field
-            label="Pay Period"
-            value={new Date(slip.periodEnd).toLocaleDateString("en-GB", {
-              day: "2-digit",
-              month: "short",
-              year: "numeric",
-            })}
-          />
-          <Field label="Position" value={slip.jobTitle ?? "—"} />
-          <Field label="Employee #" value={slip.employeeNumber ?? "—"} />
-          {showFx && (
-            <Field
-              label={`Exchange Rate (${slip.payCurrency}/${src})`}
-              value={fx!.toLocaleString()}
-            />
-          )}
-        </div>
-
-        <PaySection title="EARNINGS" currency={slip.payCurrency}>
-          <PayRow label="Basic Salary" amount={slip.basicSalary} currency={slip.payCurrency} />
-          {slip.allowances.map((a) => (
-            <PayRow key={a.key} label={a.label} amount={a.amount} currency={slip.payCurrency} />
-          ))}
-          {showFx && (
-            <PayRow
-              label={`Gross Salary (${src} equivalent)`}
-              amount={inSrc(slip.grossSalary)}
-              currency={src!}
-              muted
-            />
-          )}
-          <PayRow label="Total Earnings" amount={slip.grossSalary} currency={slip.payCurrency} bold />
-        </PaySection>
-
-        <PaySection title="DEDUCTIONS" currency={slip.payCurrency}>
-          {slip.deductions
-            .filter((d) => d.visibleToEmployee && d.employeeAmount > 0)
-            .map((d) => (
-              <PayRow
-                key={d.key}
-                label={d.label}
-                amount={d.employeeAmount}
-                currency={slip.payCurrency}
-              />
-            ))}
-          <PayRow
-            label="Total Deductions"
-            amount={slip.totalEmployeeDeductions}
-            currency={slip.payCurrency}
-            bold
-          />
-        </PaySection>
-
-        {slip.loanDeductions.length > 0 && (
-          <PaySection title="LOAN DEDUCTIONS" currency={slip.payCurrency}>
-            {slip.loanDeductions.map((l) => (
-              <PayRow
-                key={l.loanId}
-                label={l.label}
-                amount={l.amountDeducted}
-                currency={slip.payCurrency}
-                sub={`Remaining: ${fmt(l.remainingBalance, slip.payCurrency)}`}
-              />
-            ))}
-          </PaySection>
-        )}
-
-        <div className="border-2 border-primary/30 rounded-lg p-4 bg-primary/5">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-bold uppercase tracking-wide">Net Pay</span>
-            <span className="text-2xl font-bold text-success">
-              {fmt(slip.netSalary, slip.payCurrency)}
-            </span>
-          </div>
-          {showFx && (
-            <div className="flex items-center justify-between mt-1 text-xs text-muted-foreground">
-              <span>{src} equivalent</span>
-              <span className="font-mono">{fmt(inSrc(slip.netSalary), src!)}</span>
-            </div>
-          )}
-        </div>
-
-        {employerLines.length > 0 && (
-          <PaySection title="EMPLOYER CONTRIBUTIONS" currency={slip.payCurrency}>
-            {employerLines.map((d) => (
-              <PayRow
-                key={d.key}
-                label={d.label}
-                amount={d.employerAmount}
-                currency={slip.payCurrency}
-              />
-            ))}
-            <PayRow
-              label="Total Employer Contributions"
-              amount={slip.totalEmployerContributions}
-              currency={slip.payCurrency}
-              bold
-            />
-            <PayRow
-              label="Total Cost to Company (CTC)"
-              amount={slip.grossSalary + slip.totalEmployerContributions}
-              currency={slip.payCurrency}
-              bold
-            />
-          </PaySection>
-        )}
-
-        {slip.notes && (
-          <p className="text-xs text-muted-foreground border-t pt-3">{slip.notes}</p>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function Field({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</p>
-      <p className="font-medium">{value}</p>
-    </div>
-  );
-}
-
-function PaySection({
-  title,
-  currency,
-  children,
-}: {
-  title: string;
-  currency: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div>
-      <div className="flex items-center justify-between bg-muted px-3 py-1.5 rounded-t-md border border-b-0">
-        <span className="text-xs font-bold tracking-wide">{title}</span>
-        <span className="text-[10px] uppercase text-muted-foreground">
-          Amount ({currency})
-        </span>
-      </div>
-      <div className="border rounded-b-md divide-y">{children}</div>
-    </div>
-  );
-}
-
-function PayRow({
-  label,
-  amount,
-  currency,
-  bold,
-  muted,
-  sub,
-}: {
-  label: string;
-  amount: number;
-  currency: string;
-  bold?: boolean;
-  muted?: boolean;
-  sub?: string;
-}) {
-  return (
-    <div
-      className={`flex items-center justify-between px-3 py-2 text-sm ${
-        bold ? "font-semibold bg-muted/40" : ""
-      } ${muted ? "text-muted-foreground italic" : ""}`}
-    >
-      <div>
-        <p>{label}</p>
-        {sub && <p className="text-[10px] text-muted-foreground">{sub}</p>}
-      </div>
-      <span className="font-mono">{fmt(amount, currency)}</span>
-    </div>
-  );
-}
-
-function downloadPayslipPdf(slip: Payslip) {
-  const node = document.getElementById("payslip-print-area");
-  if (!node) return;
-  const w = window.open("", "_blank", "width=900,height=1200");
-  if (!w) {
-    toast.error("Pop-up blocked. Allow pop-ups to download the payslip.");
-    return;
-  }
-  const styles = Array.from(
-    document.querySelectorAll('style, link[rel="stylesheet"]'),
-  )
-    .map((el) => el.outerHTML)
-    .join("\n");
-  w.document.write(`<!doctype html><html><head><title>Payslip — ${slip.employeeName} — ${slip.periodLabel}</title>${styles}
-<style>body{padding:24px;font-family:system-ui,sans-serif;background:#fff;color:#111}@media print{@page{size:A4;margin:14mm}}</style>
-</head><body>${node.outerHTML}</body></html>`);
-  w.document.close();
-  w.focus();
-  setTimeout(() => {
-    w.print();
-  }, 400);
 }
