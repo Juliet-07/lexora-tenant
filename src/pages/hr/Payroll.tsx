@@ -79,7 +79,7 @@ import {
   processPayrollRun,
   markPayrollRunPaid,
   discardPayrollRun,
-  fetchPayslipHtml,
+  
   fetchAllEmployeesPeriodStatus,
   fetchLiveFxRate,
   type PayrollPolicy,
@@ -220,11 +220,8 @@ export default function HRPayroll() {
     enabled: !!openRun,
   });
 
-  const { data: payslipHtml, isLoading: payslipHtmlLoading } = useQuery({
-    queryKey: ["payslip-html", openPayslip?._id],
-    queryFn: () => fetchPayslipHtml(openPayslip!._id),
-    enabled: !!openPayslip,
-  });
+  // payslip HTML render endpoint no longer needed — we render natively
+
 
   const totalLoanBook = loans.reduce((acc, l) => acc + l.principalAmount, 0);
   const activeBalance = loans
@@ -1509,27 +1506,12 @@ export default function HRPayroll() {
         open={!!openPayslip}
         onOpenChange={(o) => !o && setOpenPayslip(null)}
       >
-        <SheetContent className="w-full sm:max-w-2xl overflow-y-auto p-0">
+        <SheetContent className="w-full sm:max-w-3xl overflow-y-auto p-0">
           {openPayslip && (
-            <div className="h-full flex flex-col">
-              <div className="p-4 border-b flex items-center justify-between">
-                <h3 className="font-semibold flex items-center gap-2">
-                  <FileText className="h-4 w-4" /> Payslip
-                </h3>
-                <Button size="sm" variant="outline" disabled>
-                  <Download className="h-3.5 w-3.5 mr-1.5" /> Download PDF
-                </Button>
-              </div>
-              {payslipHtmlLoading ? (
-                <LoadingRow label="Rendering payslip…" />
-              ) : (
-                <iframe
-                  srcDoc={payslipHtml}
-                  className="flex-1 w-full border-0"
-                  title="Payslip"
-                />
-              )}
-            </div>
+            <PayslipView
+              slip={openPayslip}
+              onDownload={() => downloadPayslipPdf(openPayslip)}
+            />
           )}
         </SheetContent>
       </Sheet>
@@ -1935,4 +1917,241 @@ function EmptyCard({ text }: { text: string }) {
       </CardContent>
     </Card>
   );
+}
+
+// ─────────────────────────────────────────────────────────────
+// PAYSLIP — native rendering + print-to-PDF
+// ─────────────────────────────────────────────────────────────
+
+function PayslipView({
+  slip,
+  onDownload,
+}: {
+  slip: Payslip;
+  onDownload: () => void;
+}) {
+  const fx = slip.exchangeRateApplied;
+  const src = slip.sourceCurrency;
+  const showFx = !!(fx && src && src !== slip.payCurrency);
+  const inSrc = (n: number) => (showFx && fx ? n / fx : n);
+
+  const employerLines = slip.deductions.filter((d) => d.employerAmount > 0);
+
+  return (
+    <div className="h-full flex flex-col">
+      <div className="p-4 border-b flex items-center justify-between print:hidden">
+        <h3 className="font-semibold flex items-center gap-2">
+          <FileText className="h-4 w-4" /> Payslip
+        </h3>
+        <Button size="sm" variant="outline" onClick={onDownload}>
+          <Download className="h-3.5 w-3.5 mr-1.5" /> Download PDF
+        </Button>
+      </div>
+
+      <div id="payslip-print-area" className="p-6 space-y-5 bg-white text-foreground">
+        <div className="text-center border-b pb-4">
+          <h2 className="text-lg font-bold tracking-wide">
+            EMPLOYEE PAYSLIP — {slip.periodLabel}
+          </h2>
+        </div>
+
+        <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+          <Field label="Employee Name" value={slip.employeeName} />
+          <Field
+            label="Pay Period"
+            value={new Date(slip.periodEnd).toLocaleDateString("en-GB", {
+              day: "2-digit",
+              month: "short",
+              year: "numeric",
+            })}
+          />
+          <Field label="Position" value={slip.jobTitle ?? "—"} />
+          <Field label="Employee #" value={slip.employeeNumber ?? "—"} />
+          {showFx && (
+            <Field
+              label={`Exchange Rate (${slip.payCurrency}/${src})`}
+              value={fx!.toLocaleString()}
+            />
+          )}
+        </div>
+
+        <PaySection title="EARNINGS" currency={slip.payCurrency}>
+          <PayRow label="Basic Salary" amount={slip.basicSalary} currency={slip.payCurrency} />
+          {slip.allowances.map((a) => (
+            <PayRow key={a.key} label={a.label} amount={a.amount} currency={slip.payCurrency} />
+          ))}
+          {showFx && (
+            <PayRow
+              label={`Gross Salary (${src} equivalent)`}
+              amount={inSrc(slip.grossSalary)}
+              currency={src!}
+              muted
+            />
+          )}
+          <PayRow label="Total Earnings" amount={slip.grossSalary} currency={slip.payCurrency} bold />
+        </PaySection>
+
+        <PaySection title="DEDUCTIONS" currency={slip.payCurrency}>
+          {slip.deductions
+            .filter((d) => d.visibleToEmployee && d.employeeAmount > 0)
+            .map((d) => (
+              <PayRow
+                key={d.key}
+                label={d.label}
+                amount={d.employeeAmount}
+                currency={slip.payCurrency}
+              />
+            ))}
+          <PayRow
+            label="Total Deductions"
+            amount={slip.totalEmployeeDeductions}
+            currency={slip.payCurrency}
+            bold
+          />
+        </PaySection>
+
+        {slip.loanDeductions.length > 0 && (
+          <PaySection title="LOAN DEDUCTIONS" currency={slip.payCurrency}>
+            {slip.loanDeductions.map((l) => (
+              <PayRow
+                key={l.loanId}
+                label={l.label}
+                amount={l.amountDeducted}
+                currency={slip.payCurrency}
+                sub={`Remaining: ${fmt(l.remainingBalance, slip.payCurrency)}`}
+              />
+            ))}
+          </PaySection>
+        )}
+
+        <div className="border-2 border-primary/30 rounded-lg p-4 bg-primary/5">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-bold uppercase tracking-wide">Net Pay</span>
+            <span className="text-2xl font-bold text-success">
+              {fmt(slip.netSalary, slip.payCurrency)}
+            </span>
+          </div>
+          {showFx && (
+            <div className="flex items-center justify-between mt-1 text-xs text-muted-foreground">
+              <span>{src} equivalent</span>
+              <span className="font-mono">{fmt(inSrc(slip.netSalary), src!)}</span>
+            </div>
+          )}
+        </div>
+
+        {employerLines.length > 0 && (
+          <PaySection title="EMPLOYER CONTRIBUTIONS" currency={slip.payCurrency}>
+            {employerLines.map((d) => (
+              <PayRow
+                key={d.key}
+                label={d.label}
+                amount={d.employerAmount}
+                currency={slip.payCurrency}
+              />
+            ))}
+            <PayRow
+              label="Total Employer Contributions"
+              amount={slip.totalEmployerContributions}
+              currency={slip.payCurrency}
+              bold
+            />
+            <PayRow
+              label="Total Cost to Company (CTC)"
+              amount={slip.grossSalary + slip.totalEmployerContributions}
+              currency={slip.payCurrency}
+              bold
+            />
+          </PaySection>
+        )}
+
+        {slip.notes && (
+          <p className="text-xs text-muted-foreground border-t pt-3">{slip.notes}</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Field({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="font-medium">{value}</p>
+    </div>
+  );
+}
+
+function PaySection({
+  title,
+  currency,
+  children,
+}: {
+  title: string;
+  currency: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <div className="flex items-center justify-between bg-muted px-3 py-1.5 rounded-t-md border border-b-0">
+        <span className="text-xs font-bold tracking-wide">{title}</span>
+        <span className="text-[10px] uppercase text-muted-foreground">
+          Amount ({currency})
+        </span>
+      </div>
+      <div className="border rounded-b-md divide-y">{children}</div>
+    </div>
+  );
+}
+
+function PayRow({
+  label,
+  amount,
+  currency,
+  bold,
+  muted,
+  sub,
+}: {
+  label: string;
+  amount: number;
+  currency: string;
+  bold?: boolean;
+  muted?: boolean;
+  sub?: string;
+}) {
+  return (
+    <div
+      className={`flex items-center justify-between px-3 py-2 text-sm ${
+        bold ? "font-semibold bg-muted/40" : ""
+      } ${muted ? "text-muted-foreground italic" : ""}`}
+    >
+      <div>
+        <p>{label}</p>
+        {sub && <p className="text-[10px] text-muted-foreground">{sub}</p>}
+      </div>
+      <span className="font-mono">{fmt(amount, currency)}</span>
+    </div>
+  );
+}
+
+function downloadPayslipPdf(slip: Payslip) {
+  const node = document.getElementById("payslip-print-area");
+  if (!node) return;
+  const w = window.open("", "_blank", "width=900,height=1200");
+  if (!w) {
+    toast.error("Pop-up blocked. Allow pop-ups to download the payslip.");
+    return;
+  }
+  const styles = Array.from(
+    document.querySelectorAll('style, link[rel="stylesheet"]'),
+  )
+    .map((el) => el.outerHTML)
+    .join("\n");
+  w.document.write(`<!doctype html><html><head><title>Payslip — ${slip.employeeName} — ${slip.periodLabel}</title>${styles}
+<style>body{padding:24px;font-family:system-ui,sans-serif;background:#fff;color:#111}@media print{@page{size:A4;margin:14mm}}</style>
+</head><body>${node.outerHTML}</body></html>`);
+  w.document.close();
+  w.focus();
+  setTimeout(() => {
+    w.print();
+  }, 400);
 }
