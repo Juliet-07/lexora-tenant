@@ -79,7 +79,7 @@ import {
   processPayrollRun,
   markPayrollRunPaid,
   discardPayrollRun,
-  fetchPayslipHtml,
+  
   fetchAllEmployeesPeriodStatus,
   fetchLiveFxRate,
   type PayrollPolicy,
@@ -220,11 +220,8 @@ export default function HRPayroll() {
     enabled: !!openRun,
   });
 
-  const { data: payslipHtml, isLoading: payslipHtmlLoading } = useQuery({
-    queryKey: ["payslip-html", openPayslip?._id],
-    queryFn: () => fetchPayslipHtml(openPayslip!._id),
-    enabled: !!openPayslip,
-  });
+  // payslip HTML render endpoint no longer needed — we render natively
+
 
   const totalLoanBook = loans.reduce((acc, l) => acc + l.principalAmount, 0);
   const activeBalance = loans
