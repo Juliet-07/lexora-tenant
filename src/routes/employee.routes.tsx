@@ -5,6 +5,7 @@ import MyLeave from "@/pages/hr/employee/MyLeave";
 import MyPerformance from "@/pages/hr/employee/MyPerformance";
 import MyPayslips from "@/pages/hr/employee/MyPayslips";
 import MyProfile from "@/pages/hr/employee/MyProfile";
+import MyRequisitions from "@/pages/hr/employee/MyRequisitions";
 import EmployeeOnboarding from "@/pages/EmployeeOnboarding";
 
 /** Self-service routes available only to employee. */
