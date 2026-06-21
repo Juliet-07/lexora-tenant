@@ -27,6 +27,7 @@ export const hrRoutes = ({ isAdmin }: RouteContext) => {
       <Route key="recruitment" path="/hr/recruitment" element={layout(<HRRecruitment />)} />,
       <Route key="performance" path="/hr/performance" element={layout(<HRPerformance />)} />,
       <Route key="payroll" path="/hr/payroll" element={layout(<HRPayroll />)} />,
+      <Route key="requisitions" path="/hr/requisitions" element={layout(<HRRequisitions />)} />,
       <Route key="contracts" path="/hr/contracts" element={layout(<HRContracts />)} />,
       <Route key="disputes" path="/hr/disputes" element={layout(<HRDisputes />)} />,
       <Route key="reports" path="/hr/reports" element={layout(<HRReports />)} />,
