@@ -5,6 +5,7 @@ import MyLeave from "@/pages/hr/employee/MyLeave";
 import MyPerformance from "@/pages/hr/employee/MyPerformance";
 import MyPayslips from "@/pages/hr/employee/MyPayslips";
 import MyProfile from "@/pages/hr/employee/MyProfile";
+import MyRequisitions from "@/pages/hr/employee/MyRequisitions";
 import EmployeeOnboarding from "@/pages/EmployeeOnboarding";
 
 /** Self-service routes available only to employee. */
@@ -20,6 +21,7 @@ export const employeeRoutes = ({ isAdmin }: RouteContext) => {
       element={layout(<MyPerformance />)}
     />,
     <Route key="my-pay" path="/my/payslips" element={layout(<MyPayslips />)} />,
+    <Route key="my-req" path="/my/requisitions" element={layout(<MyRequisitions />)} />,
     // Onboarding is no longer a gate — it's a dedicated page employees
     // are nudged toward via the in-app reminder/popup.
     <Route key="onboarding" path="/onboarding" element={<EmployeeOnboarding />} />,
