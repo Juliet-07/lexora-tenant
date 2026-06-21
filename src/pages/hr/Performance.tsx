@@ -1,4 +1,7 @@
-import { useMemo, useState } from "react";
+// HR > Performance — replicates Jameela Rwanda's M1 Employee Performance Review.
+// Tenant/manager side: full sectioned review form per employee.
+
+import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -6,7 +9,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription,
@@ -18,12 +20,17 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  Target, Star, TrendingUp, Award, CheckCircle2, Plus, Trash2, Save, Send, Gauge, Users, Calendar,
+  Target, Star, TrendingUp, Award, CheckCircle2, Plus, Trash2, Save, Send,
+  Gauge, Users, Calendar, FileSignature, ClipboardList, GraduationCap, ScrollText,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { employees } from "@/data/hrMockData";
 import {
-  perfStore, usePerfStore, type KPA, type KPI, type Scorecard, type ReviewStatus, type Cycle,
+  perfStore, usePerfStore, newId,
+  computeKpiTotal, kpiRatingBand, competencyAverage, valuesAverage,
+  type KPA, type Scorecard, type ReviewStatus, type Cycle,
+  type CompetencyRow, type ValueRow, type ComplianceCheck,
+  type PreviousGoal, type NextGoal, type TrainingItem, type ManagerEvaluation,
 } from "@/lib/performanceStore";
 
 const statusTone: Record<ReviewStatus, string> = {
@@ -33,8 +40,6 @@ const statusTone: Record<ReviewStatus, string> = {
   "Calibration": "bg-violet-500/10 text-violet-600 border-violet-500/20",
   "Completed": "bg-success/10 text-success border-success/20",
 };
-
-const uid = (p: string) => `${p}-${Math.random().toString(36).slice(2, 8)}`;
 
 export default function HRPerformance() {
   const cycles = usePerfStore((s) => s.cycles);
@@ -51,10 +56,12 @@ export default function HRPerformance() {
   const completed = cards.filter((c) => c.status === "Completed");
   const inProgress = cards.filter((c) => !["Not Started", "Completed"].includes(c.status));
   const avgRating = completed.length
-    ? (completed.reduce((s, c) => s + (c.finalRating ?? 0), 0) / completed.length).toFixed(2)
+    ? Math.round(completed.reduce((s, c) => s + (c.finalRating ?? 0), 0) / completed.length)
     : "—";
 
   const [selected, setSelected] = useState<Scorecard | null>(null);
+  // Re-sync selected to latest store data on every render.
+  const selectedLive = selected ? scorecards.find((s) => s.id === selected.id) ?? null : null;
 
   return (
     <div className="space-y-6">
@@ -62,7 +69,7 @@ export default function HRPerformance() {
         <div>
           <h1 className="text-2xl font-bold">Performance</h1>
           <p className="text-sm text-muted-foreground">
-            Set KPAs &amp; KPIs per employee, run review cycles end-to-end, and calibrate ratings.
+            Configure KPAs & KPIs per employee and run the end-to-end review (dual scoring, competencies, values, goals, sign-off).
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -82,22 +89,21 @@ export default function HRPerformance() {
         <Stat label="Active Cycle" value={activeCycle?.name ?? "—"} icon={Calendar} tone="from-primary to-secondary" />
         <Stat label="Reviews In Progress" value={inProgress.length} icon={TrendingUp} tone="from-amber-500 to-orange-500" />
         <Stat label="Completed" value={completed.length} icon={CheckCircle2} tone="from-emerald-500 to-teal-500" />
-        <Stat label="Avg Final Rating" value={avgRating} icon={Star} tone="from-violet-500 to-purple-600" />
+        <Stat label="Avg Final Score" value={typeof avgRating === "number" ? `${avgRating}/100` : avgRating} icon={Star} tone="from-violet-500 to-purple-600" />
       </div>
 
       <Tabs defaultValue="scorecards" className="space-y-4">
         <TabsList>
-          <TabsTrigger value="scorecards"><Gauge className="h-4 w-4 mr-2" /> KPAs &amp; Scorecards</TabsTrigger>
+          <TabsTrigger value="scorecards"><Gauge className="h-4 w-4 mr-2" /> KPAs & Scorecards</TabsTrigger>
           <TabsTrigger value="reviews"><Users className="h-4 w-4 mr-2" /> Review Workflow</TabsTrigger>
           <TabsTrigger value="calibration"><Target className="h-4 w-4 mr-2" /> Calibration</TabsTrigger>
           <TabsTrigger value="feedback"><Award className="h-4 w-4 mr-2" /> Continuous Feedback</TabsTrigger>
         </TabsList>
 
-        {/* KPA / Scorecards */}
         <TabsContent value="scorecards" className="space-y-3">
           <div className="flex items-center justify-between">
             <p className="text-sm text-muted-foreground">
-              Define what each employee will be measured on for this cycle.
+              Define what each employee will be measured on. Total weight should equal 100%.
             </p>
             <AssignEmployeeDialog cycleId={activeCycle?.id ?? ""} existing={cards.map((c) => c.employeeId)} />
           </div>
@@ -113,17 +119,15 @@ export default function HRPerformance() {
           </div>
         </TabsContent>
 
-        {/* Review workflow */}
         <TabsContent value="reviews" className="grid grid-cols-1 lg:grid-cols-2 gap-3">
           {cards.map((sc) => (
             <ScorecardCard key={sc.id} sc={sc} onOpen={() => setSelected(sc)} mode="review" />
           ))}
         </TabsContent>
 
-        {/* Calibration */}
         <TabsContent value="calibration" className="space-y-3">
           <Card>
-            <CardHeader><CardTitle className="text-base">Calibration table</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-base">Calibration table — KPI scores out of 100</CardTitle></CardHeader>
             <CardContent>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -131,25 +135,31 @@ export default function HRPerformance() {
                     <tr>
                       <th className="text-left py-2">Employee</th>
                       <th className="text-left">Status</th>
-                      <th className="text-right">Self</th>
-                      <th className="text-right">Manager</th>
-                      <th className="text-right">Final</th>
+                      <th className="text-right">Self /100</th>
+                      <th className="text-right">Manager /100</th>
+                      <th className="text-right">Final /100</th>
+                      <th className="text-right">Rating</th>
                       <th></th>
                     </tr>
                   </thead>
                   <tbody>
-                    {cards.map((sc) => (
-                      <tr key={sc.id} className="border-b last:border-0">
-                        <td className="py-2 font-medium">{sc.employeeName}</td>
-                        <td><Badge variant="outline" className={statusTone[sc.status]}>{sc.status}</Badge></td>
-                        <td className="text-right">{sc.overallSelfRating ?? "—"}</td>
-                        <td className="text-right">{sc.overallManagerRating ?? "—"}</td>
-                        <td className="text-right font-semibold">{sc.finalRating ?? "—"}</td>
-                        <td className="text-right">
-                          <Button size="sm" variant="outline" onClick={() => setSelected(sc)}>Open</Button>
-                        </td>
-                      </tr>
-                    ))}
+                    {cards.map((sc) => {
+                      const final = sc.finalRating ?? computeKpiTotal(sc, "combined");
+                      const band = kpiRatingBand(final);
+                      return (
+                        <tr key={sc.id} className="border-b last:border-0">
+                          <td className="py-2 font-medium">{sc.employeeName}</td>
+                          <td><Badge variant="outline" className={statusTone[sc.status]}>{sc.status}</Badge></td>
+                          <td className="text-right">{sc.overallSelfRating ?? "—"}</td>
+                          <td className="text-right">{sc.overallManagerRating ?? "—"}</td>
+                          <td className="text-right font-semibold">{sc.finalRating ?? "—"}</td>
+                          <td className="text-right"><Badge variant="outline" className={band.tone}>{band.label}</Badge></td>
+                          <td className="text-right">
+                            <Button size="sm" variant="outline" onClick={() => setSelected(sc)}>Open</Button>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -157,7 +167,6 @@ export default function HRPerformance() {
           </Card>
         </TabsContent>
 
-        {/* Feedback */}
         <TabsContent value="feedback" className="space-y-3">
           <AddFeedbackForm />
           {feedback.map((f) => {
@@ -181,16 +190,17 @@ export default function HRPerformance() {
         </TabsContent>
       </Tabs>
 
-      <ScorecardSheet sc={selected} onClose={() => setSelected(null)} />
+      <ReviewSheet sc={selectedLive} onClose={() => setSelected(null)} />
     </div>
   );
 }
 
-// ────────────────────────────────────────────────────────────────
+// ──────────────────────────── card ────────────────────────────
 
 function ScorecardCard({ sc, onOpen, mode }: { sc: Scorecard; onOpen: () => void; mode: "setup" | "review" }) {
   const totalWeight = sc.kpas.reduce((s, k) => s + k.weight, 0);
-  const kpiCount = sc.kpas.reduce((s, k) => s + k.kpis.length, 0);
+  const combined = computeKpiTotal(sc, "combined");
+  const band = kpiRatingBand(combined);
   return (
     <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={onOpen}>
       <CardContent className="p-5 space-y-3">
@@ -203,26 +213,38 @@ function ScorecardCard({ sc, onOpen, mode }: { sc: Scorecard; onOpen: () => void
             </Avatar>
             <div className="min-w-0">
               <p className="font-semibold truncate">{sc.employeeName}</p>
-              <p className="text-xs text-muted-foreground">{sc.kpas.length} KPAs · {kpiCount} KPIs · weight {totalWeight}%</p>
+              <p className="text-xs text-muted-foreground truncate">
+                {sc.info?.jobTitle ?? "—"} · {sc.kpas.length} KPAs · weight {totalWeight}%
+              </p>
             </div>
           </div>
           <Badge variant="outline" className={statusTone[sc.status]}>{sc.status}</Badge>
         </div>
         {mode === "review" && (
           <div className="grid grid-cols-3 gap-3 pt-1">
-            <Metric label="Self" value={sc.overallSelfRating} />
-            <Metric label="Manager" value={sc.overallManagerRating} />
-            <Metric label="Final" value={sc.finalRating} emphasis />
+            <Metric label="Self /100" value={sc.overallSelfRating} />
+            <Metric label="Manager /100" value={sc.overallManagerRating} />
+            <Metric label="Final /100" value={sc.finalRating} emphasis />
           </div>
         )}
         {mode === "setup" && (
           <div className="space-y-1.5">
             {sc.kpas.slice(0, 3).map((k) => (
-              <div key={k.id} className="text-xs flex justify-between">
+              <div key={k.id} className="text-xs flex justify-between gap-2">
                 <span className="truncate">{k.title}</span>
-                <span className="text-muted-foreground">{k.weight}%</span>
+                <span className="text-muted-foreground shrink-0">{k.weight}%</span>
               </div>
             ))}
+            {sc.kpas.length > 3 && <p className="text-[11px] text-muted-foreground">+ {sc.kpas.length - 3} more</p>}
+          </div>
+        )}
+        {combined > 0 && (
+          <div className="flex items-center justify-between pt-1">
+            <span className="text-xs text-muted-foreground">Combined score</span>
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-semibold">{combined}/100</span>
+              <Badge variant="outline" className={band.tone}>{band.label}</Badge>
+            </div>
           </div>
         )}
       </CardContent>
@@ -239,14 +261,15 @@ function Metric({ label, value, emphasis }: { label: string; value?: number; emp
   );
 }
 
-// ── New cycle ──
+// ──────────────────────────── dialogs ────────────────────────────
+
 function NewCycleDialog() {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<Partial<Cycle>>({ name: "", startDate: "", endDate: "", selfReviewDue: "", managerReviewDue: "", status: "Active" });
   const submit = () => {
     if (!draft.name) return;
     perfStore.upsertCycle({
-      id: uid("CYC"),
+      id: newId("CYC"),
       name: draft.name!,
       startDate: draft.startDate ?? "",
       endDate: draft.endDate ?? "",
@@ -282,7 +305,6 @@ function NewCycleDialog() {
   );
 }
 
-// ── Assign employee to cycle ──
 function AssignEmployeeDialog({ cycleId, existing }: { cycleId: string; existing: string[] }) {
   const [open, setOpen] = useState(false);
   const [empId, setEmpId] = useState<string>("");
@@ -296,6 +318,13 @@ function AssignEmployeeDialog({ cycleId, existing }: { cycleId: string; existing
       employeeName: `${e.firstName} ${e.lastName}`,
       cycleId,
       status: "Not Started",
+      info: {
+        jobTitle: e.jobTitle,
+        department: e.department,
+        manager: e.manager ?? "",
+        reviewType: "Annual",
+        contractStartDate: e.startDate,
+      },
       kpas: [],
     });
     setOpen(false);
@@ -329,7 +358,6 @@ function AssignEmployeeDialog({ cycleId, existing }: { cycleId: string; existing
   );
 }
 
-// ── Add feedback ──
 function AddFeedbackForm() {
   const [empId, setEmpId] = useState("");
   const [type, setType] = useState<"Praise" | "Constructive" | "1-on-1">("Praise");
@@ -337,7 +365,7 @@ function AddFeedbackForm() {
   const submit = () => {
     if (!empId || !msg.trim()) return;
     perfStore.addFeedback({
-      id: uid("F"),
+      id: newId("F"),
       employeeId: empId,
       from: "You",
       type,
@@ -375,197 +403,531 @@ function AddFeedbackForm() {
   );
 }
 
-// ── Scorecard sheet (KPAs editor + manager review + calibration) ──
-function ScorecardSheet({ sc, onClose }: { sc: Scorecard | null; onClose: () => void }) {
+// ────────────────────── full review sheet ──────────────────────
+
+function ReviewSheet({ sc, onClose }: { sc: Scorecard | null; onClose: () => void }) {
   const open = !!sc;
+
+  // ── local editable copy
   const [kpas, setKpas] = useState<KPA[]>([]);
-  const [managerComments, setManagerComments] = useState("");
+  const [comps, setComps] = useState<CompetencyRow[]>([]);
+  const [vals, setVals] = useState<ValueRow[]>([]);
+  const [compliance, setCompliance] = useState<ComplianceCheck[]>([]);
+  const [info, setInfo] = useState<Scorecard["info"]>({});
+  const [prevGoals, setPrevGoals] = useState<PreviousGoal[]>([]);
+  const [nextGoals, setNextGoals] = useState<NextGoal[]>([]);
+  const [achNote, setAchNote] = useState("");
+  const [chNote, setChNote] = useState("");
+  const [mgrEval, setMgrEval] = useState<ManagerEvaluation>({});
   const [final, setFinal] = useState<number | undefined>();
   const [calibrationNotes, setCalibrationNotes] = useState("");
 
-  // re-init when sheet opens
-  useMemo(() => {
-    if (sc) {
-      setKpas(JSON.parse(JSON.stringify(sc.kpas)));
-      setManagerComments(sc.managerComments ?? "");
-      setFinal(sc.finalRating);
-      setCalibrationNotes(sc.calibrationNotes ?? "");
-    }
+  useEffect(() => {
+    if (!sc) return;
+    setKpas(JSON.parse(JSON.stringify(sc.kpas)));
+    setComps(JSON.parse(JSON.stringify(sc.competencies ?? [])));
+    setVals(JSON.parse(JSON.stringify(sc.values ?? [])));
+    setCompliance(JSON.parse(JSON.stringify(sc.compliance ?? [])));
+    setInfo({ ...(sc.info ?? {}) });
+    setPrevGoals(JSON.parse(JSON.stringify(sc.previousGoals ?? [])));
+    setNextGoals(JSON.parse(JSON.stringify(sc.nextGoals ?? [])));
+    setAchNote(sc.achievementsManagerNote ?? "");
+    setChNote(sc.challengesManagerNote ?? "");
+    setMgrEval({ ...(sc.managerEvaluation ?? {}) });
+    setFinal(sc.finalRating);
+    setCalibrationNotes(sc.calibrationNotes ?? "");
   }, [sc?.id]);
 
   if (!sc) return null;
 
   const totalWeight = kpas.reduce((s, k) => s + k.weight, 0);
+  const liveSc: Scorecard = { ...sc, kpas, competencies: comps, values: vals };
+  const selfTotal = computeKpiTotal(liveSc, "self");
+  const mgrTotal = computeKpiTotal(liveSc, "manager");
+  const combined = computeKpiTotal(liveSc, "combined");
+  const compAvg = competencyAverage(liveSc);
+  const valAvg = valuesAverage(liveSc);
+  const band = kpiRatingBand(combined);
 
-  const addKpa = () => setKpas([...kpas, {
-    id: uid("kpa"), title: "New KPA", description: "", weight: 0, kpis: [],
-  }]);
+  // ── KPA helpers
+  const addKpa = () => setKpas([...kpas, { id: newId("kpa"), title: "New KPA", description: "", weight: 0, kpis: [] }]);
   const removeKpa = (id: string) => setKpas(kpas.filter((k) => k.id !== id));
   const updateKpa = (id: string, patch: Partial<KPA>) => setKpas(kpas.map((k) => k.id === id ? { ...k, ...patch } : k));
-  const addKpi = (kpaId: string) => setKpas(kpas.map((k) => k.id === kpaId
-    ? { ...k, kpis: [...k.kpis, { id: uid("kpi"), name: "New KPI", target: "", metric: "", weight: 0 }] }
-    : k));
-  const removeKpi = (kpaId: string, kpiId: string) => setKpas(kpas.map((k) => k.id === kpaId
-    ? { ...k, kpis: k.kpis.filter((x) => x.id !== kpiId) } : k));
-  const updateKpi = (kpaId: string, kpiId: string, patch: Partial<KPI>) => setKpas(kpas.map((k) => k.id === kpaId
-    ? { ...k, kpis: k.kpis.map((x) => x.id === kpiId ? { ...x, ...patch } : x) } : k));
 
+  // ── saves
   const saveKpas = () => {
-    perfStore.setKpas(sc.id, kpas);
+    perfStore.patchScorecard(sc.id, { kpas });
     toast({ title: "Scorecard saved", description: "Employee will see updated KPAs immediately." });
   };
   const sendToEmployee = () => {
-    perfStore.setKpas(sc.id, kpas);
+    perfStore.patchScorecard(sc.id, { kpas, info, compliance });
     perfStore.setStatus(sc.id, "Self Review");
     toast({ title: "Sent for self-review", description: `${sc.employeeName} can now complete their self-assessment.` });
     onClose();
   };
+  const saveSection = (patch: Partial<Scorecard>, msg: string) => {
+    perfStore.patchScorecard(sc.id, patch);
+    toast({ title: msg });
+  };
+
   const submitManager = () => {
     perfStore.submitManagerReview(sc.id, {
-      comments: managerComments,
-      kpis: kpas.flatMap((k) => k.kpis.map((x) => ({ id: x.id, managerScore: x.managerScore }))),
+      kpas: kpas.map((k) => ({ id: k.id, managerScore: k.managerScore })),
+      competencies: comps.map((c) => ({ id: c.id, managerScore: c.managerScore, managerObservation: c.managerObservation })),
+      values: vals.map((c) => ({ id: c.id, managerScore: c.managerScore, managerObservation: c.managerObservation })),
+      nextGoals,
+      achievementsManagerNote: achNote,
+      challengesManagerNote: chNote,
+      managerEvaluation: mgrEval,
       final,
     });
     toast({ title: "Manager review submitted", description: "Moved to calibration." });
     onClose();
   };
+
   const finalise = () => {
     if (typeof final !== "number") return;
     perfStore.finalise(sc.id, final, calibrationNotes);
-    toast({ title: "Review finalised", description: `${sc.employeeName} — final rating ${final}/5.` });
+    perfStore.signManager(sc.id);
+    toast({ title: "Review finalised", description: `${sc.employeeName} — final ${final}/100 (${kpiRatingBand(final).label}).` });
     onClose();
   };
 
   return (
     <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
-      <SheetContent className="w-full sm:max-w-2xl overflow-y-auto">
+      <SheetContent className="w-full sm:max-w-3xl overflow-y-auto">
         <SheetHeader>
-          <SheetTitle>{sc.employeeName}</SheetTitle>
-          <SheetDescription>
+          <SheetTitle className="flex items-center gap-3">
+            <Avatar className="h-9 w-9"><AvatarFallback className="bg-gradient-to-br from-primary to-secondary text-white text-xs">
+              {sc.employeeName.split(" ").map((n) => n[0]).join("").slice(0, 2)}
+            </AvatarFallback></Avatar>
+            <div className="min-w-0">
+              <p className="truncate">{sc.employeeName}</p>
+              <p className="text-xs font-normal text-muted-foreground truncate">{info?.jobTitle ?? sc.info?.jobTitle}</p>
+            </div>
+          </SheetTitle>
+          <SheetDescription className="flex flex-wrap gap-2 items-center">
             <Badge variant="outline" className={statusTone[sc.status]}>{sc.status}</Badge>
-            <span className="ml-2 text-xs">Total weight {totalWeight}% (target 100%)</span>
+            <span className="text-xs">Weight {totalWeight}% / 100</span>
+            <span className="text-xs">Self {selfTotal}/100 · Manager {mgrTotal}/100 · Combined {combined}/100</span>
+            {combined > 0 && <Badge variant="outline" className={band.tone}>{band.label}</Badge>}
           </SheetDescription>
         </SheetHeader>
 
-        <Tabs defaultValue="kpas" className="mt-5">
-          <TabsList>
-            <TabsTrigger value="kpas">KPAs &amp; KPIs</TabsTrigger>
-            <TabsTrigger value="manager">Manager review</TabsTrigger>
-            <TabsTrigger value="calibration">Calibration</TabsTrigger>
-            <TabsTrigger value="employee">Employee view</TabsTrigger>
+        <Tabs defaultValue="info" className="mt-5">
+          <TabsList className="flex flex-wrap h-auto">
+            <TabsTrigger value="info">1 · Info</TabsTrigger>
+            <TabsTrigger value="kpis">2 · KPIs</TabsTrigger>
+            <TabsTrigger value="skills">3 · Skills</TabsTrigger>
+            <TabsTrigger value="values">4 · Values</TabsTrigger>
+            <TabsTrigger value="self">5 · Self-Assessment</TabsTrigger>
+            <TabsTrigger value="goals">6 · Goals</TabsTrigger>
+            <TabsTrigger value="dev">7 · Development</TabsTrigger>
+            <TabsTrigger value="mgr">8 · Manager Eval</TabsTrigger>
+            <TabsTrigger value="signoff">Sign-off</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="kpas" className="space-y-4">
-            {kpas.map((kpa) => (
-              <Card key={kpa.id}>
-                <CardContent className="p-4 space-y-3">
-                  <div className="flex items-start gap-2">
-                    <div className="flex-1 grid grid-cols-[1fr_90px] gap-2">
-                      <Input value={kpa.title} onChange={(e) => updateKpa(kpa.id, { title: e.target.value })} placeholder="KPA title" />
-                      <Input type="number" value={kpa.weight} onChange={(e) => updateKpa(kpa.id, { weight: +e.target.value })} placeholder="Weight %" />
-                      <Textarea className="col-span-2" rows={2} value={kpa.description} onChange={(e) => updateKpa(kpa.id, { description: e.target.value })} placeholder="Why this matters…" />
-                    </div>
-                    <Button size="icon" variant="ghost" onClick={() => removeKpa(kpa.id)}><Trash2 className="h-4 w-4" /></Button>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">KPIs</div>
-                    {kpa.kpis.map((kpi) => (
-                      <div key={kpi.id} className="grid grid-cols-[1fr_110px_110px_70px_auto] gap-2 items-center">
-                        <Input value={kpi.name} onChange={(e) => updateKpi(kpa.id, kpi.id, { name: e.target.value })} placeholder="KPI name" />
-                        <Input value={kpi.target} onChange={(e) => updateKpi(kpa.id, kpi.id, { target: e.target.value })} placeholder="Target" />
-                        <Input value={kpi.metric} onChange={(e) => updateKpi(kpa.id, kpi.id, { metric: e.target.value })} placeholder="Metric" />
-                        <Input type="number" value={kpi.weight} onChange={(e) => updateKpi(kpa.id, kpi.id, { weight: +e.target.value })} placeholder="Wt %" />
-                        <Button size="icon" variant="ghost" onClick={() => removeKpi(kpa.id, kpi.id)}><Trash2 className="h-4 w-4" /></Button>
-                      </div>
-                    ))}
-                    <Button size="sm" variant="outline" onClick={() => addKpi(kpa.id)}><Plus className="h-3 w-3 mr-1" /> Add KPI</Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-            <Button variant="outline" onClick={addKpa}><Plus className="h-4 w-4 mr-2" /> Add KPA</Button>
-
-            <div className="flex justify-end gap-2 pt-2">
-              <Button variant="outline" onClick={saveKpas}><Save className="h-4 w-4 mr-2" /> Save draft</Button>
-              <Button onClick={sendToEmployee} className="bg-gradient-to-r from-primary to-secondary"><Send className="h-4 w-4 mr-2" /> Send for self-review</Button>
-            </div>
-          </TabsContent>
-
-          <TabsContent value="manager" className="space-y-4">
-            {sc.selfReflection && (
-              <Card><CardContent className="p-4">
-                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-1">Employee self-reflection</p>
-                <p className="text-sm whitespace-pre-wrap">{sc.selfReflection}</p>
-              </CardContent></Card>
-            )}
-            <div className="space-y-3">
-              {kpas.map((kpa) => (
-                <Card key={kpa.id}><CardContent className="p-4 space-y-2">
-                  <div className="flex justify-between"><p className="font-semibold text-sm">{kpa.title}</p><Badge variant="outline">{kpa.weight}%</Badge></div>
-                  {kpa.kpis.map((kpi) => (
-                    <div key={kpi.id} className="grid grid-cols-[1fr_120px_90px] gap-2 items-center">
-                      <div className="text-sm">
-                        <p>{kpi.name}</p>
-                        <p className="text-xs text-muted-foreground">Target {kpi.target} · Self: {kpi.selfScore ?? "—"} · Actual: {kpi.actual ?? "—"}</p>
-                      </div>
-                      <Input value={kpi.actual ?? ""} onChange={(e) => updateKpi(kpa.id, kpi.id, { actual: e.target.value })} placeholder="Actual" />
-                      <Input type="number" min={1} max={5} step={0.1} value={kpi.managerScore ?? ""} onChange={(e) => updateKpi(kpa.id, kpi.id, { managerScore: +e.target.value })} placeholder="Score /5" />
-                    </div>
-                  ))}
-                </CardContent></Card>
-              ))}
-            </div>
-            <div>
-              <Label>Manager comments</Label>
-              <Textarea rows={4} className="mt-1.5" value={managerComments} onChange={(e) => setManagerComments(e.target.value)} placeholder="Strengths, areas to improve, development plan…" />
-            </div>
-            <div className="flex items-end justify-between gap-3">
-              <div className="flex-1">
-                <Label>Proposed final rating (1–5)</Label>
-                <Input type="number" min={1} max={5} step={0.1} className="mt-1.5 max-w-[120px]" value={final ?? ""} onChange={(e) => setFinal(+e.target.value)} />
+          {/* ── 1 INFO ── */}
+          <TabsContent value="info" className="space-y-4">
+            <Card><CardContent className="p-4 grid sm:grid-cols-2 gap-3">
+              <Field label="Job Title" value={info?.jobTitle} onChange={(v) => setInfo({ ...info, jobTitle: v })} />
+              <Field label="Department" value={info?.department} onChange={(v) => setInfo({ ...info, department: v })} />
+              <Field label="Manager / Supervisor" value={info?.manager} onChange={(v) => setInfo({ ...info, manager: v })} />
+              <Field label="Review Period" value={info?.reviewPeriod} placeholder="Jan 2026 – Jun 2026" onChange={(v) => setInfo({ ...info, reviewPeriod: v })} />
+              <Field label="Date of Review" type="date" value={info?.reviewDate} onChange={(v) => setInfo({ ...info, reviewDate: v })} />
+              <Field label="Last Review Date" type="date" value={info?.lastReviewDate} onChange={(v) => setInfo({ ...info, lastReviewDate: v })} />
+              <div>
+                <Label>Review Type</Label>
+                <Select value={info?.reviewType ?? ""} onValueChange={(v) => setInfo({ ...info, reviewType: v as any })}>
+                  <SelectTrigger className="mt-1.5"><SelectValue placeholder="Select" /></SelectTrigger>
+                  <SelectContent>
+                    {["Annual", "Mid-Year", "Probation", "Quarterly", "Other"].map((x) => <SelectItem key={x} value={x}>{x}</SelectItem>)}
+                  </SelectContent>
+                </Select>
               </div>
-              <Button onClick={submitManager} className="bg-gradient-to-r from-primary to-secondary"><Send className="h-4 w-4 mr-2" /> Submit & calibrate</Button>
+              <Field label="Contract Start Date" type="date" value={info?.contractStartDate} onChange={(v) => setInfo({ ...info, contractStartDate: v })} />
+            </CardContent></Card>
+
+            <Card>
+              <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><ClipboardList className="h-4 w-4" /> Document Control & Compliance Checks</CardTitle></CardHeader>
+              <CardContent className="space-y-2">
+                {compliance.map((c, i) => (
+                  <div key={c.id} className="grid sm:grid-cols-[1fr_140px_140px_1fr] gap-2 items-center">
+                    <p className="text-sm">{c.question}</p>
+                    <Select value={c.answer ?? ""} onValueChange={(v) => {
+                      const next = [...compliance]; next[i] = { ...c, answer: v as any }; setCompliance(next);
+                    }}>
+                      <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Yes">Yes</SelectItem>
+                        <SelectItem value="No">No</SelectItem>
+                        <SelectItem value="N/A">N/A</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Input type="date" value={c.date ?? ""} onChange={(e) => {
+                      const next = [...compliance]; next[i] = { ...c, date: e.target.value }; setCompliance(next);
+                    }} />
+                    <Input placeholder="Notes" value={c.notes ?? ""} onChange={(e) => {
+                      const next = [...compliance]; next[i] = { ...c, notes: e.target.value }; setCompliance(next);
+                    }} />
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+
+            <div className="flex justify-end">
+              <Button variant="outline" onClick={() => saveSection({ info, compliance }, "Section 1 saved")}>
+                <Save className="h-4 w-4 mr-2" /> Save Section 1
+              </Button>
             </div>
           </TabsContent>
 
-          <TabsContent value="calibration" className="space-y-3">
-            <Card><CardContent className="p-4 space-y-2 text-sm">
-              <div className="flex justify-between"><span>Self overall</span><span className="font-semibold">{sc.overallSelfRating ?? "—"}</span></div>
-              <div className="flex justify-between"><span>Manager overall</span><span className="font-semibold">{sc.overallManagerRating ?? "—"}</span></div>
-              <div className="flex justify-between"><span>Proposed final</span><span className="font-semibold">{sc.finalRating ?? "—"}</span></div>
+          {/* ── 2 KPIs ── */}
+          <TabsContent value="kpis" className="space-y-3">
+            <Card><CardContent className="p-3 text-xs text-muted-foreground flex flex-wrap items-center gap-3">
+              <span>Total weight: <strong className={totalWeight === 100 ? "text-success" : "text-warning"}>{totalWeight}%</strong> (target 100%)</span>
+              <span>Each row scored 1–5. Weighted score = (combined/5) × weight. Total out of 100.</span>
             </CardContent></Card>
-            <div>
-              <Label>Override final rating</Label>
-              <Input type="number" min={1} max={5} step={0.1} className="mt-1.5 max-w-[120px]" value={final ?? ""} onChange={(e) => setFinal(+e.target.value)} />
+
+            <div className="space-y-3">
+              {kpas.map((kpa, idx) => {
+                const combinedRow = (typeof kpa.selfScore === "number" && typeof kpa.managerScore === "number")
+                  ? (kpa.selfScore + kpa.managerScore) / 2
+                  : (kpa.selfScore ?? kpa.managerScore);
+                const weighted = typeof combinedRow === "number" ? +((combinedRow / 5) * kpa.weight).toFixed(2) : undefined;
+                const divergent = (typeof kpa.selfScore === "number" && typeof kpa.managerScore === "number")
+                  && Math.abs(kpa.selfScore - kpa.managerScore) >= 2;
+                return (
+                  <Card key={kpa.id} className={divergent ? "border-warning/50" : undefined}>
+                    <CardContent className="p-4 space-y-3">
+                      <div className="flex items-start gap-2">
+                        <span className="text-xs text-muted-foreground pt-2">#{idx + 1}</span>
+                        <div className="flex-1 space-y-2">
+                          <Input value={kpa.title} onChange={(e) => updateKpa(kpa.id, { title: e.target.value })} placeholder="Key Performance Area" />
+                          <Textarea rows={2} value={kpa.description} onChange={(e) => updateKpa(kpa.id, { description: e.target.value })} placeholder="Performance standard…" />
+                        </div>
+                        <Button size="icon" variant="ghost" onClick={() => removeKpa(kpa.id)}><Trash2 className="h-4 w-4" /></Button>
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 items-end text-sm">
+                        <div><Label className="text-xs">Weight %</Label>
+                          <Input type="number" min={0} max={100} value={kpa.weight} onChange={(e) => updateKpa(kpa.id, { weight: +e.target.value })} /></div>
+                        <div><Label className="text-xs">Self (1–5)</Label>
+                          <Input type="number" min={1} max={5} step={0.1} value={kpa.selfScore ?? ""} onChange={(e) => updateKpa(kpa.id, { selfScore: e.target.value === "" ? undefined : +e.target.value })} /></div>
+                        <div><Label className="text-xs">Manager (1–5)</Label>
+                          <Input type="number" min={1} max={5} step={0.1} value={kpa.managerScore ?? ""} onChange={(e) => updateKpa(kpa.id, { managerScore: e.target.value === "" ? undefined : +e.target.value })} /></div>
+                        <div className="rounded-md bg-success/5 border p-2 text-center">
+                          <p className="text-[10px] uppercase text-muted-foreground">Combined</p>
+                          <p className="font-semibold">{typeof combinedRow === "number" ? combinedRow.toFixed(2) : "—"}</p>
+                        </div>
+                        <div className="rounded-md bg-violet-500/5 border p-2 text-center">
+                          <p className="text-[10px] uppercase text-muted-foreground">Weighted</p>
+                          <p className="font-semibold">{weighted ?? "—"}</p>
+                        </div>
+                      </div>
+                      {divergent && <p className="text-xs text-warning">⚠ Self & Manager differ by 2+ — discuss in Section 5.</p>}
+                    </CardContent>
+                  </Card>
+                );
+              })}
+              <Button variant="outline" onClick={addKpa}><Plus className="h-4 w-4 mr-2" /> Add KPA</Button>
             </div>
+
+            <Card><CardContent className="p-3 flex flex-wrap justify-between gap-2 items-center bg-muted/30">
+              <div className="text-sm">Total /100 — Self <strong>{selfTotal}</strong> · Manager <strong>{mgrTotal}</strong> · Combined <strong>{combined}</strong></div>
+              {combined > 0 && <Badge variant="outline" className={band.tone}>{band.label}</Badge>}
+            </CardContent></Card>
+
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={saveKpas}><Save className="h-4 w-4 mr-2" /> Save</Button>
+              {sc.status === "Not Started" && (
+                <Button onClick={sendToEmployee} className="bg-gradient-to-r from-primary to-secondary">
+                  <Send className="h-4 w-4 mr-2" /> Send for self-review
+                </Button>
+              )}
+            </div>
+          </TabsContent>
+
+          {/* ── 3 SKILLS ── */}
+          <TabsContent value="skills" className="space-y-3">
+            <p className="text-xs text-muted-foreground">Dual assessment (1 = Poor · 5 = Excellent). Combined average shown.</p>
+            <DualRows
+              rows={comps}
+              setRows={setComps}
+              labelHeader="Competency"
+            />
+            <Card><CardContent className="p-3 flex justify-between bg-muted/30">
+              <span className="text-sm">Overall competency score (avg of combined)</span>
+              <span className="font-semibold">{compAvg || "—"} / 5</span>
+            </CardContent></Card>
+            <div className="flex justify-end">
+              <Button variant="outline" onClick={() => saveSection({ competencies: comps }, "Skills saved")}>
+                <Save className="h-4 w-4 mr-2" /> Save
+              </Button>
+            </div>
+          </TabsContent>
+
+          {/* ── 4 VALUES ── */}
+          <TabsContent value="values" className="space-y-3">
+            <DualRows
+              rows={vals}
+              setRows={setVals}
+              labelHeader="Value"
+            />
+            <Card><CardContent className="p-3 flex justify-between bg-muted/30">
+              <span className="text-sm">Overall values score (avg of combined)</span>
+              <span className="font-semibold">{valAvg || "—"} / 5</span>
+            </CardContent></Card>
+            <div className="flex justify-end">
+              <Button variant="outline" onClick={() => saveSection({ values: vals }, "Values saved")}>
+                <Save className="h-4 w-4 mr-2" /> Save
+              </Button>
+            </div>
+          </TabsContent>
+
+          {/* ── 5 SELF-ASSESSMENT (read employee content + manager space) ── */}
+          <TabsContent value="self" className="space-y-3">
+            <Card><CardContent className="p-4 space-y-2">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">5.1 Key Achievements (employee)</p>
+              <p className="text-sm whitespace-pre-wrap min-h-[40px]">{sc.achievements || <span className="text-muted-foreground italic">Pending self-assessment</span>}</p>
+              <Label className="text-xs">Manager space</Label>
+              <Textarea rows={3} value={achNote} onChange={(e) => setAchNote(e.target.value)} placeholder="Manager observations on achievements…" />
+            </CardContent></Card>
+            <Card><CardContent className="p-4 space-y-2">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">5.2 Challenges (employee)</p>
+              <p className="text-sm whitespace-pre-wrap min-h-[40px]">{sc.challenges || <span className="text-muted-foreground italic">Pending self-assessment</span>}</p>
+              <Label className="text-xs">Manager space</Label>
+              <Textarea rows={3} value={chNote} onChange={(e) => setChNote(e.target.value)} placeholder="Manager observations on challenges…" />
+            </CardContent></Card>
+            <Card>
+              <CardHeader className="pb-2"><CardTitle className="text-sm">5.3 Goals Review — Previous Period</CardTitle></CardHeader>
+              <CardContent className="space-y-2">
+                {prevGoals.length === 0 && <p className="text-xs text-muted-foreground">No previous goals captured.</p>}
+                {prevGoals.map((g, i) => (
+                  <div key={g.id} className="grid sm:grid-cols-[1fr_140px_1fr_1fr_auto] gap-2 items-start">
+                    <Textarea rows={2} value={g.goal} onChange={(e) => { const n = [...prevGoals]; n[i] = { ...g, goal: e.target.value }; setPrevGoals(n); }} placeholder="Goal" />
+                    <Select value={g.status ?? ""} onValueChange={(v) => { const n = [...prevGoals]; n[i] = { ...g, status: v as any }; setPrevGoals(n); }}>
+                      <SelectTrigger><SelectValue placeholder="Status" /></SelectTrigger>
+                      <SelectContent>
+                        {["Achieved", "Partially Achieved", "Not Achieved", "Carried Over"].map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <Textarea rows={2} value={g.employeeComments ?? ""} onChange={(e) => { const n = [...prevGoals]; n[i] = { ...g, employeeComments: e.target.value }; setPrevGoals(n); }} placeholder="Employee comments" />
+                    <Textarea rows={2} value={g.managerComments ?? ""} onChange={(e) => { const n = [...prevGoals]; n[i] = { ...g, managerComments: e.target.value }; setPrevGoals(n); }} placeholder="Manager comments" />
+                    <Button size="icon" variant="ghost" onClick={() => setPrevGoals(prevGoals.filter((x) => x.id !== g.id))}><Trash2 className="h-4 w-4" /></Button>
+                  </div>
+                ))}
+                <Button size="sm" variant="outline" onClick={() => setPrevGoals([...prevGoals, { id: newId("pg"), goal: "" }])}><Plus className="h-3 w-3 mr-1" /> Add row</Button>
+              </CardContent>
+            </Card>
+            <div className="flex justify-end">
+              <Button variant="outline" onClick={() => saveSection({ achievementsManagerNote: achNote, challengesManagerNote: chNote, previousGoals: prevGoals }, "Self-assessment notes saved")}>
+                <Save className="h-4 w-4 mr-2" /> Save
+              </Button>
+            </div>
+          </TabsContent>
+
+          {/* ── 6 NEXT GOALS ── */}
+          <TabsContent value="goals" className="space-y-3">
+            <p className="text-xs text-muted-foreground">Specific, measurable goals agreed for the next period.</p>
+            {nextGoals.map((g, i) => (
+              <Card key={g.id}><CardContent className="p-3 grid sm:grid-cols-[1fr_120px_140px_1fr_auto] gap-2 items-start">
+                <Textarea rows={2} value={g.description} onChange={(e) => { const n = [...nextGoals]; n[i] = { ...g, description: e.target.value }; setNextGoals(n); }} placeholder="Goal description" />
+                <Select value={g.priority ?? ""} onValueChange={(v) => { const n = [...nextGoals]; n[i] = { ...g, priority: v as any }; setNextGoals(n); }}>
+                  <SelectTrigger><SelectValue placeholder="Priority" /></SelectTrigger>
+                  <SelectContent>
+                    {["High", "Medium", "Low"].map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <Input value={g.timeline ?? ""} onChange={(e) => { const n = [...nextGoals]; n[i] = { ...g, timeline: e.target.value }; setNextGoals(n); }} placeholder="Timeline" />
+                <Textarea rows={2} value={g.managerComments ?? ""} onChange={(e) => { const n = [...nextGoals]; n[i] = { ...g, managerComments: e.target.value }; setNextGoals(n); }} placeholder="Manager comments / notes" />
+                <Button size="icon" variant="ghost" onClick={() => setNextGoals(nextGoals.filter((x) => x.id !== g.id))}><Trash2 className="h-4 w-4" /></Button>
+              </CardContent></Card>
+            ))}
+            <Button size="sm" variant="outline" onClick={() => setNextGoals([...nextGoals, { id: newId("ng"), description: "" }])}><Plus className="h-3 w-3 mr-1" /> Add goal</Button>
+            <div className="flex justify-end">
+              <Button variant="outline" onClick={() => saveSection({ nextGoals }, "Next goals saved")}>
+                <Save className="h-4 w-4 mr-2" /> Save
+              </Button>
+            </div>
+          </TabsContent>
+
+          {/* ── 7 DEVELOPMENT (read employee + recommend) ── */}
+          <TabsContent value="dev" className="space-y-3">
+            <Card>
+              <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><GraduationCap className="h-4 w-4" /> 7.1 Training & Development Needs</CardTitle></CardHeader>
+              <CardContent className="space-y-2">
+                {(sc.training ?? []).length === 0 && <p className="text-xs text-muted-foreground">No training needs proposed by employee yet.</p>}
+                {(sc.training ?? []).map((t, i) => (
+                  <div key={t.id} className="grid sm:grid-cols-[1fr_120px_1fr] gap-2 items-start">
+                    <p className="text-sm pt-2">{t.area || <em className="text-muted-foreground">—</em>}</p>
+                    <Badge variant="outline" className="self-start">{t.priority ?? "—"}</Badge>
+                    <Textarea
+                      rows={2}
+                      value={t.managementRecommendation ?? ""}
+                      onChange={(e) => {
+                        const next = [...(sc.training ?? [])];
+                        next[i] = { ...t, managementRecommendation: e.target.value };
+                        perfStore.patchScorecard(sc.id, { training: next });
+                      }}
+                      placeholder="Management recommendation / comment"
+                    />
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+            <Card><CardContent className="p-4 space-y-3 text-sm">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-1">7.2 Short-term career goals (employee, 6–12 mo)</p>
+                <p className="whitespace-pre-wrap min-h-[40px]">{sc.shortTermCareer || <span className="text-muted-foreground italic">Pending</span>}</p>
+              </div>
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-1">7.3 Long-term career goals (employee, 3–5 yrs)</p>
+                <p className="whitespace-pre-wrap min-h-[40px]">{sc.longTermCareer || <span className="text-muted-foreground italic">Pending</span>}</p>
+              </div>
+            </CardContent></Card>
+          </TabsContent>
+
+          {/* ── 8 MANAGER EVAL ── */}
+          <TabsContent value="mgr" className="space-y-3">
+            <Card><CardContent className="p-4 space-y-3">
+              <BlockLabel n="8.1" label="Performance Summary — Last Period">
+                <Textarea rows={3} value={mgrEval.lastPeriodSummary ?? ""} onChange={(e) => setMgrEval({ ...mgrEval, lastPeriodSummary: e.target.value })} placeholder="Summary of prior period performance" />
+              </BlockLabel>
+              <BlockLabel n="8.2" label="Performance Assessment — This Period">
+                <Textarea rows={4} value={mgrEval.thisPeriodAssessment ?? ""} onChange={(e) => setMgrEval({ ...mgrEval, thisPeriodAssessment: e.target.value })} placeholder="Strengths, results, behaviours observed" />
+              </BlockLabel>
+              <BlockLabel n="8.3" label="Key Development Areas & Observations">
+                <Textarea rows={3} value={mgrEval.developmentAreas ?? ""} onChange={(e) => setMgrEval({ ...mgrEval, developmentAreas: e.target.value })} />
+              </BlockLabel>
+              <BlockLabel n="8.4" label="Review Conclusions & Management Recommendations">
+                <Textarea rows={3} value={mgrEval.conclusions ?? ""} onChange={(e) => setMgrEval({ ...mgrEval, conclusions: e.target.value })} />
+              </BlockLabel>
+            </CardContent></Card>
+
+            <Card><CardContent className="p-4 space-y-3">
+              <div className="flex items-end gap-3">
+                <div className="flex-1">
+                  <Label>Proposed final score (out of 100)</Label>
+                  <Input type="number" min={0} max={100} step={1} className="mt-1.5 max-w-[140px]" value={final ?? ""} onChange={(e) => setFinal(e.target.value === "" ? undefined : +e.target.value)} placeholder={`${combined}`} />
+                </div>
+                <Badge variant="outline" className={kpiRatingBand(final ?? combined).tone}>{kpiRatingBand(final ?? combined).label}</Badge>
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => saveSection({ managerEvaluation: mgrEval, achievementsManagerNote: achNote, challengesManagerNote: chNote }, "Manager evaluation saved")}>
+                  <Save className="h-4 w-4 mr-2" /> Save draft
+                </Button>
+                <Button onClick={submitManager} className="bg-gradient-to-r from-primary to-secondary">
+                  <Send className="h-4 w-4 mr-2" /> Submit & calibrate
+                </Button>
+              </div>
+            </CardContent></Card>
+          </TabsContent>
+
+          {/* ── SIGN-OFF / CALIBRATION ── */}
+          <TabsContent value="signoff" className="space-y-3">
+            <Card><CardContent className="p-4 space-y-2 text-sm">
+              <div className="flex justify-between"><span>Self overall</span><span className="font-semibold">{sc.overallSelfRating ?? "—"} / 100</span></div>
+              <div className="flex justify-between"><span>Manager overall</span><span className="font-semibold">{sc.overallManagerRating ?? "—"} / 100</span></div>
+              <div className="flex justify-between"><span>Combined</span><span className="font-semibold">{combined} / 100</span></div>
+              <div className="flex justify-between items-center"><span>Proposed final</span>
+                <div className="flex items-center gap-2">
+                  <Input type="number" min={0} max={100} className="w-20 h-8" value={final ?? ""} onChange={(e) => setFinal(e.target.value === "" ? undefined : +e.target.value)} />
+                  <Badge variant="outline" className={kpiRatingBand(final ?? combined).tone}>{kpiRatingBand(final ?? combined).label}</Badge>
+                </div>
+              </div>
+            </CardContent></Card>
             <div>
               <Label>Calibration notes</Label>
               <Textarea rows={3} className="mt-1.5" value={calibrationNotes} onChange={(e) => setCalibrationNotes(e.target.value)} placeholder="Notes from the calibration committee…" />
             </div>
-            <div className="flex justify-end">
-              <Button onClick={finalise} disabled={typeof final !== "number"} className="bg-gradient-to-r from-primary to-secondary"><CheckCircle2 className="h-4 w-4 mr-2" /> Finalise review</Button>
+            <Card><CardContent className="p-4 space-y-2 text-sm">
+              <p className="font-medium flex items-center gap-2"><FileSignature className="h-4 w-4" /> Sign-off</p>
+              <p className="text-xs text-muted-foreground">By signing, both parties confirm this review has been conducted and discussed in full.</p>
+              <div className="grid sm:grid-cols-2 gap-3 mt-2">
+                <SignBlock label="Employee" at={sc.employeeSignedAt} />
+                <SignBlock label="Manager / HR" at={sc.managerSignedAt} onSign={() => perfStore.signManager(sc.id)} />
+              </div>
+            </CardContent></Card>
+            <div className="flex justify-end gap-2">
+              <Button onClick={finalise} disabled={typeof final !== "number"} className="bg-gradient-to-r from-primary to-secondary">
+                <CheckCircle2 className="h-4 w-4 mr-2" /> Finalise review
+              </Button>
             </div>
-          </TabsContent>
-
-          <TabsContent value="employee" className="space-y-3">
-            <p className="text-xs text-muted-foreground">Preview of what the employee sees in <strong>My Performance</strong>.</p>
-            {kpas.map((kpa) => {
-              const kpiAvg = kpa.kpis.reduce((s, k) => s + (k.managerScore ?? k.selfScore ?? 0), 0) / Math.max(1, kpa.kpis.length);
-              const pct = Math.min(100, Math.round((kpiAvg / 5) * 100));
-              return (
-                <Card key={kpa.id}><CardContent className="p-4">
-                  <div className="flex justify-between text-sm">
-                    <span className="font-medium">{kpa.title}</span>
-                    <span className="text-muted-foreground">{kpa.weight}% · {pct}%</span>
-                  </div>
-                  <Progress value={pct} className="h-2 mt-2" />
-                </CardContent></Card>
-              );
-            })}
           </TabsContent>
         </Tabs>
       </SheetContent>
     </Sheet>
+  );
+}
+
+// ──────────────────────── shared little bits ────────────────────────
+
+function Field({ label, value, onChange, type = "text", placeholder }: { label: string; value?: string; onChange: (v: string) => void; type?: string; placeholder?: string }) {
+  return (
+    <div>
+      <Label>{label}</Label>
+      <Input type={type} className="mt-1.5" value={value ?? ""} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />
+    </div>
+  );
+}
+
+function BlockLabel({ n, label, children }: { n: string; label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-1.5">{n} · {label}</p>
+      {children}
+    </div>
+  );
+}
+
+function SignBlock({ label, at, onSign }: { label: string; at?: string; onSign?: () => void }) {
+  return (
+    <div className="rounded-md border p-3">
+      <p className="text-xs uppercase text-muted-foreground tracking-wide">{label}</p>
+      {at ? (
+        <p className="text-sm mt-1">Signed {new Date(at).toLocaleString()}</p>
+      ) : (
+        <Button size="sm" className="mt-2" variant="outline" disabled={!onSign} onClick={onSign}>
+          <FileSignature className="h-3.5 w-3.5 mr-2" /> Sign now
+        </Button>
+      )}
+    </div>
+  );
+}
+
+function DualRows<T extends CompetencyRow | ValueRow>({ rows, setRows, labelHeader }: { rows: T[]; setRows: (r: T[]) => void; labelHeader: string }) {
+  return (
+    <div className="space-y-2">
+      <div className="grid grid-cols-[1.2fr_1fr_1fr_80px] gap-2 px-1 text-[11px] uppercase tracking-wide text-muted-foreground">
+        <span>{labelHeader}</span><span>Employee comment</span><span>Manager observation</span><span className="text-right">Avg</span>
+      </div>
+      {rows.map((r, i) => {
+        const avg = (typeof r.selfScore === "number" && typeof r.managerScore === "number")
+          ? +((r.selfScore + r.managerScore) / 2).toFixed(2)
+          : (r.selfScore ?? r.managerScore);
+        return (
+          <Card key={r.id}><CardContent className="p-3 space-y-2">
+            <div className="grid grid-cols-[1.2fr_1fr_1fr_80px] gap-2 items-start">
+              <div>
+                <p className="font-medium text-sm">{r.name}</p>
+                <p className="text-xs text-muted-foreground">{r.description}</p>
+              </div>
+              <Textarea rows={2} value={r.employeeComment ?? ""} onChange={(e) => { const n = [...rows]; n[i] = { ...r, employeeComment: e.target.value }; setRows(n); }} placeholder="Employee" />
+              <Textarea rows={2} value={r.managerObservation ?? ""} onChange={(e) => { const n = [...rows]; n[i] = { ...r, managerObservation: e.target.value }; setRows(n); }} placeholder="Manager" />
+              <div className="rounded-md bg-success/5 border p-2 text-center"><p className="text-[10px] uppercase text-muted-foreground">Avg</p><p className="font-semibold">{avg ?? "—"}</p></div>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div><Label className="text-xs">Self (1–5)</Label>
+                <Input type="number" min={1} max={5} step={0.1} value={r.selfScore ?? ""} onChange={(e) => { const n = [...rows]; n[i] = { ...r, selfScore: e.target.value === "" ? undefined : +e.target.value }; setRows(n); }} />
+              </div>
+              <div><Label className="text-xs">Manager (1–5)</Label>
+                <Input type="number" min={1} max={5} step={0.1} value={r.managerScore ?? ""} onChange={(e) => { const n = [...rows]; n[i] = { ...r, managerScore: e.target.value === "" ? undefined : +e.target.value }; setRows(n); }} />
+              </div>
+            </div>
+          </CardContent></Card>
+        );
+      })}
+    </div>
   );
 }
 
