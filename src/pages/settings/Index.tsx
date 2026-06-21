@@ -1,13 +1,12 @@
 import { useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { User as UserIcon, Lock, Crown, FileText, Users } from "lucide-react";
+import { User as UserIcon, Lock, Crown, FileText } from "lucide-react";
 
 import ProfileTab from "./Profile";
 import SecurityTab from "./Security";
 import PlanTab from "./Plan";
 import EngagementTab from "./EngagementDocument";
-import TeamTab from "./Team";
 
 export default function Settings() {
   const [params, setParams] = useSearchParams();
