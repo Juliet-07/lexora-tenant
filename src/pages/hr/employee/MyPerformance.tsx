@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -9,211 +9,104 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger,
 } from "@/components/ui/dialog";
 import {
-  Award,
-  Target,
-  Star,
-  TrendingUp,
-  MessageSquare,
-  Plus,
-  CheckCircle2,
-  Sparkles,
-  Calendar,
+  Award, Target, Star, TrendingUp, CheckCircle2, Sparkles, Calendar, Send,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
+import { perfStore, usePerfStore, type Scorecard, type ReviewStatus } from "@/lib/performanceStore";
+import { employees } from "@/data/hrMockData";
 
-interface Goal {
-  id: string;
-  title: string;
-  category: string;
-  progress: number;
-  due: string;
-  status: "On Track" | "At Risk" | "Completed" | "Behind";
-  weight: number;
-  keyResults: { text: string; done: boolean }[];
-}
-
-interface Review {
-  id: string;
-  period: string;
-  rating: number;
-  reviewer: string;
-  date: string;
-  highlights: string[];
-  improvements: string[];
-}
-
-interface Feedback {
-  id: string;
-  from: string;
-  type: "Praise" | "Constructive" | "1-on-1";
-  message: string;
-  date: string;
-}
-
-const initialGoals: Goal[] = [
-  {
-    id: "g1", title: "Reduce client KYC turnaround to <48h", category: "Operational", progress: 75, due: "2026-09-30", status: "On Track", weight: 30,
-    keyResults: [
-      { text: "Automate document collection emails", done: true },
-      { text: "Build screening dashboard", done: true },
-      { text: "Hit <48h on 90% of cases", done: false },
-    ],
-  },
-  {
-    id: "g2", title: "Complete CAMS certification", category: "Development", progress: 60, due: "2026-12-15", status: "On Track", weight: 20,
-    keyResults: [
-      { text: "Finish online modules", done: true },
-      { text: "Pass practice exam (80%+)", done: false },
-      { text: "Sit final exam", done: false },
-    ],
-  },
-  {
-    id: "g3", title: "Mentor 2 junior analysts", category: "Leadership", progress: 50, due: "2026-12-31", status: "On Track", weight: 15,
-    keyResults: [
-      { text: "Weekly 1-on-1s established", done: true },
-      { text: "Co-author training playbook", done: false },
-    ],
-  },
-  {
-    id: "g4", title: "Zero SLA breaches on assigned clients", category: "Quality", progress: 40, due: "2026-12-31", status: "At Risk", weight: 35,
-    keyResults: [
-      { text: "Implement weekly SLA review", done: true },
-      { text: "Reduce breach rate to 0%", done: false },
-    ],
-  },
-];
-
-const reviews: Review[] = [
-  {
-    id: "r1", period: "H2 2025", rating: 4.3, reviewer: "Sarah Lee", date: "2026-01-15",
-    highlights: ["Exceeded KYC throughput targets", "Strong stakeholder communication", "Mentored 2 new hires"],
-    improvements: ["Time management on multi-client workloads", "More proactive risk escalation"],
-  },
-  {
-    id: "r2", period: "H1 2025", rating: 4.0, reviewer: "Sarah Lee", date: "2025-07-20",
-    highlights: ["Solid technical execution", "Reliable team player"],
-    improvements: ["Take ownership of larger projects", "Improve documentation"],
-  },
-];
-
-const initialFeedback: Feedback[] = [
-  { id: "f1", from: "Sarah Lee (Manager)", type: "Praise", message: "Great handling of the Acme Holdings escalation — your stakeholder management was excellent.", date: "2026-06-08" },
-  { id: "f2", from: "Marco Bianchi (Peer)", type: "Praise", message: "Thanks for the assist on case #4421 — your STR template saved us hours.", date: "2026-06-05" },
-  { id: "f3", from: "Sarah Lee (Manager)", type: "Constructive", message: "Consider scheduling deep work blocks earlier in the week to avoid Friday crunches.", date: "2026-05-22" },
-];
+const statusTone: Record<ReviewStatus, string> = {
+  "Not Started": "bg-muted text-muted-foreground",
+  "Self Review": "bg-info/10 text-info border-info/20",
+  "Manager Review": "bg-warning/10 text-warning border-warning/20",
+  "Calibration": "bg-violet-500/10 text-violet-600 border-violet-500/20",
+  "Completed": "bg-success/10 text-success border-success/20",
+};
 
 export default function MyPerformance() {
-  const [goals, setGoals] = useState<Goal[]>(initialGoals);
-  const [feedback] = useState<Feedback[]>(initialFeedback);
-  const [open, setOpen] = useState(false);
-  const [reflectionOpen, setReflectionOpen] = useState(false);
-  const [draft, setDraft] = useState({ title: "", category: "Operational", due: "", weight: 10 });
-  const [reflection, setReflection] = useState("");
-  const { toast } = useToast();
+  const { user } = useAuth();
+  // In the absence of a real user→employee mapping, fall back to the first seeded employee.
+  const employeeId = useMemo(() => {
+    const match = employees.find((e) => e.email.toLowerCase() === (user?.email ?? "").toLowerCase());
+    return match?.id ?? employees[0]?.id;
+  }, [user?.email]);
 
-  const overall = Math.round(goals.reduce((s, g) => s + (g.progress * g.weight) / 100, 0));
-  const completed = goals.filter((g) => g.status === "Completed").length;
-  const atRisk = goals.filter((g) => g.status === "At Risk" || g.status === "Behind").length;
-  const latestRating = reviews[0]?.rating ?? 0;
+  const scorecards = usePerfStore((s) => s.scorecards.filter((sc) => sc.employeeId === employeeId));
+  const feedback = usePerfStore((s) => s.feedback.filter((f) => f.employeeId === employeeId));
 
-  const addGoal = () => {
-    if (!draft.title.trim() || !draft.due) return;
-    setGoals([{ id: `g-${Date.now()}`, ...draft, progress: 0, status: "On Track", keyResults: [] }, ...goals]);
-    setOpen(false);
-    setDraft({ title: "", category: "Operational", due: "", weight: 10 });
-    toast({ title: "Goal added" });
-  };
+  const active = scorecards.find((s) => !["Completed", "Not Started"].includes(s.status))
+    ?? scorecards[0];
+  const completed = scorecards.filter((s) => s.status === "Completed");
 
-  const toggleKR = (gid: string, idx: number) => {
-    setGoals(goals.map((g) => {
-      if (g.id !== gid) return g;
-      const krs = g.keyResults.map((k, i) => i === idx ? { ...k, done: !k.done } : k);
-      const progress = krs.length ? Math.round((krs.filter((k) => k.done).length / krs.length) * 100) : g.progress;
-      return { ...g, keyResults: krs, progress };
-    }));
-  };
+  const overallProgress = useMemo(() => {
+    if (!active) return 0;
+    const all = active.kpas.flatMap((k) => k.kpis);
+    const scored = all.filter((k) => typeof k.selfScore === "number");
+    if (!scored.length) return 0;
+    return Math.round((scored.reduce((s, k) => s + (k.selfScore! / 5), 0) / scored.length) * 100);
+  }, [active]);
 
-  const submitReflection = () => {
-    if (!reflection.trim()) return;
-    setReflectionOpen(false);
-    toast({ title: "Reflection submitted", description: "Sent to your manager for review." });
-    setReflection("");
-  };
+  const latestRating = completed[0]?.finalRating ?? 0;
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold">My Performance</h1>
-          <p className="text-sm text-muted-foreground">Track goals, view reviews, and engage with feedback.</p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => setReflectionOpen(true)}>
-            <Sparkles className="h-4 w-4 mr-2" /> Self-Reflection
-          </Button>
-          <Button onClick={() => setOpen(true)} className="bg-gradient-to-r from-primary to-secondary">
-            <Plus className="h-4 w-4 mr-2" /> Add Goal
-          </Button>
-        </div>
+      <div>
+        <h1 className="text-2xl font-bold">My Performance</h1>
+        <p className="text-sm text-muted-foreground">
+          Your KPAs &amp; KPIs are set by your manager. Track progress, complete your self-review and engage with feedback.
+        </p>
       </div>
 
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Stat label="Overall Progress" value={`${overall}%`} icon={TrendingUp} tone="from-blue-500 to-cyan-500" />
-        <Stat label="Latest Rating" value={`${latestRating}/5`} icon={Star} tone="from-amber-500 to-orange-500" />
-        <Stat label="Goals Completed" value={completed} icon={CheckCircle2} tone="from-emerald-500 to-teal-500" />
-        <Stat label="At Risk" value={atRisk} icon={Target} tone="from-rose-500 to-red-500" />
+        <Stat label="Active Cycle" value={active ? active.status : "—"} icon={Calendar} tone="from-primary to-secondary" />
+        <Stat label="Self-Review Progress" value={`${overallProgress}%`} icon={TrendingUp} tone="from-blue-500 to-cyan-500" />
+        <Stat label="Latest Rating" value={latestRating ? `${latestRating}/5` : "—"} icon={Star} tone="from-amber-500 to-orange-500" />
+        <Stat label="Past Reviews" value={completed.length} icon={CheckCircle2} tone="from-emerald-500 to-teal-500" />
       </div>
 
-      <Tabs defaultValue="goals" className="space-y-4">
+      <Tabs defaultValue="current" className="space-y-4">
         <TabsList>
-          <TabsTrigger value="goals">Goals & OKRs</TabsTrigger>
-          <TabsTrigger value="reviews">Reviews</TabsTrigger>
+          <TabsTrigger value="current">Current Review</TabsTrigger>
+          <TabsTrigger value="history">Past Reviews</TabsTrigger>
           <TabsTrigger value="feedback">Feedback</TabsTrigger>
-          <TabsTrigger value="growth">Growth</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="goals" className="space-y-3">
-          {goals.map((g) => (
-            <Card key={g.id}>
+        <TabsContent value="current" className="space-y-3">
+          {!active && (
+            <Card><CardContent className="p-6 text-sm text-muted-foreground">
+              No active review cycle assigned to you yet. Your manager will set up your KPAs &amp; KPIs shortly.
+            </CardContent></Card>
+          )}
+          {active && <CurrentReviewCard sc={active} />}
+        </TabsContent>
+
+        <TabsContent value="history" className="space-y-3">
+          {completed.length === 0 && (
+            <Card><CardContent className="p-6 text-sm text-muted-foreground">No completed reviews yet.</CardContent></Card>
+          )}
+          {completed.map((sc) => (
+            <Card key={sc.id}>
               <CardContent className="p-5">
                 <div className="flex items-start justify-between gap-3 mb-3">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="font-semibold">{g.title}</h3>
-                      <Badge variant="outline" className="text-[10px]">{g.category}</Badge>
-                      <Badge variant="outline" className="text-[10px]">Weight {g.weight}%</Badge>
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-                      <Calendar className="h-3 w-3" /> Due {new Date(g.due).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
-                    </p>
+                  <div>
+                    <h3 className="font-semibold">Review · {sc.cycleId}</h3>
+                    <p className="text-xs text-muted-foreground">Finalised {sc.finalisedAt?.slice(0, 10)}</p>
                   </div>
-                  <Badge variant="outline" className={
-                    g.status === "Completed" ? "bg-success/10 text-success border-success/20" :
-                    g.status === "On Track" ? "bg-info/10 text-info border-info/20" :
-                    g.status === "At Risk" ? "bg-warning/10 text-warning border-warning/20" :
-                    "bg-destructive/10 text-destructive border-destructive/20"
-                  }>{g.status}</Badge>
+                  <div className="flex items-center gap-1 bg-gradient-to-r from-amber-500 to-orange-500 text-white px-3 py-1.5 rounded-lg">
+                    <Star className="h-4 w-4 fill-white" />
+                    <span className="font-bold">{sc.finalRating}</span>
+                    <span className="text-xs opacity-80">/5</span>
+                  </div>
                 </div>
-                <div className="space-y-1.5">
-                  <div className="flex justify-between text-xs"><span className="text-muted-foreground">Progress</span><span className="font-medium">{g.progress}%</span></div>
-                  <Progress value={g.progress} className="h-2" />
-                </div>
-                {g.keyResults.length > 0 && (
-                  <div className="mt-3 space-y-1.5">
-                    {g.keyResults.map((k, i) => (
-                      <label key={i} className="flex items-center gap-2 text-sm cursor-pointer hover:bg-muted/30 p-1.5 rounded">
-                        <input type="checkbox" checked={k.done} onChange={() => toggleKR(g.id, i)} />
-                        <span className={k.done ? "line-through text-muted-foreground" : ""}>{k.text}</span>
-                      </label>
-                    ))}
+                {sc.managerComments && (
+                  <div className="text-sm">
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-1">Manager comments</p>
+                    <p className="whitespace-pre-wrap">{sc.managerComments}</p>
                   </div>
                 )}
               </CardContent>
@@ -221,37 +114,10 @@ export default function MyPerformance() {
           ))}
         </TabsContent>
 
-        <TabsContent value="reviews" className="space-y-3">
-          {reviews.map((r) => (
-            <Card key={r.id}>
-              <CardContent className="p-5">
-                <div className="flex items-start justify-between gap-3 mb-3">
-                  <div>
-                    <h3 className="font-semibold">{r.period} Performance Review</h3>
-                    <p className="text-xs text-muted-foreground">By {r.reviewer} · {new Date(r.date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</p>
-                  </div>
-                  <div className="flex items-center gap-1 bg-gradient-to-r from-amber-500 to-orange-500 text-white px-3 py-1.5 rounded-lg">
-                    <Star className="h-4 w-4 fill-white" />
-                    <span className="font-bold">{r.rating}</span>
-                    <span className="text-xs opacity-80">/5</span>
-                  </div>
-                </div>
-                <div className="grid md:grid-cols-2 gap-4 mt-3">
-                  <div>
-                    <p className="text-xs font-medium text-success uppercase tracking-wide mb-1.5">Highlights</p>
-                    <ul className="space-y-1 text-sm">{r.highlights.map((h, i) => <li key={i} className="flex gap-2"><CheckCircle2 className="h-3.5 w-3.5 text-success mt-0.5 shrink-0" />{h}</li>)}</ul>
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium text-warning uppercase tracking-wide mb-1.5">Areas to Improve</p>
-                    <ul className="space-y-1 text-sm">{r.improvements.map((h, i) => <li key={i} className="flex gap-2"><Target className="h-3.5 w-3.5 text-warning mt-0.5 shrink-0" />{h}</li>)}</ul>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </TabsContent>
-
         <TabsContent value="feedback" className="space-y-3">
+          {feedback.length === 0 && (
+            <Card><CardContent className="p-6 text-sm text-muted-foreground">No feedback shared with you yet.</CardContent></Card>
+          )}
           {feedback.map((f) => (
             <Card key={f.id}>
               <CardContent className="p-4 flex gap-3">
@@ -268,7 +134,7 @@ export default function MyPerformance() {
                       f.type === "Constructive" ? "bg-warning/10 text-warning border-warning/20" :
                       "bg-info/10 text-info border-info/20"
                     }>{f.type}</Badge>
-                    <span className="text-xs text-muted-foreground">{new Date(f.date).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</span>
+                    <span className="text-xs text-muted-foreground">{f.date}</span>
                   </div>
                   <p className="text-sm mt-1">{f.message}</p>
                 </div>
@@ -276,69 +142,147 @@ export default function MyPerformance() {
             </Card>
           ))}
         </TabsContent>
-
-        <TabsContent value="growth">
-          <Card>
-            <CardHeader><CardTitle className="text-base flex items-center gap-2"><Award className="h-4 w-4 text-primary" /> Skills & Development</CardTitle></CardHeader>
-            <CardContent className="space-y-4">
-              {[
-                { skill: "AML / KYC Analysis", level: 90 },
-                { skill: "Risk Assessment", level: 80 },
-                { skill: "Client Communication", level: 85 },
-                { skill: "Regulatory Reporting", level: 70 },
-                { skill: "Project Management", level: 60 },
-              ].map((s) => (
-                <div key={s.skill}>
-                  <div className="flex justify-between text-sm mb-1"><span>{s.skill}</span><span className="font-medium">{s.level}%</span></div>
-                  <Progress value={s.level} className="h-2" />
-                </div>
-              ))}
-              <div className="border-t pt-4 mt-2">
-                <p className="text-sm font-medium mb-2">Recommended next steps</p>
-                <ul className="text-sm space-y-1 text-muted-foreground">
-                  <li>• Enroll in "Advanced Sanctions Screening" course (4h)</li>
-                  <li>• Shadow Compliance Officer on quarterly board reporting</li>
-                  <li>• Co-lead the next internal audit dry-run</li>
-                </ul>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
       </Tabs>
+    </div>
+  );
+}
 
-      {/* Add goal */}
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>New Goal</DialogTitle></DialogHeader>
-          <div className="space-y-3 py-2">
-            <div><Label>Title</Label><Input value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} className="mt-1.5" /></div>
-            <div className="grid grid-cols-2 gap-3">
-              <div><Label>Category</Label><Input value={draft.category} onChange={(e) => setDraft({ ...draft, category: e.target.value })} className="mt-1.5" /></div>
-              <div><Label>Weight (%)</Label><Input type="number" value={draft.weight} onChange={(e) => setDraft({ ...draft, weight: +e.target.value })} className="mt-1.5" /></div>
+function CurrentReviewCard({ sc }: { sc: Scorecard }) {
+  const { toast } = useToast();
+  const [reflection, setReflection] = useState(sc.selfReflection ?? "");
+  const [draftKpis, setDraftKpis] = useState(
+    sc.kpas.flatMap((k) => k.kpis.map((x) => ({ id: x.id, actual: x.actual ?? "", selfScore: x.selfScore })))
+  );
+  const [openSubmit, setOpenSubmit] = useState(false);
+
+  useEffect(() => {
+    setReflection(sc.selfReflection ?? "");
+    setDraftKpis(sc.kpas.flatMap((k) => k.kpis.map((x) => ({ id: x.id, actual: x.actual ?? "", selfScore: x.selfScore }))));
+  }, [sc.id]);
+
+  const locked = sc.status !== "Self Review" && sc.status !== "Not Started";
+
+  const updateKpi = (id: string, patch: Partial<{ actual: string; selfScore: number }>) =>
+    setDraftKpis(draftKpis.map((d) => d.id === id ? { ...d, ...patch } : d));
+
+  const submit = () => {
+    perfStore.submitSelfReview(sc.id, { reflection, kpis: draftKpis });
+    setOpenSubmit(false);
+    toast({ title: "Self-review submitted", description: "Your manager has been notified." });
+  };
+
+  return (
+    <Card>
+      <CardContent className="p-5 space-y-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="font-semibold">My scorecard · {sc.cycleId}</h3>
+            <p className="text-xs text-muted-foreground">Defined by your manager. Score yourself honestly from 1 (below) to 5 (exceeds).</p>
+          </div>
+          <Badge variant="outline" className={statusTone[sc.status]}>{sc.status}</Badge>
+        </div>
+
+        {sc.kpas.length === 0 && (
+          <p className="text-sm text-muted-foreground">Your manager hasn’t finalised your KPAs yet.</p>
+        )}
+
+        {sc.kpas.map((kpa) => (
+          <div key={kpa.id} className="rounded-lg border p-4 space-y-3">
+            <div className="flex justify-between gap-3">
+              <div>
+                <p className="font-semibold text-sm">{kpa.title}</p>
+                <p className="text-xs text-muted-foreground">{kpa.description}</p>
+              </div>
+              <Badge variant="outline" className="text-[10px]">Weight {kpa.weight}%</Badge>
             </div>
-            <div><Label>Due Date</Label><Input type="date" value={draft.due} onChange={(e) => setDraft({ ...draft, due: e.target.value })} className="mt-1.5" /></div>
+            <div className="space-y-2">
+              {kpa.kpis.map((kpi) => {
+                const d = draftKpis.find((x) => x.id === kpi.id);
+                return (
+                  <div key={kpi.id} className="grid grid-cols-1 sm:grid-cols-[1fr_140px_110px] gap-2 items-center">
+                    <div className="text-sm">
+                      <p>{kpi.name}</p>
+                      <p className="text-xs text-muted-foreground">Target {kpi.target} {kpi.metric && `· ${kpi.metric}`} · Weight {kpi.weight}%</p>
+                    </div>
+                    <Input
+                      placeholder="Actual"
+                      disabled={locked}
+                      value={d?.actual ?? ""}
+                      onChange={(e) => updateKpi(kpi.id, { actual: e.target.value })}
+                    />
+                    <Input
+                      type="number" min={1} max={5} step={0.1}
+                      placeholder="Self / 5"
+                      disabled={locked}
+                      value={d?.selfScore ?? ""}
+                      onChange={(e) => updateKpi(kpi.id, { selfScore: +e.target.value })}
+                    />
+                  </div>
+                );
+              })}
+            </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-            <Button onClick={addGoal} className="bg-gradient-to-r from-primary to-secondary">Add</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        ))}
 
-      {/* Self reflection */}
-      <Dialog open={reflectionOpen} onOpenChange={setReflectionOpen}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Self-Reflection</DialogTitle></DialogHeader>
-          <div className="space-y-3 py-2">
-            <p className="text-sm text-muted-foreground">Reflect on this period: wins, challenges, support needed.</p>
-            <Textarea rows={6} value={reflection} onChange={(e) => setReflection(e.target.value)} placeholder="What went well? What got in your way? What do you need from your manager?" />
+        <div>
+          <Label>Self-reflection</Label>
+          <Textarea
+            className="mt-1.5"
+            rows={4}
+            disabled={locked}
+            value={reflection}
+            onChange={(e) => setReflection(e.target.value)}
+            placeholder="What went well? What got in your way? What do you need from your manager?"
+          />
+        </div>
+
+        {!locked && sc.kpas.length > 0 && (
+          <div className="flex justify-end">
+            <Dialog open={openSubmit} onOpenChange={setOpenSubmit}>
+              <DialogTrigger asChild>
+                <Button className="bg-gradient-to-r from-primary to-secondary">
+                  <Send className="h-4 w-4 mr-2" /> Submit self-review
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader><DialogTitle>Submit self-review?</DialogTitle></DialogHeader>
+                <p className="text-sm text-muted-foreground">Your scores and reflection will be sent to your manager for review. You won't be able to edit after submitting.</p>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setOpenSubmit(false)}>Cancel</Button>
+                  <Button onClick={submit} className="bg-gradient-to-r from-primary to-secondary">Submit</Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setReflectionOpen(false)}>Cancel</Button>
-            <Button onClick={submitReflection} className="bg-gradient-to-r from-primary to-secondary">Submit</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        )}
+
+        {locked && sc.status !== "Completed" && (
+          <p className="text-xs text-muted-foreground flex items-center gap-2">
+            <Sparkles className="h-3.5 w-3.5" /> Self-review submitted — waiting on your manager.
+          </p>
+        )}
+
+        {sc.status === "Completed" && (
+          <div className="rounded-lg border p-4 bg-success/5 space-y-2">
+            <div className="flex items-center gap-2"><Award className="h-4 w-4 text-success" /><p className="font-semibold text-sm">Review finalised</p></div>
+            <div className="grid grid-cols-3 gap-3 text-sm">
+              <Metric label="Self" value={sc.overallSelfRating} />
+              <Metric label="Manager" value={sc.overallManagerRating} />
+              <Metric label="Final" value={sc.finalRating} emphasis />
+            </div>
+            {sc.managerComments && <p className="text-sm whitespace-pre-wrap"><span className="font-medium">Manager: </span>{sc.managerComments}</p>}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function Metric({ label, value, emphasis }: { label: string; value?: number; emphasis?: boolean }) {
+  return (
+    <div className="rounded-md border p-2 text-center bg-background">
+      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className={`mt-0.5 ${emphasis ? "font-bold text-base" : "text-sm"}`}>{value ?? "—"}</p>
     </div>
   );
 }
