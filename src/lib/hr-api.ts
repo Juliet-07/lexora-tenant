@@ -1102,8 +1102,6 @@ export interface Payslip {
   netSalary: number;
   notes: string | null;
   createdAt: string;
-  emailedAt: string | null;
-  emailSendCount: number;
 }
 
 export interface CreatePayrollRunDto {
@@ -1277,41 +1275,4 @@ export const calculateGrossUp = async (dto: {
 }): Promise<GrossUpResult> => {
   const res = await api.post("/hr/payroll/policy/gross-up", dto);
   return res.data?.data ?? res.data;
-};
-
-export const emailPayslip = async (
-  payslipId: string,
-): Promise<{ sentTo: string }> => {
-  const res = await api.post(`/hr/payroll/runs/payslip/${payslipId}/email`, {});
-  return res.data?.data ?? res.data;
-};
-
-export const emailAllPayslipsInRun = async (
-  runId: string,
-): Promise<{
-  sent: number;
-  failed: { employeeName: string; reason: string }[];
-}> => {
-  const res = await api.post(`/hr/payroll/runs/${runId}/email-all`, {});
-  return res.data?.data ?? res.data;
-};
-
-export const downloadPayrollExcel = async (
-  runId: string,
-  periodLabel: string,
-): Promise<void> => {
-  const res = await api.get(`/hr/payroll/runs/${runId}/export-excel`, {
-    responseType: "blob",
-  });
-  const url = window.URL.createObjectURL(new Blob([res.data]));
-  const link = document.createElement("a");
-  link.href = url;
-  link.setAttribute(
-    "download",
-    `payroll-${periodLabel.replace(/\s+/g, "-")}.xlsx`,
-  );
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  window.URL.revokeObjectURL(url);
 };

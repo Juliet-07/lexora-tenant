@@ -55,15 +55,12 @@ import {
   GraduationCap,
   UserSquare2,
   Circle,
-  Landmark,
-  Eye,
 } from "lucide-react";
 import { toast } from "sonner";
 import type { Employee, HrTeam, HrLocation } from "@/lib/hr-api";
 import {
   fetchEmployeeDetail,
   fetchEmployeeOnboardingRecord,
-  fetchLoansForEmployee,
 } from "@/lib/hr-api";
 import { downloadEmployeeReport } from "@/lib/employeeReport";
 
@@ -119,6 +116,18 @@ const DUMMY = {
       { title: "Zero SLA breaches", progress: 40, status: "At Risk" },
     ],
   },
+  payroll: {
+    salary: 5500,
+    ytdGross: 22905,
+    nextPayDate: "2026-06-30",
+    pensionPot: 14200,
+    loans: [{ type: "Salary Advance", balance: 750 }],
+    payslips: [
+      { period: "May 2026", net: 4180, date: "2026-05-30" },
+      { period: "Apr 2026", net: 4180, date: "2026-04-30" },
+      { period: "Mar 2026", net: 4180, date: "2026-03-30" },
+    ],
+  },
   documents: [
     { name: "Employment Contract", date: "2024-03-12" },
     { name: "NDA — Confidentiality", date: "2024-03-12" },
@@ -159,13 +168,6 @@ const LEAVE_STATUS_STYLE: Record<string, string> = {
   cancelled: "bg-muted text-muted-foreground border-border",
 };
 
-const LOAN_STATUS_STYLE: Record<string, string> = {
-  active: "bg-info/10 text-info border-info/20",
-  paid_off: "bg-success/10 text-success border-success/20",
-  paused: "bg-warning/10 text-warning border-warning/20",
-  cancelled: "bg-muted text-muted-foreground border-border",
-};
-
 const DISPUTE_TONE: Record<Dispute["status"], string> = {
   Open: "bg-warning/10 text-warning border-warning/20",
   Investigating: "bg-info/10 text-info border-info/20",
@@ -195,8 +197,9 @@ const fmtDateTime = (d: string) =>
     hour: "2-digit",
     minute: "2-digit",
   });
+const currency = (n: number) => `£${n.toLocaleString("en-GB")}`;
 
-const fmtMoney = (
+const fmtSalary = (
   amount: number | null | undefined,
   currencyCode?: string | null,
 ) => {
@@ -256,22 +259,6 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
     staleTime: 30_000,
   });
 
-  // ── Real payroll data for this employee ──────────────────────
-  // Payslip history comes from detail.employee's payroll, but the
-  // EmployeeDetailResponse type doesn't currently include payslips
-  // — only loans have a dedicated per-employee fetch. So this tab
-  // shows real loans + the employee's current salary/currency from
-  // `emp` directly, plus a note pointing to the Payroll module's
-  // Employees tab for full payslip history/payslip viewing, rather
-  // than silently duplicating that UI here with a second, separate
-  // payslip-fetching path.
-  const { data: loans = [], isLoading: loansLoading } = useQuery({
-    queryKey: ["employee-loans", employee?._id],
-    queryFn: () => fetchLoansForEmployee(employee!._id),
-    enabled: !!employee,
-    staleTime: 30_000,
-  });
-
   if (!employee) return null;
 
   const emp = detail?.employee ?? employee;
@@ -296,13 +283,6 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
   const onboardingStep = emp.onboardingStep ?? 0;
   const onboardingCompleted = emp.onboardingCompleted ?? false;
   const signatureRecord = onboardingTab?.record ?? null;
-
-  const activeLoans = loans.filter(
-    (l) => l.status === "active" || l.status === "paused",
-  );
-  const otherLoans = loans.filter(
-    (l) => l.status !== "active" && l.status !== "paused",
-  );
 
   const addDispute = () => {
     if (!dForm.title) return toast.error("Add a short title.");
@@ -449,7 +429,6 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
               </TabsList>
             </div>
 
-            {/* ── Overview ── */}
             <TabsContent value="overview" className="space-y-3">
               <Card>
                 <CardContent className="p-4 space-y-2 text-sm">
@@ -482,7 +461,7 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
                   <Row
                     icon={Wallet}
                     label="Salary"
-                    value={fmtMoney(emp.salary, emp.salaryCurrency)}
+                    value={fmtSalary(emp.salary, emp.salaryCurrency)}
                   />
                   <Row
                     icon={FileText}
@@ -557,7 +536,6 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
               </div>
             </TabsContent>
 
-            {/* ── Work (dummy) ── */}
             <TabsContent value="work" className="space-y-3">
               <DummyNotice />
               <div>
@@ -610,7 +588,6 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
               </div>
             </TabsContent>
 
-            {/* ── Time & Leave — REAL ── */}
             <TabsContent value="time" className="space-y-3">
               {detailLoading ? (
                 <LoadingBlock />
@@ -740,7 +717,6 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
               )}
             </TabsContent>
 
-            {/* ── Performance (dummy) ── */}
             <TabsContent value="performance" className="space-y-3">
               <DummyNotice />
               <Card>
@@ -786,90 +762,78 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
               </Button>
             </TabsContent>
 
-            {/* ── Payroll — REAL DATA ── */}
             <TabsContent value="payroll" className="space-y-3">
+              <DummyNotice />
               <Card>
                 <CardContent className="p-4 space-y-2 text-sm">
                   <Row
                     icon={Wallet}
-                    label="Basic salary"
-                    value={fmtMoney(emp.salary, emp.salaryCurrency)}
+                    label="Base salary"
+                    value={`${currency(d.payroll.salary)} / month`}
                   />
                   <Row
                     icon={Wallet}
-                    label="Salary frequency"
-                    value={emp.salaryFrequency ?? "monthly"}
+                    label="YTD gross"
+                    value={currency(d.payroll.ytdGross)}
                   />
                   <Row
-                    icon={FileText}
-                    label="Tax ID"
-                    value={emp.taxId ?? "—"}
+                    icon={CalendarDays}
+                    label="Next pay date"
+                    value={new Date(d.payroll.nextPayDate).toLocaleDateString(
+                      "en-GB",
+                      { day: "numeric", month: "long" },
+                    )}
                   />
                   <Row
-                    icon={Landmark}
-                    label="Bank"
-                    value={emp.bankName ?? "—"}
-                  />
-                  <Row
-                    icon={Landmark}
-                    label="Account number"
-                    value={emp.bankAccountNumber ?? "—"}
+                    icon={Wallet}
+                    label="Pension pot"
+                    value={currency(d.payroll.pensionPot)}
                   />
                 </CardContent>
               </Card>
-
-              {loansLoading ? (
-                <LoadingBlock />
-              ) : (
+              {d.payroll.loans.length > 0 && (
                 <Card>
                   <CardContent className="p-4">
-                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-3">
-                      Loans
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2">
+                      Active loans
                     </p>
-                    {loans.length === 0 ? (
-                      <p className="text-sm text-muted-foreground py-2">
-                        No loans on record.
-                      </p>
-                    ) : (
-                      <div className="space-y-2">
-                        {[...activeLoans, ...otherLoans].map((l) => (
-                          <div
-                            key={l._id}
-                            className="flex items-center justify-between text-sm py-2 border-b last:border-b-0"
-                          >
-                            <div>
-                              <p className="font-medium flex items-center gap-2">
-                                {l.label}
-                                <Badge
-                                  variant="outline"
-                                  className={`${LOAN_STATUS_STYLE[l.status] ?? ""} text-[10px]`}
-                                >
-                                  {l.status.replace("_", " ")}
-                                </Badge>
-                              </p>
-                              <p className="text-xs text-muted-foreground">
-                                {fmtMoney(l.monthlyInstallment, l.currency)}/mo
-                              </p>
-                            </div>
-                            <p className="font-mono text-sm">
-                              {fmtMoney(l.outstandingBalance, l.currency)}
-                            </p>
-                          </div>
-                        ))}
+                    {d.payroll.loans.map((l, i) => (
+                      <div
+                        key={i}
+                        className="flex justify-between text-sm py-1"
+                      >
+                        <span>{l.type}</span>
+                        <span className="font-mono">{currency(l.balance)}</span>
                       </div>
-                    )}
+                    ))}
                   </CardContent>
                 </Card>
               )}
-
-              <div className="text-xs text-muted-foreground bg-muted/40 border rounded-lg px-3 py-2">
-                Full payslip history and individual payslips are available from
-                the Payroll module's Employees tab — select the relevant period
-                and click the eye icon next to this employee's row.
-              </div>
+              <Card>
+                <CardContent className="p-4">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2">
+                    Recent payslips
+                  </p>
+                  {d.payroll.payslips.map((p) => (
+                    <div
+                      key={p.period}
+                      className="flex items-center justify-between text-sm py-2 border-b last:border-b-0"
+                    >
+                      <div>
+                        <p className="font-medium">{p.period}</p>
+                        <p className="text-xs text-muted-foreground">
+                          Net {currency(p.net)} · {fmt(p.date)}
+                        </p>
+                      </div>
+                      <Button size="sm" variant="ghost">
+                        <Download className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
             </TabsContent>
 
-            {/* ── Disputes ── */}
             <TabsContent value="disputes" className="space-y-3">
               <div className="flex justify-between items-center">
                 <p className="text-xs text-muted-foreground">
@@ -922,7 +886,6 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
               )}
             </TabsContent>
 
-            {/* ── Documents (dummy) ── */}
             <TabsContent value="documents" className="space-y-2">
               <DummyNotice />
               {d.documents.map((doc) => (
@@ -945,7 +908,6 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
               ))}
             </TabsContent>
 
-            {/* ── Onboarding ── */}
             <TabsContent value="onboarding" className="space-y-3">
               {detailLoading || onboardingLoading ? (
                 <LoadingBlock />
@@ -1216,7 +1178,6 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
               )}
             </TabsContent>
 
-            {/* ── Activity (dummy) ── */}
             <TabsContent value="activity" className="space-y-2">
               <DummyNotice />
               {d.activity.map((act, i) => (
