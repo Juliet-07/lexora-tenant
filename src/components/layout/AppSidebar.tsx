@@ -231,6 +231,7 @@ const NAV_BY_MODULE: Record<
       title: "Requisitions",
       url: "/hr/requisitions",
       icon: ClipboardList,
+      adminOnly: true,
     },
     {
       title: "Reports",
