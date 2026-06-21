@@ -19,7 +19,6 @@ export const hrRoutes = ({ isAdmin }: RouteContext) => {
     <Route key="attendance" path="/hr/attendance" element={layout(<HRAttendance />)} />,
     <Route key="leave" path="/hr/leave" element={layout(<HRLeave />)} />,
     <Route key="learning" path="/hr/learning" element={layout(<HRLearning />)} />,
-    <Route key="requisitions" path="/hr/requisitions" element={layout(<HRRequisitions />)} />,
   ];
 
   if (isAdmin) {
