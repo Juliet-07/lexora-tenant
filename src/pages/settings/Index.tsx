@@ -64,14 +64,5 @@ export default function Settings() {
     </div>
   );
 }
-        <TabsContent value="plan">
-          <PlanTab />
-        </TabsContent>
-        <TabsContent value="engagement">
-          <EngagementTab />
-        </TabsContent>
-      </Tabs>
-    </div>
-  );
-}
+
 
