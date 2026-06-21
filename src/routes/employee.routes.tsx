@@ -21,6 +21,7 @@ export const employeeRoutes = ({ isAdmin }: RouteContext) => {
       element={layout(<MyPerformance />)}
     />,
     <Route key="my-pay" path="/my/payslips" element={layout(<MyPayslips />)} />,
+    <Route key="my-req" path="/my/requisitions" element={layout(<MyRequisitions />)} />,
     // Onboarding is no longer a gate — it's a dedicated page employees
     // are nudged toward via the in-app reminder/popup.
     <Route key="onboarding" path="/onboarding" element={<EmployeeOnboarding />} />,
