@@ -269,6 +269,7 @@ export function AppSidebar() {
     { title: "Leave", url: "/my/leave", icon: CalendarDays },
     { title: "Performance", url: "/my/performance", icon: BarChart3 },
     { title: "Payslips", url: "/my/payslips", icon: Wallet },
+    { title: "Requisitions", url: "/my/requisitions", icon: ClipboardList },
   ];
 
   if (!isAdmin) {
