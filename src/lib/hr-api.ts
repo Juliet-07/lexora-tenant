@@ -527,7 +527,11 @@ export interface AttendanceStats {
 
 export const fetchActiveShift = async (): Promise<AttendanceRecord | null> => {
   const res = await api.get("/employee/attendance/active");
-  return res.data?.data ?? res.data ?? null;
+  const body = res.data;
+  if (body && typeof body === "object" && "data" in body) {
+    return body.data; // correctly returns null when there's no active shift
+  }
+  return body ?? null;
 };
 
 export const fetchAttendanceStats = async (): Promise<AttendanceStats> => {
