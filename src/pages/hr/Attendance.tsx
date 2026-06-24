@@ -178,7 +178,7 @@ export default function HRAttendance() {
       <div>
         <h1 className="text-2xl font-bold">Time & Attendance</h1>
         <p className="text-sm text-muted-foreground">
-          Daily attendance, shifts and overtime — for {today}.
+          Daily attendance and shifts — for {today}.
         </p>
       </div>
 
@@ -224,7 +224,6 @@ export default function HRAttendance() {
         <TabsList>
           <TabsTrigger value="today">Today's Log</TabsTrigger>
           <TabsTrigger value="trends">Weekly Trends</TabsTrigger>
-          <TabsTrigger value="overtime">Overtime</TabsTrigger>
         </TabsList>
 
         {/* Today's log */}
@@ -362,15 +361,6 @@ export default function HRAttendance() {
           </Card>
         </TabsContent>
 
-        {/* Overtime — placeholder */}
-        <TabsContent value="overtime">
-          <Card>
-            <CardContent className="p-10 text-center text-sm text-muted-foreground">
-              Overtime tracking will be available once payroll module is
-              configured.
-            </CardContent>
-          </Card>
-        </TabsContent>
       </Tabs>
     </div>
   );

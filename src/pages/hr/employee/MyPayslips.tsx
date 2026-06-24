@@ -119,7 +119,6 @@ export default function MyPayslips() {
       <Tabs defaultValue="payslips" className="space-y-4">
         <TabsList>
           <TabsTrigger value="payslips">Payslips</TabsTrigger>
-          <TabsTrigger value="tax">Tax Documents</TabsTrigger>
           <TabsTrigger value="benefits">Benefits</TabsTrigger>
           <TabsTrigger value="loans">Loans & Advances</TabsTrigger>
         </TabsList>
@@ -153,29 +152,6 @@ export default function MyPayslips() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="tax">
-          <Card>
-            <CardHeader><CardTitle className="text-base">Annual Tax Documents</CardTitle></CardHeader>
-            <CardContent className="space-y-2">
-              {taxDocs.map((d) => (
-                <div key={d.id} className="flex items-center justify-between p-3 border rounded-lg">
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center">
-                      <FileText className="h-5 w-5 text-white" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium">{d.name}</p>
-                      <p className="text-xs text-muted-foreground">{d.type} · {d.year}</p>
-                    </div>
-                  </div>
-                  <Button size="sm" variant="outline" onClick={() => download(d.name)}>
-                    <Download className="h-3 w-3 mr-1.5" /> Download
-                  </Button>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-        </TabsContent>
 
         <TabsContent value="benefits">
           <Card>
