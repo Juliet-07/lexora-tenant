@@ -21,6 +21,17 @@ import {
   MapPin,
 } from "lucide-react";
 import { api } from "@/lib/api";
+import { fetchTeams, type HrTeam } from "@/lib/hr-api";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+} from "recharts";
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -29,8 +40,7 @@ interface AttendanceLog {
   firstName: string;
   lastName: string;
   jobTitle: string;
-  department: string | null;
-  clientId: string;
+  team: string | null;
   clockIn: string | null;
   clockOut: string | null;
   hoursWorked: number | null;
@@ -78,6 +88,9 @@ const fmtDate = (d: string) =>
     day: "numeric",
     month: "short",
   });
+
+const fmtChartDate = (d: string) =>
+  new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 
 const getInitials = (first: string, last: string) =>
   `${first[0] ?? ""}${last[0] ?? ""}`.toUpperCase();
@@ -133,7 +146,7 @@ function StatCard({
 // ─── Component ────────────────────────────────────────────────
 
 export default function HRAttendance() {
-  const [clientFilter, setClientFilter] = useState("all");
+  const [teamFilter, setTeamFilter] = useState("all");
 
   const today = new Date().toLocaleDateString("en-GB", {
     weekday: "long",
@@ -142,12 +155,19 @@ export default function HRAttendance() {
     day: "numeric",
   });
 
+  // ── Teams, for the filter dropdown ────────────────────────
+  const { data: teams = [] } = useQuery<HrTeam[]>({
+    queryKey: ["hr-teams"],
+    queryFn: fetchTeams,
+    staleTime: 60_000,
+  });
+
   // ── Fetch today's attendance ──────────────────────────────
   const { data, isLoading } = useQuery<TodayAttendance>({
-    queryKey: ["hr-attendance-today", clientFilter],
+    queryKey: ["hr-attendance-today", teamFilter],
     queryFn: async () => {
       const params: any = {};
-      if (clientFilter !== "all") params.clientId = clientFilter;
+      if (teamFilter !== "all") params.teamId = teamFilter;
       const res = await api.get("/hr/attendance/today", { params });
       return res.data?.data ?? res.data;
     },
@@ -157,10 +177,10 @@ export default function HRAttendance() {
 
   // ── Fetch weekly trends ───────────────────────────────────
   const { data: trends = [] } = useQuery<WeeklyTrend[]>({
-    queryKey: ["hr-attendance-trends", clientFilter],
+    queryKey: ["hr-attendance-trends", teamFilter],
     queryFn: async () => {
       const params: any = {};
-      if (clientFilter !== "all") params.clientId = clientFilter;
+      if (teamFilter !== "all") params.teamId = teamFilter;
       const res = await api.get("/hr/attendance/trends", { params });
       const d = res.data?.data ?? res.data;
       return Array.isArray(d) ? d : [];
@@ -217,7 +237,21 @@ export default function HRAttendance() {
       </div>
 
       {/* Filter */}
-      {/* TODO: populate with real corporate clients once client list API is wired here */}
+      <div className="flex items-center gap-2">
+        <Select value={teamFilter} onValueChange={setTeamFilter}>
+          <SelectTrigger className="w-[200px]">
+            <SelectValue placeholder="All teams" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All teams</SelectItem>
+            {teams.map((t) => (
+              <SelectItem key={t._id} value={t._id}>
+                {t.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
 
       {/* Tabs */}
       <Tabs defaultValue="today" className="space-y-4">
@@ -256,20 +290,20 @@ export default function HRAttendance() {
                         </AvatarFallback>
                       </Avatar>
 
-                      {/* Name + location */}
+                      {/* Name + role/team + location */}
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium">
                           {emp.firstName} {emp.lastName}
                         </p>
-                        <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                          {emp.location ? (
-                            <>
-                              <MapPin className="h-3 w-3" /> {emp.location}
-                            </>
-                          ) : (
-                            "—"
-                          )}
+                        <p className="text-xs text-muted-foreground truncate">
+                          {emp.jobTitle}
+                          {emp.team ? ` · ${emp.team}` : ""}
                         </p>
+                        {emp.location && (
+                          <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                            <MapPin className="h-3 w-3" /> {emp.location}
+                          </p>
+                        )}
                       </div>
 
                       {/* Times */}
@@ -314,12 +348,72 @@ export default function HRAttendance() {
         </TabsContent>
 
         {/* Weekly trends */}
-        <TabsContent value="trends">
+        <TabsContent value="trends" className="space-y-4">
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-base">
-                Weekly Attendance Trends
-              </CardTitle>
+              <CardTitle className="text-base">Attendance Trend</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {trends.length === 0 ? (
+                <p className="text-center text-sm text-muted-foreground py-10">
+                  No data for this week yet.
+                </p>
+              ) : (
+                <ResponsiveContainer width="100%" height={280}>
+                  <LineChart data={trends}>
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      className="opacity-30"
+                    />
+                    <XAxis
+                      dataKey="date"
+                      tickFormatter={fmtChartDate}
+                      fontSize={12}
+                    />
+                    <YAxis fontSize={12} allowDecimals={false} />
+                    <Tooltip
+                      labelFormatter={(d) => fmtDate(d as string)}
+                      formatter={(value: number, name: string) => [value, name]}
+                    />
+                    <Legend />
+                    <Line
+                      type="monotone"
+                      dataKey="present"
+                      stroke="#10b981"
+                      name="Present"
+                      strokeWidth={2}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="late"
+                      stroke="#f59e0b"
+                      name="Late"
+                      strokeWidth={2}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="remote"
+                      stroke="#3b82f6"
+                      name="Remote"
+                      strokeWidth={2}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="avgHours"
+                      stroke="#8b5cf6"
+                      name="Avg Hours"
+                      strokeWidth={2}
+                      strokeDasharray="4 2"
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Day-by-Day Breakdown</CardTitle>
             </CardHeader>
             <CardContent>
               {trends.length === 0 ? (
@@ -360,7 +454,6 @@ export default function HRAttendance() {
             </CardContent>
           </Card>
         </TabsContent>
-
       </Tabs>
     </div>
   );

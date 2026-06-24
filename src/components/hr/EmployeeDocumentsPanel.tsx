@@ -1,236 +1,221 @@
 import { useRef, useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
-  DialogDescription,
 } from "@/components/ui/dialog";
-import { FileText, Upload, Download, Trash2, User, Building2 } from "lucide-react";
-import { toast } from "@/hooks/use-toast";
 import {
-  addEmployeeDocument,
-  deleteEmployeeDocument,
-  formatBytes,
-  useEmployeeDocuments,
-} from "@/lib/employeeDocumentsStore";
+  FileText,
+  Eye,
+  Trash2,
+  Upload,
+  Loader2,
+  Download,
+  User as UserIcon,
+  Briefcase as TenantIcon,
+} from "lucide-react";
+import { toast } from "sonner";
+import {
+  fetchEmployeeDocuments,
+  uploadEmployeeDocumentAsTenant,
+  deleteEmployeeDocumentAsTenant,
+  fetchMyDocuments,
+  uploadMyDocument,
+  deleteMyDocument,
+  type EmployeeDocumentFile,
+} from "@/lib/hr-employee-documents-api";
+import { toAbsoluteFileUrl } from "@/lib/hr-employee-documents-api";
 
-const CATEGORIES = [
-  "Contract",
-  "Identification",
-  "Certificate",
-  "Policy",
-  "Tax",
-  "Payslip",
-  "Other",
-];
+const fmt = (d: string) =>
+  new Date(d).toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
 
-interface Props {
-  uploadedBy: "employee" | "tenant";
-  uploadedByName: string;
-  /** When true, hides upload UI (read-only). */
-  readOnly?: boolean;
+interface EmployeeDocumentsPanelProps {
+  employeeId?: string;
+  uploadedBy?: "employee" | "tenant";
+  uploadedByName?: string;
 }
 
 export function EmployeeDocumentsPanel({
-  uploadedBy,
-  uploadedByName,
-  readOnly,
-}: Props) {
-  const docs = useEmployeeDocuments();
-  const [open, setOpen] = useState(false);
-  const [file, setFile] = useState<File | null>(null);
-  const [category, setCategory] = useState("Other");
-  const [notes, setNotes] = useState("");
-  const [saving, setSaving] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
+  employeeId,
+}: EmployeeDocumentsPanelProps) {
+  const queryClient = useQueryClient();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const isTenantView = !!employeeId;
+  const [preview, setPreview] = useState<EmployeeDocumentFile | null>(null);
 
-  const reset = () => {
-    setFile(null);
-    setCategory("Other");
-    setNotes("");
-    if (fileRef.current) fileRef.current.value = "";
-  };
+  const queryKey = isTenantView
+    ? ["employee-documents", employeeId]
+    : ["my-documents"];
 
-  const submit = async () => {
-    if (!file) return;
-    setSaving(true);
-    try {
-      await addEmployeeDocument(file, {
-        category,
-        notes,
-        uploadedBy,
-        uploadedByName,
-      });
-      toast({ title: "Document uploaded", description: file.name });
-      setOpen(false);
-      reset();
-    } catch {
-      toast({ title: "Upload failed", variant: "destructive" });
-    } finally {
-      setSaving(false);
-    }
-  };
+  const { data: documents = [], isLoading } = useQuery({
+    queryKey,
+    queryFn: () =>
+      isTenantView ? fetchEmployeeDocuments(employeeId!) : fetchMyDocuments(),
+  });
 
-  const download = (d: (typeof docs)[number]) => {
-    if (!d.dataUrl) {
-      toast({ title: "No file available", description: "This seeded sample has no attached file." });
-      return;
-    }
-    const a = document.createElement("a");
-    a.href = d.dataUrl;
-    a.download = d.name;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-  };
+  const uploadMutation = useMutation({
+    mutationFn: (file: File) =>
+      isTenantView
+        ? uploadEmployeeDocumentAsTenant(employeeId!, file)
+        : uploadMyDocument(file),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey });
+      toast.success("Document uploaded.");
+    },
+    onError: (err: any) =>
+      toast.error(err?.response?.data?.message ?? "Failed to upload document"),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (documentId: string) =>
+      isTenantView
+        ? deleteEmployeeDocumentAsTenant(documentId)
+        : deleteMyDocument(documentId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey });
+      toast.success("Document removed.");
+    },
+    onError: (err: any) =>
+      toast.error(err?.response?.data?.message ?? "Failed to remove document"),
+  });
 
   return (
-    <div className="space-y-4">
-      {!readOnly && (
-        <div className="flex items-center justify-between">
-          <p className="text-sm text-muted-foreground">
-            Upload personal documents and access files shared with you.
-          </p>
-          <Button
-            size="sm"
-            className="bg-gradient-to-r from-primary to-secondary"
-            onClick={() => setOpen(true)}
-          >
-            <Upload className="h-4 w-4 mr-2" /> Upload Document
-          </Button>
-        </div>
-      )}
+    <div className="space-y-2">
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-xs text-muted-foreground">
+          {isTenantView
+            ? "Documents uploaded by the employee or added by your team."
+            : "Upload documents to your employee file — ID, certificates, proof of address, etc."}
+        </p>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => fileInputRef.current?.click()}
+        >
+          <Upload className="h-3.5 w-3.5 mr-1.5" /> Upload
+        </Button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) uploadMutation.mutate(file);
+            e.target.value = "";
+          }}
+        />
+      </div>
 
-      <Card>
-        <CardContent className="p-4 space-y-2">
-          {docs.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-8">
-              No documents yet.
-            </p>
-          ) : (
-            docs.map((d) => (
-              <div
-                key={d.id}
-                className="flex items-center gap-3 p-3 border rounded-lg hover:bg-muted/30 transition-colors"
-              >
-                <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center shrink-0">
-                  <FileText className="h-5 w-5 text-white" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{d.name}</p>
-                  <p className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
-                    <Badge variant="outline" className="text-[10px] py-0">
-                      {d.category}
-                    </Badge>
-                    <span className="flex items-center gap-1">
-                      {d.uploadedBy === "tenant" ? (
-                        <Building2 className="h-3 w-3" />
+      {isLoading ? (
+        <div className="flex items-center justify-center py-8 gap-2 text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          <span className="text-sm">Loading documents…</span>
+        </div>
+      ) : documents.length === 0 ? (
+        <Card>
+          <CardContent className="p-6 text-center text-sm text-muted-foreground">
+            No documents uploaded yet.
+          </CardContent>
+        </Card>
+      ) : (
+        documents.map((doc) => {
+          const canDelete = isTenantView || doc.uploadedBy === "employee";
+          return (
+            <Card key={doc._id}>
+              <CardContent className="p-3 flex items-center justify-between">
+                <button
+                  onClick={() => setPreview(doc)}
+                  className="flex items-center gap-3 min-w-0 text-left hover:underline"
+                >
+                  <FileText className="h-4 w-4 text-primary shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium truncate">
+                      {doc.label || doc.fileName}
+                    </p>
+                    <p className="text-xs text-muted-foreground flex items-center gap-1">
+                      {doc.uploadedBy === "tenant" ? (
+                        <TenantIcon className="h-3 w-3" />
                       ) : (
-                        <User className="h-3 w-3" />
+                        <UserIcon className="h-3 w-3" />
                       )}
-                      {d.uploadedByName}
-                    </span>
-                    <span>{formatBytes(d.size)}</span>
-                    <span>
-                      {new Date(d.uploadedAt).toLocaleDateString("en-GB", {
-                        day: "numeric",
-                        month: "short",
-                        year: "numeric",
-                      })}
-                    </span>
-                  </p>
-                </div>
-                <Button size="sm" variant="outline" onClick={() => download(d)}>
-                  <Download className="h-3 w-3" />
-                </Button>
-                {!readOnly && d.uploadedBy === uploadedBy && (
+                      {doc.uploadedBy === "tenant"
+                        ? "Added by your team"
+                        : "Uploaded by employee"}{" "}
+                      · {fmt(doc.createdAt)}
+                    </p>
+                  </div>
+                </button>
+                <div className="flex gap-1 shrink-0">
                   <Button
                     size="sm"
                     variant="ghost"
-                    onClick={() => {
-                      deleteEmployeeDocument(d.id);
-                      toast({ title: "Document removed" });
-                    }}
+                    onClick={() => setPreview(doc)}
                   >
-                    <Trash2 className="h-3 w-3 text-destructive" />
+                    <Eye className="h-3.5 w-3.5" />
                   </Button>
-                )}
-              </div>
-            ))
-          )}
-        </CardContent>
-      </Card>
+                  {canDelete && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => deleteMutation.mutate(doc._id)}
+                      disabled={deleteMutation.isPending}
+                    >
+                      <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                    </Button>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })
+      )}
 
-      <Dialog
-        open={open}
-        onOpenChange={(o) => {
-          setOpen(o);
-          if (!o) reset();
-        }}
-      >
-        <DialogContent className="max-w-md">
+      {/* Preview dialog — SAME pattern as OnboardingDocumentsTab's
+          working preview: an iframe, not a direct link/download */}
+      <Dialog open={!!preview} onOpenChange={(v) => !v && setPreview(null)}>
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Upload Document</DialogTitle>
-            <DialogDescription>
-              Attach a file to your employee record.
-            </DialogDescription>
+            <DialogTitle>{preview?.label || preview?.fileName}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-3 py-2">
-            <div className="space-y-1.5">
-              <Label>File</Label>
-              <Input
-                ref={fileRef}
-                type="file"
-                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-              />
+          {preview && (
+            <div className="space-y-3">
+              {preview.mimeType === "application/pdf" ? (
+                <iframe
+                  src={toAbsoluteFileUrl(preview.fileUrl)}
+                  className="w-full h-[65vh] border rounded"
+                  title={preview.label || preview.fileName}
+                />
+              ) : preview.mimeType.startsWith("image/") ? (
+                <img
+                  src={toAbsoluteFileUrl(preview.fileUrl)}
+                  alt={preview.label || preview.fileName}
+                  className="max-w-full max-h-[65vh] mx-auto rounded border"
+                />
+              ) : (
+                <p className="text-sm text-muted-foreground py-8 text-center">
+                  Preview isn't available for this file type. Use the button
+                  below to open it directly.
+                </p>
+              )}
+              <Button variant="outline" className="w-full" asChild>
+                <a
+                  href={toAbsoluteFileUrl(preview.fileUrl)}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <Download className="h-4 w-4 mr-2" /> Open in new tab
+                </a>
+              </Button>
             </div>
-            <div className="space-y-1.5">
-              <Label>Category</Label>
-              <Select value={category} onValueChange={setCategory}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {CATEGORIES.map((c) => (
-                    <SelectItem key={c} value={c}>
-                      {c}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label>Notes (optional)</Label>
-              <Textarea
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                rows={2}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)}>
-              Cancel
-            </Button>
-            <Button disabled={!file || saving} onClick={submit}>
-              {saving ? "Uploading…" : "Upload"}
-            </Button>
-          </DialogFooter>
+          )}
         </DialogContent>
       </Dialog>
     </div>

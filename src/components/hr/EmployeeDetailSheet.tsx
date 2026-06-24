@@ -65,6 +65,7 @@ import {
   terminateEmployee,
 } from "@/lib/hr-api";
 import { downloadEmployeeReport } from "@/lib/employeeReport";
+import { EmployeeDocumentsPanel } from "./EmployeeDocumentsPanel";
 
 interface Dispute {
   id: string;
@@ -926,25 +927,7 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
             </TabsContent>
 
             <TabsContent value="documents" className="space-y-2">
-              <DummyNotice />
-              {d.documents.map((doc) => (
-                <Card key={doc.name}>
-                  <CardContent className="p-3 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <FileText className="h-4 w-4 text-primary" />
-                      <div>
-                        <p className="text-sm font-medium">{doc.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {fmt(doc.date)}
-                        </p>
-                      </div>
-                    </div>
-                    <Button size="sm" variant="ghost">
-                      <Download className="h-3.5 w-3.5" />
-                    </Button>
-                  </CardContent>
-                </Card>
-              ))}
+              <EmployeeDocumentsPanel employeeId={emp._id} />
             </TabsContent>
 
             <TabsContent value="onboarding" className="space-y-3">
