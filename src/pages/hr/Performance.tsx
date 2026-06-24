@@ -67,6 +67,8 @@ import {
 import { ManagerReviewSheet } from "@/components/hr/ManagerReviewSheet";
 import { KpiTemplatesPanel } from "@/components/hr/KpiTemplatePanel";
 import { PerformanceFrameworksPanel } from "@/components/hr/PerformanceFrameworksPanel";
+import { PerformancePoliciesPanel } from "@/components/hr/PerformancePoliciesPanel";
+import { FileText } from "lucide-react";
 
 const CYCLE_STATUS_TONE: Record<string, string> = {
   draft: "bg-warning/10 text-warning border-warning/20",
@@ -206,6 +208,9 @@ export default function HRPerformance() {
           <TabsTrigger value="frameworks">
             <Award className="h-3.5 w-3.5 mr-1.5" /> Competencies & Values
           </TabsTrigger>
+          <TabsTrigger value="policies">
+            <FileText className="h-3.5 w-3.5 mr-1.5" /> Policies
+          </TabsTrigger>
         </TabsList>
 
         {/* ════════════════ REVIEW CYCLES ════════════════ */}
@@ -283,6 +288,11 @@ export default function HRPerformance() {
         {/* ════════════════ FRAMEWORKS ════════════════ */}
         <TabsContent value="frameworks">
           <PerformanceFrameworksPanel />
+        </TabsContent>
+
+        {/* ════════════════ POLICIES ════════════════ */}
+        <TabsContent value="policies">
+          <PerformancePoliciesPanel />
         </TabsContent>
       </Tabs>
 
