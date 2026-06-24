@@ -125,6 +125,8 @@ export type EmploymentType =
   | "intern"
   | "consultant";
 
+export type WorkerCategory = "employee" | "consultant";
+
 export interface Employee {
   _id: string;
   tenantId: string;
@@ -175,6 +177,7 @@ export interface Employee {
   onboardingStep: number; // 0-4
   onboardingCompleted: boolean;
   allowances: EmployeeAllowanceInput[];
+  workerCategory: WorkerCategory;
 }
 
 export interface EmployeeStats {
@@ -276,6 +279,7 @@ export interface EmployeeDetailResponse {
     stats: EmployeeAttendanceStats;
   };
 }
+
 // ─────────────────────────────────────────────────────────────
 // EMPLOYEES — API calls
 // ─────────────────────────────────────────────────────────────
@@ -331,6 +335,12 @@ export const fetchEmployeeDetail = async (
 ): Promise<EmployeeDetailResponse> => {
   const res = await api.get(`/hr/employees/${id}/detail`);
   return res.data?.data ?? res.data;
+};
+
+export const fetchConsultants = async (): Promise<Employee[]> => {
+  const res = await api.get("/hr/employees/consultants");
+  const d = res.data?.data ?? res.data;
+  return Array.isArray(d) ? d : [];
 };
 // ─────────────────────────────────────────────────────────────
 // LEAVE — Types & API (keep as-is, clientId removed internally)

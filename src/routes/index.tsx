@@ -7,6 +7,7 @@ import { amlRoutes } from "./aml.routes";
 import { hrRoutes } from "./hr.routes";
 import { crmRoutes } from "./crm.routes";
 import { employeeRoutes } from "./employee.routes";
+import SignContractPage from "@/pages/SigninContractPage";
 
 /**
  * Top-level router. Module-specific routes live in their own files so
@@ -16,8 +17,24 @@ import { employeeRoutes } from "./employee.routes";
  * dashboard normally. A reminder popup + header progress indicator
  * (see OnboardingReminder) nudge them to /onboarding when incomplete.
  */
+
+const PUBLIC_ROUTE_PATTERNS = [/^\/sign-contract\/[^/]+$/];
+
 export function AppRoutes() {
   const { user, isAdmin } = useAuth();
+
+  const path = window.location.pathname;
+  const isPublicRoute = PUBLIC_ROUTE_PATTERNS.some((pattern) =>
+    pattern.test(path),
+  );
+
+  if (isPublicRoute) {
+    return (
+      <Routes>
+        <Route path="/sign-contract/:token" element={<SignContractPage />} />
+      </Routes>
+    );
+  }
 
   if (!user) return <Login />;
 

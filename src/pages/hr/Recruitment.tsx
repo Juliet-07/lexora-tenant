@@ -60,11 +60,18 @@ import {
   createSuccessionPlan,
   addSuccessor,
   removeSuccessor,
+  getNextStage,
+  getStageOrderFor,
   type Candidate,
   type CandidateStage,
+  type WorkerCategory,
   type OffboardingRecord,
   type SuccessionPlan,
 } from "@/lib/hr-recruitment-api";
+import {
+  fetchContractTemplates,
+  generateContractFromCandidate,
+} from "@/lib/hr-contracts-api";
 
 // ─── Helpers ──────────────────────────────────────────────────
 
@@ -75,14 +82,6 @@ const STAGES: { key: CandidateStage; label: string }[] = [
   { key: "offer", label: "Offer" },
   { key: "hired", label: "Hired" },
   { key: "rejected", label: "Rejected" },
-];
-
-const STAGE_ORDER: CandidateStage[] = [
-  "sourced",
-  "screening",
-  "interview",
-  "offer",
-  "hired",
 ];
 
 const stageColor = (s: CandidateStage) =>
@@ -167,6 +166,16 @@ export default function HRRecruitment() {
   const [openOffboarding, setOpenOffboarding] =
     useState<OffboardingRecord | null>(null);
 
+  // ── Hired → contract generation hook ──
+  // Set by PipelineColumn's onHired callback the moment a candidate
+  // is successfully moved to "hired". Opens GenerateContractDialog,
+  // which lets the tenant pick a template (filtered to the
+  // candidate's own workerCategory) or skip entirely. The candidate
+  // is ALREADY correctly marked "hired" by the time this fires —
+  // skipping the dialog never leaves the pipeline in a bad state,
+  // it just means no contract gets drafted right now.
+  const [hiredCandidate, setHiredCandidate] = useState<Candidate | null>(null);
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -227,58 +236,13 @@ export default function HRRecruitment() {
         />
       </div>
 
-      <Tabs defaultValue="openings" className="space-y-4">
+      <Tabs defaultValue="pipeline" className="space-y-4">
         <TabsList>
-          <TabsTrigger value="openings">Job Openings</TabsTrigger>
           <TabsTrigger value="pipeline">Candidate Pipeline</TabsTrigger>
           <TabsTrigger value="offboarding">Offboarding</TabsTrigger>
           <TabsTrigger value="succession">Succession Planning</TabsTrigger>
+          <TabsTrigger value="openings">Job Openings</TabsTrigger>
         </TabsList>
-
-        {/* ── Job Openings — DUMMY, unchanged ── */}
-        <TabsContent
-          value="openings"
-          className="grid grid-cols-1 lg:grid-cols-2 gap-4"
-        >
-          <div className="lg:col-span-2 text-xs text-muted-foreground bg-muted/40 border rounded-lg px-3 py-2">
-            This section uses placeholder data — the underlying module isn't
-            built yet.
-          </div>
-          {jobs.map((j) => (
-            <Card key={j.id} className="hover:shadow-md transition-shadow">
-              <CardContent className="p-5 space-y-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <h3 className="font-semibold">{j.title}</h3>
-                    <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
-                      <MapPin className="h-3 w-3" />
-                      {j.location} · {j.type}
-                    </p>
-                  </div>
-                  <Badge
-                    variant="outline"
-                    className={
-                      j.status === "Open"
-                        ? "bg-success/10 text-success border-success/20"
-                        : j.status === "On Hold"
-                          ? "bg-warning/10 text-warning border-warning/20"
-                          : "bg-muted"
-                    }
-                  >
-                    {j.status}
-                  </Badge>
-                </div>
-                <div className="text-sm text-muted-foreground line-clamp-2">
-                  {j.description}
-                </div>
-                <div className="flex items-center justify-between text-xs text-muted-foreground">
-                  <span>Hiring Manager · {j.hiringManager}</span>
-                  <span>{j.applicants} applicants</span>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </TabsContent>
 
         {/* ── Candidate Pipeline — REAL ── */}
         <TabsContent value="pipeline" className="space-y-3">
@@ -300,6 +264,7 @@ export default function HRRecruitment() {
                   stageKey={stage.key}
                   label={stage.label}
                   candidates={candidates}
+                  onHired={setHiredCandidate}
                 />
               ))}
             </div>
@@ -401,6 +366,51 @@ export default function HRRecruitment() {
         <TabsContent value="succession" className="space-y-3">
           <SuccessionPlanning />
         </TabsContent>
+
+        {/* ── Job Openings — DUMMY, unchanged ── */}
+        <TabsContent
+          value="openings"
+          className="grid grid-cols-1 lg:grid-cols-2 gap-4"
+        >
+          <div className="lg:col-span-2 text-xs text-muted-foreground bg-muted/40 border rounded-lg px-3 py-2">
+            This section uses placeholder data — the underlying module isn't
+            built yet.
+          </div>
+          {jobs.map((j) => (
+            <Card key={j.id} className="hover:shadow-md transition-shadow">
+              <CardContent className="p-5 space-y-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h3 className="font-semibold">{j.title}</h3>
+                    <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
+                      <MapPin className="h-3 w-3" />
+                      {j.location} · {j.type}
+                    </p>
+                  </div>
+                  <Badge
+                    variant="outline"
+                    className={
+                      j.status === "Open"
+                        ? "bg-success/10 text-success border-success/20"
+                        : j.status === "On Hold"
+                          ? "bg-warning/10 text-warning border-warning/20"
+                          : "bg-muted"
+                    }
+                  >
+                    {j.status}
+                  </Badge>
+                </div>
+                <div className="text-sm text-muted-foreground line-clamp-2">
+                  {j.description}
+                </div>
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>Hiring Manager · {j.hiringManager}</span>
+                  <span>{j.applicants} applicants</span>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </TabsContent>
       </Tabs>
 
       <AddCandidateDialog
@@ -410,6 +420,10 @@ export default function HRRecruitment() {
       <OffboardingDetailSheet
         record={openOffboarding}
         onClose={() => setOpenOffboarding(null)}
+      />
+      <GenerateContractDialog
+        candidate={hiredCandidate}
+        onClose={() => setHiredCandidate(null)}
       />
     </div>
   );
@@ -421,22 +435,31 @@ function PipelineColumn({
   stageKey,
   label,
   candidates,
+  onHired,
 }: {
   stageKey: CandidateStage;
   label: string;
   candidates: Candidate[];
+  onHired: (candidate: Candidate) => void;
 }) {
   const queryClient = useQueryClient();
-  const inStage = candidates.filter((c) => c.stage === stageKey);
+  const inStage = candidates.filter(
+    (c) =>
+      c.stage === stageKey &&
+      getStageOrderFor(c.workerCategory).includes(stageKey),
+  );
 
   const moveMutation = useMutation({
     mutationFn: ({ id, stage }: { id: string; stage: CandidateStage }) =>
       moveCandidateStage(id, { stage }),
-    onSuccess: (_data, vars) => {
+    onSuccess: (updatedCandidate, vars) => {
       queryClient.invalidateQueries({ queryKey: ["recruitment-candidates"] });
       toast.success(
         `Moved to ${STAGES.find((s) => s.key === vars.stage)?.label}.`,
       );
+      if (vars.stage === "hired") {
+        onHired(updatedCandidate);
+      }
     },
     onError: (err: any) =>
       toast.error(err?.response?.data?.message ?? "Failed to move candidate"),
@@ -450,12 +473,6 @@ function PipelineColumn({
     },
   });
 
-  const nextStage = (current: CandidateStage): CandidateStage | null => {
-    const idx = STAGE_ORDER.indexOf(current);
-    if (idx === -1 || idx === STAGE_ORDER.length - 1) return null;
-    return STAGE_ORDER[idx + 1];
-  };
-
   return (
     <Card>
       <CardHeader className="pb-2">
@@ -465,7 +482,7 @@ function PipelineColumn({
       </CardHeader>
       <CardContent className="space-y-2">
         {inStage.map((c) => {
-          const next = nextStage(c.stage);
+          const next = getNextStage(c.stage, c.workerCategory);
           return (
             <div
               key={c._id}
@@ -503,6 +520,9 @@ function PipelineColumn({
                 className={`${stageColor(c.stage)} text-[10px] capitalize`}
               >
                 {c.source.replace("_", " ")}
+              </Badge>
+              <Badge variant="outline" className="text-[10px] capitalize">
+                {c.workerCategory}
               </Badge>
               {c.stage === "rejected" && c.rejectionReason && (
                 <p className="text-[11px] text-muted-foreground italic">
@@ -559,6 +579,105 @@ function PipelineColumn({
   );
 }
 
+// ─── Generate Contract dialog (Hired → contract hook) ──────────
+
+function GenerateContractDialog({
+  candidate,
+  onClose,
+}: {
+  candidate: Candidate | null;
+  onClose: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const [templateId, setTemplateId] = useState("");
+
+  const { data: templates = [], isLoading } = useQuery({
+    queryKey: ["contract-templates", candidate?.workerCategory],
+    queryFn: () => fetchContractTemplates(candidate!.workerCategory),
+    enabled: !!candidate,
+  });
+
+  const generateMutation = useMutation({
+    mutationFn: () =>
+      generateContractFromCandidate({
+        candidateId: candidate!._id,
+        templateId,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["contracts"] });
+      onClose();
+      setTemplateId("");
+      toast.success(
+        "Contract draft created. Review it in the Contracts module before sending.",
+      );
+    },
+    onError: (err: any) =>
+      toast.error(
+        err?.response?.data?.message ?? "Failed to generate contract",
+      ),
+  });
+
+  const handleClose = () => {
+    setTemplateId("");
+    onClose();
+  };
+
+  if (!candidate) return null;
+
+  return (
+    <Dialog open={!!candidate} onOpenChange={(o) => !o && handleClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Generate a contract for {candidate.name}?</DialogTitle>
+          <DialogDescription>
+            Pick a {candidate.workerCategory} template. You can review and edit
+            before sending it for signature.
+          </DialogDescription>
+        </DialogHeader>
+        {isLoading ? (
+          <div className="flex justify-center py-6">
+            <Loader2 className="h-5 w-5 animate-spin" />
+          </div>
+        ) : templates.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-4">
+            No {candidate.workerCategory} templates exist yet. Create one in the
+            Contracts module first.
+          </p>
+        ) : (
+          <Select value={templateId} onValueChange={setTemplateId}>
+            <SelectTrigger>
+              <SelectValue placeholder="Select a template" />
+            </SelectTrigger>
+            <SelectContent>
+              {templates.map((t) => (
+                <SelectItem key={t._id} value={t._id}>
+                  {t.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+        <DialogFooter>
+          <Button variant="outline" onClick={handleClose}>
+            Skip for now
+          </Button>
+          <Button
+            disabled={!templateId || generateMutation.isPending}
+            onClick={() => generateMutation.mutate()}
+            className="bg-gradient-to-r from-primary to-secondary"
+          >
+            {generateMutation.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              "Generate Contract"
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Add Candidate dialog ─────────────────────────────────────
 
 function AddCandidateDialog({
@@ -575,6 +694,7 @@ function AddCandidateDialog({
     phone: "",
     roleAppliedFor: "",
     source: "other" as const,
+    workerCategory: "employee" as WorkerCategory,
     notes: "",
   });
 
@@ -589,6 +709,7 @@ function AddCandidateDialog({
         phone: "",
         roleAppliedFor: "",
         source: "other",
+        workerCategory: "employee",
         notes: "",
       });
       toast.success("Candidate added to pipeline.");
@@ -657,6 +778,28 @@ function AddCandidateDialog({
                 <SelectItem value="other">Other</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+          <div className="space-y-1">
+            <Label>Category</Label>
+            <Select
+              value={form.workerCategory}
+              onValueChange={(v: WorkerCategory) =>
+                setForm({ ...form, workerCategory: v })
+              }
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="employee">Employee</SelectItem>
+                <SelectItem value="consultant">Consultant</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              {form.workerCategory === "consultant"
+                ? "Consultant pipeline: Sourced → Screening → Hired/Rejected (no interview/offer stages)."
+                : "Employee pipeline: Sourced → Screening → Interview → Offer → Hired/Rejected."}
+            </p>
           </div>
           <div className="space-y-1">
             <Label>Notes</Label>

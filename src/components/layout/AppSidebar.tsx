@@ -193,6 +193,12 @@ const NAV_BY_MODULE: Record<
       adminOnly: true,
     },
     {
+      title: "Contracts",
+      url: "/hr/contracts",
+      icon: FileText,
+      adminOnly: true,
+    },
+    {
       title: "Time & Attendance",
       url: "/hr/attendance",
       icon: CalendarDays,
@@ -214,12 +220,6 @@ const NAV_BY_MODULE: Record<
       title: "Learning & Dev",
       url: "/hr/learning",
       icon: GraduationCap,
-    },
-    {
-      title: "Contracts",
-      url: "/hr/contracts",
-      icon: FileText,
-      adminOnly: true,
     },
     {
       title: "Disputes",

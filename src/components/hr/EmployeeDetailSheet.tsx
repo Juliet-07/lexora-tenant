@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -55,12 +55,14 @@ import {
   GraduationCap,
   UserSquare2,
   Circle,
+  UserX,
 } from "lucide-react";
 import { toast } from "sonner";
 import type { Employee, HrTeam, HrLocation } from "@/lib/hr-api";
 import {
   fetchEmployeeDetail,
   fetchEmployeeOnboardingRecord,
+  terminateEmployee,
 } from "@/lib/hr-api";
 import { downloadEmployeeReport } from "@/lib/employeeReport";
 
@@ -244,6 +246,13 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
     title: "",
     note: "",
   });
+  const queryClient = useQueryClient();
+  const [terminateOpen, setTerminateOpen] = useState(false);
+  const [terminateForm, setTerminateForm] = useState({
+    endDate: new Date().toISOString().slice(0, 10),
+    status: "resigned" as "terminated" | "resigned",
+    reason: "",
+  });
 
   const { data: detail, isLoading: detailLoading } = useQuery({
     queryKey: ["employee-detail", employee?._id],
@@ -257,6 +266,25 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
     queryFn: () => fetchEmployeeOnboardingRecord(employee!._id),
     enabled: !!employee,
     staleTime: 30_000,
+  });
+
+  const terminateMutation = useMutation({
+    mutationFn: () => terminateEmployee(employee!._id, terminateForm),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["employee-detail", employee!._id],
+      });
+      queryClient.invalidateQueries({ queryKey: ["hr-employees"] });
+      queryClient.invalidateQueries({ queryKey: ["recruitment-offboarding"] });
+      setTerminateOpen(false);
+      toast.success(
+        `${employee!.firstName} ${employee!.lastName} marked as ${terminateForm.status}. An offboarding record was created.`,
+      );
+    },
+    onError: (err: any) =>
+      toast.error(
+        err?.response?.data?.message ?? "Failed to terminate employee",
+      ),
   });
 
   if (!employee) return null;
@@ -372,7 +400,7 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
               </p>
             </div>
           </div>
-          <div className="mt-4">
+          <div className="mt-4 space-x-3">
             <Button
               size="sm"
               variant="secondary"
@@ -384,6 +412,17 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
             >
               <Download className="h-4 w-4 mr-2" /> Download Report
             </Button>
+            {emp.employmentStatus !== "terminated" &&
+              emp.employmentStatus !== "resigned" && (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="bg-destructive/20 hover:bg-destructive/30 text-white border-destructive/30"
+                  onClick={() => setTerminateOpen(true)}
+                >
+                  <UserX className="h-4 w-4 mr-2" /> Terminate
+                </Button>
+              )}
           </div>
         </div>
 
@@ -1251,6 +1290,75 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
                 className="bg-gradient-to-r from-primary to-secondary"
               >
                 Log Dispute
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Termination Dialog */}
+        <Dialog open={terminateOpen} onOpenChange={setTerminateOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>
+                Terminate {emp.firstName} {emp.lastName}?
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                This sets their employment status and automatically creates an
+                offboarding record (clearance checklist, exit interview
+                tracking). This cannot be undone from here.
+              </p>
+              <div className="space-y-1">
+                <Label>Reason</Label>
+                <Select
+                  value={terminateForm.status}
+                  onValueChange={(v: any) =>
+                    setTerminateForm((f) => ({ ...f, status: v }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="resigned">Resigned</SelectItem>
+                    <SelectItem value="terminated">Terminated</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label>Last working day</Label>
+                <Input
+                  type="date"
+                  value={terminateForm.endDate}
+                  onChange={(e) =>
+                    setTerminateForm((f) => ({ ...f, endDate: e.target.value }))
+                  }
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>Notes (optional)</Label>
+                <Textarea
+                  rows={3}
+                  value={terminateForm.reason}
+                  onChange={(e) =>
+                    setTerminateForm((f) => ({ ...f, reason: e.target.value }))
+                  }
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setTerminateOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                disabled={!terminateForm.endDate || terminateMutation.isPending}
+                onClick={() => terminateMutation.mutate()}
+              >
+                {terminateMutation.isPending
+                  ? "Processing…"
+                  : "Confirm Termination"}
               </Button>
             </DialogFooter>
           </DialogContent>

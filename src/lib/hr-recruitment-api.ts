@@ -20,6 +20,8 @@ export type CandidateSource =
   | "website"
   | "other";
 
+export type WorkerCategory = "employee" | "consultant";
+
 export interface StageHistoryEntry {
   stage: CandidateStage;
   enteredAt: string;
@@ -33,6 +35,7 @@ export interface Candidate {
   phone: string | null;
   roleAppliedFor: string;
   source: CandidateSource;
+  workerCategory: WorkerCategory;
   stage: CandidateStage;
   rating: number;
   notes: string | null;
@@ -42,6 +45,20 @@ export interface Candidate {
   createdAt: string;
   updatedAt: string;
 }
+
+export const EMPLOYEE_STAGE_ORDER: CandidateStage[] = [
+  "sourced",
+  "screening",
+  "interview",
+  "offer",
+  "hired",
+];
+
+export const CONSULTANT_STAGE_ORDER: CandidateStage[] = [
+  "sourced",
+  "screening",
+  "hired",
+];
 
 export const fetchAllCandidates = async (
   stage?: CandidateStage,
@@ -73,6 +90,7 @@ export const createCandidate = async (dto: {
   phone?: string;
   roleAppliedFor: string;
   source?: CandidateSource;
+  workerCategory?: WorkerCategory;
   notes?: string;
 }): Promise<Candidate> => {
   const res = await api.post("/hr/recruitment/candidates", dto);
@@ -110,6 +128,22 @@ export const deleteCandidate = async (candidateId: string): Promise<void> => {
   await api.delete(`/hr/recruitment/candidates/${candidateId}`);
 };
 
+export const getStageOrderFor = (
+  workerCategory: WorkerCategory,
+): CandidateStage[] =>
+  workerCategory === "consultant"
+    ? CONSULTANT_STAGE_ORDER
+    : EMPLOYEE_STAGE_ORDER;
+
+export const getNextStage = (
+  currentStage: CandidateStage,
+  workerCategory: WorkerCategory,
+): CandidateStage | null => {
+  const order = getStageOrderFor(workerCategory);
+  const idx = order.indexOf(currentStage);
+  if (idx === -1 || idx === order.length - 1) return null;
+  return order[idx + 1];
+};
 // ─────────────────────────────────────────────────────────────
 // OFFBOARDING — Types & API
 // ─────────────────────────────────────────────────────────────
