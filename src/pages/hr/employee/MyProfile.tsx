@@ -41,7 +41,9 @@ import {
   Save,
   X,
   Loader2,
+  Folder,
 } from "lucide-react";
+import { EmployeeDocumentsPanel } from "@/components/hr/EmployeeDocumentsPanel";
 import { useToast } from "@/hooks/use-toast";
 import {
   fetchMyProfile,
@@ -362,6 +364,9 @@ export default function MyProfile() {
           </TabsTrigger>
           <TabsTrigger value="payroll" className="text-xs">
             Payroll
+          </TabsTrigger>
+          <TabsTrigger value="documents" className="text-xs">
+            Documents
           </TabsTrigger>
         </TabsList>
 
