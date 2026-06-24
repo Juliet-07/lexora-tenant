@@ -954,6 +954,13 @@ export default function MyProfile() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        <TabsContent value="documents" className="space-y-4">
+          <EmployeeDocumentsPanel
+            uploadedBy="employee"
+            uploadedByName={`${profile.firstName} ${profile.lastName}`}
+          />
+        </TabsContent>
       </Tabs>
 
       <Sheet
