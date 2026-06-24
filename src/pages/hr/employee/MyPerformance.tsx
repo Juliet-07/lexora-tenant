@@ -114,6 +114,7 @@ export default function MyPerformance() {
         <TabsList>
           <TabsTrigger value="current">Current Review</TabsTrigger>
           <TabsTrigger value="history">Past Reviews</TabsTrigger>
+          <TabsTrigger value="policies">Policies</TabsTrigger>
         </TabsList>
 
         <TabsContent value="current" className="space-y-3">
@@ -142,6 +143,10 @@ export default function MyPerformance() {
               <PastReviewCard key={r._id} reviewId={r._id} summary={r} />
             ))
           )}
+        </TabsContent>
+
+        <TabsContent value="policies" className="space-y-3">
+          <PerformancePoliciesPanel readOnly />
         </TabsContent>
       </Tabs>
     </div>
