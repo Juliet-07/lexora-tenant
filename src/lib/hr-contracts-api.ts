@@ -134,6 +134,8 @@ export interface Contract {
   status: ContractStatus;
   interactions: ContractInteraction[];
   signature: SignatureRecord | null;
+  tenantSignature?: TenantSignatureRecord | null;
+  signedCopySentAt?: string | null;
   declinedAt: string | null;
   declineReason: string | null;
   createdAt: string;
