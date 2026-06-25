@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -59,7 +59,12 @@ import {
   CheckCircle2,
   XCircle,
   FileText,
+  Mail,
+  Hourglass,
+  ThumbsUp,
+  ThumbsDown,
 } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import {
   fetchLocations,
@@ -69,8 +74,6 @@ import {
   applyRwandaPayrollPreset,
   deletePayrollPolicy,
   fetchAllLoans,
-  createLoan,
-  updateLoan,
   deleteLoan,
   fetchAllPayrollRuns,
   fetchPayrollRunDetail,
@@ -79,9 +82,13 @@ import {
   processPayrollRun,
   markPayrollRunPaid,
   discardPayrollRun,
-  
+  downloadPayslipPdf,
+  emailPayslip,
+  emailAllPayslipsInRun,
   fetchAllEmployeesPeriodStatus,
   fetchLiveFxRate,
+  fetchPendingLoans,
+  decideLoanRequest,
   type PayrollPolicy,
   type PayrollDeductionRule,
   type EmployeeLoan,
@@ -90,6 +97,9 @@ import {
   type HrLocation,
   type EmployeePeriodStatus,
   type ManualExchangeRate,
+  fetchPayslipTemplate,
+  updatePayslipTemplate,
+  uploadPayslipLogo,
 } from "@/lib/hr-api";
 
 const CURRENCIES = [
@@ -160,26 +170,19 @@ export default function HRPayroll() {
   const queryClient = useQueryClient();
   const [openRun, setOpenRun] = useState<PayrollRun | null>(null);
   const [openPayslip, setOpenPayslip] = useState<Payslip | null>(null);
+  const [openPayslipRunStatus, setOpenPayslipRunStatus] = useState<
+    PayrollRun["status"] | null
+  >(null);
   const [openLoan, setOpenLoan] = useState<EmployeeLoan | null>(null);
   const [editingPolicy, setEditingPolicy] = useState<PayrollPolicy | null>(
     null,
   );
-
+  const [decidingLoan, setDecidingLoan] = useState<EmployeeLoan | null>(null);
   const [newRunOpen, setNewRunOpen] = useState(false);
-  const [newLoanOpen, setNewLoanOpen] = useState(false);
-  const [deleteLoanTarget, setDeleteLoanTarget] = useState<EmployeeLoan | null>(
-    null,
-  );
   const [discardRunTarget, setDiscardRunTarget] = useState<PayrollRun | null>(
     null,
   );
-  const [period, setPeriod] = useState(PERIOD_OPTIONS[2].label); // index 2 = current month (i=0 offset)
-
-  // ── Manual exchange rates for the New Run dialog. Locked-per-run
-  // is the default model (matches real practice — one fixed rate set
-  // per pay period, not refetched live mid-calculation). The "fetch
-  // live rate" button below only PRE-FILLS a row's rate; it never
-  // applies anything automatically. ──
+  const [period, setPeriod] = useState(PERIOD_OPTIONS[2].label);
   const [manualRates, setManualRates] = useState<ManualExchangeRate[]>([]);
   const [fetchingRateFor, setFetchingRateFor] = useState<string | null>(null);
 
@@ -196,6 +199,11 @@ export default function HRPayroll() {
   const { data: policies = [], isLoading: policiesLoading } = useQuery({
     queryKey: ["payroll-policies"],
     queryFn: fetchAllPayrollPolicies,
+  });
+
+  const { data: pendingLoans = [] } = useQuery({
+    queryKey: ["payroll-loans-pending"],
+    queryFn: fetchPendingLoans,
   });
 
   const { data: loans = [], isLoading: loansLoading } = useQuery({
@@ -221,7 +229,6 @@ export default function HRPayroll() {
   });
 
   // payslip HTML render endpoint no longer needed — we render natively
-
 
   const totalLoanBook = loans.reduce((acc, l) => acc + l.principalAmount, 0);
   const activeBalance = loans
@@ -258,32 +265,21 @@ export default function HRPayroll() {
     },
   });
 
-  const createLoanMutation = useMutation({
-    mutationFn: createLoan,
-    onSuccess: () => {
+  const decideLoanMutation = useMutation({
+    mutationFn: ({ id, dto }: { id: string; dto: any }) =>
+      decideLoanRequest(id, dto),
+    onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["payroll-loans"] });
-      setNewLoanOpen(false);
-      toast.success("Loan created.");
+      queryClient.invalidateQueries({ queryKey: ["payroll-loans-pending"] });
+      setDecidingLoan(null);
+      toast.success(
+        variables.dto.decision === "approved"
+          ? "Loan approved."
+          : "Loan rejected.",
+      );
     },
     onError: (err: any) =>
-      toast.error(err?.response?.data?.message ?? "Failed to create loan"),
-  });
-
-  const updateLoanMutation = useMutation({
-    mutationFn: ({ id, dto }: { id: string; dto: any }) => updateLoan(id, dto),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["payroll-loans"] });
-      toast.success("Loan updated.");
-    },
-  });
-
-  const deleteLoanMutation = useMutation({
-    mutationFn: deleteLoan,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["payroll-loans"] });
-      setDeleteLoanTarget(null);
-      toast.success("Loan deleted.");
-    },
+      toast.error(err?.response?.data?.message ?? "Failed to record decision"),
   });
 
   const createRunMutation = useMutation({
@@ -317,6 +313,7 @@ export default function HRPayroll() {
       queryClient.invalidateQueries({ queryKey: ["payroll-runs"] });
       queryClient.invalidateQueries({ queryKey: ["payroll-run-detail"] });
       queryClient.invalidateQueries({ queryKey: ["payroll-loans"] });
+      queryClient.invalidateQueries({ queryKey: ["payroll-period-status"] });
       toast.success("Run processed. Loan deductions committed.");
     },
     onError: (err: any) =>
@@ -327,10 +324,11 @@ export default function HRPayroll() {
     mutationFn: markPayrollRunPaid,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["payroll-runs"] });
+      queryClient.invalidateQueries({ queryKey: ["payroll-run-detail"] });
+      queryClient.invalidateQueries({ queryKey: ["payroll-period-status"] });
       toast.success("Marked as paid.");
     },
   });
-
   const discardRunMutation = useMutation({
     mutationFn: discardPayrollRun,
     onSuccess: () => {
@@ -365,21 +363,36 @@ export default function HRPayroll() {
       toast.error(err?.response?.data?.message ?? "Failed to run payroll"),
   });
 
+  const emailPayslipMutation = useMutation({
+    mutationFn: emailPayslip,
+    onSuccess: (result) => {
+      toast.success(`Payslip emailed to ${result.sentTo}.`);
+    },
+    onError: (err: any) =>
+      toast.error(err?.response?.data?.message ?? "Failed to email payslip"),
+  });
+
+  const emailAllMutation = useMutation({
+    mutationFn: emailAllPayslipsInRun,
+    onSuccess: (result) => {
+      if (result.failed.length === 0) {
+        toast.success(`Emailed ${result.sent} payslip(s).`);
+      } else {
+        toast.error(
+          `Emailed ${result.sent}, but ${result.failed.length} failed (${result.failed.map((f) => f.employeeName).join(", ")}).`,
+        );
+      }
+    },
+    onError: (err: any) =>
+      toast.error(err?.response?.data?.message ?? "Failed to email payslips"),
+  });
+
   const [runForm, setRunForm] = useState({
     periodLabel: "",
     periodStart: "",
     periodEnd: "",
     locationId: "all",
     runCurrency: "RWF",
-  });
-
-  const [loanForm, setLoanForm] = useState({
-    employeeId: "",
-    label: "",
-    principalAmount: "",
-    currency: "RWF",
-    monthlyInstallment: "",
-    note: "",
   });
 
   // Fetches a live rate and pre-fills the row's input — does NOT
@@ -431,6 +444,9 @@ export default function HRPayroll() {
           </TabsTrigger>
           <TabsTrigger value="policy">
             <Settings2 className="h-3.5 w-3.5 mr-1.5" /> Policies
+          </TabsTrigger>
+          <TabsTrigger value="branding">
+            <Sparkles className="h-3.5 w-3.5 mr-1.5" /> Branding
           </TabsTrigger>
         </TabsList>
 
@@ -612,7 +628,10 @@ export default function HRPayroll() {
                               const slip = detail.payslips.find(
                                 (p) => p._id === ps.payslipId,
                               );
-                              if (slip) setOpenPayslip(slip);
+                              if (slip) {
+                                setOpenPayslip(slip);
+                                setOpenPayslipRunStatus(detail.run.status);
+                              }
                             }}
                           >
                             <Eye className="h-3 w-3" />
@@ -723,68 +742,122 @@ export default function HRPayroll() {
               <CardContent className="p-4 flex items-center justify-between">
                 <div>
                   <p className="text-xs text-muted-foreground uppercase">
-                    Active Loans
+                    Pending Requests
                   </p>
-                  <p className="text-xl font-bold">{activeCount}</p>
+                  <p className="text-xl font-bold">{pendingLoans.length}</p>
                 </div>
                 <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center">
-                  <Clock className="h-5 w-5 text-white" />
+                  <Hourglass className="h-5 w-5 text-white" />
                 </div>
               </CardContent>
             </Card>
           </div>
 
-          <Card>
-            <CardHeader className="flex-row items-center justify-between space-y-0">
-              <CardTitle className="text-base">Employee Loans</CardTitle>
-              <Button size="sm" onClick={() => setNewLoanOpen(true)}>
-                <Plus className="h-3.5 w-3.5 mr-1" /> New Loan
-              </Button>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {loansLoading ? (
-                <LoadingRow label="Loading loans…" />
-              ) : loans.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-8">
-                  No loans on record.
-                </p>
-              ) : (
-                loans.map((l) => {
+          {pendingLoans.length > 0 && (
+            <Card className="border-warning/30">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Hourglass className="h-4 w-4 text-warning" /> Awaiting Your
+                  Decision
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {pendingLoans.map((l) => {
                   const emp =
                     typeof l.employeeId === "object" ? l.employeeId : null;
                   return (
                     <div
                       key={l._id}
-                      className="flex items-center justify-between border-b pb-2 last:border-b-0 cursor-pointer hover:bg-muted/30 px-2 rounded"
-                      onClick={() => setOpenLoan(l)}
+                      className="flex items-center justify-between border rounded-lg p-3 cursor-pointer hover:bg-muted/30"
+                      onClick={() => setDecidingLoan(l)}
                     >
                       <div>
-                        <p className="text-sm font-medium flex items-center gap-2">
+                        <p className="text-sm font-medium">
                           {emp
                             ? `${emp.firstName} ${emp.lastName}`
                             : "Employee"}
-                          <Badge
-                            variant="outline"
-                            className={`${loanStatusTone(l.status)} text-[10px]`}
-                          >
-                            {l.status.replace("_", " ")}
-                          </Badge>
                         </p>
                         <p className="text-xs text-muted-foreground">
                           {l.label}
                         </p>
+                        {l.requestedReason && (
+                          <p className="text-xs text-muted-foreground italic mt-1">
+                            "{l.requestedReason}"
+                          </p>
+                        )}
                       </div>
-                      <div className="text-right">
+                      <div className="text-right shrink-0">
                         <p className="text-sm font-semibold">
-                          {fmt(l.outstandingBalance, l.currency)}
+                          {fmt(l.principalAmount, l.currency)}
                         </p>
-                        <p className="text-[10px] text-muted-foreground">
-                          {fmt(l.monthlyInstallment, l.currency)}/mo
-                        </p>
+                        <Button
+                          size="sm"
+                          className="mt-1"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDecidingLoan(l);
+                          }}
+                        >
+                          Review
+                        </Button>
                       </div>
                     </div>
                   );
-                })
+                })}
+              </CardContent>
+            </Card>
+          )}
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">All Loans</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {loansLoading ? (
+                <LoadingRow label="Loading loans…" />
+              ) : loans.filter((l) => l.status !== "pending").length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-8">
+                  No decided loans yet.
+                </p>
+              ) : (
+                loans
+                  .filter((l) => l.status !== "pending")
+                  .map((l) => {
+                    const emp =
+                      typeof l.employeeId === "object" ? l.employeeId : null;
+                    return (
+                      <div
+                        key={l._id}
+                        className="flex items-center justify-between border-b pb-2 last:border-b-0 cursor-pointer hover:bg-muted/30 px-2 rounded"
+                        onClick={() => setOpenLoan(l)}
+                      >
+                        <div>
+                          <p className="text-sm font-medium flex items-center gap-2">
+                            {emp
+                              ? `${emp.firstName} ${emp.lastName}`
+                              : "Employee"}
+                            <Badge
+                              variant="outline"
+                              className={`${loanStatusTone(l.status)} text-[10px]`}
+                            >
+                              {l.status.replace("_", " ")}
+                            </Badge>
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {l.label}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm font-semibold">
+                            {fmt(l.outstandingBalance, l.currency)}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground">
+                            {fmt(l.monthlyInstallment, l.currency)}/mo
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })
               )}
             </CardContent>
           </Card>
@@ -906,6 +979,10 @@ export default function HRPayroll() {
               </Card>
             ))
           )}
+        </TabsContent>
+
+        <TabsContent value="branding" className="space-y-4">
+          <PayslipBrandingPanel />
         </TabsContent>
       </Tabs>
 
@@ -1147,133 +1224,6 @@ export default function HRPayroll() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={newLoanOpen} onOpenChange={setNewLoanOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>New Loan</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3 py-2">
-            <div className="space-y-1">
-              <Label>Employee</Label>
-              <Select
-                value={loanForm.employeeId}
-                onValueChange={(v) =>
-                  setLoanForm((f) => ({ ...f, employeeId: v }))
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select employee" />
-                </SelectTrigger>
-                <SelectContent>
-                  {employees.map((e) => (
-                    <SelectItem key={e._id} value={e._id}>
-                      {e.firstName} {e.lastName}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <Label>Label</Label>
-              <Input
-                placeholder="e.g. Salary Advance — June 2026"
-                value={loanForm.label}
-                onChange={(e) =>
-                  setLoanForm((f) => ({ ...f, label: e.target.value }))
-                }
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label>Principal amount</Label>
-                <Input
-                  type="number"
-                  value={loanForm.principalAmount}
-                  onChange={(e) =>
-                    setLoanForm((f) => ({
-                      ...f,
-                      principalAmount: e.target.value,
-                    }))
-                  }
-                />
-              </div>
-              <div className="space-y-1">
-                <Label>Currency</Label>
-                <Select
-                  value={loanForm.currency}
-                  onValueChange={(v) =>
-                    setLoanForm((f) => ({ ...f, currency: v }))
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {CURRENCIES.map((c) => (
-                      <SelectItem key={c} value={c}>
-                        {c}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="space-y-1">
-              <Label>Monthly installment</Label>
-              <Input
-                type="number"
-                value={loanForm.monthlyInstallment}
-                onChange={(e) =>
-                  setLoanForm((f) => ({
-                    ...f,
-                    monthlyInstallment: e.target.value,
-                  }))
-                }
-              />
-            </div>
-            <div className="space-y-1">
-              <Label>Note (optional)</Label>
-              <Input
-                value={loanForm.note}
-                onChange={(e) =>
-                  setLoanForm((f) => ({ ...f, note: e.target.value }))
-                }
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setNewLoanOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              disabled={
-                !loanForm.employeeId ||
-                !loanForm.label ||
-                !loanForm.principalAmount ||
-                !loanForm.monthlyInstallment ||
-                createLoanMutation.isPending
-              }
-              onClick={() =>
-                createLoanMutation.mutate({
-                  employeeId: loanForm.employeeId,
-                  label: loanForm.label,
-                  principalAmount: Number(loanForm.principalAmount),
-                  currency: loanForm.currency,
-                  monthlyInstallment: Number(loanForm.monthlyInstallment),
-                  note: loanForm.note || undefined,
-                })
-              }
-            >
-              {createLoanMutation.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                "Create Loan"
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       <Sheet open={!!openLoan} onOpenChange={(o) => !o && setOpenLoan(null)}>
         <SheetContent className="w-full sm:max-w-md">
           {openLoan && (
@@ -1333,48 +1283,6 @@ export default function HRPayroll() {
                       ))}
                     </div>
                   </div>
-                )}
-
-                {openLoan.status === "active" && (
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      className="flex-1"
-                      onClick={() => {
-                        updateLoanMutation.mutate({
-                          id: openLoan._id,
-                          dto: { status: "paused" },
-                        });
-                        setOpenLoan(null);
-                      }}
-                    >
-                      Pause
-                    </Button>
-                    <Button
-                      variant="destructive"
-                      className="flex-1"
-                      onClick={() => {
-                        setDeleteLoanTarget(openLoan);
-                        setOpenLoan(null);
-                      }}
-                    >
-                      <Trash2 className="h-4 w-4 mr-2" /> Delete
-                    </Button>
-                  </div>
-                )}
-                {openLoan.status === "paused" && (
-                  <Button
-                    className="w-full"
-                    onClick={() => {
-                      updateLoanMutation.mutate({
-                        id: openLoan._id,
-                        dto: { status: "active" },
-                      });
-                      setOpenLoan(null);
-                    }}
-                  >
-                    Resume
-                  </Button>
                 )}
               </div>
             </>
@@ -1437,6 +1345,22 @@ export default function HRPayroll() {
                         <BadgeCheck className="h-3.5 w-3.5 mr-1.5" /> Mark Paid
                       </Button>
                     )}
+                    {(openRun.status === "processed" ||
+                      openRun.status === "paid") && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={emailAllMutation.isPending}
+                        onClick={() => emailAllMutation.mutate(openRun._id)}
+                      >
+                        {emailAllMutation.isPending ? (
+                          <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                        ) : (
+                          <Mail className="h-3.5 w-3.5 mr-1.5" />
+                        )}
+                        Email All Payslips
+                      </Button>
+                    )}
                   </div>
                 </div>
 
@@ -1473,7 +1397,10 @@ export default function HRPayroll() {
                         <div
                           key={p._id}
                           className="flex items-center justify-between border rounded-md p-2.5 cursor-pointer hover:bg-muted/30"
-                          onClick={() => setOpenPayslip(p)}
+                          onClick={() => {
+                            setOpenPayslip(p);
+                            setOpenPayslipRunStatus(openRun!.status);
+                          }}
                         >
                           <div>
                             <p className="text-sm font-medium">
@@ -1504,13 +1431,24 @@ export default function HRPayroll() {
 
       <Sheet
         open={!!openPayslip}
-        onOpenChange={(o) => !o && setOpenPayslip(null)}
+        onOpenChange={(o) => {
+          if (!o) {
+            setOpenPayslip(null);
+            setOpenPayslipRunStatus(null);
+          }
+        }}
       >
         <SheetContent className="w-full sm:max-w-3xl overflow-y-auto p-0">
           {openPayslip && (
             <PayslipView
               slip={openPayslip}
-              onDownload={() => downloadPayslipPdf(openPayslip)}
+              onDownload={() => downloadPayslipPdf(openPayslip._id)}
+              onEmail={() => emailPayslipMutation.mutate(openPayslip._id)}
+              emailing={emailPayslipMutation.isPending}
+              canEmail={
+                openPayslipRunStatus === "processed" ||
+                openPayslipRunStatus === "paid"
+              }
             />
           )}
         </SheetContent>
@@ -1526,32 +1464,16 @@ export default function HRPayroll() {
         />
       )}
 
-      <AlertDialog
-        open={!!deleteLoanTarget}
-        onOpenChange={(o) => !o && setDeleteLoanTarget(null)}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete this loan?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This cannot be undone. Past deduction history on payslips already
-              issued is unaffected.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive hover:bg-destructive/90"
-              onClick={() =>
-                deleteLoanTarget &&
-                deleteLoanMutation.mutate(deleteLoanTarget._id)
-              }
-            >
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {decidingLoan && (
+        <DecideLoanDialog
+          loan={decidingLoan}
+          onClose={() => setDecidingLoan(null)}
+          onDecide={(dto) =>
+            decideLoanMutation.mutate({ id: decidingLoan._id, dto })
+          }
+          deciding={decideLoanMutation.isPending}
+        />
+      )}
 
       <AlertDialog
         open={!!discardRunTarget}
@@ -1919,6 +1841,102 @@ function EmptyCard({ text }: { text: string }) {
   );
 }
 
+function DecideLoanDialog({
+  loan,
+  onClose,
+  onDecide,
+  deciding,
+}: {
+  loan: EmployeeLoan;
+  onClose: () => void;
+  onDecide: (dto: {
+    decision: "approved" | "rejected";
+    monthlyInstallment?: number;
+    rejectionReason?: string;
+  }) => void;
+  deciding: boolean;
+}) {
+  const [installment, setInstallment] = useState("");
+  const [rejectionReason, setRejectionReason] = useState("");
+  const emp = typeof loan.employeeId === "object" ? loan.employeeId : null;
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Loan Request</DialogTitle>
+          <DialogDescription>
+            {emp ? `${emp.firstName} ${emp.lastName}` : "Employee"} requested{" "}
+            {fmt(loan.principalAmount, loan.currency)}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3 py-2">
+          <div className="border rounded-md p-3 bg-muted/30 text-sm space-y-1">
+            <p>
+              <span className="text-muted-foreground">Label:</span> {loan.label}
+            </p>
+            <p>
+              <span className="text-muted-foreground">Amount:</span>{" "}
+              {fmt(loan.principalAmount, loan.currency)}
+            </p>
+            {loan.requestedReason && (
+              <p>
+                <span className="text-muted-foreground">Reason:</span>{" "}
+                {loan.requestedReason}
+              </p>
+            )}
+          </div>
+
+          <div className="space-y-1">
+            <Label>Monthly installment (required to approve)</Label>
+            <Input
+              type="number"
+              placeholder={`Up to ${loan.principalAmount}`}
+              value={installment}
+              onChange={(e) => setInstallment(e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-1">
+            <Label>Rejection reason (required to reject)</Label>
+            <Textarea
+              rows={2}
+              placeholder="Why this request can't be approved right now…"
+              value={rejectionReason}
+              onChange={(e) => setRejectionReason(e.target.value)}
+            />
+          </div>
+        </div>
+        <DialogFooter className="gap-2">
+          <Button
+            variant="outline"
+            className="border-destructive/30 text-destructive hover:bg-destructive/10"
+            disabled={deciding || !rejectionReason.trim()}
+            onClick={() => onDecide({ decision: "rejected", rejectionReason })}
+          >
+            <ThumbsDown className="h-3.5 w-3.5 mr-1.5" /> Reject
+          </Button>
+          <Button
+            disabled={deciding || !installment || Number(installment) <= 0}
+            onClick={() =>
+              onDecide({
+                decision: "approved",
+                monthlyInstallment: Number(installment),
+              })
+            }
+          >
+            {deciding ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <ThumbsUp className="h-3.5 w-3.5 mr-1.5" />
+            )}
+            Approve
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
 // ─────────────────────────────────────────────────────────────
 // PAYSLIP — native rendering + print-to-PDF
 // ─────────────────────────────────────────────────────────────
@@ -1926,9 +1944,15 @@ function EmptyCard({ text }: { text: string }) {
 function PayslipView({
   slip,
   onDownload,
+  onEmail,
+  emailing,
+  canEmail,
 }: {
   slip: Payslip;
   onDownload: () => void;
+  onEmail: () => void;
+  emailing: boolean;
+  canEmail: boolean;
 }) {
   const fx = slip.exchangeRateApplied;
   const src = slip.sourceCurrency;
@@ -1943,12 +1967,34 @@ function PayslipView({
         <h3 className="font-semibold flex items-center gap-2">
           <FileText className="h-4 w-4" /> Payslip
         </h3>
-        <Button size="sm" variant="outline" onClick={onDownload}>
+        {/* <Button size="sm" variant="outline" onClick={onDownload}>
           <Download className="h-3.5 w-3.5 mr-1.5" /> Download PDF
+        </Button> */}
+        <Button
+          className="mx-6"
+          size="sm"
+          variant="outline"
+          disabled={emailing || !canEmail}
+          title={
+            canEmail
+              ? undefined
+              : "This payslip must be processed before it can be emailed."
+          }
+          onClick={onEmail}
+        >
+          {emailing ? (
+            <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+          ) : (
+            <Mail className="h-3.5 w-3.5 mr-1.5" />
+          )}
+          Email to Employee
         </Button>
       </div>
 
-      <div id="payslip-print-area" className="p-6 space-y-5 bg-white text-foreground">
+      <div
+        id="payslip-print-area"
+        className="p-6 space-y-5 bg-white text-foreground"
+      >
         <div className="text-center border-b pb-4">
           <h2 className="text-lg font-bold tracking-wide">
             EMPLOYEE PAYSLIP — {slip.periodLabel}
@@ -1976,9 +2022,18 @@ function PayslipView({
         </div>
 
         <PaySection title="EARNINGS" currency={slip.payCurrency}>
-          <PayRow label="Basic Salary" amount={slip.basicSalary} currency={slip.payCurrency} />
+          <PayRow
+            label="Basic Salary"
+            amount={slip.basicSalary}
+            currency={slip.payCurrency}
+          />
           {slip.allowances.map((a) => (
-            <PayRow key={a.key} label={a.label} amount={a.amount} currency={slip.payCurrency} />
+            <PayRow
+              key={a.key}
+              label={a.label}
+              amount={a.amount}
+              currency={slip.payCurrency}
+            />
           ))}
           {showFx && (
             <PayRow
@@ -1988,7 +2043,12 @@ function PayslipView({
               muted
             />
           )}
-          <PayRow label="Total Earnings" amount={slip.grossSalary} currency={slip.payCurrency} bold />
+          <PayRow
+            label="Total Earnings"
+            amount={slip.grossSalary}
+            currency={slip.payCurrency}
+            bold
+          />
         </PaySection>
 
         <PaySection title="DEDUCTIONS" currency={slip.payCurrency}>
@@ -2026,7 +2086,9 @@ function PayslipView({
 
         <div className="border-2 border-primary/30 rounded-lg p-4 bg-primary/5">
           <div className="flex items-center justify-between">
-            <span className="text-sm font-bold uppercase tracking-wide">Net Pay</span>
+            <span className="text-sm font-bold uppercase tracking-wide">
+              Net Pay
+            </span>
             <span className="text-2xl font-bold text-success">
               {fmt(slip.netSalary, slip.payCurrency)}
             </span>
@@ -2034,13 +2096,18 @@ function PayslipView({
           {showFx && (
             <div className="flex items-center justify-between mt-1 text-xs text-muted-foreground">
               <span>{src} equivalent</span>
-              <span className="font-mono">{fmt(inSrc(slip.netSalary), src!)}</span>
+              <span className="font-mono">
+                {fmt(inSrc(slip.netSalary), src!)}
+              </span>
             </div>
           )}
         </div>
 
         {employerLines.length > 0 && (
-          <PaySection title="EMPLOYER CONTRIBUTIONS" currency={slip.payCurrency}>
+          <PaySection
+            title="EMPLOYER CONTRIBUTIONS"
+            currency={slip.payCurrency}
+          >
             {employerLines.map((d) => (
               <PayRow
                 key={d.key}
@@ -2065,7 +2132,9 @@ function PayslipView({
         )}
 
         {slip.notes && (
-          <p className="text-xs text-muted-foreground border-t pt-3">{slip.notes}</p>
+          <p className="text-xs text-muted-foreground border-t pt-3">
+            {slip.notes}
+          </p>
         )}
       </div>
     </div>
@@ -2075,7 +2144,9 @@ function PayslipView({
 function Field({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+        {label}
+      </p>
       <p className="font-medium">{value}</p>
     </div>
   );
@@ -2133,25 +2204,231 @@ function PayRow({
   );
 }
 
-function downloadPayslipPdf(slip: Payslip) {
-  const node = document.getElementById("payslip-print-area");
-  if (!node) return;
-  const w = window.open("", "_blank", "width=900,height=1200");
-  if (!w) {
-    toast.error("Pop-up blocked. Allow pop-ups to download the payslip.");
-    return;
+function PayslipBrandingPanel() {
+  const queryClient = useQueryClient();
+  const logoInputRef = useRef<HTMLInputElement>(null);
+
+  const { data: template, isLoading } = useQuery({
+    queryKey: ["payslip-template"],
+    queryFn: fetchPayslipTemplate,
+  });
+
+  const [draft, setDraft] = useState(() => {
+    const cached = queryClient.getQueryData<typeof template>([
+      "payslip-template",
+    ]);
+    if (!cached) return null;
+    return {
+      companyName: cached.companyName ?? "",
+      companyAddress: cached.companyAddress ?? "",
+      accentColor: cached.accentColor,
+      footerNote: cached.footerNote ?? "",
+      showEmployerContributions: cached.showEmployerContributions,
+      showLoanDeductions: cached.showLoanDeductions,
+      showYearToDateSummary: cached.showYearToDateSummary,
+    };
+  });
+
+  const seeded = useRef(!!draft);
+  if (!seeded.current && template) {
+    seeded.current = true;
+    setDraft({
+      companyName: template.companyName ?? "",
+      companyAddress: template.companyAddress ?? "",
+      accentColor: template.accentColor,
+      footerNote: template.footerNote ?? "",
+      showEmployerContributions: template.showEmployerContributions,
+      showLoanDeductions: template.showLoanDeductions,
+      showYearToDateSummary: template.showYearToDateSummary,
+    });
   }
-  const styles = Array.from(
-    document.querySelectorAll('style, link[rel="stylesheet"]'),
-  )
-    .map((el) => el.outerHTML)
-    .join("\n");
-  w.document.write(`<!doctype html><html><head><title>Payslip — ${slip.employeeName} — ${slip.periodLabel}</title>${styles}
-<style>body{padding:24px;font-family:system-ui,sans-serif;background:#fff;color:#111}@media print{@page{size:A4;margin:14mm}}</style>
-</head><body>${node.outerHTML}</body></html>`);
-  w.document.close();
-  w.focus();
-  setTimeout(() => {
-    w.print();
-  }, 400);
+
+  const saveMutation = useMutation({
+    mutationFn: updatePayslipTemplate,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["payslip-template"] });
+      toast.success("Payslip branding saved.");
+    },
+    onError: (err: any) =>
+      toast.error(err?.response?.data?.message ?? "Failed to save"),
+  });
+
+  const logoMutation = useMutation({
+    mutationFn: uploadPayslipLogo,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["payslip-template"] });
+      toast.success("Logo updated.");
+    },
+    onError: (err: any) =>
+      toast.error(err?.response?.data?.message ?? "Failed to upload logo"),
+  });
+
+  if (isLoading || !draft) {
+    return <LoadingRow label="Loading branding settings…" />;
+  }
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base">Payslip Branding</CardTitle>
+        {/* <p className="text-xs text-muted-foreground">
+          Customize how payslips look when emailed or downloaded — your logo,
+          colors, and footer text. The footer always shows "Generated by Lexora"
+          unless you set your own note below.
+        </p> */}
+        <p className="text-xs text-muted-foreground">
+          Customize how payslips look when emailed or downloaded — your company
+          name, logo and colors. The footer always shows "Generated by Lexora"
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="space-y-2">
+          <Label>Logo</Label>
+          <div className="flex items-center gap-4">
+            {template?.logoUrl ? (
+              <img
+                src={template.logoUrl}
+                alt="Logo"
+                className="h-14 object-contain border rounded p-1"
+              />
+            ) : (
+              <div className="h-14 w-28 border rounded flex items-center justify-center text-xs text-muted-foreground">
+                No logo
+              </div>
+            )}
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={logoMutation.isPending}
+              onClick={() => logoInputRef.current?.click()}
+            >
+              {logoMutation.isPending ? (
+                <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+              ) : null}
+              {template?.logoUrl ? "Replace Logo" : "Upload Logo"}
+            </Button>
+            <input
+              ref={logoInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/jpg,image/svg+xml"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) logoMutation.mutate(file);
+                e.target.value = "";
+              }}
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            PNG, JPG, or SVG. Max 2MB.
+          </p>
+        </div>
+
+        <div className="grid sm:grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <Label>Company name</Label>
+            <Input
+              value={draft.companyName}
+              onChange={(e) =>
+                setDraft((d) => ({ ...d!, companyName: e.target.value }))
+              }
+              placeholder="Shown on every payslip"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label>Accent color</Label>
+            <div className="flex items-center gap-2">
+              <input
+                type="color"
+                value={draft.accentColor}
+                onChange={(e) =>
+                  setDraft((d) => ({ ...d!, accentColor: e.target.value }))
+                }
+                className="h-9 w-12 rounded border cursor-pointer"
+              />
+              <Input
+                value={draft.accentColor}
+                onChange={(e) =>
+                  setDraft((d) => ({ ...d!, accentColor: e.target.value }))
+                }
+                className="font-mono"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-1">
+          <Label>Company address (optional)</Label>
+          <Input
+            value={draft.companyAddress}
+            onChange={(e) =>
+              setDraft((d) => ({ ...d!, companyAddress: e.target.value }))
+            }
+          />
+        </div>
+
+        {/* <div className="space-y-1">
+          <Label>Footer note</Label>
+          <Input
+            value={draft.footerNote}
+            onChange={(e) =>
+              setDraft((d) => ({ ...d!, footerNote: e.target.value }))
+            }
+            placeholder='Leave empty to show "Generated by Lexora"'
+          />
+        </div> */}
+
+        <div className="space-y-2 pt-2 border-t">
+          <label className="flex items-center justify-between text-sm">
+            <span>Show employer contributions section</span>
+            <Switch
+              checked={draft.showEmployerContributions}
+              onCheckedChange={(v) =>
+                setDraft((d) => ({ ...d!, showEmployerContributions: v }))
+              }
+            />
+          </label>
+          <label className="flex items-center justify-between text-sm">
+            <span>Show loan deductions section</span>
+            <Switch
+              checked={draft.showLoanDeductions}
+              onCheckedChange={(v) =>
+                setDraft((d) => ({ ...d!, showLoanDeductions: v }))
+              }
+            />
+          </label>
+          <label className="flex items-center justify-between text-sm">
+            <span>Show year-to-date summary</span>
+            <Switch
+              checked={draft.showYearToDateSummary}
+              onCheckedChange={(v) =>
+                setDraft((d) => ({ ...d!, showYearToDateSummary: v }))
+              }
+            />
+          </label>
+        </div>
+
+        <Button
+          className="bg-gradient-to-r from-primary to-secondary"
+          disabled={saveMutation.isPending}
+          onClick={() =>
+            saveMutation.mutate({
+              companyName: draft.companyName || undefined,
+              companyAddress: draft.companyAddress || undefined,
+              accentColor: draft.accentColor,
+              footerNote: draft.footerNote || undefined,
+              showEmployerContributions: draft.showEmployerContributions,
+              showLoanDeductions: draft.showLoanDeductions,
+              showYearToDateSummary: draft.showYearToDateSummary,
+            })
+          }
+        >
+          {saveMutation.isPending ? (
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          ) : null}
+          Save Branding
+        </Button>
+      </CardContent>
+    </Card>
+  );
 }

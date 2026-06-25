@@ -62,6 +62,7 @@ import type { Employee, HrTeam, HrLocation } from "@/lib/hr-api";
 import {
   fetchEmployeeDetail,
   fetchEmployeeOnboardingRecord,
+  fetchEmployeePayrollSnapshot,
   terminateEmployee,
 } from "@/lib/hr-api";
 import { downloadEmployeeReport } from "@/lib/employeeReport";
@@ -265,6 +266,13 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
   const { data: onboardingTab, isLoading: onboardingLoading } = useQuery({
     queryKey: ["employee-onboarding-record", employee?._id],
     queryFn: () => fetchEmployeeOnboardingRecord(employee!._id),
+    enabled: !!employee,
+    staleTime: 30_000,
+  });
+
+  const { data: payroll, isLoading: payrollLoading } = useQuery({
+    queryKey: ["employee-payroll-snapshot", employee?._id],
+    queryFn: () => fetchEmployeePayrollSnapshot(employee!._id),
     enabled: !!employee,
     staleTime: 30_000,
   });
@@ -803,75 +811,132 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
             </TabsContent>
 
             <TabsContent value="payroll" className="space-y-3">
-              <DummyNotice />
-              <Card>
-                <CardContent className="p-4 space-y-2 text-sm">
-                  <Row
-                    icon={Wallet}
-                    label="Base salary"
-                    value={`${currency(d.payroll.salary)} / month`}
-                  />
-                  <Row
-                    icon={Wallet}
-                    label="YTD gross"
-                    value={currency(d.payroll.ytdGross)}
-                  />
-                  <Row
-                    icon={CalendarDays}
-                    label="Next pay date"
-                    value={new Date(d.payroll.nextPayDate).toLocaleDateString(
-                      "en-GB",
-                      { day: "numeric", month: "long" },
+              {payrollLoading ? (
+                <LoadingBlock />
+              ) : (
+                <>
+                  <Card>
+                    <CardContent className="p-4 space-y-2 text-sm">
+                      <Row
+                        icon={Wallet}
+                        label="Base salary"
+                        value={fmtSalary(emp.salary, emp.salaryCurrency)}
+                      />
+                      <Row
+                        icon={Wallet}
+                        label="YTD gross"
+                        value={
+                          payroll
+                            ? fmtSalary(
+                                payroll.ytdGross,
+                                payroll.latestPayslip?.payCurrency ??
+                                  emp.salaryCurrency,
+                              )
+                            : "—"
+                        }
+                      />
+                      <Row
+                        icon={Wallet}
+                        label="YTD net"
+                        value={
+                          payroll
+                            ? fmtSalary(
+                                payroll.ytdNet,
+                                payroll.latestPayslip?.payCurrency ??
+                                  emp.salaryCurrency,
+                              )
+                            : "—"
+                        }
+                      />
+                      {payroll?.latestPayslip && (
+                        <Row
+                          icon={CalendarDays}
+                          label="Last pay period"
+                          value={payroll.latestPayslip.periodLabel}
+                        />
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  {payroll &&
+                    payroll.loans.filter((l) => l.status === "active").length >
+                      0 && (
+                      <Card>
+                        <CardContent className="p-4">
+                          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2">
+                            Active loans
+                          </p>
+                          {payroll.loans
+                            .filter((l) => l.status === "active")
+                            .map((l) => (
+                              <div
+                                key={l._id}
+                                className="flex justify-between text-sm py-1"
+                              >
+                                <span>{l.label}</span>
+                                <span className="font-mono">
+                                  {fmtSalary(l.outstandingBalance, l.currency)}
+                                </span>
+                              </div>
+                            ))}
+                        </CardContent>
+                      </Card>
                     )}
-                  />
-                  <Row
-                    icon={Wallet}
-                    label="Pension pot"
-                    value={currency(d.payroll.pensionPot)}
-                  />
-                </CardContent>
-              </Card>
-              {d.payroll.loans.length > 0 && (
-                <Card>
-                  <CardContent className="p-4">
-                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2">
-                      Active loans
-                    </p>
-                    {d.payroll.loans.map((l, i) => (
-                      <div
-                        key={i}
-                        className="flex justify-between text-sm py-1"
-                      >
-                        <span>{l.type}</span>
-                        <span className="font-mono">{currency(l.balance)}</span>
-                      </div>
-                    ))}
-                  </CardContent>
-                </Card>
-              )}
-              <Card>
-                <CardContent className="p-4">
-                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2">
-                    Recent payslips
-                  </p>
-                  {d.payroll.payslips.map((p) => (
-                    <div
-                      key={p.period}
-                      className="flex items-center justify-between text-sm py-2 border-b last:border-b-0"
-                    >
-                      <div>
-                        <p className="font-medium">{p.period}</p>
-                        <p className="text-xs text-muted-foreground">
-                          Net {currency(p.net)} · {fmt(p.date)}
+
+                  {payroll &&
+                    payroll.loans.some((l) => l.status === "pending") && (
+                      <Card className="border-warning/30">
+                        <CardContent className="p-4">
+                          <p className="text-xs font-medium uppercase tracking-wide text-warning mb-2">
+                            Pending loan request
+                          </p>
+                          {payroll.loans
+                            .filter((l) => l.status === "pending")
+                            .map((l) => (
+                              <div
+                                key={l._id}
+                                className="flex justify-between text-sm py-1"
+                              >
+                                <span>{l.label}</span>
+                                <span className="font-mono">
+                                  {fmtSalary(l.principalAmount, l.currency)}
+                                </span>
+                              </div>
+                            ))}
+                        </CardContent>
+                      </Card>
+                    )}
+
+                  <Card>
+                    <CardContent className="p-4">
+                      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2">
+                        Most recent payslip
+                      </p>
+                      {!payroll?.latestPayslip ? (
+                        <p className="text-sm text-muted-foreground py-2">
+                          No payslips yet.
                         </p>
-                      </div>
-                      <Button size="sm" variant="ghost">
-                        <Download className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
+                      ) : (
+                        <div className="flex items-center justify-between text-sm py-2">
+                          <div>
+                            <p className="font-medium">
+                              {payroll.latestPayslip.periodLabel}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              Net{" "}
+                              {fmtSalary(
+                                payroll.latestPayslip.netSalary,
+                                payroll.latestPayslip.payCurrency,
+                              )}{" "}
+                              · {fmt(payroll.latestPayslip.periodEnd)}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </>
+              )}
             </TabsContent>
 
             <TabsContent value="disputes" className="space-y-3">

@@ -963,18 +963,24 @@ export const deletePayrollPolicy = async (policyId: string): Promise<void> => {
 
 // ── Employee Loans — Types ──────────────────────────────────────
 
-export type LoanStatus = "active" | "paid_off" | "cancelled" | "paused";
+export type LoanStatus =
+  | "pending"
+  | "active"
+  | "rejected"
+  | "paid_off"
+  | "cancelled"
+  | "paused";
 
 export interface EmployeeLoan {
   _id: string;
   employeeId:
+    | string
     | {
         _id: string;
         firstName: string;
         lastName: string;
-        employeeNumber: string;
-      }
-    | string;
+        employeeNumber?: string;
+      };
   tenantId: string;
   label: string;
   principalAmount: number;
@@ -984,32 +990,19 @@ export interface EmployeeLoan {
   status: LoanStatus;
   startDate: string;
   note: string | null;
+  createdBy: "employee" | "tenant";
+  requestedReason: string | null;
+  decidedBy: string | null;
+  decidedAt: string | null;
+  rejectionReason: string | null;
   deductionHistory: {
     payrollRunId: string;
     amount: number;
     deductedAt: string;
   }[];
-  createdAt: string;
 }
 
-export interface CreateLoanDto {
-  employeeId: string;
-  label: string;
-  principalAmount: number;
-  currency: string;
-  monthlyInstallment: number;
-  startDate?: string;
-  note?: string;
-}
-
-export interface UpdateLoanDto {
-  label?: string;
-  monthlyInstallment?: number;
-  status?: LoanStatus;
-  note?: string;
-}
-
-// ── Employee Loans — API calls ──────────────────────────────────
+// ── Employee Loans — Tenant Side API calls ──────────────────────────────────
 
 export const fetchAllLoans = async (
   status?: LoanStatus,
@@ -1029,21 +1022,43 @@ export const fetchLoansForEmployee = async (
   return Array.isArray(d) ? d : [];
 };
 
-export const createLoan = async (dto: CreateLoanDto): Promise<EmployeeLoan> => {
-  const res = await api.post("/hr/payroll/loans", dto);
-  return res.data?.data ?? res.data;
+export const fetchPendingLoans = async (): Promise<EmployeeLoan[]> => {
+  const res = await api.get("/hr/payroll/loans/pending");
+  const d = res.data?.data ?? res.data;
+  return Array.isArray(d) ? d : [];
 };
 
-export const updateLoan = async (
+export const decideLoanRequest = async (
   loanId: string,
-  dto: UpdateLoanDto,
+  dto: {
+    decision: "approved" | "rejected";
+    monthlyInstallment?: number;
+    rejectionReason?: string;
+  },
 ): Promise<EmployeeLoan> => {
-  const res = await api.patch(`/hr/payroll/loans/${loanId}`, dto);
+  const res = await api.patch(`/hr/payroll/loans/${loanId}/decide`, dto);
   return res.data?.data ?? res.data;
 };
 
 export const deleteLoan = async (loanId: string): Promise<void> => {
   await api.delete(`/hr/payroll/loans/${loanId}`);
+};
+
+// ── Employee Loans — Employee Side API calls ──────────────────────────────────
+export const fetchMyLoans = async (): Promise<EmployeeLoan[]> => {
+  const res = await api.get("/employee/loans");
+  const d = res.data?.data ?? res.data;
+  return Array.isArray(d) ? d : [];
+};
+
+export const requestLoan = async (dto: {
+  label: string;
+  amountRequested: number;
+  currency?: string;
+  reason: string;
+}): Promise<EmployeeLoan> => {
+  const res = await api.post("/employee/loans", dto);
+  return res.data?.data ?? res.data;
 };
 
 // ── Payroll Runs — Types ────────────────────────────────────────
@@ -1223,15 +1238,100 @@ export const fetchPayslipTemplate = async (): Promise<PayslipTemplate> => {
 };
 
 export const updatePayslipTemplate = async (
-  dto: UpdatePayslipTemplateDto,
+  dto: Partial<Omit<PayslipTemplate, "_id" | "logoUrl">>,
 ): Promise<PayslipTemplate> => {
   const res = await api.patch("/hr/payroll/template", dto);
   return res.data?.data ?? res.data;
 };
 
+export const downloadPayslipPdf = async (
+  payslipId: string,
+  filename?: string,
+): Promise<void> => {
+  const res = await api.get(`/hr/payroll/runs/payslip/${payslipId}/pdf`, {
+    responseType: "blob",
+  });
+  const blob = new Blob([res.data], { type: "application/pdf" });
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename ?? `payslip-${payslipId}.pdf`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(url);
+};
+
+export const emailPayslip = async (
+  payslipId: string,
+): Promise<{ sentTo: string; sentAt: string }> => {
+  const res = await api.post(`/hr/payroll/runs/payslip/${payslipId}/email`, {});
+  return res.data?.data ?? res.data;
+};
+
+export const emailAllPayslipsInRun = async (
+  runId: string,
+): Promise<{
+  sent: number;
+  failed: { employeeName: string; reason: string }[];
+}> => {
+  const res = await api.post(`/hr/payroll/runs/${runId}/email-all`, {});
+  return res.data?.data ?? res.data;
+};
+
+export interface PayslipTemplate {
+  _id: string;
+  logoUrl: string | null;
+  accentColor: string;
+  companyName: string | null;
+  companyAddress: string | null;
+  footerNote: string | null;
+  showEmployerContributions: boolean;
+  showLoanDeductions: boolean;
+  showYearToDateSummary: boolean;
+}
+
+export interface MyPayslipSummary {
+  _id: string;
+  periodLabel: string;
+  periodStart: string;
+  periodEnd: string;
+  payCurrency: string;
+  grossSalary: number;
+  netSalary: number;
+  totalEmployeeDeductions: number;
+  basicSalary: number;
+  allowances: { key: string; label: string; amount: number }[];
+  deductions: {
+    key: string;
+    label: string;
+    employeeAmount: number;
+    employerAmount: number;
+    visibleToEmployee: boolean;
+  }[];
+  loanDeductions: {
+    loanId: string;
+    label: string;
+    amountDeducted: number;
+    remainingBalance: number;
+  }[];
+  totalEmployerContributions: number;
+  emailedAt: string | null;
+}
+
+export const uploadPayslipLogo = async (
+  file: File,
+): Promise<PayslipTemplate> => {
+  const formData = new FormData();
+  formData.append("file", file);
+  const res = await api.post("/hr/payroll/template/logo", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return res.data?.data ?? res.data;
+};
 // ── Employee self-service — My Payslips ─────────────────────────
 
-export const fetchMyPayslips = async (): Promise<Payslip[]> => {
+export const fetchMyPayslips = async (): Promise<MyPayslipSummary[]> => {
   const res = await api.get("/employee/payslips");
   const d = res.data?.data ?? res.data;
   return Array.isArray(d) ? d : [];
@@ -1273,6 +1373,54 @@ export const fetchLiveFxRate = async (
   return res.data?.data ?? res.data;
 };
 
+export const downloadMyPayslipPdf = async (
+  payslipId: string,
+): Promise<void> => {
+  const res = await api.get(`/employee/payslips/${payslipId}/pdf`, {
+    responseType: "blob",
+  });
+  const blob = new Blob([res.data], { type: "application/pdf" });
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `payslip-${payslipId}.pdf`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(url);
+};
+
+export interface EmployeePayrollSnapshot {
+  latestPayslip: MyPayslipSummary | null;
+  ytdGross: number;
+  ytdNet: number;
+  loans: EmployeeLoan[];
+}
+
+export const fetchEmployeePayrollSnapshot = async (
+  employeeId: string,
+): Promise<EmployeePayrollSnapshot> => {
+  // Uses GET /hr/payroll/loans/employee/:employeeId (confirmed
+  // real on EmployeeLoanController) plus ONE new backend route for
+  // an employee's payslip history from the TENANT's perspective —
+  // getMyPayslips() only works for the employee's OWN token.
+  const [loansRes, payslipsRes] = await Promise.all([
+    api.get(`/hr/payroll/loans/employee/${employeeId}`),
+    api.get(`/hr/payroll/runs/employee/${employeeId}/payslips`),
+  ]);
+  const loans: EmployeeLoan[] = loansRes.data?.data ?? loansRes.data ?? [];
+  const payslips: MyPayslipSummary[] =
+    payslipsRes.data?.data ?? payslipsRes.data ?? [];
+
+  const sorted = [...payslips].sort(
+    (a, b) => new Date(b.periodEnd).getTime() - new Date(a.periodEnd).getTime(),
+  );
+  const latestPayslip = sorted[0] ?? null;
+  const ytdGross = payslips.reduce((s, p) => s + p.grossSalary, 0);
+  const ytdNet = payslips.reduce((s, p) => s + p.netSalary, 0);
+
+  return { latestPayslip, ytdGross, ytdNet, loans };
+};
 // ═══════════════════════════════════════════════════════════════
 // ADD — gross-up calculator
 // ═══════════════════════════════════════════════════════════════
