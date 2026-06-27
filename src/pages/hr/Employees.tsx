@@ -152,6 +152,8 @@ export default function HREmployees() {
     teamId: "",
     locationId: "",
     employmentType: "full_time",
+    roleLevel: "regular",
+    reportsTo: undefined,
     startDate: new Date().toISOString().slice(0, 10),
     salary: undefined,
     salaryCurrency: "USD",
