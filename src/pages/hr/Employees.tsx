@@ -779,6 +779,79 @@ export default function HREmployees() {
                 </SelectContent>
               </Select>
             </div>
+            {empForm.employmentType === "full_time" && (
+              <div className="space-y-1">
+                <Label>Role Level</Label>
+                <Select
+                  value={empForm.roleLevel ?? "regular"}
+                  onValueChange={(v: any) =>
+                    setEmpForm((f) => ({
+                      ...f,
+                      roleLevel: v,
+                      reportsTo: v === "regular" ? f.reportsTo : undefined,
+                    }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="head_of_department">
+                      Head of Department
+                    </SelectItem>
+                    <SelectItem value="manager">
+                      Manager / Supervisor
+                    </SelectItem>
+                    <SelectItem value="regular">Regular</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            {empForm.employmentType === "full_time" &&
+              empForm.roleLevel === "regular" && (
+                <div className="space-y-1">
+                  <Label>Reports To</Label>
+                  <Select
+                    value={empForm.reportsTo ?? ""}
+                    onValueChange={(v) =>
+                      setEmpForm((f) => ({ ...f, reportsTo: v }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select manager..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {employees.filter(
+                        (e) =>
+                          e.roleLevel === "manager" ||
+                          e.roleLevel === "head_of_department",
+                      ).length === 0 ? (
+                        <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                          No managers available yet
+                        </div>
+                      ) : (
+                        employees
+                          .filter(
+                            (e) =>
+                              e.roleLevel === "manager" ||
+                              e.roleLevel === "head_of_department",
+                          )
+                          .map((e) => (
+                            <SelectItem key={e._id} value={e._id}>
+                              {e.firstName} {e.lastName}
+                              <span className="ml-2 text-xs text-muted-foreground">
+                                ·{" "}
+                                {e.roleLevel === "head_of_department"
+                                  ? "HoD"
+                                  : "Manager"}
+                              </span>
+                            </SelectItem>
+                          ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             <div className="space-y-1">
               <Label>Start Date</Label>
               <Input
