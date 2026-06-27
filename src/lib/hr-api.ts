@@ -236,6 +236,7 @@ export interface CreateEmployeeDto {
   annualLeaveBalance?: number;
   sickLeaveBalance?: number;
   allowances?: EmployeeAllowanceInput[];
+  roleLevel?: RoleLevel;
 }
 
 export interface TerminateEmployeeDto {
