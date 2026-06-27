@@ -180,6 +180,7 @@ export interface Employee {
   onboardingCompleted: boolean;
   allowances: EmployeeAllowanceInput[];
   workerCategory: WorkerCategory;
+  roleLevel?: RoleLevel | null;
 }
 
 export interface EmployeeStats {
