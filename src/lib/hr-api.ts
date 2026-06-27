@@ -127,6 +127,8 @@ export type EmploymentType =
 
 export type WorkerCategory = "employee" | "consultant";
 
+export type RoleLevel = "head_of_department" | "manager" | "regular";
+
 export interface Employee {
   _id: string;
   tenantId: string;
@@ -178,6 +180,7 @@ export interface Employee {
   onboardingCompleted: boolean;
   allowances: EmployeeAllowanceInput[];
   workerCategory: WorkerCategory;
+  roleLevel?: RoleLevel | null;
 }
 
 export interface EmployeeStats {
@@ -233,6 +236,7 @@ export interface CreateEmployeeDto {
   annualLeaveBalance?: number;
   sickLeaveBalance?: number;
   allowances?: EmployeeAllowanceInput[];
+  roleLevel?: RoleLevel;
 }
 
 export interface TerminateEmployeeDto {
