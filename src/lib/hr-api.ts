@@ -127,6 +127,8 @@ export type EmploymentType =
 
 export type WorkerCategory = "employee" | "consultant";
 
+export type RoleLevel = "head_of_department" | "manager" | "regular";
+
 export interface Employee {
   _id: string;
   tenantId: string;
