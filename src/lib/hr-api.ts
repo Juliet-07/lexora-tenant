@@ -21,7 +21,12 @@ export interface HrTeam {
   tenantId: string;
   name: string;
   description: string | null;
-  lead: string | null;
+  headOfDepartment: {
+    _id: string;
+    firstName: string;
+    lastName: string;
+    jobTitle: string;
+  } | null;
   memberCount: number;
   isActive: boolean;
   createdAt: string;
@@ -153,7 +158,12 @@ export interface Employee {
   emergencyContactPhone: string | null;
   employeeNumber: string;
   jobTitle: string;
-  reportsTo: string | null;
+  hierarchyRole: "regular" | "manager" | "head_of_department";
+  reportsToManagerId:
+    | string
+    | { _id: string; firstName: string; lastName: string }
+    | null;
+  reportsToTenantId: string | null;
   employmentType: EmploymentType;
   employmentStatus: EmploymentStatus;
   startDate: string;
@@ -224,7 +234,6 @@ export interface CreateEmployeeDto {
   };
   emergencyContactName?: string;
   emergencyContactPhone?: string;
-  reportsTo?: string;
   employmentType?: EmploymentType;
   probationEndDate?: string;
   salary?: number;
@@ -237,6 +246,8 @@ export interface CreateEmployeeDto {
   sickLeaveBalance?: number;
   allowances?: EmployeeAllowanceInput[];
   roleLevel?: RoleLevel;
+  hierarchyRole: string;
+  reportsToManagerId: undefined;
 }
 
 export interface TerminateEmployeeDto {
@@ -343,6 +354,14 @@ export const fetchEmployeeDetail = async (
 
 export const fetchConsultants = async (): Promise<Employee[]> => {
   const res = await api.get("/hr/employees/consultants");
+  const d = res.data?.data ?? res.data;
+  return Array.isArray(d) ? d : [];
+};
+
+export const fetchEmployeesByHierarchyRole = async (
+  role: "manager" | "head_of_department",
+): Promise<Employee[]> => {
+  const res = await api.get(`/hr/employees/by-role/${role}`);
   const d = res.data?.data ?? res.data;
   return Array.isArray(d) ? d : [];
 };
@@ -983,6 +1002,7 @@ export interface EmployeeLoan {
         _id: string;
         firstName: string;
         lastName: string;
+        jobTitle?: string;
         employeeNumber?: string;
       };
   tenantId: string;
@@ -1440,5 +1460,48 @@ export const calculateGrossUp = async (dto: {
   locationId?: string;
 }): Promise<GrossUpResult> => {
   const res = await api.post("/hr/payroll/policy/gross-up", dto);
+  return res.data?.data ?? res.data;
+};
+
+export interface DirectReport {
+  _id: string;
+  firstName: string;
+  lastName: string;
+  jobTitle: string;
+  teamId: HrTeam | string | null;
+  locationId: HrLocation | string | null;
+}
+
+export interface TerminateEmployeeDto {
+  endDate: string;
+  reason: string;
+  status: "terminated" | "resigned";
+  reassignDirectReportsTo?: string;
+}
+
+export const fetchMyDirectReports = async (): Promise<DirectReport[]> => {
+  const res = await api.get("/employee/my-team");
+  const d = res.data?.data ?? res.data;
+  return Array.isArray(d) ? d : [];
+};
+
+export const fetchDirectReportsOf = async (
+  employeeId: string,
+): Promise<DirectReport[]> => {
+  const res = await api.get(`/hr/employees/${employeeId}/direct-reports`);
+  const d = res.data?.data ?? res.data;
+  return Array.isArray(d) ? d : [];
+};
+
+export const promoteManagerToHeadOfDepartment = async (dto: {
+  teamId: string;
+  promotedManagerId: string;
+  regularsReassignToManagerId?: string;
+}): Promise<{
+  newHod: Employee;
+  reassignedManagers: number;
+  reassignedRegulars: number;
+}> => {
+  const res = await api.post("/hr/employees/promote-to-hod", dto);
   return res.data?.data ?? res.data;
 };

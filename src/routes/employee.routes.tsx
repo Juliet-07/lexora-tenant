@@ -9,10 +9,14 @@ import MyRequisitions from "@/pages/hr/employee/MyRequisitions";
 import EmployeeOnboarding from "@/pages/EmployeeOnboarding";
 
 /** Self-service routes available only to employee. */
-export const employeeRoutes = ({ isAdmin }: RouteContext) => {
+export const employeeRoutes = ({ isAdmin, hierarchyRole }: RouteContext) => {
   if (isAdmin) return [];
-  return [
-    <Route key="my-profile" path="/my/profile" element={layout(<MyProfile />)} />,
+  const routes = [
+    <Route
+      key="my-profile"
+      path="/my/profile"
+      element={layout(<MyProfile />)}
+    />,
     <Route key="my-time" path="/my/time" element={layout(<MyTime />)} />,
     <Route key="my-leave" path="/my/leave" element={layout(<MyLeave />)} />,
     <Route
@@ -21,9 +25,35 @@ export const employeeRoutes = ({ isAdmin }: RouteContext) => {
       element={layout(<MyPerformance />)}
     />,
     <Route key="my-pay" path="/my/payslips" element={layout(<MyPayslips />)} />,
-    <Route key="my-req" path="/my/requisitions" element={layout(<MyRequisitions />)} />,
+    <Route
+      key="my-req"
+      path="/my/requisitions"
+      element={layout(<MyRequisitions />)}
+    />,
+
     // Onboarding is no longer a gate — it's a dedicated page employees
     // are nudged toward via the in-app reminder/popup.
-    <Route key="onboarding" path="/onboarding" element={<EmployeeOnboarding />} />,
+    <Route
+      key="onboarding"
+      path="/onboarding"
+      element={<EmployeeOnboarding />}
+    />,
   ];
+
+  if (hierarchyRole === "manager") {
+    routes.push(
+      <Route key="my-team" path="/my/team" element={layout(<MyTeam />)} />,
+    );
+  }
+
+  if (hierarchyRole === "head_of_department") {
+    routes.push(
+      <Route
+        key="my-department"
+        path="/my/department"
+        element={layout(<MyDepartment />)}
+      />,
+    );
+  }
+  return routes;
 };

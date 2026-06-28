@@ -48,6 +48,7 @@ import {
   Pencil,
   ClipboardCheck,
   Calculator,
+  ArrowRightLeft,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -68,6 +69,9 @@ import {
   type HrLocation,
   type CreateEmployeeDto,
   type EmploymentStatus,
+  fetchEmployeesByHierarchyRole,
+  promoteManagerToHeadOfDepartment,
+  fetchDirectReportsOf,
 } from "@/lib/hr-api";
 import { EmployeeDetailSheet } from "@/components/hr/EmployeeDetailSheet";
 import OnboardingDocumentsTab from "./OnboardingDocuments";
@@ -153,32 +157,28 @@ export default function HREmployees() {
     locationId: "",
     employmentType: "full_time",
     roleLevel: "regular",
-    reportsTo: undefined,
     startDate: new Date().toISOString().slice(0, 10),
     salary: undefined,
     salaryCurrency: "USD",
     taxId: undefined,
     allowances: [],
+    reportsToManagerId: undefined,
+    hierarchyRole: "regular",
   };
   const [empForm, setEmpForm] = useState<CreateEmployeeDto>(EMPTY_EMP);
   const [teamForm, setTeamForm] = useState({
     name: "",
     description: "",
-    lead: "",
   });
   const [locForm, setLocForm] = useState({ name: "", country: "", city: "" });
 
-  // ── Salary entry mode — "basic" (enter the basic salary directly)
-  // or "net_target" (enter what the employee should actually take
-  // home, solve for the basic salary that achieves it under the
-  // selected location's payroll policy). Either way, empForm.salary
-  // ends up holding a real basic-salary number — net_target mode
-  // doesn't change what gets submitted to the backend, it's purely a
-  // convenience for figuring out the right number to put there. ──
   const [salaryEntryMode, setSalaryEntryMode] = useState<
     "basic" | "net_target"
   >("basic");
   const [netTargetInput, setNetTargetInput] = useState("");
+  const [replacingHodForTeam, setReplacingHodForTeam] = useState<HrTeam | null>(
+    null,
+  );
 
   // ── Queries ───────────────────────────────────────────────
 
@@ -214,8 +214,30 @@ export default function HREmployees() {
 
   const employees = empData?.items ?? [];
 
-  // ── Mutations ─────────────────────────────────────────────
+  const pickerTargetRole =
+    empForm.hierarchyRole === "manager" ? "head_of_department" : "manager";
 
+  const { data: managerOptions = [], isLoading: managerOptionsLoading } =
+    useQuery({
+      queryKey: ["hr-employees-by-role", pickerTargetRole],
+      queryFn: () => fetchEmployeesByHierarchyRole(pickerTargetRole),
+      enabled: empOpen && empForm.hierarchyRole !== "head_of_department",
+      staleTime: 30_000,
+    });
+
+  const managerOptionsForSelectedTeam = useMemo(
+    () =>
+      managerOptions.filter((e) => {
+        const empTeamId =
+          typeof e.teamId === "object" && e.teamId !== null
+            ? e.teamId._id
+            : e.teamId;
+        return empTeamId === empForm.teamId;
+      }),
+    [managerOptions, empForm.teamId],
+  );
+
+  // ── Mutations ─────────────────────────────────────────────
   const createEmpMutation = useMutation({
     mutationFn: createEmployee,
     onSuccess: () => {
@@ -237,7 +259,7 @@ export default function HREmployees() {
       queryClient.invalidateQueries({ queryKey: ["hr-teams"] });
       queryClient.invalidateQueries({ queryKey: ["hr-stats"] });
       setTeamOpen(false);
-      setTeamForm({ name: "", description: "", lead: "" });
+      setTeamForm({ name: "", description: "" });
       toast.success("Team created.");
     },
     onError: (err: any) =>
@@ -281,10 +303,6 @@ export default function HREmployees() {
       toast.error(err?.response?.data?.message ?? "Failed to remove location"),
   });
 
-  // Resolves a target net pay into a basic salary using the selected
-  // location's payroll policy. Doesn't auto-submit anything — just
-  // fills empForm.salary/salaryCurrency so the tenant can see and
-  // adjust the number before saving.
   const grossUpMutation = useMutation({
     mutationFn: calculateGrossUp,
     onSuccess: (result) => {
@@ -302,6 +320,23 @@ export default function HREmployees() {
         err?.response?.data?.message ??
           "Could not calculate gross salary — make sure a payroll policy exists for this location.",
       ),
+  });
+
+  const promoteMutation = useMutation({
+    mutationFn: promoteManagerToHeadOfDepartment,
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ["hr-teams"] });
+      queryClient.invalidateQueries({ queryKey: ["hr-employees"] });
+      setReplacingHodForTeam(null);
+      toast.success(
+        `${result.newHod.firstName} ${result.newHod.lastName} is now Head of Department.` +
+          (result.reassignedRegulars > 0
+            ? ` ${result.reassignedRegulars} employee(s) reassigned.`
+            : ""),
+      );
+    },
+    onError: (err: any) =>
+      toast.error(err?.response?.data?.message ?? "Failed to promote"),
   });
 
   // ── Stats ─────────────────────────────────────────────────
@@ -551,10 +586,30 @@ export default function HREmployees() {
                             {t.description}
                           </p>
                         )}
-                        {t.lead && (
-                          <p className="text-xs mt-2">
-                            <span className="text-muted-foreground">Lead:</span>{" "}
-                            <span className="font-medium">{t.lead}</span>
+                        {t.headOfDepartment ? (
+                          <div className="flex items-center justify-between mt-2">
+                            <p className="text-xs flex items-center gap-1">
+                              <span className="text-muted-foreground">
+                                Head of Department:
+                              </span>{" "}
+                              <span className="font-medium">
+                                {t.headOfDepartment.firstName}{" "}
+                                {t.headOfDepartment.lastName}
+                              </span>
+                            </p>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-6 px-2 text-xs"
+                              onClick={() => setReplacingHodForTeam(t)}
+                            >
+                              <ArrowRightLeft className="h-3 w-3 mr-1" />{" "}
+                              Replace
+                            </Button>
+                          </div>
+                        ) : (
+                          <p className="text-xs mt-2 text-warning">
+                            No Head of Department assigned yet.
                           </p>
                         )}
                       </div>
@@ -783,12 +838,11 @@ export default function HREmployees() {
               <div className="space-y-1">
                 <Label>Role Level</Label>
                 <Select
-                  value={empForm.roleLevel ?? "regular"}
+                  value={empForm.hierarchyRole ?? "regular"}
                   onValueChange={(v: any) =>
                     setEmpForm((f) => ({
                       ...f,
-                      roleLevel: v,
-                      reportsTo: v === "regular" ? f.reportsTo : undefined,
+                      hierarchyRole: v,
                     }))
                   }
                 >
@@ -808,48 +862,53 @@ export default function HREmployees() {
               </div>
             )}
             {empForm.employmentType === "full_time" &&
-              empForm.roleLevel === "regular" && (
+              (empForm.hierarchyRole === "regular" ||
+                empForm.hierarchyRole === "manager") && (
                 <div className="space-y-1">
-                  <Label>Reports To</Label>
+                  <Label>
+                    Reports To <span className="text-destructive">*</span>
+                  </Label>
                   <Select
-                    value={empForm.reportsTo ?? ""}
+                    value={empForm.reportsToManagerId ?? ""}
                     onValueChange={(v) =>
-                      setEmpForm((f) => ({ ...f, reportsTo: v }))
+                      setEmpForm((f) => ({ ...f, reportsToManagerId: v }))
                     }
+                    disabled={!empForm.teamId || managerOptionsLoading}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Select manager..." />
+                      <SelectValue
+                        placeholder={
+                          !empForm.teamId
+                            ? "Select a team first"
+                            : empForm.hierarchyRole === "manager"
+                              ? "Select Head of Department..."
+                              : "Select Manager..."
+                        }
+                      />
                     </SelectTrigger>
                     <SelectContent>
-                      {employees.filter(
-                        (e) =>
-                          e.roleLevel === "manager" ||
-                          e.roleLevel === "head_of_department",
-                      ).length === 0 ? (
+                      {managerOptionsForSelectedTeam.length === 0 ? (
                         <div className="px-2 py-1.5 text-xs text-muted-foreground">
-                          No managers available yet
+                          {empForm.hierarchyRole === "manager"
+                            ? "No Head of Department in this team yet."
+                            : "No Managers in this team yet."}
                         </div>
                       ) : (
-                        employees
-                          .filter(
-                            (e) =>
-                              e.roleLevel === "manager" ||
-                              e.roleLevel === "head_of_department",
-                          )
-                          .map((e) => (
-                            <SelectItem key={e._id} value={e._id}>
-                              {e.firstName} {e.lastName}
-                              <span className="ml-2 text-xs text-muted-foreground">
-                                ·{" "}
-                                {e.roleLevel === "head_of_department"
-                                  ? "HoD"
-                                  : "Manager"}
-                              </span>
-                            </SelectItem>
-                          ))
+                        managerOptionsForSelectedTeam.map((e) => (
+                          <SelectItem key={e._id} value={e._id}>
+                            {e.firstName} {e.lastName}
+                          </SelectItem>
+                        ))
                       )}
                     </SelectContent>
                   </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Only showing{" "}
+                    {empForm.hierarchyRole === "manager"
+                      ? "Heads of Department"
+                      : "Managers"}{" "}
+                    in the selected team.
+                  </p>
                 </div>
               )}
             <div className="space-y-1">
@@ -1148,6 +1207,9 @@ export default function HREmployees() {
                 !empForm.jobTitle ||
                 !empForm.teamId ||
                 !empForm.locationId ||
+                ((empForm.hierarchyRole === "regular" ||
+                  empForm.hierarchyRole === "manager") &&
+                  !empForm.reportsToManagerId) ||
                 createEmpMutation.isPending
               }
               onClick={() => createEmpMutation.mutate(empForm)}
@@ -1191,16 +1253,6 @@ export default function HREmployees() {
                 value={teamForm.description}
                 onChange={(e) =>
                   setTeamForm((f) => ({ ...f, description: e.target.value }))
-                }
-              />
-            </div>
-            <div className="space-y-1">
-              <Label>Team Lead</Label>
-              <Input
-                value={teamForm.lead}
-                placeholder="Name of the team lead"
-                onChange={(e) =>
-                  setTeamForm((f) => ({ ...f, lead: e.target.value }))
                 }
               />
             </div>
@@ -1367,10 +1419,171 @@ export default function HREmployees() {
         </AlertDialogContent>
       </AlertDialog>
 
+      {replacingHodForTeam && (
+        <ReplaceHodDialog
+          team={replacingHodForTeam}
+          onClose={() => setReplacingHodForTeam(null)}
+          onPromote={(dto) => promoteMutation.mutate(dto)}
+          promoting={promoteMutation.isPending}
+        />
+      )}
+
       <EmployeeDetailSheet
         employee={selectedEmployee}
         onClose={() => setSelectedEmployee(null)}
       />
     </div>
+  );
+}
+
+function ReplaceHodDialog({
+  team,
+  onClose,
+  onPromote,
+  promoting,
+}: {
+  team: HrTeam;
+  onClose: () => void;
+  onPromote: (dto: {
+    teamId: string;
+    promotedManagerId: string;
+    regularsReassignToManagerId?: string;
+  }) => void;
+  promoting: boolean;
+}) {
+  const [selectedManagerId, setSelectedManagerId] = useState("");
+  const [regularsTarget, setRegularsTarget] = useState("");
+
+  // All Managers in THIS team — the only valid promotion candidates.
+  const { data: allManagers = [], isLoading: managersLoading } = useQuery({
+    queryKey: ["hr-employees-by-role", "manager"],
+    queryFn: () => fetchEmployeesByHierarchyRole("manager"),
+  });
+  const managersInTeam = useMemo(
+    () =>
+      allManagers.filter((m) => {
+        const mTeamId =
+          typeof m.teamId === "object" && m.teamId !== null
+            ? m.teamId._id
+            : m.teamId;
+        return mTeamId === team._id;
+      }),
+    [allManagers, team._id],
+  );
+
+  // Once a Manager is selected, check if THEY have Regular reports
+  // that need reassigning as part of this same promotion.
+  const { data: theirReports = [] } = useQuery({
+    queryKey: ["employee-direct-reports", selectedManagerId],
+    queryFn: () => fetchDirectReportsOf(selectedManagerId),
+    enabled: !!selectedManagerId,
+  });
+
+  // Valid targets for the Regular reassignment: any OTHER Manager
+  // in this same team (not the one being promoted).
+  const otherManagersInTeam = useMemo(
+    () => managersInTeam.filter((m) => m._id !== selectedManagerId),
+    [managersInTeam, selectedManagerId],
+  );
+
+  const needsRegularsTarget = theirReports.length > 0;
+  const canSubmit =
+    !!selectedManagerId && (!needsRegularsTarget || !!regularsTarget);
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Replace Head of Department</DialogTitle>
+          <DialogDescription>
+            Promote a Manager in {team.name} to Head of Department. The current
+            HoD steps down to Manager, reporting to the new HoD.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3 py-2">
+          <div className="space-y-1">
+            <Label>Promote which Manager?</Label>
+            <Select
+              value={selectedManagerId}
+              onValueChange={(v) => {
+                setSelectedManagerId(v);
+                setRegularsTarget("");
+              }}
+              disabled={managersLoading}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select a Manager…" />
+              </SelectTrigger>
+              <SelectContent>
+                {managersInTeam.length === 0 ? (
+                  <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                    No other Managers in this team yet.
+                  </div>
+                ) : (
+                  managersInTeam.map((m) => (
+                    <SelectItem key={m._id} value={m._id}>
+                      {m.firstName} {m.lastName}
+                    </SelectItem>
+                  ))
+                )}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {selectedManagerId && needsRegularsTarget && (
+            <div className="space-y-1">
+              <Label>
+                {theirReports.length} employee(s) report to this Manager. Move
+                them to <span className="text-destructive">*</span>
+              </Label>
+              <Select value={regularsTarget} onValueChange={setRegularsTarget}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select another Manager…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {otherManagersInTeam.length === 0 ? (
+                    <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                      No other Manager available — promote/add one first.
+                    </div>
+                  ) : (
+                    otherManagersInTeam.map((m) => (
+                      <SelectItem key={m._id} value={m._id}>
+                        {m.firstName} {m.lastName}
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {theirReports
+                  .map((r) => `${r.firstName} ${r.lastName}`)
+                  .join(", ")}
+              </p>
+            </div>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            disabled={!canSubmit || promoting}
+            onClick={() =>
+              onPromote({
+                teamId: team._id,
+                promotedManagerId: selectedManagerId,
+                regularsReassignToManagerId: regularsTarget || undefined,
+              })
+            }
+          >
+            {promoting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              "Confirm Promotion"
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

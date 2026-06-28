@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -60,9 +60,11 @@ import {
 import { toast } from "sonner";
 import type { Employee, HrTeam, HrLocation } from "@/lib/hr-api";
 import {
+  fetchDirectReportsOf,
   fetchEmployeeDetail,
   fetchEmployeeOnboardingRecord,
   fetchEmployeePayrollSnapshot,
+  fetchEmployeesByHierarchyRole,
   terminateEmployee,
 } from "@/lib/hr-api";
 import { downloadEmployeeReport } from "@/lib/employeeReport";
@@ -233,10 +235,16 @@ const locName = (e: Employee) =>
   typeof e.locationId === "object" && e.locationId !== null
     ? (e.locationId as HrLocation).name
     : "—";
-const teamLead = (e: Employee) =>
-  typeof e.teamId === "object" && e.teamId !== null
-    ? (e.teamId as HrTeam).lead || "Unassigned"
-    : "—";
+// const teamLead = (e: Employee) =>
+//   typeof e.teamId === "object" && e.teamId !== null
+//     ? (e.teamId as HrTeam).lead || "Unassigned"
+//     : "—";
+const managerName = (e: Employee) =>
+  typeof e.reportsToManagerId === "object" && e.reportsToManagerId !== null
+    ? `${e.reportsToManagerId.firstName} ${e.reportsToManagerId.lastName}`
+    : e.hierarchyRole === "head_of_department"
+      ? "Tenant (top of chain)"
+      : "Unassigned";
 
 export function EmployeeDetailSheet({ employee, onClose }: Props) {
   const [disputes, setDisputes] = useState<Dispute[]>([]);
@@ -255,6 +263,7 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
     status: "resigned" as "terminated" | "resigned",
     reason: "",
   });
+  const [reassignChoice, setReassignChoice] = useState<string>("");
 
   const { data: detail, isLoading: detailLoading } = useQuery({
     queryKey: ["employee-detail", employee?._id],
@@ -277,8 +286,47 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
     staleTime: 30_000,
   });
 
+  const { data: directReports = [], isLoading: directReportsLoading } =
+    useQuery({
+      queryKey: ["employee-direct-reports", employee?._id],
+      queryFn: () => fetchDirectReportsOf(employee!._id),
+      enabled: terminateOpen && !!employee,
+      staleTime: 10_000,
+    });
+
+  const { data: replacementCandidates = [] } = useQuery({
+    queryKey: ["hr-employees-by-role", "manager"],
+    queryFn: () => fetchEmployeesByHierarchyRole("manager"),
+    enabled:
+      terminateOpen &&
+      directReports.length > 0 &&
+      employee?.hierarchyRole === "manager",
+    staleTime: 30_000,
+  });
+
+  const replacementCandidatesForSameTeam = useMemo(() => {
+    if (!employee) return [];
+
+    const empTeamId =
+      typeof employee.teamId === "object" && employee.teamId !== null
+        ? employee.teamId._id
+        : employee.teamId;
+
+    return replacementCandidates.filter((c) => {
+      const cTeamId =
+        typeof c.teamId === "object" && c.teamId !== null
+          ? c.teamId._id
+          : c.teamId;
+      return cTeamId === empTeamId && c._id !== employee._id;
+    });
+  }, [replacementCandidates, employee]);
+
   const terminateMutation = useMutation({
-    mutationFn: () => terminateEmployee(employee!._id, terminateForm),
+    mutationFn: () =>
+      terminateEmployee(employee!._id, {
+        ...terminateForm,
+        reassignDirectReportsTo: reassignChoice || undefined,
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: ["employee-detail", employee!._id],
@@ -385,7 +433,7 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
                     variant="outline"
                     className="bg-white/10 text-white border-white/30"
                   >
-                    Reports to {teamLead(emp)}
+                    Reports to {managerName(emp)}
                   </Badge>
                 </div>
               </div>
@@ -488,7 +536,7 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
                   <Row
                     icon={Briefcase}
                     label="Reports to"
-                    value={teamLead(emp)}
+                    value={managerName(emp)}
                   />
                   <Row
                     icon={CalendarDays}
@@ -1357,43 +1405,99 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
                 offboarding record (clearance checklist, exit interview
                 tracking). This cannot be undone from here.
               </p>
-              <div className="space-y-1">
-                <Label>Reason</Label>
-                <Select
-                  value={terminateForm.status}
-                  onValueChange={(v: any) =>
-                    setTerminateForm((f) => ({ ...f, status: v }))
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="resigned">Resigned</SelectItem>
-                    <SelectItem value="terminated">Terminated</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <Label>Last working day</Label>
-                <Input
-                  type="date"
-                  value={terminateForm.endDate}
-                  onChange={(e) =>
-                    setTerminateForm((f) => ({ ...f, endDate: e.target.value }))
-                  }
-                />
-              </div>
-              <div className="space-y-1">
-                <Label>Notes (optional)</Label>
-                <Textarea
-                  rows={3}
-                  value={terminateForm.reason}
-                  onChange={(e) =>
-                    setTerminateForm((f) => ({ ...f, reason: e.target.value }))
-                  }
-                />
-              </div>
+
+              {directReportsLoading ? (
+                <p className="text-xs text-muted-foreground">
+                  Checking direct reports…
+                </p>
+              ) : emp.hierarchyRole === "head_of_department" &&
+                directReports.length > 0 ? (
+                <div className="rounded-md bg-destructive/10 border border-destructive/20 text-destructive text-sm p-3">
+                  {emp.firstName} is the Head of Department with{" "}
+                  {directReports.length} Manager(s) reporting to them. Use{" "}
+                  <strong>Replace Head of Department</strong> on the Teams tab
+                  first, then terminate them afterward.
+                </div>
+              ) : (
+                <>
+                  {directReports.length > 0 && (
+                    <div className="space-y-1">
+                      <Label>
+                        {directReports.length} employee(s) report to{" "}
+                        {emp.firstName}. Reassign them to{" "}
+                        <span className="text-destructive">*</span>
+                      </Label>
+                      <Select
+                        value={reassignChoice}
+                        onValueChange={setReassignChoice}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Choose a replacement…" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="clear">
+                            Leave unassigned for now
+                          </SelectItem>
+                          {replacementCandidatesForSameTeam.map((c) => (
+                            <SelectItem key={c._id} value={c._id}>
+                              {c.firstName} {c.lastName}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        {directReports
+                          .map((r) => `${r.firstName} ${r.lastName}`)
+                          .join(", ")}
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="space-y-1">
+                    <Label>Reason</Label>
+                    <Select
+                      value={terminateForm.status}
+                      onValueChange={(v: any) =>
+                        setTerminateForm((f) => ({ ...f, status: v }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="resigned">Resigned</SelectItem>
+                        <SelectItem value="terminated">Terminated</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Last working day</Label>
+                    <Input
+                      type="date"
+                      value={terminateForm.endDate}
+                      onChange={(e) =>
+                        setTerminateForm((f) => ({
+                          ...f,
+                          endDate: e.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Notes (optional)</Label>
+                    <Textarea
+                      rows={3}
+                      value={terminateForm.reason}
+                      onChange={(e) =>
+                        setTerminateForm((f) => ({
+                          ...f,
+                          reason: e.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                </>
+              )}
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setTerminateOpen(false)}>
@@ -1401,7 +1505,13 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
               </Button>
               <Button
                 variant="destructive"
-                disabled={!terminateForm.endDate || terminateMutation.isPending}
+                disabled={
+                  !terminateForm.endDate ||
+                  (emp.hierarchyRole === "head_of_department" &&
+                    directReports.length > 0) ||
+                  (directReports.length > 0 && !reassignChoice) ||
+                  terminateMutation.isPending
+                }
                 onClick={() => terminateMutation.mutate()}
               >
                 {terminateMutation.isPending

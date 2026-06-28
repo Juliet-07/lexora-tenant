@@ -21,6 +21,7 @@ export interface AuthUser {
   tenantId: string | null;
   businessName: string;
   mustChangePassword: boolean;
+  hierarchyRole: "regular" | "manager" | "head_of_department" | null;
 }
 
 interface AuthContextType {
@@ -42,7 +43,7 @@ function deriveRole(userType: string, roles: string[]): UserRole {
   return roles.some((r) => adminRoles.includes(r)) ? "admin" : "employee";
 }
 
-function mapUser(raw: any): AuthUser {
+function mapUser(raw: any, hierarchyRole?: string): AuthUser {
   return {
     id: raw._id,
     firstName: raw.firstName,
@@ -54,12 +55,13 @@ function mapUser(raw: any): AuthUser {
     tenantId: raw.tenantId ?? null,
     businessName: raw.tenantProfile?.businessName ?? "",
     mustChangePassword: raw.mustChangePassword ?? false,
+    hierarchyRole: (hierarchyRole as AuthUser["hierarchyRole"]) ?? null,
   };
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
-  const [isLoading, setIsLoading] = useState(true); 
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   // ── Hydrate from localStorage on mount ───────────────────
@@ -82,11 +84,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setError(null);
     try {
       const res = await api.post("/auth/login", { email, password });
-      const { user: rawUser, tokens } = res.data.data;
+      const { user: rawUser, tokens, hierarchyRole } = res.data.data;
 
       localStorage.setItem("tenantToken", tokens.accessToken);
 
-      const mapped = mapUser(rawUser);
+      const mapped = mapUser(rawUser, hierarchyRole);
       localStorage.setItem("tenantUser", JSON.stringify(mapped));
       setUser(mapped);
     } catch (err: any) {
