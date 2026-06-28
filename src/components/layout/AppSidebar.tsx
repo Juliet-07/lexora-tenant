@@ -255,7 +255,7 @@ NAV_BY_MODULE["hr"] = NAV_BY_MODULE["hr_pm"];
 export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
-  const { isAdmin, logout } = useAuth();
+  const { isAdmin, logout, user } = useAuth();
   const { currentModule, isLoadingDashboard } = useModule();
 
   // ── Team members get a fixed, minimal sidebar — no module switching,
@@ -270,7 +270,14 @@ export function AppSidebar() {
     { title: "Performance", url: "/my/performance", icon: BarChart3 },
     { title: "Payslips", url: "/my/payslips", icon: Wallet },
     { title: "Requisitions", url: "/my/requisitions", icon: ClipboardList },
+    ...(user?.hierarchyRole === "manager"
+      ? [{ title: "My Team", url: "/my/team", icon: UsersRound }]
+      : []),
+    ...(user?.hierarchyRole === "head_of_department"
+      ? [{ title: "My Department", url: "/my/department", icon: UsersRound }]
+      : []),
   ];
+
 
   if (!isAdmin) {
     return (
