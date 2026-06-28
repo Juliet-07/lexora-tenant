@@ -6,7 +6,10 @@ import MyPerformance from "@/pages/hr/employee/MyPerformance";
 import MyPayslips from "@/pages/hr/employee/MyPayslips";
 import MyProfile from "@/pages/hr/employee/MyProfile";
 import MyRequisitions from "@/pages/hr/employee/MyRequisitions";
+import MyTeam from "@/pages/hr/employee/MyTeam";
+import MyDepartment from "@/pages/hr/employee/MyDepartment";
 import EmployeeOnboarding from "@/pages/EmployeeOnboarding";
+
 
 /** Self-service routes available only to employee. */
 export const employeeRoutes = ({ isAdmin, hierarchyRole }: RouteContext) => {
