@@ -21,6 +21,7 @@ export interface HrTeam {
   tenantId: string;
   name: string;
   description: string | null;
+  lead?: string | null;
   headOfDepartment: {
     _id: string;
     firstName: string;
@@ -31,6 +32,7 @@ export interface HrTeam {
   isActive: boolean;
   createdAt: string;
 }
+
 
 export const fetchTeams = async (): Promise<HrTeam[]> => {
   const res = await api.get("/hr/teams");
