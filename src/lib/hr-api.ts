@@ -249,7 +249,8 @@ export interface CreateEmployeeDto {
   allowances?: EmployeeAllowanceInput[];
   roleLevel?: RoleLevel;
   hierarchyRole: string;
-  reportsToManagerId: undefined;
+  reportsToManagerId?: string | null;
+
 }
 
 export interface TerminateEmployeeDto {
