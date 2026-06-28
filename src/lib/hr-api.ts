@@ -1505,3 +1505,39 @@ export const promoteManagerToHeadOfDepartment = async (dto: {
   const res = await api.post("/hr/employees/promote-to-hod", dto);
   return res.data?.data ?? res.data;
 };
+
+// ─────────────────────────────────────────────────────────────
+// My Department — Head of Department view
+// ─────────────────────────────────────────────────────────────
+export interface DepartmentManager {
+  _id: string;
+  firstName: string;
+  lastName: string;
+  jobTitle: string;
+  avatarUrl?: string | null;
+  reports: DirectReport[];
+}
+
+export interface MyDepartmentResponse {
+  managers: DepartmentManager[];
+  totalEmployees: number;
+}
+
+export const fetchMyDepartment = async (): Promise<MyDepartmentResponse> => {
+  try {
+    const res = await api.get("/employee/my-department");
+    const d = res.data?.data ?? res.data;
+    if (d && Array.isArray(d.managers)) return d;
+    if (Array.isArray(d)) {
+      const managers = d as DepartmentManager[];
+      return {
+        managers,
+        totalEmployees: managers.reduce((s, m) => s + (m.reports?.length ?? 0), 0),
+      };
+    }
+  } catch {
+    // fall through to empty
+  }
+  return { managers: [], totalEmployees: 0 };
+};
+
