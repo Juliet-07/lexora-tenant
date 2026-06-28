@@ -270,13 +270,13 @@ export function AppSidebar() {
     { title: "Performance", url: "/my/performance", icon: BarChart3 },
     { title: "Payslips", url: "/my/payslips", icon: Wallet },
     { title: "Requisitions", url: "/my/requisitions", icon: ClipboardList },
-    ...(user?.hierarchyRole === "manager"
-      ? [{ title: "My Team", url: "/my/team", icon: UsersRound }]
-      : []),
-    ...(user?.hierarchyRole === "head_of_department"
-      ? [{ title: "My Department", url: "/my/department", icon: UsersRound }]
-      : []),
+    // Preview: show both entries so the user can review the new pages.
+    // Re-gate by user?.hierarchyRole === "manager" / "head_of_department"
+    // once roles are wired up.
+    { title: "My Team", url: "/my/team", icon: UsersRound },
+    { title: "My Department", url: "/my/department", icon: UsersRound },
   ];
+
 
 
   if (!isAdmin) {
