@@ -180,7 +180,7 @@ export function ManagerReviewSheet({
 
   const saveMutation = useMutation({
     mutationFn: (payload: Parameters<typeof updateManagerReviewSection>[1]) =>
-      updateManagerReviewSection(reviewId!, payload),
+      (saveFn ?? updateManagerReviewSection)(reviewId!, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: ["performance-review", reviewId],
@@ -191,8 +191,13 @@ export function ManagerReviewSheet({
       toast.error(err?.response?.data?.message ?? "Failed to save"),
   });
 
+  const isProbation = live?.employeeEmploymentStatus === "probation";
+
   const completeMutation = useMutation({
-    mutationFn: () => completeReview(reviewId!),
+    mutationFn: () =>
+      completeFn
+        ? completeFn(reviewId!, isProbation ? probationReasoning : undefined)
+        : completeReview(reviewId!),
     onSuccess: () => {
       toast.success("Review signed off and completed.");
       onCompleted();
