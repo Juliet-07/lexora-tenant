@@ -116,6 +116,7 @@ export function ManagerReviewSheet({
     useState("");
   const [managerDevelopmentAreas, setManagerDevelopmentAreas] = useState("");
   const [managerConclusions, setManagerConclusions] = useState("");
+  const [probationReasoning, setProbationReasoning] = useState("");
 
   useEffect(() => {
     if (!live) return;
