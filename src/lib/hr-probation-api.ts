@@ -45,6 +45,9 @@ export interface ProbationStage {
   recommendation: ProbationRecommendation | null;
   decision: ProbationDecisionDetail | null;
   linkedReviewId: string | null;
+  // Employee self-assessment per monthly stage (optional)
+  employeeSelfAssessment: string | null;
+  employeeSelfAssessmentAt: string | null;
   // LIVE due-window fields, added by computeDueWindow() at read time
   // — never stored, always fresh:
   dueFrom: string;
@@ -52,6 +55,7 @@ export interface ProbationStage {
   isDue: boolean;
   isOverdue: boolean;
 }
+
 
 export interface ProbationRecord {
   _id: string;
