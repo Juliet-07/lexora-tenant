@@ -52,6 +52,16 @@ interface Props {
   review: PerformanceReview | null;
   onClose: () => void;
   onCompleted: () => void;
+  /** Override the save endpoint (e.g. for manager-of-team using the employee API path) */
+  saveFn?: (
+    reviewId: string,
+    dto: Parameters<typeof updateManagerReviewSection>[1],
+  ) => Promise<PerformanceReview>;
+  /** Override the complete endpoint. Receives optional probation reasoning. */
+  completeFn?: (
+    reviewId: string,
+    probationRecommendationReasoning?: string,
+  ) => Promise<PerformanceReview>;
 }
 
 export function ManagerReviewSheet({ review, onClose, onCompleted }: Props) {
