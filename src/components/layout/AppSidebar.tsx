@@ -112,7 +112,6 @@ const NAV_BY_MODULE: Record<
     },
   ],
 
-
   // ── GRC ────────────────────────────────────────────────────
   grc: [
     { title: "Dashboard", url: "/", icon: LayoutDashboard },
@@ -161,18 +160,37 @@ const NAV_BY_MODULE: Record<
     },
   ],
 
-
   // ── CRM & Project Management ──────────────────────────────
   crm: [
     { title: "Dashboard", url: "/", icon: LayoutDashboard },
-    { title: "Pipeline", url: "/crm/pipeline", icon: TrendingUp, adminOnly: true },
+    {
+      title: "Pipeline",
+      url: "/crm/pipeline",
+      icon: TrendingUp,
+      adminOnly: true,
+    },
     // { title: "Contacts & Accounts", url: "/crm/contacts", icon: Contact, adminOnly: true },
     { title: "Clients", url: "/clients", icon: Users, adminOnly: true },
     { title: "Projects", url: "/crm/projects", icon: FolderKanban },
     { title: "Time Tracking", url: "/crm/time", icon: Clock },
-    { title: "Resources", url: "/crm/resources", icon: UsersRound, adminOnly: true },
-    { title: "Invoicing", url: "/crm/invoicing", icon: Receipt, adminOnly: true },
-    { title: "Contracts & Docs", url: "/crm/contracts", icon: FileSignature, adminOnly: true },
+    {
+      title: "Resources",
+      url: "/crm/resources",
+      icon: UsersRound,
+      adminOnly: true,
+    },
+    {
+      title: "Invoicing",
+      url: "/crm/invoicing",
+      icon: Receipt,
+      adminOnly: true,
+    },
+    {
+      title: "Contracts & Docs",
+      url: "/crm/contracts",
+      icon: FileSignature,
+      adminOnly: true,
+    },
     // { title: "Client Portal", url: "/crm/portal", icon: Globe, adminOnly: true },
   ],
 
@@ -241,7 +259,6 @@ const NAV_BY_MODULE: Record<
     },
   ],
 
-
   // ── Legacy key aliases — kept so any old data still resolves ──
   // If the DB ever returns "kyc/aml" or "hr" these still work.
   "kyc/aml": [], // populated below after definition
@@ -270,14 +287,19 @@ export function AppSidebar() {
     { title: "Performance", url: "/my/performance", icon: BarChart3 },
     { title: "Payslips", url: "/my/payslips", icon: Wallet },
     { title: "Requisitions", url: "/my/requisitions", icon: ClipboardList },
-    // Preview: show both entries so the user can review the new pages.
-    // Re-gate by user?.hierarchyRole === "manager" / "head_of_department"
-    // once roles are wired up.
-    { title: "My Team", url: "/my/team", icon: UsersRound },
-    { title: "My Department", url: "/my/department", icon: UsersRound },
+    {
+      title: "My Team",
+      url: "/my/team",
+      icon: UsersRound,
+      requiresRole: "manager",
+    },
+    {
+      title: "My Department",
+      url: "/my/department",
+      icon: UsersRound,
+      requiresRole: "head_of_department",
+    },
   ];
-
-
 
   if (!isAdmin) {
     return (
@@ -309,7 +331,11 @@ export function AppSidebar() {
             {!collapsed && <SidebarGroupLabel>Workspace</SidebarGroupLabel>}
             <SidebarGroupContent>
               <SidebarMenu>
-                {TEAM_MEMBER_NAV.map((item) => (
+                {TEAM_MEMBER_NAV.filter(
+                  (item) =>
+                    !item.requiresRole ||
+                    item.requiresRole === user?.hierarchyRole,
+                ).map((item) => (
                   <SidebarMenuItem key={item.title + item.url}>
                     <SidebarMenuButton asChild>
                       <NavLink
@@ -361,7 +387,6 @@ export function AppSidebar() {
   if (!currentModule) {
     return (
       <Sidebar collapsible="icon">
-
         <div className="p-4 border-b border-sidebar-border">
           <div className="w-9 h-9 rounded-lg bg-muted animate-pulse mx-auto" />
         </div>

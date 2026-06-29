@@ -10,7 +10,6 @@ import MyTeam from "@/pages/hr/employee/MyTeam";
 import MyDepartment from "@/pages/hr/employee/MyDepartment";
 import EmployeeOnboarding from "@/pages/EmployeeOnboarding";
 
-
 /** Self-service routes available only to employee. */
 export const employeeRoutes = ({ isAdmin, hierarchyRole }: RouteContext) => {
   if (isAdmin) return [];
@@ -43,18 +42,21 @@ export const employeeRoutes = ({ isAdmin, hierarchyRole }: RouteContext) => {
     />,
   ];
 
-  // NOTE: Routes are registered for any employee so the preview is
-  // accessible regardless of hierarchyRole. Sidebar still surfaces
-  // them only for the appropriate role in production.
-  routes.push(
-    <Route key="my-team" path="/my/team" element={layout(<MyTeam />)} />,
-    <Route
-      key="my-department"
-      path="/my/department"
-      element={layout(<MyDepartment />)}
-    />,
-  );
+  if (hierarchyRole === "manager") {
+    routes.push(
+      <Route key="my-team" path="/my/team" element={layout(<MyTeam />)} />,
+    );
+  }
+
+  if (hierarchyRole === "head_of_department") {
+    routes.push(
+      <Route
+        key="my-department"
+        path="/my/department"
+        element={layout(<MyDepartment />)}
+      />,
+    );
+  }
 
   return routes;
 };
-
