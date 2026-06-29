@@ -12,6 +12,7 @@ import HRContracts from "@/pages/hr/Contracts";
 import HRRequisitions from "@/pages/hr/Requisitions";
 import HRDisputes from "@/pages/hr/Disputes";
 import HRReports from "@/pages/hr/Reports";
+import HROverview from "@/pages/hr/Overview";
 
 /** HR & People Management — most admin-gated, attendance/leave/learning open. */
 export const hrRoutes = ({ isAdmin }: RouteContext) => {
@@ -23,6 +24,7 @@ export const hrRoutes = ({ isAdmin }: RouteContext) => {
 
   if (isAdmin) {
     routes.push(
+      <Route key="overview" path="/hr/overview" element={layout(<HROverview />)} />,
       <Route key="employees" path="/hr/employees" element={layout(<HREmployees />)} />,
       <Route key="recruitment" path="/hr/recruitment" element={layout(<HRRecruitment />)} />,
       <Route key="performance" path="/hr/performance" element={layout(<HRPerformance />)} />,
