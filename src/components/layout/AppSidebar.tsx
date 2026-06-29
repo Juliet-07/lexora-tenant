@@ -197,6 +197,12 @@ const NAV_BY_MODULE: Record<
   // ── HR & People Management ─────────────────────────────────
   hr_pm: [
     { title: "Dashboard", url: "/", icon: LayoutDashboard },
+    {
+      title: "HR Overview",
+      url: "/hr/overview",
+      icon: BarChart3,
+      adminOnly: true,
+    },
     { title: "Clients", url: "/clients", icon: Users, adminOnly: true },
     {
       title: "Employees",
