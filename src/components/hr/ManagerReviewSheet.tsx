@@ -971,7 +971,10 @@ export function ManagerReviewSheet({
                   <div className="flex justify-end">
                     <Button
                       className="bg-gradient-to-r from-primary to-secondary"
-                      disabled={completeMutation.isPending}
+                      disabled={
+                        completeMutation.isPending ||
+                        (isProbation && probationReasoning.trim().length === 0)
+                      }
                       onClick={() => completeMutation.mutate()}
                     >
                       {completeMutation.isPending ? (
