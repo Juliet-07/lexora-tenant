@@ -54,6 +54,8 @@ import {
   type PerformanceReview,
   type ScoredReviewResponse,
 } from "@/lib/hr-performance-api";
+import { fetchMyProbation } from "@/lib/hr-probation-api";
+
 
 const STATUS_TONE: Record<string, string> = {
   employee_in_progress: "bg-info/10 text-info border-info/20",
