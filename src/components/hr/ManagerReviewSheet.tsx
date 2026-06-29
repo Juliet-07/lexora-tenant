@@ -941,6 +941,32 @@ export function ManagerReviewSheet({
                     </div>
                   </CardContent>
                 </Card>
+                {isProbation && (
+                  <Card className="border-warning/40 bg-warning/5">
+                    <CardContent className="p-4 space-y-2">
+                      <p className="text-sm font-medium flex items-center gap-2 text-warning">
+                        <AlertTriangle className="h-4 w-4" /> Probation
+                        evaluation
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        This employee is currently on probation
+                        {live.probationEndDate
+                          ? ` (ends ${new Date(live.probationEndDate).toLocaleDateString()})`
+                          : ""}
+                        . A written recommendation with reasoning is required
+                        before you can sign off — HR will use it to confirm,
+                        extend, or end probation.
+                      </p>
+                      <Textarea
+                        rows={4}
+                        disabled={locked}
+                        value={probationReasoning}
+                        onChange={(e) => setProbationReasoning(e.target.value)}
+                        placeholder="Your recommendation (confirm / extend / end) and reasoning…"
+                      />
+                    </CardContent>
+                  </Card>
+                )}
                 {live.status === "manager_in_progress" && (
                   <div className="flex justify-end">
                     <Button
