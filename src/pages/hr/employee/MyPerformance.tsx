@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { PerformancePoliciesPanel } from "@/components/hr/PerformancePoliciesPanel";
 import { ManagerTeamReviewsPanel } from "@/components/hr/ManagerTeamReviewsPanel";
 import { DepartmentReviewsPanel } from "@/components/hr/DepartmentReviewsPanel";
-import { HoDManagerReviewsPanel } from "@/components/hr/HoDManagerReviewsPanel";
+// import { HoDManagerReviewsPanel } from "@/components/hr/HoDManagerReviewsPanel";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -87,8 +87,6 @@ export default function MyPerformance() {
 
   const active = reviews.find((r) => r.status !== "completed");
   const completed = reviews.filter((r) => r.status === "completed");
-
-
 
   return (
     <div className="space-y-6">
@@ -179,7 +177,7 @@ export default function MyPerformance() {
 
         {isHoD && (
           <TabsContent value="mgr-reviews" className="space-y-3">
-            <HoDManagerReviewsPanel />
+            <ManagerTeamReviewsPanel />
           </TabsContent>
         )}
 

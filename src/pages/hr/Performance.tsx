@@ -63,6 +63,7 @@ import {
   discardReviewCycle,
   type ReviewCycle,
   type PerformanceReview,
+  retrySkippedEmployees,
 } from "@/lib/hr-performance-api";
 import { ManagerReviewSheet } from "@/components/hr/ManagerReviewSheet";
 import { KpiTemplatesPanel } from "@/components/hr/KpiTemplatePanel";
@@ -165,6 +166,30 @@ export default function HRPerformance() {
       setDiscardTarget(null);
       toast.success("Draft cycle discarded.");
     },
+  });
+
+  const retrySkippedMutation = useMutation({
+    mutationFn: retrySkippedEmployees,
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({
+        queryKey: ["performance-cycle-detail", openCycle?._id],
+      });
+      queryClient.invalidateQueries({ queryKey: ["performance-cycles"] });
+      if (result.recovered > 0) {
+        toast.success(
+          `${result.recovered} employee(s) added to the cycle.` +
+            (result.stillSkipped > 0
+              ? ` ${result.stillSkipped} still need attention.`
+              : ""),
+        );
+      } else {
+        toast.error("No employees could be added — check their KPI templates.");
+      }
+    },
+    onError: (err: any) =>
+      toast.error(
+        err?.response?.data?.message ?? "Failed to retry skipped employees",
+      ),
   });
 
   const [cycleForm, setCycleForm] = useState({
@@ -523,17 +548,39 @@ export default function HRPerformance() {
                     )}
                   </div>
                 </div>
-
                 {openCycle.skippedEmployees.length > 0 && (
-                  <div className="text-xs bg-warning/10 border border-warning/20 text-warning rounded-md p-3 space-y-1">
-                    <p className="font-medium">
-                      {openCycle.skippedEmployees.length} employee(s) skipped:
-                    </p>
+                  <div className="text-xs bg-warning/10 border border-warning/20 text-warning rounded-md p-3 space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="font-medium">
+                        {openCycle.skippedEmployees.length} employee(s) skipped:
+                      </p>
+                      {openCycle.status !== "closed" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs shrink-0"
+                          disabled={retrySkippedMutation.isPending}
+                          onClick={() =>
+                            retrySkippedMutation.mutate(openCycle._id)
+                          }
+                        >
+                          {retrySkippedMutation.isPending ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            "Retry now"
+                          )}
+                        </Button>
+                      )}
+                    </div>
                     {openCycle.skippedEmployees.map((s, i) => (
                       <p key={i}>
                         • {s.employeeName} — {s.reason}
                       </p>
                     ))}
+                    <p className="text-[11px] opacity-80">
+                      Fixed the issue (e.g. filled in a missing KPI field)?
+                      Click "Retry now" — no need to create a new cycle.
+                    </p>
                   </div>
                 )}
 
@@ -560,28 +607,38 @@ export default function HRPerformance() {
                     <LoadingRow label="Loading reviews…" />
                   ) : (
                     <div className="space-y-1.5">
-                      {(cycleDetail?.reviews ?? []).map((r) => (
-                        <div
-                          key={r._id}
-                          className="flex items-center justify-between border rounded-md p-2.5 cursor-pointer hover:bg-muted/30"
-                          onClick={() => setOpenReview(r)}
-                        >
-                          <div>
-                            <p className="text-sm font-medium">
-                              {r.employeeName}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              {r.jobTitle}
-                            </p>
-                          </div>
-                          <Badge
-                            variant="outline"
-                            className={REVIEW_STATUS_TONE[r.status]}
+                      {(cycleDetail?.reviews ?? []).map((r) => {
+                        const isHodReview =
+                          r.subjectHierarchyRole === "head_of_department";
+                        return (
+                          <div
+                            key={r._id}
+                            className={`flex items-center justify-between border rounded-md p-2.5 ${
+                              isHodReview
+                                ? "cursor-pointer hover:bg-muted/30"
+                                : ""
+                            }`}
+                            onClick={() => isHodReview && setOpenReview(r)}
                           >
-                            {REVIEW_STATUS_LABEL[r.status]}
-                          </Badge>
-                        </div>
-                      ))}
+                            <div>
+                              <p className="text-sm font-medium">
+                                {r.employeeName}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {r.jobTitle}
+                                {!isHodReview &&
+                                  " · Managed by their reporting chain"}
+                              </p>
+                            </div>
+                            <Badge
+                              variant="outline"
+                              className={REVIEW_STATUS_TONE[r.status]}
+                            >
+                              {REVIEW_STATUS_LABEL[r.status]}
+                            </Badge>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>

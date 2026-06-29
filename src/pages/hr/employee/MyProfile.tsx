@@ -180,10 +180,29 @@ const teamName = (e: Employee) =>
   typeof e.teamId === "object" && e.teamId !== null
     ? (e.teamId as HrTeam).name
     : "—";
-const teamLead = (e: Employee) =>
-  typeof e.teamId === "object" && e.teamId !== null
-    ? (e.teamId as HrTeam).lead || "Unassigned"
-    : "—";
+const reportsTo = (e: Employee): string => {
+  if (e.hierarchyRole === "head_of_department") {
+    // reportsToTenantId — your API likely returns a tenant object or just an ID
+    if (
+      typeof e.reportsToTenantId === "object" &&
+      e.reportsToTenantId !== null
+    ) {
+      return (e.reportsToTenantId as any).name ?? "Organisation";
+    }
+    return e.reportsToTenantId ? "Organisation" : "—";
+  }
+
+  // Everyone else reports to their manager via reportsToManagerId
+  if (
+    typeof e.reportsToManagerId === "object" &&
+    e.reportsToManagerId !== null
+  ) {
+    const mgr = e.reportsToManagerId as any;
+    return `${mgr.firstName ?? ""} ${mgr.lastName ?? ""}`.trim() || "—";
+  }
+
+  return "—";
+};
 const locName = (e: Employee) =>
   typeof e.locationId === "object" && e.locationId !== null
     ? (e.locationId as HrLocation).name
@@ -321,7 +340,7 @@ export default function MyProfile() {
                 variant="outline"
                 className="bg-white/10 text-white border-white/30"
               >
-                Reports to {teamLead(profile)}
+                Reports to {reportsTo(profile)}
               </Badge>
             </div>
           </div>
@@ -395,7 +414,7 @@ export default function MyProfile() {
                 <Row
                   icon={Briefcase}
                   label="Reports to"
-                  value={teamLead(profile)}
+                  value={reportsTo(profile)}
                 />
                 <Row
                   icon={CalendarDays}

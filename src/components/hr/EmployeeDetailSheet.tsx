@@ -347,6 +347,7 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
   if (!employee) return null;
 
   const emp = detail?.employee ?? employee;
+  // console.log(emp,"employee data")
 
   const initials =
     `${emp.firstName[0] ?? ""}${emp.lastName[0] ?? ""}`.toUpperCase();

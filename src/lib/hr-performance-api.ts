@@ -255,6 +255,7 @@ export interface PerformanceReview {
   managerSignedAt: string | null;
   managerSignedBy: string | null;
   createdAt: string;
+  subjectHierarchyRole: "regular" | "manager" | "head_of_department" | null;
 }
 
 // ── Live-computed scores, returned alongside a review ───────────
@@ -366,6 +367,24 @@ export const completeReview = async (
   return res.data?.data ?? res.data;
 };
 
+export const fetchPendingHodReviews = async (): Promise<
+  PerformanceReview[]
+> => {
+  const res = await api.get("/hr/performance/reviews/pending/hods");
+  const d = res.data?.data ?? res.data;
+  return Array.isArray(d) ? d : [];
+};
+
+export const retrySkippedEmployees = async (
+  cycleId: string,
+): Promise<{ cycle: ReviewCycle; recovered: number; stillSkipped: number }> => {
+  const res = await api.post(
+    `/hr/performance/cycles/${cycleId}/retry-skipped`,
+    {},
+  );
+  return res.data?.data ?? res.data;
+};
+
 // ── Performance Review — employee self-service API ──────────────
 
 export const fetchMyReviews = async (): Promise<PerformanceReview[]> => {
@@ -415,5 +434,42 @@ export const submitMyReview = async (
     `/employee/performance/reviews/${reviewId}/submit`,
     {},
   );
+  return res.data?.data ?? res.data;
+};
+
+export const fetchPendingReviewsForMyTeam = async (): Promise<
+  PerformanceReview[]
+> => {
+  const res = await api.get("/employee/reviews/pending-for-my-team");
+  const d = res.data?.data ?? res.data;
+  return Array.isArray(d) ? d : [];
+};
+
+export const fetchDepartmentReviewHistory = async (): Promise<
+  PerformanceReview[]
+> => {
+  const res = await api.get("/employee/performance/department-history");
+  const d = res.data?.data ?? res.data;
+  return Array.isArray(d) ? d : [];
+};
+
+export const updateReviewManagerSection = async (
+  reviewId: string,
+  dto: Parameters<typeof updateManagerReviewSection>[1],
+): Promise<PerformanceReview> => {
+  const res = await api.patch(
+    `/employee/reviews/${reviewId}/manager-section`,
+    dto,
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const completeReviewAsManager = async (
+  reviewId: string,
+  probationRecommendationReasoning?: string,
+): Promise<PerformanceReview> => {
+  const res = await api.patch(`/employee/reviews/${reviewId}/complete`, {
+    probationRecommendationReasoning,
+  });
   return res.data?.data ?? res.data;
 };
