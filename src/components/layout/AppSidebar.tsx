@@ -211,6 +211,12 @@ const NAV_BY_MODULE: Record<
       adminOnly: true,
     },
     {
+      title: "Probation",
+      url: "/hr/probation",
+      icon: ClipboardCheck,
+      adminOnly: true,
+    },
+    {
       title: "Recruitment",
       url: "/hr/recruitment",
       icon: ClipboardList,
