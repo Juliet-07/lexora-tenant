@@ -161,6 +161,18 @@ export default function MyPerformance() {
           )}
         </TabsContent>
 
+        {isManager && (
+          <TabsContent value="team-reviews" className="space-y-3">
+            <ManagerTeamReviewsPanel />
+          </TabsContent>
+        )}
+
+        {isHoD && (
+          <TabsContent value="dept-reviews" className="space-y-3">
+            <DepartmentReviewsPanel />
+          </TabsContent>
+        )}
+
         <TabsContent value="policies" className="space-y-3">
           <PerformancePoliciesPanel readOnly />
         </TabsContent>
