@@ -64,7 +64,13 @@ interface Props {
   ) => Promise<PerformanceReview>;
 }
 
-export function ManagerReviewSheet({ review, onClose, onCompleted }: Props) {
+export function ManagerReviewSheet({
+  review,
+  onClose,
+  onCompleted,
+  saveFn,
+  completeFn,
+}: Props) {
   const queryClient = useQueryClient();
   const reviewId = review?._id;
 
