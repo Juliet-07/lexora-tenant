@@ -256,6 +256,15 @@ export interface PerformanceReview {
   managerSignedBy: string | null;
   createdAt: string;
   subjectHierarchyRole: "regular" | "manager" | "head_of_department" | null;
+  employeeEmploymentStatus?:
+    | "active"
+    | "on_leave"
+    | "probation"
+    | "suspended"
+    | "terminated"
+    | "resigned"
+    | null;
+  probationEndDate?: string | null;
 }
 
 // ── Live-computed scores, returned alongside a review ───────────
