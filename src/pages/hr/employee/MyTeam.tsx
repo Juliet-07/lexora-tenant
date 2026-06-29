@@ -1,115 +1,77 @@
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Users, MapPin, Briefcase, Mail, CalendarDays } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Users,
+  Briefcase,
+  ClipboardCheck,
+  AlertTriangle,
+} from "lucide-react";
+import { fetchMyDirectReports, type DirectReport } from "@/lib/hr-api";
+import { ManagerProbationSheet } from "@/components/hr/ManagerProbationSheet";
 
 const initials = (first: string, last: string) =>
   `${(first?.[0] ?? "").toUpperCase()}${(last?.[0] ?? "").toUpperCase()}`;
 
-// ── Dummy data ──────────────────────────────────────────────────
-interface TeamMember {
-  _id: string;
-  firstName: string;
-  lastName: string;
-  jobTitle: string;
-  team: string;
-  location: string;
-  email: string;
-  startDate: string;
-  employmentType: "Full-time" | "Contract";
-}
+const EMPLOYMENT_TYPE_LABEL: Record<string, string> = {
+  full_time: "Full-time",
+  part_time: "Part-time",
+  contract: "Contract",
+  intern: "Intern",
+  consultant: "Consultant",
+};
 
-const MOCK_TEAM: TeamMember[] = [
-  {
-    _id: "1",
-    firstName: "Amara",
-    lastName: "Okafor",
-    jobTitle: "Senior Compliance Analyst",
-    team: "Compliance",
-    location: "Lagos HQ",
-    email: "amara.okafor@lexora.co",
-    startDate: "2023-04-12",
-    employmentType: "Full-time",
-  },
-  {
-    _id: "2",
-    firstName: "David",
-    lastName: "Mensah",
-    jobTitle: "KYC Specialist",
-    team: "Compliance",
-    location: "Accra Office",
-    email: "david.mensah@lexora.co",
-    startDate: "2024-01-08",
-    employmentType: "Full-time",
-  },
-  {
-    _id: "3",
-    firstName: "Priya",
-    lastName: "Sharma",
-    jobTitle: "AML Investigator",
-    team: "Compliance",
-    location: "Remote",
-    email: "priya.sharma@lexora.co",
-    startDate: "2022-11-21",
-    employmentType: "Full-time",
-  },
-  {
-    _id: "4",
-    firstName: "Jonas",
-    lastName: "Becker",
-    jobTitle: "Onboarding Associate",
-    team: "Compliance",
-    location: "Lagos HQ",
-    email: "jonas.becker@lexora.co",
-    startDate: "2025-02-03",
-    employmentType: "Contract",
-  },
-  {
-    _id: "5",
-    firstName: "Chiamaka",
-    lastName: "Eze",
-    jobTitle: "Junior Analyst",
-    team: "Compliance",
-    location: "Lagos HQ",
-    email: "chiamaka.eze@lexora.co",
-    startDate: "2025-06-15",
-    employmentType: "Full-time",
-  },
-  {
-    _id: "6",
-    firstName: "Liam",
-    lastName: "O'Connor",
-    jobTitle: "Risk Analyst",
-    team: "Compliance",
-    location: "Remote",
-    email: "liam.oconnor@lexora.co",
-    startDate: "2024-09-30",
-    employmentType: "Full-time",
-  },
-];
+const STATUS_TONE: Record<string, string> = {
+  active: "bg-success/10 text-success border-success/20",
+  probation: "bg-warning/10 text-warning border-warning/20",
+  on_leave: "bg-info/10 text-info border-info/20",
+  suspended: "bg-destructive/10 text-destructive border-destructive/20",
+  terminated: "bg-muted text-muted-foreground",
+  resigned: "bg-muted text-muted-foreground",
+};
 
-const fmtDate = (d: string) =>
-  new Date(d).toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
+const STATUS_LABEL: Record<string, string> = {
+  active: "Active",
+  probation: "Probation",
+  on_leave: "On leave",
+  suspended: "Suspended",
+  terminated: "Terminated",
+  resigned: "Resigned",
+};
 
 export default function MyTeam() {
-  const reports = MOCK_TEAM;
+  const { data: reports = [], isLoading } = useQuery({
+    queryKey: ["my-direct-reports"],
+    queryFn: fetchMyDirectReports,
+  });
+
+  const [probationFor, setProbationFor] = useState<DirectReport | null>(null);
+
   const count = reports.length;
-  const subtitle =
-    count === 0
-      ? "No direct reports yet."
-      : `${count} ${count === 1 ? "person reports" : "people reporting"} to you.`;
+  const probationCount = reports.filter(
+    (r) => r.employmentStatus === "probation",
+  ).length;
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">My Team</h1>
-        <p className="text-sm text-muted-foreground mt-1">{subtitle}</p>
+        <p className="text-sm text-muted-foreground mt-1">
+          {isLoading
+            ? "Loading…"
+            : count === 0
+              ? "No direct reports yet."
+              : `${count} ${count === 1 ? "person reports" : "people report"} to you${
+                  probationCount > 0
+                    ? ` · ${probationCount} on probation`
+                    : ""
+                }.`}
+        </p>
       </div>
 
-      {count === 0 ? (
+      {!isLoading && count === 0 ? (
         <Card>
           <CardContent className="py-20 text-center text-muted-foreground">
             <Users className="h-10 w-10 mx-auto mb-3 opacity-40" />
@@ -118,57 +80,84 @@ export default function MyTeam() {
         </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {reports.map((r) => (
-            <Card key={r._id} className="hover:shadow-md transition-shadow">
-              <CardContent className="p-5">
-                <div className="flex items-start gap-4">
-                  <div className="h-12 w-12 rounded-full bg-gradient-to-br from-primary to-secondary text-white flex items-center justify-center font-semibold shrink-0">
-                    {initials(r.firstName, r.lastName)}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-start justify-between gap-2">
+          {reports.map((r) => {
+            const status = r.employmentStatus ?? "active";
+            const type = r.employmentType ?? "full_time";
+            const isProbation = status === "probation";
+            return (
+              <Card
+                key={r._id}
+                className="hover:shadow-md transition-shadow flex flex-col"
+              >
+                <CardContent className="p-5 flex-1 flex flex-col">
+                  <div className="flex items-start gap-4">
+                    <div className="h-12 w-12 rounded-full bg-gradient-to-br from-primary to-secondary text-white flex items-center justify-center font-semibold shrink-0">
+                      {initials(r.firstName, r.lastName)}
+                    </div>
+                    <div className="min-w-0 flex-1">
                       <p className="font-semibold truncate">
                         {r.firstName} {r.lastName}
                       </p>
-                      <Badge
-                        variant="outline"
-                        className="text-[10px] shrink-0"
-                      >
-                        {r.employmentType}
-                      </Badge>
+                      <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5 truncate">
+                        <Briefcase className="h-3 w-3 shrink-0" />
+                        {r.jobTitle}
+                      </p>
                     </div>
-                    <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5 truncate">
-                      <Briefcase className="h-3 w-3 shrink-0" />
-                      {r.jobTitle}
-                    </p>
                   </div>
-                </div>
 
-                <div className="mt-4 space-y-1.5 text-xs text-muted-foreground">
-                  <div className="flex items-center gap-1.5">
-                    <Users className="h-3.5 w-3.5" />
-                    <span className="truncate">{r.team}</span>
+                  <div className="mt-3 flex items-center gap-1.5 flex-wrap">
+                    <Badge
+                      variant="outline"
+                      className={STATUS_TONE[status] ?? ""}
+                    >
+                      {isProbation && (
+                        <AlertTriangle className="h-3 w-3 mr-1" />
+                      )}
+                      {STATUS_LABEL[status] ?? status}
+                    </Badge>
+                    <Badge variant="outline" className="text-[10px]">
+                      {EMPLOYMENT_TYPE_LABEL[type] ?? type}
+                    </Badge>
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    <MapPin className="h-3.5 w-3.5" />
-                    <span className="truncate">{r.location}</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <Mail className="h-3.5 w-3.5" />
-                    <span className="truncate">{r.email}</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <CalendarDays className="h-3.5 w-3.5" />
-                    <span className="truncate">
-                      Joined {fmtDate(r.startDate)}
-                    </span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+
+                  {isProbation && (
+                    <div className="mt-4 pt-3 border-t">
+                      <Button
+                        size="sm"
+                        className="w-full"
+                        onClick={() => setProbationFor(r)}
+                      >
+                        <ClipboardCheck className="h-4 w-4 mr-1.5" />
+                        Manage 90-day plan
+                      </Button>
+                      {r.probationEndDate && (
+                        <p className="text-[10px] text-muted-foreground mt-1.5 text-center">
+                          Ends{" "}
+                          {new Date(r.probationEndDate).toLocaleDateString()}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
+
+      <ManagerProbationSheet
+        employee={
+          probationFor
+            ? {
+                _id: probationFor._id,
+                firstName: probationFor.firstName,
+                lastName: probationFor.lastName,
+                jobTitle: probationFor.jobTitle,
+              }
+            : null
+        }
+        onClose={() => setProbationFor(null)}
+      />
     </div>
   );
 }
