@@ -1471,9 +1471,15 @@ export interface DirectReport {
   firstName: string;
   lastName: string;
   jobTitle: string;
+  email?: string;
   teamId: HrTeam | string | null;
   locationId: HrLocation | string | null;
+  employmentType?: EmploymentType;
+  employmentStatus?: EmploymentStatus;
+  startDate?: string;
+  probationEndDate?: string | null;
 }
+
 
 export interface TerminateEmployeeDto {
   endDate: string;
