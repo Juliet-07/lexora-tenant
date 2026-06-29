@@ -2,12 +2,14 @@ import { useState, useEffect } from "react";
 import { PerformancePoliciesPanel } from "@/components/hr/PerformancePoliciesPanel";
 import { ManagerTeamReviewsPanel } from "@/components/hr/ManagerTeamReviewsPanel";
 import { DepartmentReviewsPanel } from "@/components/hr/DepartmentReviewsPanel";
+import { MyProbationPanel } from "@/components/hr/MyProbationPanel";
 // import { HoDManagerReviewsPanel } from "@/components/hr/HoDManagerReviewsPanel";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
