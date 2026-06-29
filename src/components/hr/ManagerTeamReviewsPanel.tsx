@@ -1,25 +1,15 @@
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-} from "@/components/ui/sheet";
 import { Loader2, ClipboardCheck, Clock, AlertTriangle } from "lucide-react";
-import { toast } from "sonner";
 import {
   fetchPendingReviewsForMyTeam,
   updateReviewManagerSection,
   completeReviewAsManager,
   type PerformanceReview,
 } from "@/lib/hr-performance-api";
+import { ManagerReviewSheet } from "./ManagerReviewSheet";
 
 export function ManagerTeamReviewsPanel() {
   const queryClient = useQueryClient();
@@ -37,7 +27,7 @@ export function ManagerTeamReviewsPanel() {
         <p className="text-xs text-muted-foreground">
           {pending.length === 0
             ? "Nothing waiting on you right now."
-            : `${pending.length} review(s) ready for your assessment.`}
+            : `${pending.length} review(s) ready for your assessment. You score each section alongside the employee's self-assessment, then sign off.`}
         </p>
       </div>
 
@@ -55,157 +45,66 @@ export function ManagerTeamReviewsPanel() {
         </Card>
       ) : (
         <div className="space-y-2">
-          {pending.map((r) => (
-            <Card
-              key={r._id}
-              className="cursor-pointer hover:bg-muted/30 transition-colors"
-              onClick={() => setReviewing(r)}
-            >
-              <CardContent className="p-4 flex items-center justify-between gap-3 flex-wrap">
-                <div className="min-w-0">
-                  <p className="font-medium text-sm">{r.employeeName}</p>
-                  <p className="text-xs text-muted-foreground">{r.jobTitle}</p>
-                </div>
-                <Badge
-                  variant="outline"
-                  className="bg-warning/10 text-warning border-warning/20"
-                >
-                  <Clock className="h-3 w-3 mr-1" /> Awaiting you
-                </Badge>
-              </CardContent>
-            </Card>
-          ))}
+          {pending.map((r) => {
+            const isProbation = r.employeeEmploymentStatus === "probation";
+            const awaitingEmployee = r.status === "employee_in_progress";
+            return (
+              <Card
+                key={r._id}
+                className="cursor-pointer hover:bg-muted/30 transition-colors"
+                onClick={() => setReviewing(r)}
+              >
+                <CardContent className="p-4 flex items-center justify-between gap-3 flex-wrap">
+                  <div className="min-w-0">
+                    <p className="font-medium text-sm">{r.employeeName}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {r.jobTitle}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {isProbation && (
+                      <Badge
+                        variant="outline"
+                        className="bg-warning/10 text-warning border-warning/20"
+                      >
+                        <AlertTriangle className="h-3 w-3 mr-1" /> Probation
+                      </Badge>
+                    )}
+                    {awaitingEmployee ? (
+                      <Badge
+                        variant="outline"
+                        className="bg-info/10 text-info border-info/20"
+                      >
+                        <Clock className="h-3 w-3 mr-1" /> Awaiting self-review
+                      </Badge>
+                    ) : (
+                      <Badge
+                        variant="outline"
+                        className="bg-warning/10 text-warning border-warning/20"
+                      >
+                        <Clock className="h-3 w-3 mr-1" /> Your turn to score
+                      </Badge>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
 
-      {reviewing && (
-        <ReviewActionSheet
-          review={reviewing}
-          onClose={() => setReviewing(null)}
-          onDone={() => {
-            queryClient.invalidateQueries({
-              queryKey: ["pending-reviews-for-my-team"],
-            });
-            setReviewing(null);
-          }}
-        />
-      )}
+      <ManagerReviewSheet
+        review={reviewing}
+        onClose={() => setReviewing(null)}
+        onCompleted={() => {
+          queryClient.invalidateQueries({
+            queryKey: ["pending-reviews-for-my-team"],
+          });
+          setReviewing(null);
+        }}
+        saveFn={updateReviewManagerSection}
+        completeFn={completeReviewAsManager}
+      />
     </div>
-  );
-}
-
-function ReviewActionSheet({
-  review,
-  onClose,
-  onDone,
-}: {
-  review: PerformanceReview;
-  onClose: () => void;
-  onDone: () => void;
-}) {
-  const [assessment, setAssessment] = useState(
-    review.managerAssessmentThisPeriod ?? "",
-  );
-  const [conclusions, setConclusions] = useState(
-    review.managerConclusions ?? "",
-  );
-  const [recommendationReasoning, setRecommendationReasoning] = useState("");
-
-  const saveMutation = useMutation({
-    mutationFn: () =>
-      updateReviewManagerSection(review._id, {
-        managerAssessmentThisPeriod: assessment,
-        managerConclusions: conclusions,
-      }),
-    onSuccess: () => toast.success("Saved."),
-    onError: (err: any) =>
-      toast.error(err?.response?.data?.message ?? "Failed to save"),
-  });
-
-  const completeMutation = useMutation({
-    mutationFn: () =>
-      completeReviewAsManager(review._id, recommendationReasoning || undefined),
-    onSuccess: () => {
-      toast.success(`Review for ${review.employeeName} completed.`);
-      onDone();
-    },
-    onError: (err: any) => {
-      toast.error(err?.response?.data?.message ?? "Failed to complete review");
-    },
-  });
-
-  return (
-    <Sheet open onOpenChange={(o) => !o && onClose()}>
-      <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
-        <SheetHeader>
-          <SheetTitle>{review.employeeName}</SheetTitle>
-          <SheetDescription>{review.jobTitle}</SheetDescription>
-        </SheetHeader>
-        <div className="mt-5 space-y-4">
-          <div>
-            <Label>Your assessment this period</Label>
-            <Textarea
-              className="mt-1.5"
-              rows={4}
-              value={assessment}
-              onChange={(e) => setAssessment(e.target.value)}
-              placeholder="Summarize their performance this period…"
-            />
-          </div>
-          <div>
-            <Label>Conclusions</Label>
-            <Textarea
-              className="mt-1.5"
-              rows={3}
-              value={conclusions}
-              onChange={(e) => setConclusions(e.target.value)}
-              placeholder="Overall conclusions and next steps…"
-            />
-          </div>
-
-          <div className="rounded-md border border-warning/30 bg-warning/5 p-3 space-y-2">
-            <p className="text-xs font-medium flex items-center gap-1.5 text-warning">
-              <AlertTriangle className="h-3.5 w-3.5" /> If this is a probation
-              evaluation
-            </p>
-            <p className="text-xs text-muted-foreground">
-              If this review is this person's Month 3 probation evaluation, a
-              recommendation with reasoning is required before you can complete
-              it. Otherwise, leave this blank.
-            </p>
-            <Textarea
-              rows={3}
-              value={recommendationReasoning}
-              onChange={(e) => setRecommendationReasoning(e.target.value)}
-              placeholder="Your recommendation and reasoning for HR's final decision…"
-            />
-          </div>
-
-          <div className="flex justify-end gap-2 pt-2 border-t">
-            <Button
-              variant="outline"
-              disabled={saveMutation.isPending}
-              onClick={() => saveMutation.mutate()}
-            >
-              {saveMutation.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                "Save draft"
-              )}
-            </Button>
-            <Button
-              disabled={completeMutation.isPending}
-              onClick={() => completeMutation.mutate()}
-            >
-              {completeMutation.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                "Complete & sign off"
-              )}
-            </Button>
-          </div>
-        </div>
-      </SheetContent>
-    </Sheet>
   );
 }
