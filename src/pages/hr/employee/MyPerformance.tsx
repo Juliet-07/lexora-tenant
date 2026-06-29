@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { PerformancePoliciesPanel } from "@/components/hr/PerformancePoliciesPanel";
 import { ManagerTeamReviewsPanel } from "@/components/hr/ManagerTeamReviewsPanel";
 import { DepartmentReviewsPanel } from "@/components/hr/DepartmentReviewsPanel";
+import { HoDManagerReviewsPanel } from "@/components/hr/HoDManagerReviewsPanel";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -130,6 +131,9 @@ export default function MyPerformance() {
           {isHoD && (
             <TabsTrigger value="dept-reviews">Department Reviews</TabsTrigger>
           )}
+          {isHoD && (
+            <TabsTrigger value="mgr-reviews">Review Managers</TabsTrigger>
+          )}
           <TabsTrigger value="policies">Policies</TabsTrigger>
         </TabsList>
 
@@ -170,6 +174,12 @@ export default function MyPerformance() {
         {isHoD && (
           <TabsContent value="dept-reviews" className="space-y-3">
             <DepartmentReviewsPanel />
+          </TabsContent>
+        )}
+
+        {isHoD && (
+          <TabsContent value="mgr-reviews" className="space-y-3">
+            <HoDManagerReviewsPanel />
           </TabsContent>
         )}
 
