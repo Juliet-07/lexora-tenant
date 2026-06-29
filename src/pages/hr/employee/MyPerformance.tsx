@@ -84,49 +84,69 @@ export default function MyPerformance() {
   const isManager = user?.hierarchyRole === "manager";
   const isHoD = user?.hierarchyRole === "head_of_department";
 
+  const { data: probation, isLoading: probationLoading } = useQuery({
+    queryKey: ["my-probation"],
+    queryFn: fetchMyProbation,
+  });
+
+  const onProbation =
+    !!probation?.record && probation.record.status === "in_progress";
+
   const { data: reviews = [], isLoading } = useQuery({
     queryKey: ["my-performance-reviews"],
     queryFn: fetchMyReviews,
+    enabled: !onProbation,
   });
 
   const active = reviews.find((r) => r.status !== "completed");
   const completed = reviews.filter((r) => r.status === "completed");
+
+  const defaultTab = onProbation ? "probation" : "current";
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">My Performance</h1>
         <p className="text-sm text-muted-foreground">
-          Complete your self-assessment honestly — your manager's scores and
-          notes appear once they review it.
+          {onProbation
+            ? "You're on probation — track your 90-day plan and submit a self-assessment at each check-in."
+            : "Complete your self-assessment honestly — your manager's scores and notes appear once they review it."}
         </p>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-        <Stat
-          label="Status"
-          value={active ? STATUS_LABEL[active.status] : "—"}
-          icon={Calendar}
-          tone="from-primary to-secondary"
-        />
-        <Stat
-          label="Past Reviews"
-          value={completed.length}
-          icon={CheckCircle2}
-          tone="from-emerald-500 to-teal-500"
-        />
-        <Stat
-          label="Open Items"
-          value={reviews.filter((r) => r.status !== "completed").length}
-          icon={TrendingUp}
-          tone="from-amber-500 to-orange-500"
-        />
-      </div>
+      {!onProbation && (
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+          <Stat
+            label="Status"
+            value={active ? STATUS_LABEL[active.status] : "—"}
+            icon={Calendar}
+            tone="from-primary to-secondary"
+          />
+          <Stat
+            label="Past Reviews"
+            value={completed.length}
+            icon={CheckCircle2}
+            tone="from-emerald-500 to-teal-500"
+          />
+          <Stat
+            label="Open Items"
+            value={reviews.filter((r) => r.status !== "completed").length}
+            icon={TrendingUp}
+            tone="from-amber-500 to-orange-500"
+          />
+        </div>
+      )}
 
-      <Tabs defaultValue="current" className="space-y-4">
+      <Tabs defaultValue={defaultTab} className="space-y-4">
         <TabsList className="flex flex-wrap h-auto">
-          <TabsTrigger value="current">Current Review</TabsTrigger>
-          <TabsTrigger value="history">Past Reviews</TabsTrigger>
+          {onProbation ? (
+            <TabsTrigger value="probation">Probation</TabsTrigger>
+          ) : (
+            <>
+              <TabsTrigger value="current">Current Review</TabsTrigger>
+              <TabsTrigger value="history">Past Reviews</TabsTrigger>
+            </>
+          )}
           {isManager && (
             <TabsTrigger value="team-reviews">Team Reviews</TabsTrigger>
           )}
@@ -139,33 +159,41 @@ export default function MyPerformance() {
           <TabsTrigger value="policies">Policies</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="current" className="space-y-3">
-          {isLoading ? (
-            <LoadingBlock />
-          ) : !active ? (
-            <Card>
-              <CardContent className="p-6 text-sm text-muted-foreground">
-                No review cycle assigned to you right now.
-              </CardContent>
-            </Card>
-          ) : (
-            <CurrentReview reviewId={active._id} />
-          )}
-        </TabsContent>
+        {onProbation ? (
+          <TabsContent value="probation" className="space-y-3">
+            <MyProbationPanel />
+          </TabsContent>
+        ) : (
+          <>
+            <TabsContent value="current" className="space-y-3">
+              {isLoading || probationLoading ? (
+                <LoadingBlock />
+              ) : !active ? (
+                <Card>
+                  <CardContent className="p-6 text-sm text-muted-foreground">
+                    No review cycle assigned to you right now.
+                  </CardContent>
+                </Card>
+              ) : (
+                <CurrentReview reviewId={active._id} />
+              )}
+            </TabsContent>
 
-        <TabsContent value="history" className="space-y-3">
-          {completed.length === 0 ? (
-            <Card>
-              <CardContent className="p-6 text-sm text-muted-foreground">
-                No completed reviews yet.
-              </CardContent>
-            </Card>
-          ) : (
-            completed.map((r) => (
-              <PastReviewCard key={r._id} reviewId={r._id} summary={r} />
-            ))
-          )}
-        </TabsContent>
+            <TabsContent value="history" className="space-y-3">
+              {completed.length === 0 ? (
+                <Card>
+                  <CardContent className="p-6 text-sm text-muted-foreground">
+                    No completed reviews yet.
+                  </CardContent>
+                </Card>
+              ) : (
+                completed.map((r) => (
+                  <PastReviewCard key={r._id} reviewId={r._id} summary={r} />
+                ))
+              )}
+            </TabsContent>
+          </>
+        )}
 
         {isManager && (
           <TabsContent value="team-reviews" className="space-y-3">
@@ -192,6 +220,7 @@ export default function MyPerformance() {
     </div>
   );
 }
+
 
 // ─────────────────────────────────────────────────────────────
 // Past review summary card — fetches its own scored view so the
