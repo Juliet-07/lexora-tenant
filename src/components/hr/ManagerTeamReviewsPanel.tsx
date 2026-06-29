@@ -8,6 +8,7 @@ import {
   updateReviewManagerSection,
   completeReviewAsManager,
   type PerformanceReview,
+  fetchReviewForReviewer,
 } from "@/lib/hr-performance-api";
 import { ManagerReviewSheet } from "./ManagerReviewSheet";
 
@@ -102,6 +103,7 @@ export function ManagerTeamReviewsPanel() {
           });
           setReviewing(null);
         }}
+        fetchFn={fetchReviewForReviewer}
         saveFn={updateReviewManagerSection}
         completeFn={completeReviewAsManager}
       />

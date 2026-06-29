@@ -366,6 +366,50 @@ function CurrentReview({ reviewId }: { reviewId: string }) {
 
   const locked = live.status !== "employee_in_progress";
 
+  const isReadyToSubmit = (): boolean => {
+    // All KPI scores must be filled
+    const allKpisFilled = live.kpis.every(
+      (k) => kpiScores[k.key] != null && kpiScores[k.key] !== undefined,
+    );
+
+    // All competency scores must be filled
+    const allCompetenciesFilled = live.competencies.every(
+      (c) => competencyState[c.key]?.score != null,
+    );
+
+    // All values scores must be filled
+    const allValuesFilled = live.values.every(
+      (v) => valuesState[v.key]?.score != null,
+    );
+
+    // Narrative fields must not be empty
+    const narrativeFilled =
+      achievements.trim().length > 0 && challenges.trim().length > 0;
+
+    // Every previous goal must have a status picked
+    const goalStatusesFilled = previousGoals.every(
+      (g) => g.status != null && g.status.trim().length > 0,
+    );
+
+    // At least one training area must be entered (and not blank)
+    const trainingFilled = trainingAreas.some((a) => a.trim().length > 0);
+
+    // Career goals
+    const careerGoalsFilled =
+      shortTermCareerGoals.trim().length > 0 &&
+      longTermCareerGoals.trim().length > 0;
+
+    return (
+      allKpisFilled &&
+      allCompetenciesFilled &&
+      allValuesFilled &&
+      narrativeFilled &&
+      goalStatusesFilled &&
+      trainingFilled &&
+      careerGoalsFilled
+    );
+  };
+
   const buildPayload = () => ({
     kpiScores: Object.entries(kpiScores).map(([key, score]) => ({
       key,
@@ -939,6 +983,7 @@ function CurrentReview({ reviewId }: { reviewId: string }) {
               <DialogTrigger asChild>
                 <Button
                   className="bg-gradient-to-r from-primary to-secondary"
+                  disabled={!isReadyToSubmit()}
                   onClick={() => saveMutation.mutate(buildPayload())}
                 >
                   <Send className="h-4 w-4 mr-2" /> Submit self-review

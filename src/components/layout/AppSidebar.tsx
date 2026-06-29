@@ -292,6 +292,12 @@ export function AppSidebar() {
   const TEAM_MEMBER_NAV = [
     { title: "Dashboard", url: "/", icon: LayoutDashboard },
     { title: "My Profile", url: "/my/profile", icon: UserCog },
+    {
+      title: "My Team",
+      url: "/my/team",
+      icon: UsersRound,
+      requiresRole: "manager",
+    },
     { title: "Clients", url: "/clients", icon: Users },
     { title: "Projects", url: "/projects", icon: FolderKanban },
     { title: "Time", url: "/my/time", icon: Clock },
@@ -299,12 +305,6 @@ export function AppSidebar() {
     { title: "Performance", url: "/my/performance", icon: BarChart3 },
     { title: "Payslips", url: "/my/payslips", icon: Wallet },
     { title: "Requisitions", url: "/my/requisitions", icon: ClipboardList },
-    {
-      title: "My Team",
-      url: "/my/team",
-      icon: UsersRound,
-      requiresRole: "manager",
-    },
     {
       title: "My Department",
       url: "/my/department",

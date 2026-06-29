@@ -394,6 +394,13 @@ export const retrySkippedEmployees = async (
   return res.data?.data ?? res.data;
 };
 
+export const fetchReviewForReviewer = async (
+  reviewId: string,
+): Promise<ScoredReviewResponse> => {
+  const res = await api.get(`/employee/reviews/${reviewId}`);
+  return res.data?.data ?? res.data;
+};
+
 // ── Performance Review — employee self-service API ──────────────
 
 export const fetchMyReviews = async (): Promise<PerformanceReview[]> => {

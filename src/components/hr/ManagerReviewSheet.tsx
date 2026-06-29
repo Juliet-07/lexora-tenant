@@ -35,7 +35,9 @@ import {
   fetchReviewById,
   updateManagerReviewSection,
   completeReview,
+  fetchReviewForReviewer,
   type PerformanceReview,
+  ScoredReviewResponse,
 } from "@/lib/hr-performance-api";
 
 const RATING_BAND_TONE: Record<string, string> = {
@@ -52,7 +54,7 @@ interface Props {
   review: PerformanceReview | null;
   onClose: () => void;
   onCompleted: () => void;
-  /** Override the save endpoint (e.g. for manager-of-team using the employee API path) */
+  fetchFn?: (reviewId: string) => Promise<ScoredReviewResponse>;
   saveFn?: (
     reviewId: string,
     dto: Parameters<typeof updateManagerReviewSection>[1],
@@ -68,6 +70,7 @@ export function ManagerReviewSheet({
   review,
   onClose,
   onCompleted,
+  fetchFn,
   saveFn,
   completeFn,
 }: Props) {
@@ -76,7 +79,7 @@ export function ManagerReviewSheet({
 
   const { data, isLoading } = useQuery({
     queryKey: ["performance-review", reviewId],
-    queryFn: () => fetchReviewById(reviewId!),
+    queryFn: () => (fetchFn ?? fetchReviewById)(reviewId!),
     enabled: !!reviewId,
   });
 
