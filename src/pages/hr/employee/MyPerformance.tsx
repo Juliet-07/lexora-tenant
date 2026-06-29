@@ -1,5 +1,8 @@
 import { useState, useEffect } from "react";
 import { PerformancePoliciesPanel } from "@/components/hr/PerformancePoliciesPanel";
+import { ManagerTeamReviewsPanel } from "@/components/hr/ManagerTeamReviewsPanel";
+import { DepartmentReviewsPanel } from "@/components/hr/DepartmentReviewsPanel";
+import { useAuth } from "@/contexts/AuthContext";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -72,6 +75,10 @@ const RATING_BAND_TONE: Record<string, string> = {
 };
 
 export default function MyPerformance() {
+  const { user } = useAuth();
+  const isManager = user?.hierarchyRole === "manager";
+  const isHoD = user?.hierarchyRole === "head_of_department";
+
   const { data: reviews = [], isLoading } = useQuery({
     queryKey: ["my-performance-reviews"],
     queryFn: fetchMyReviews,
@@ -79,6 +86,8 @@ export default function MyPerformance() {
 
   const active = reviews.find((r) => r.status !== "completed");
   const completed = reviews.filter((r) => r.status === "completed");
+
+
 
   return (
     <div className="space-y-6">
@@ -112,9 +121,15 @@ export default function MyPerformance() {
       </div>
 
       <Tabs defaultValue="current" className="space-y-4">
-        <TabsList>
+        <TabsList className="flex flex-wrap h-auto">
           <TabsTrigger value="current">Current Review</TabsTrigger>
           <TabsTrigger value="history">Past Reviews</TabsTrigger>
+          {isManager && (
+            <TabsTrigger value="team-reviews">Team Reviews</TabsTrigger>
+          )}
+          {isHoD && (
+            <TabsTrigger value="dept-reviews">Department Reviews</TabsTrigger>
+          )}
           <TabsTrigger value="policies">Policies</TabsTrigger>
         </TabsList>
 
@@ -145,6 +160,18 @@ export default function MyPerformance() {
             ))
           )}
         </TabsContent>
+
+        {isManager && (
+          <TabsContent value="team-reviews" className="space-y-3">
+            <ManagerTeamReviewsPanel />
+          </TabsContent>
+        )}
+
+        {isHoD && (
+          <TabsContent value="dept-reviews" className="space-y-3">
+            <DepartmentReviewsPanel />
+          </TabsContent>
+        )}
 
         <TabsContent value="policies" className="space-y-3">
           <PerformancePoliciesPanel readOnly />
