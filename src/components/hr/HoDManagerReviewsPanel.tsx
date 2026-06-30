@@ -232,6 +232,8 @@ export function HoDManagerReviewsPanel() {
         </CardContent>
       </Card>
 
+      <ReviewedByMeHistoryTable />
+
       {/* Send-review dialog */}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
