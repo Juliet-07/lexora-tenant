@@ -11,6 +11,7 @@ import {
   fetchReviewForReviewer,
 } from "@/lib/hr-performance-api";
 import { ManagerReviewSheet } from "./ManagerReviewSheet";
+import { ReviewedByMeHistoryTable } from "./ReviewedByMeHistoryTable";
 
 export function ManagerTeamReviewsPanel() {
   const queryClient = useQueryClient();
