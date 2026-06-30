@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/dialog";
 import { Send, Star, Users, ClipboardCheck } from "lucide-react";
 import { toast } from "sonner";
+import { ReviewedByMeHistoryTable } from "./ReviewedByMeHistoryTable";
 
 // ── Dummy data: managers reporting to this HoD ─────────────────
 interface ManagerReport {
@@ -230,6 +231,8 @@ export function HoDManagerReviewsPanel() {
           </ul>
         </CardContent>
       </Card>
+
+      <ReviewedByMeHistoryTable />
 
       {/* Send-review dialog */}
       <Dialog open={open} onOpenChange={setOpen}>
