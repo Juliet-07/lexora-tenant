@@ -401,6 +401,18 @@ export const fetchReviewForReviewer = async (
   return res.data?.data ?? res.data;
 };
 
+export const deleteCycle = async (cycleId: string): Promise<void> => {
+  await api.delete(`/hr/performance/cycles/${cycleId}/force`);
+};
+
+export const fetchReviewedHistoryForManager = async (): Promise<
+  (PerformanceReview & { scores: ScoredReviewResponse["scores"] })[]
+> => {
+  const res = await api.get("/employee/reviews/reviewed-by-me");
+  const d = res.data?.data ?? res.data;
+  return Array.isArray(d) ? d : [];
+};
+
 // ── Performance Review — employee self-service API ──────────────
 
 export const fetchMyReviews = async (): Promise<PerformanceReview[]> => {

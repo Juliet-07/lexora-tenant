@@ -64,6 +64,7 @@ import {
   type ReviewCycle,
   type PerformanceReview,
   retrySkippedEmployees,
+  deleteCycle,
 } from "@/lib/hr-performance-api";
 import { ManagerReviewSheet } from "@/components/hr/ManagerReviewSheet";
 import { KpiTemplatesPanel } from "@/components/hr/KpiTemplatePanel";
@@ -107,6 +108,7 @@ export default function HRPerformance() {
 
   const [newCycleOpen, setNewCycleOpen] = useState(false);
   const [discardTarget, setDiscardTarget] = useState<ReviewCycle | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ReviewCycle | null>(null);
 
   const { data: locations = [] } = useQuery({
     queryKey: ["hr-locations"],
@@ -190,6 +192,18 @@ export default function HRPerformance() {
       toast.error(
         err?.response?.data?.message ?? "Failed to retry skipped employees",
       ),
+  });
+
+  const deleteCycleMutation = useMutation({
+    mutationFn: deleteCycle,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["performance-cycles"] });
+      setDeleteTarget(null);
+      setOpenCycle(null);
+      toast.success("Cycle and all its reviews deleted.");
+    },
+    onError: (err: any) =>
+      toast.error(err?.response?.data?.message ?? "Failed to delete cycle"),
   });
 
   const [cycleForm, setCycleForm] = useState({
@@ -546,6 +560,14 @@ export default function HRPerformance() {
                         Close Cycle
                       </Button>
                     )}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-destructive border-destructive/30 hover:bg-destructive/10"
+                      onClick={() => setDeleteTarget(openCycle)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Delete Cycle
+                    </Button>
                   </div>
                 </div>
                 {openCycle.skippedEmployees.length > 0 && (
@@ -686,6 +708,39 @@ export default function HRPerformance() {
               }}
             >
               Discard
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={!!deleteTarget}
+        onOpenChange={(o) => !o && setDeleteTarget(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Permanently delete this cycle?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This deletes "{deleteTarget?.name}" and EVERY review inside it —
+              including any that are already completed and signed off. This
+              cannot be undone, and there is no way to recover the deleted
+              performance history afterward.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive hover:bg-destructive/90"
+              disabled={deleteCycleMutation.isPending}
+              onClick={() => {
+                if (deleteTarget) deleteCycleMutation.mutate(deleteTarget._id);
+              }}
+            >
+              {deleteCycleMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                "Delete permanently"
+              )}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
