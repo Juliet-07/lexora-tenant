@@ -71,7 +71,8 @@ import { KpiTemplatesPanel } from "@/components/hr/KpiTemplatePanel";
 import { PerformanceFrameworksPanel } from "@/components/hr/PerformanceFrameworksPanel";
 import { PerformancePoliciesPanel } from "@/components/hr/PerformancePoliciesPanel";
 import { TenantHoDReviewsPanel } from "@/components/hr/TenantHoDReviewsPanel";
-import { FileText, Crown } from "lucide-react";
+import { TenantAllReviewsPanel } from "@/components/hr/TenantAllReviewsPanel";
+import { FileText, Crown, ListChecks } from "lucide-react";
 
 const CYCLE_STATUS_TONE: Record<string, string> = {
   draft: "bg-warning/10 text-warning border-warning/20",
