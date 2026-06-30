@@ -1,17 +1,23 @@
 // =================================================================
-// ManagerProbationSheet
+// ManagerProbationSheet — CORRECTED
 // -----------------------------------------------------------------
-// Side-sheet that lets a line manager run the 4 manager-owned
-// stages of a direct report's 90-day probation. Stages are strictly
-// sequential — a later stage is locked until the previous one is
-// completed (mirrors the server-side guard).
+// Side-sheet for a line manager running a direct report's 90-day
+// probation. Stages stay strictly sequential, server-guarded.
 //
-//   1. Onboarding (Day 1)         → set objectives + success measures
-//   2. Month 1 check-in (D25–30)  → informal note
-//   3. Month 2 review (D55–60)    → formal progress note
-//   4. Month 3 evaluation (D80–85)→ recommendation (Confirm / Extend
-//                                   / Terminate) + reasoning → goes
-//                                   to HR for the Final Decision.
+//   1. Onboarding (Day 1)         → objectives + success measures
+//   2. Month 1 check-in (D25–30)  → manager-only informal note
+//                                    (confirmed: no employee input,
+//                                    per Probation_Workflow.docx)
+//   3. Month 2 review (D55–60)    → manager-only formal progress
+//                                    note (same confirmation)
+//   4. Month 3 evaluation (D80–85)→ generates a REAL performance
+//                                    review cycle; employee
+//                                    self-assesses, manager scores
+//                                    via the SAME ManagerReviewSheet
+//                                    used everywhere else; the
+//                                    recommendation is AUTO-COMPUTED
+//                                    on completion — the manager
+//                                    never hand-types an outcome.
 // =================================================================
 
 import { useState, useEffect } from "react";
@@ -34,14 +40,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   Loader2,
   CheckCircle2,
@@ -51,7 +49,6 @@ import {
   Target,
   CalendarDays,
   FileText,
-  Send,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -59,10 +56,16 @@ import {
   setProbationOnboarding,
   completeProbationMonth1,
   completeProbationMonth2,
-  submitProbationMonth3,
+  startProbationMonth3,
   type ProbationStage,
-  type ProbationOutcome,
 } from "@/lib/hr-probation-api";
+import {
+  fetchReviewForReviewer,
+  updateReviewManagerSection,
+  completeReviewAsManager,
+  type PerformanceReview,
+} from "@/lib/hr-performance-api";
+import { ManagerReviewSheet } from "./ManagerReviewSheet";
 
 const STAGE_LABELS: Record<string, string> = {
   onboarding: "Onboarding — 90-day plan",
@@ -184,18 +187,28 @@ function Inner({ employee }: { employee: NonNullable<Props["employee"]> }) {
       </SheetHeader>
 
       <div className="mt-6 space-y-4">
-        <OnboardingCard stage={onboarding} employeeId={employee._id} onSaved={invalidate} />
-        <Month1Card
+        <OnboardingCard
+          stage={onboarding}
+          employeeId={employee._id}
+          onSaved={invalidate}
+        />
+        <MonthlyCard
           stage={m1}
           prevDone={onboarding.status === "completed"}
           employeeId={employee._id}
           onSaved={invalidate}
+          field="note"
+          placeholder="Informal review of settling-in, early performance, any concerns."
+          mutate={completeProbationMonth1}
         />
-        <Month2Card
+        <MonthlyCard
           stage={m2}
           prevDone={m1.status === "completed"}
           employeeId={employee._id}
           onSaved={invalidate}
+          field="progressNote"
+          placeholder="Formal mid-point assessment against objectives + corrective actions if any."
+          mutate={completeProbationMonth2}
         />
         <Month3Card
           stage={m3}
@@ -216,7 +229,8 @@ function Inner({ employee }: { employee: NonNullable<Props["employee"]> }) {
               </CardDescription>
             </CardHeader>
             <CardContent className="text-xs text-muted-foreground">
-              {finalDecision.status === "completed" && finalDecision.decision ? (
+              {finalDecision.status === "completed" &&
+              finalDecision.decision ? (
                 <span className="text-success capitalize">
                   Decision recorded: {finalDecision.decision.outcome}
                 </span>
@@ -271,7 +285,9 @@ function OnboardingCard({
   employeeId: string;
   onSaved: () => void;
 }) {
-  const [objectives, setObjectives] = useState(stage.objectives?.objectives ?? "");
+  const [objectives, setObjectives] = useState(
+    stage.objectives?.objectives ?? "",
+  );
   const [successMeasures, setSuccessMeasures] = useState(
     stage.objectives?.successMeasures ?? "",
   );
@@ -348,6 +364,10 @@ function OnboardingCard({
   );
 }
 
+// Month 1 & Month 2 — manager-only notes, confirmed against
+// Probation_Workflow.docx (no employee input described for either
+// stage). employeeSelfAssessment reference REMOVED — that field
+// never existed on the real schema.
 function MonthlyCard({
   stage,
   prevDone,
@@ -371,7 +391,10 @@ function MonthlyCard({
 
   const mut = useMutation({
     mutationFn: () =>
-      mutate(employeeId, field === "note" ? { note: text } : { progressNote: text }),
+      mutate(
+        employeeId,
+        field === "note" ? { note: text } : { progressNote: text },
+      ),
     onSuccess: () => {
       toast.success("Check-in recorded.");
       onSaved();
@@ -389,14 +412,6 @@ function MonthlyCard({
       </CardHeader>
       <CardContent className="space-y-3 text-sm">
         {!prevDone && <LockedNote />}
-        {stage.employeeSelfAssessment && (
-          <div className="rounded-md bg-muted/40 p-3 text-xs">
-            <p className="font-medium mb-1">Employee self-assessment</p>
-            <p className="whitespace-pre-wrap text-muted-foreground">
-              {stage.employeeSelfAssessment}
-            </p>
-          </div>
-        )}
         <div className="space-y-1">
           <Label className="text-xs">Your assessment</Label>
           <Textarea
@@ -431,38 +446,11 @@ function MonthlyCard({
   );
 }
 
-function Month1Card(props: {
-  stage: ProbationStage;
-  prevDone: boolean;
-  employeeId: string;
-  onSaved: () => void;
-}) {
-  return (
-    <MonthlyCard
-      {...props}
-      field="note"
-      placeholder="Informal review of settling-in, early performance, any concerns."
-      mutate={completeProbationMonth1}
-    />
-  );
-}
-
-function Month2Card(props: {
-  stage: ProbationStage;
-  prevDone: boolean;
-  employeeId: string;
-  onSaved: () => void;
-}) {
-  return (
-    <MonthlyCard
-      {...props}
-      field="progressNote"
-      placeholder="Formal mid-point assessment against objectives + corrective actions if any."
-      mutate={completeProbationMonth2}
-    />
-  );
-}
-
+// Month 3 — REBUILT. Status/trigger card, not a data-entry form.
+// Generates a real review cycle; the recommendation is AUTO-COMPUTED
+// when that review completes (PerformanceReviewService.completeReview()
+// -> ProbationService.recordMonth3Recommendation()) — never typed by
+// hand here.
 function Month3Card({
   stage,
   prevDone,
@@ -474,36 +462,22 @@ function Month3Card({
   employeeId: string;
   onSaved: () => void;
 }) {
-  const [reasoning, setReasoning] = useState(
-    stage.recommendation?.managerReasoning ?? "",
-  );
-  const [outcome, setOutcome] = useState<ProbationOutcome | "">(
-    stage.recommendation?.suggestedOutcome ?? "",
-  );
-  const [band, setBand] = useState(stage.recommendation?.basedOnRatingBand ?? "");
+  const [reviewing, setReviewing] = useState<PerformanceReview | null>(null);
 
-  useEffect(() => {
-    setReasoning(stage.recommendation?.managerReasoning ?? "");
-    setOutcome(stage.recommendation?.suggestedOutcome ?? "");
-    setBand(stage.recommendation?.basedOnRatingBand ?? "");
-  }, [stage]);
-
-  const mut = useMutation({
-    mutationFn: () =>
-      submitProbationMonth3(employeeId, {
-        managerReasoning: reasoning,
-        suggestedOutcome: outcome as ProbationOutcome,
-        basedOnRatingBand: band || undefined,
-      }),
+  const startMutation = useMutation({
+    mutationFn: () => startProbationMonth3(employeeId),
     onSuccess: () => {
-      toast.success("Recommendation sent to HR.");
+      toast.success(
+        "Month 3 evaluation started — the employee can now self-assess.",
+      );
       onSaved();
     },
     onError: (e: any) =>
-      toast.error(e?.response?.data?.message ?? "Failed to submit"),
+      toast.error(e?.response?.data?.message ?? "Failed to start evaluation"),
   });
 
   const done = stage.status === "completed";
+  const hasStarted = !!stage.linkedReviewId;
 
   return (
     <Card className={!prevDone ? "opacity-60" : ""}>
@@ -512,73 +486,74 @@ function Month3Card({
       </CardHeader>
       <CardContent className="space-y-3 text-sm">
         {!prevDone && <LockedNote />}
-        {stage.employeeSelfAssessment && (
-          <div className="rounded-md bg-muted/40 p-3 text-xs">
-            <p className="font-medium mb-1">Employee final self-assessment</p>
-            <p className="whitespace-pre-wrap text-muted-foreground">
-              {stage.employeeSelfAssessment}
+
+        {prevDone && !hasStarted && (
+          <>
+            <p className="text-xs text-muted-foreground">
+              Starting this generates a real performance review — the employee
+              completes a self-assessment, then you score it through the normal
+              review screen, exactly like any other review. The recommendation
+              for HR is prepared automatically once you complete it.
+            </p>
+            <Button
+              size="sm"
+              disabled={startMutation.isPending}
+              onClick={() => startMutation.mutate()}
+            >
+              {startMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                "Start Month 3 Evaluation"
+              )}
+            </Button>
+          </>
+        )}
+
+        {hasStarted && !done && (
+          <>
+            <p className="text-xs text-muted-foreground">
+              The evaluation is in progress. Open it to check status or add your
+              scores once the employee has submitted.
+            </p>
+            <Button
+              size="sm"
+              onClick={() => setReviewing({ _id: stage.linkedReviewId } as any)}
+            >
+              Open Review
+            </Button>
+          </>
+        )}
+
+        {done && stage.recommendation && (
+          <div className="rounded-md bg-muted/40 p-3 text-xs space-y-1">
+            <p>
+              <span className="font-medium">Recommendation: </span>
+              <span className="capitalize">
+                {stage.recommendation.suggestedOutcome}
+              </span>{" "}
+              (rated {stage.recommendation.basedOnRatingBand})
+            </p>
+            <p className="text-muted-foreground">
+              {stage.recommendation.managerReasoning}
+            </p>
+            <p className="text-muted-foreground">
+              Sent to HR {fmtDate(stage.completedAt)}
             </p>
           </div>
         )}
-        <div className="grid sm:grid-cols-2 gap-3">
-          <div className="space-y-1">
-            <Label className="text-xs">Recommended outcome</Label>
-            <Select
-              value={outcome}
-              onValueChange={(v) => setOutcome(v as ProbationOutcome)}
-              disabled={!prevDone || done}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select…" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="confirm">Confirm</SelectItem>
-                <SelectItem value="extend">Extend</SelectItem>
-                <SelectItem value="terminate">Terminate</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Overall rating band (optional)</Label>
-            <Input
-              value={band}
-              onChange={(e) => setBand(e.target.value)}
-              placeholder="e.g. Good"
-              disabled={!prevDone || done}
-            />
-          </div>
-        </div>
-        <div className="space-y-1">
-          <Label className="text-xs">Reasoning for HR</Label>
-          <Textarea
-            rows={4}
-            value={reasoning}
-            onChange={(e) => setReasoning(e.target.value)}
-            placeholder="Final performance assessment against probation criteria — what HR needs to sign off."
-            disabled={!prevDone || done}
-          />
-        </div>
-        {prevDone && !done && (
-          <Button
-            size="sm"
-            disabled={!outcome || !reasoning.trim() || mut.isPending}
-            onClick={() => mut.mutate()}
-          >
-            {mut.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <>
-                <Send className="h-4 w-4 mr-1" /> Send to HR
-              </>
-            )}
-          </Button>
-        )}
-        {done && (
-          <p className="text-xs text-muted-foreground">
-            Recommendation sent {fmtDate(stage.completedAt)}
-          </p>
-        )}
       </CardContent>
+
+      <ManagerReviewSheet
+        review={reviewing}
+        onClose={() => setReviewing(null)}
+        onCompleted={() => {
+          setReviewing(null);
+          onSaved();
+        }}
+        fetchFn={fetchReviewForReviewer}
+        saveFn={updateReviewManagerSection}
+        completeFn={completeReviewAsManager}
+      />
     </Card>
   );
 }

@@ -69,6 +69,7 @@ import {
 } from "@/lib/hr-api";
 import { downloadEmployeeReport } from "@/lib/employeeReport";
 import { EmployeeDocumentsPanel } from "./EmployeeDocumentsPanel";
+import { fetchEmployeeReviewHistory } from "@/lib/hr-performance-api";
 
 interface Dispute {
   id: string;
@@ -304,6 +305,14 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
     staleTime: 30_000,
   });
 
+  const { data: reviewHistory = [], isLoading: reviewHistoryLoading } =
+    useQuery({
+      queryKey: ["employee-review-history", employee?._id],
+      queryFn: () => fetchEmployeeReviewHistory(employee!._id),
+      enabled: !!employee,
+      staleTime: 30_000,
+    });
+
   const replacementCandidatesForSameTeam = useMemo(() => {
     if (!employee) return [];
 
@@ -443,7 +452,14 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
           <div className="grid grid-cols-3 gap-3 mt-5 text-sm">
             <div className="bg-white/10 rounded-lg p-3">
               <p className="text-xs opacity-80">Perf</p>
-              <p className="font-bold text-lg">{d.performance.overall}%</p>
+              <p className="font-bold text-lg">
+                {reviewHistoryLoading
+                  ? "—"
+                  : reviewHistory[0]?.scores.kpiSection.totalWeightedScore !=
+                      null
+                    ? `${reviewHistory[0].scores.kpiSection.totalWeightedScore}%`
+                    : "—"}
+              </p>
             </div>
             <div className="bg-white/10 rounded-lg p-3">
               <p className="text-xs opacity-80">Punctuality</p>
@@ -815,48 +831,68 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
             </TabsContent>
 
             <TabsContent value="performance" className="space-y-3">
-              <DummyNotice />
-              <Card>
-                <CardContent className="p-4 flex items-center justify-between">
-                  <div>
-                    <p className="text-xs text-muted-foreground">
-                      Latest Review Rating
-                    </p>
-                    <p className="text-2xl font-bold">
-                      {d.performance.rating}/5
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-1 bg-gradient-to-r from-amber-500 to-orange-500 text-white px-3 py-2 rounded-lg">
-                    <Star className="h-4 w-4 fill-white" />
-                    <span className="font-bold">H2 2025</span>
-                  </div>
-                </CardContent>
-              </Card>
-              <div className="space-y-2">
-                {d.performance.goals.map((g) => (
-                  <Card key={g.title}>
-                    <CardContent className="p-3">
-                      <div className="flex justify-between items-start mb-1.5">
-                        <p className="text-sm font-medium flex-1">{g.title}</p>
-                        <Badge
-                          variant="outline"
-                          className={
-                            g.status === "At Risk"
-                              ? "bg-warning/10 text-warning border-warning/20"
-                              : "bg-info/10 text-info border-info/20"
-                          }
-                        >
-                          {g.status}
-                        </Badge>
+              {reviewHistoryLoading ? (
+                <LoadingBlock />
+              ) : reviewHistory.length === 0 ? (
+                <Card>
+                  <CardContent className="p-8 text-center text-sm text-muted-foreground">
+                    No completed performance reviews yet.
+                  </CardContent>
+                </Card>
+              ) : (
+                <>
+                  <Card>
+                    <CardContent className="p-4 flex items-center justify-between">
+                      <div>
+                        <p className="text-xs text-muted-foreground">
+                          Latest Review Rating
+                        </p>
+                        <p className="text-2xl font-bold">
+                          {reviewHistory[0].scores.kpiSection
+                            .totalWeightedScore ?? "—"}
+                          /100
+                        </p>
                       </div>
-                      <Progress value={g.progress} className="h-1.5" />
+                      <div className="flex items-center gap-1 bg-gradient-to-r from-amber-500 to-orange-500 text-white px-3 py-2 rounded-lg">
+                        <Star className="h-4 w-4 fill-white" />
+                        <span className="font-bold">
+                          {reviewHistory[0].scores.kpiSection.ratingBand}
+                        </span>
+                      </div>
                     </CardContent>
                   </Card>
-                ))}
-              </div>
-              <Button variant="outline" className="w-full">
-                <MessageSquare className="h-4 w-4 mr-2" /> Give Feedback
-              </Button>
+                  <div className="space-y-2">
+                    {reviewHistory.map((r) => (
+                      <Card key={r._id}>
+                        <CardContent className="p-3">
+                          <div className="flex justify-between items-start mb-1.5">
+                            <div>
+                              <p className="text-sm font-medium">
+                                {r.jobTitle}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                Signed off{" "}
+                                {r.managerSignedAt
+                                  ? fmt(r.managerSignedAt)
+                                  : "—"}
+                              </p>
+                            </div>
+                            <Badge variant="outline">
+                              {r.scores.kpiSection.totalWeightedScore ?? "—"}
+                              /100 · {r.scores.kpiSection.ratingBand}
+                            </Badge>
+                          </div>
+                          {r.managerConclusions && (
+                            <p className="text-xs mt-1 line-clamp-2">
+                              {r.managerConclusions}
+                            </p>
+                          )}
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                </>
+              )}
             </TabsContent>
 
             <TabsContent value="payroll" className="space-y-3">

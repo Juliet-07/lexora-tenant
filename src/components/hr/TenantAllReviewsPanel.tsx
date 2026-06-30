@@ -38,23 +38,11 @@ const STATUS_LABEL: Record<string, string> = {
   completed: "Completed",
 };
 
-function computeManagerScore(r: PerformanceReview): number | null {
-  if (r.status !== "completed" || !r.kpis?.length) return null;
-  let total = 0;
-  let weightSum = 0;
-  for (const k of r.kpis) {
-    if (k.managerScore == null) continue;
-    total += k.managerScore * (k.weight ?? 0);
-    weightSum += k.weight ?? 0;
-  }
-  if (weightSum === 0) return null;
-  // weighted score on 0-5 scale * 20 → 0-100
-  return (total / weightSum) * 20;
-}
-
 interface Row extends PerformanceReview {
   cycleName: string;
-  score: number | null;
+  scores?: {
+    kpiSection: { totalWeightedScore: number | null; ratingBand: string };
+  } | null;
 }
 
 export function TenantAllReviewsPanel() {
@@ -86,7 +74,6 @@ export function TenantAllReviewsPanel() {
         out.push({
           ...r,
           cycleName: cycle?.name ?? "",
-          score: computeManagerScore(r),
         });
       }
     });
@@ -95,7 +82,9 @@ export function TenantAllReviewsPanel() {
 
   const departments = useMemo(
     () =>
-      Array.from(new Set(rows.map((r) => r.department).filter(Boolean))) as string[],
+      Array.from(
+        new Set(rows.map((r) => r.department).filter(Boolean)),
+      ) as string[],
     [rows],
   );
 
@@ -123,8 +112,8 @@ export function TenantAllReviewsPanel() {
           <Users className="h-4 w-4" /> All Employee Performance Reviews
         </h3>
         <p className="text-xs text-muted-foreground">
-          Every review across every cycle. Score is the weighted manager
-          assessment (0–100) once a review is completed.
+          Every review across every cycle. Score is the combined employee +
+          manager weighted assessment (0–100) once a review is completed.
         </p>
       </div>
 
@@ -141,8 +130,12 @@ export function TenantAllReviewsPanel() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All statuses</SelectItem>
-            <SelectItem value="employee_in_progress">Awaiting employee</SelectItem>
-            <SelectItem value="manager_in_progress">Awaiting manager</SelectItem>
+            <SelectItem value="employee_in_progress">
+              Awaiting employee
+            </SelectItem>
+            <SelectItem value="manager_in_progress">
+              Awaiting manager
+            </SelectItem>
             <SelectItem value="completed">Completed</SelectItem>
           </SelectContent>
         </Select>
@@ -190,7 +183,9 @@ export function TenantAllReviewsPanel() {
                 {filtered.map((r) => (
                   <TableRow key={r._id}>
                     <TableCell>
-                      <div className="font-medium text-sm">{r.employeeName}</div>
+                      <div className="font-medium text-sm">
+                        {r.employeeName}
+                      </div>
                       <div className="text-xs text-muted-foreground">
                         {r.jobTitle}
                       </div>
@@ -217,10 +212,16 @@ export function TenantAllReviewsPanel() {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
-                      {r.score != null ? (
-                        <span className="font-semibold">
-                          {r.score.toFixed(1)}/100
-                        </span>
+                      {r.scores?.kpiSection.totalWeightedScore != null ? (
+                        <div className="flex items-center justify-end gap-2">
+                          <Badge variant="outline" className="text-[10px]">
+                            {r.scores.kpiSection.ratingBand}
+                          </Badge>
+                          <span className="font-semibold">
+                            {r.scores.kpiSection.totalWeightedScore.toFixed(1)}
+                            /100
+                          </span>
+                        </div>
                       ) : (
                         <span className="text-muted-foreground text-xs">—</span>
                       )}

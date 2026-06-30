@@ -265,6 +265,11 @@ export interface PerformanceReview {
     | "resigned"
     | null;
   probationEndDate?: string | null;
+  scores?: {
+    kpiSection: KpiSectionResult;
+    competencySection: FrameworkSectionResult;
+    valuesSection: FrameworkSectionResult;
+  } | null;
 }
 
 // ── Live-computed scores, returned alongside a review ───────────
@@ -392,6 +397,16 @@ export const retrySkippedEmployees = async (
     {},
   );
   return res.data?.data ?? res.data;
+};
+
+export const fetchEmployeeReviewHistory = async (
+  employeeId: string,
+): Promise<
+  (PerformanceReview & { scores: ScoredReviewResponse["scores"] })[]
+> => {
+  const res = await api.get(`/hr/performance/reviews/${employeeId}/history`);
+  const d = res.data?.data ?? res.data;
+  return Array.isArray(d) ? d : [];
 };
 
 export const fetchReviewForReviewer = async (

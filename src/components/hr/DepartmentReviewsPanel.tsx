@@ -16,35 +16,6 @@ const RATING_BAND_TONE: Record<string, string> = {
   "—": "bg-muted text-muted-foreground",
 };
 
-function deriveBand(review: {
-  kpis: { employeeScore: number | null; managerScore: number | null }[];
-}): {
-  band: string;
-  score: number | null;
-} {
-  const combined = review.kpis
-    .map((k) => {
-      if (k.employeeScore == null && k.managerScore == null) return null;
-      if (k.employeeScore == null) return k.managerScore;
-      if (k.managerScore == null) return k.employeeScore;
-      return (k.employeeScore + k.managerScore) / 2;
-    })
-    .filter((v): v is number => v != null);
-
-  if (combined.length === 0) return { band: "—", score: null };
-  const avg = combined.reduce((s, v) => s + v, 0) / combined.length;
-  const score = Math.round((avg / 5) * 100);
-
-  let band = "Unsatisfactory";
-  if (score >= 90) band = "Outstanding";
-  else if (score >= 80) band = "Exceeds Expectations";
-  else if (score >= 70) band = "Good";
-  else if (score >= 60) band = "Satisfactory";
-  else if (score >= 50) band = "Needs Improvement";
-
-  return { band, score };
-}
-
 export function DepartmentReviewsPanel() {
   const [search, setSearch] = useState("");
 
@@ -54,10 +25,15 @@ export function DepartmentReviewsPanel() {
   });
 
   const enriched = useMemo(
-    () => reviews.map((r) => ({ ...r, ...deriveBand(r) })),
+    () =>
+      reviews.map((r) => ({
+        ...r,
+        band: r.scores?.kpiSection.ratingBand ?? "—",
+        score: r.scores?.kpiSection.totalWeightedScore ?? null,
+      })),
     [reviews],
   );
-
+  console.log(enriched);
   const filtered = enriched.filter(
     (r) =>
       search === "" ||
