@@ -71,7 +71,8 @@ import { KpiTemplatesPanel } from "@/components/hr/KpiTemplatePanel";
 import { PerformanceFrameworksPanel } from "@/components/hr/PerformanceFrameworksPanel";
 import { PerformancePoliciesPanel } from "@/components/hr/PerformancePoliciesPanel";
 import { TenantHoDReviewsPanel } from "@/components/hr/TenantHoDReviewsPanel";
-import { FileText, Crown } from "lucide-react";
+import { TenantAllReviewsPanel } from "@/components/hr/TenantAllReviewsPanel";
+import { FileText, Crown, ListChecks } from "lucide-react";
 
 const CYCLE_STATUS_TONE: Record<string, string> = {
   draft: "bg-warning/10 text-warning border-warning/20",
@@ -251,6 +252,9 @@ export default function HRPerformance() {
           <TabsTrigger value="hod-reviews">
             <Crown className="h-3.5 w-3.5 mr-1.5" /> HoD Reviews
           </TabsTrigger>
+          <TabsTrigger value="all-reviews">
+            <ListChecks className="h-3.5 w-3.5 mr-1.5" /> All Reviews
+          </TabsTrigger>
           <TabsTrigger value="policies">
             <FileText className="h-3.5 w-3.5 mr-1.5" /> Policies
           </TabsTrigger>
@@ -336,6 +340,10 @@ export default function HRPerformance() {
         {/* ════════════════ HOD REVIEWS ════════════════ */}
         <TabsContent value="hod-reviews">
           <TenantHoDReviewsPanel />
+        </TabsContent>
+
+        <TabsContent value="all-reviews">
+          <TenantAllReviewsPanel />
         </TabsContent>
 
         {/* ════════════════ POLICIES ════════════════ */}
