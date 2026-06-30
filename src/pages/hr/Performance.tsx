@@ -252,6 +252,9 @@ export default function HRPerformance() {
           <TabsTrigger value="hod-reviews">
             <Crown className="h-3.5 w-3.5 mr-1.5" /> HoD Reviews
           </TabsTrigger>
+          <TabsTrigger value="all-reviews">
+            <ListChecks className="h-3.5 w-3.5 mr-1.5" /> All Reviews
+          </TabsTrigger>
           <TabsTrigger value="policies">
             <FileText className="h-3.5 w-3.5 mr-1.5" /> Policies
           </TabsTrigger>
