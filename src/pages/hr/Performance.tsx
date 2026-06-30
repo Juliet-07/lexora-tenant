@@ -342,6 +342,10 @@ export default function HRPerformance() {
           <TenantHoDReviewsPanel />
         </TabsContent>
 
+        <TabsContent value="all-reviews">
+          <TenantAllReviewsPanel />
+        </TabsContent>
+
         {/* ════════════════ POLICIES ════════════════ */}
         <TabsContent value="policies">
           <PerformancePoliciesPanel />
