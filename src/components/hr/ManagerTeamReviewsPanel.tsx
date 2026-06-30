@@ -95,9 +95,8 @@ export function ManagerTeamReviewsPanel() {
         </div>
       )}
 
-      )}
-
       <ReviewedByMeHistoryTable />
+
 
       <ManagerReviewSheet
         review={reviewing}
