@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/dialog";
 import { Send, Star, Users, ClipboardCheck } from "lucide-react";
 import { toast } from "sonner";
+import { ReviewedByMeHistoryTable } from "./ReviewedByMeHistoryTable";
 
 // ── Dummy data: managers reporting to this HoD ─────────────────
 interface ManagerReport {
