@@ -95,6 +95,10 @@ export function ManagerTeamReviewsPanel() {
         </div>
       )}
 
+      )}
+
+      <ReviewedByMeHistoryTable />
+
       <ManagerReviewSheet
         review={reviewing}
         onClose={() => setReviewing(null)}
