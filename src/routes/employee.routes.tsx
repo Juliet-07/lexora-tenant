@@ -52,6 +52,11 @@ export const employeeRoutes = ({ isAdmin, hierarchyRole }: RouteContext) => {
   if (hierarchyRole === "manager") {
     routes.push(
       <Route key="my-team" path="/my/team" element={layout(<MyTeam />)} />,
+      <Route
+        key="team-disputes"
+        path="/my/team-disputes"
+        element={layout(<TeamDisputes />)}
+      />,
     );
   }
 
