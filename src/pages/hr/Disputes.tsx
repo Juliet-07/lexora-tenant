@@ -260,10 +260,9 @@ function CaseSheet({
   const [hearingDate, setHearingDate] = useState("");
   const [hearingVenue, setHearingVenue] = useState("");
   const [hearingNote, setHearingNote] = useState("");
-  const [outcomeDecision, setOutcomeDecision] =
-    useState<Dispute["outcome"] extends infer T ? any : never>(
-      "First written warning",
-    );
+  const [outcomeDecision, setOutcomeDecision] = useState<any>(
+    "First written warning",
+  );
   const [outcomeRationale, setOutcomeRationale] = useState("");
   const [appealDecision, setAppealDecision] = useState<"Upheld" | "Dismissed" | "Modified">("Dismissed");
   const [appealNote, setAppealNote] = useState("");
