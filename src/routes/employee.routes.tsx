@@ -8,6 +8,8 @@ import MyProfile from "@/pages/hr/employee/MyProfile";
 import MyRequisitions from "@/pages/hr/employee/MyRequisitions";
 import MyTeam from "@/pages/hr/employee/MyTeam";
 import MyDepartment from "@/pages/hr/employee/MyDepartment";
+import MyDisputes from "@/pages/hr/employee/MyDisputes";
+import TeamDisputes from "@/pages/hr/employee/TeamDisputes";
 import EmployeeOnboarding from "@/pages/EmployeeOnboarding";
 
 /** Self-service routes available only to employee. */
