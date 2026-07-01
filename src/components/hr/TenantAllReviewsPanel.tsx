@@ -38,12 +38,7 @@ const STATUS_LABEL: Record<string, string> = {
   completed: "Completed",
 };
 
-interface Row extends PerformanceReview {
-  cycleName: string;
-  scores?: {
-    kpiSection: { totalWeightedScore: number | null; ratingBand: string };
-  } | null;
-}
+type Row = PerformanceReview & { cycleName: string };
 
 export function TenantAllReviewsPanel() {
   const [search, setSearch] = useState("");
