@@ -30,6 +30,7 @@ import {
   FileSignature,
   FolderOpen,
   Globe,
+  Gavel,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import {
@@ -305,6 +306,13 @@ export function AppSidebar() {
     { title: "Performance", url: "/my/performance", icon: BarChart3 },
     { title: "Payslips", url: "/my/payslips", icon: Wallet },
     { title: "Requisitions", url: "/my/requisitions", icon: ClipboardList },
+    { title: "Disputes", url: "/my/disputes", icon: ShieldAlert },
+    {
+      title: "Team Disputes",
+      url: "/my/team-disputes",
+      icon: Gavel,
+      requiresRole: "manager",
+    },
     {
       title: "My Department",
       url: "/my/department",

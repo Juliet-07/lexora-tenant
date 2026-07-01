@@ -8,6 +8,8 @@ import MyProfile from "@/pages/hr/employee/MyProfile";
 import MyRequisitions from "@/pages/hr/employee/MyRequisitions";
 import MyTeam from "@/pages/hr/employee/MyTeam";
 import MyDepartment from "@/pages/hr/employee/MyDepartment";
+import MyDisputes from "@/pages/hr/employee/MyDisputes";
+import TeamDisputes from "@/pages/hr/employee/TeamDisputes";
 import EmployeeOnboarding from "@/pages/EmployeeOnboarding";
 
 /** Self-service routes available only to employee. */
@@ -32,6 +34,11 @@ export const employeeRoutes = ({ isAdmin, hierarchyRole }: RouteContext) => {
       path="/my/requisitions"
       element={layout(<MyRequisitions />)}
     />,
+    <Route
+      key="my-disputes"
+      path="/my/disputes"
+      element={layout(<MyDisputes />)}
+    />,
 
     // Onboarding is no longer a gate — it's a dedicated page employees
     // are nudged toward via the in-app reminder/popup.
@@ -45,6 +52,11 @@ export const employeeRoutes = ({ isAdmin, hierarchyRole }: RouteContext) => {
   if (hierarchyRole === "manager") {
     routes.push(
       <Route key="my-team" path="/my/team" element={layout(<MyTeam />)} />,
+      <Route
+        key="team-disputes"
+        path="/my/team-disputes"
+        element={layout(<TeamDisputes />)}
+      />,
     );
   }
 
