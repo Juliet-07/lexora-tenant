@@ -30,6 +30,7 @@ import {
   FileSignature,
   FolderOpen,
   Globe,
+  Gavel,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import {
