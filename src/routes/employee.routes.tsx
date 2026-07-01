@@ -34,6 +34,11 @@ export const employeeRoutes = ({ isAdmin, hierarchyRole }: RouteContext) => {
       path="/my/requisitions"
       element={layout(<MyRequisitions />)}
     />,
+    <Route
+      key="my-disputes"
+      path="/my/disputes"
+      element={layout(<MyDisputes />)}
+    />,
 
     // Onboarding is no longer a gate — it's a dedicated page employees
     // are nudged toward via the in-app reminder/popup.
