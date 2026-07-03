@@ -829,66 +829,87 @@ export default function MyProfile() {
           <DummyNotice />
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <MiniStat
-              label="Overall"
-              value={`${d.performance.overall}%`}
+              label="Latest Score"
+              value={`${d.performance.cycles[0].kpiScore.toFixed(1)}%`}
               icon={TrendingUp}
             />
             <MiniStat
               label="Latest Rating"
-              value={`${d.performance.rating}/5`}
+              value={`${d.performance.cycles[0].rating}/5`}
               icon={Star}
             />
             <MiniStat
-              label="Goals On Track"
-              value={`${d.performance.goals.filter((g) => g.status === "On Track").length}`}
+              label="Cycles Completed"
+              value={`${d.performance.cycles.length}`}
               icon={CheckCircle2}
             />
             <MiniStat
-              label="At Risk"
-              value={`${d.performance.goals.filter((g) => g.status === "At Risk").length}`}
+              label="Avg Score"
+              value={`${(
+                d.performance.cycles.reduce((a, c) => a + c.kpiScore, 0) /
+                d.performance.cycles.length
+              ).toFixed(1)}%`}
               icon={Target}
             />
           </div>
           <Card>
             <CardContent className="p-4">
               <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-3">
-                Current Goals
+                Review Cycles
               </p>
-              <div className="space-y-4">
-                {d.performance.goals.map((g) => (
-                  <div key={g.title} className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <p className="text-sm font-medium">{g.title}</p>
+              <div className="space-y-3">
+                {d.performance.cycles.map((c) => (
+                  <div
+                    key={c.cycle}
+                    className="rounded-lg border p-3 space-y-2"
+                  >
+                    <div className="flex items-start justify-between gap-2 flex-wrap">
+                      <div>
+                        <p className="text-sm font-semibold">{c.cycle}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {c.period} · Reviewed by {c.reviewer} ·{" "}
+                          {new Date(c.completedOn).toLocaleDateString()}
+                        </p>
+                      </div>
                       <Badge
                         variant="outline"
-                        className={
-                          g.status === "On Track"
-                            ? "bg-info/10 text-info border-info/20"
-                            : "bg-warning/10 text-warning border-warning/20"
-                        }
+                        className="bg-success/10 text-success border-success/20"
                       >
-                        {g.status}
+                        {c.status}
                       </Badge>
                     </div>
-                    <div className="flex justify-between text-xs">
-                      <span className="text-muted-foreground">Progress</span>
-                      <span className="font-medium">{g.progress}%</span>
+                    <div className="grid grid-cols-3 gap-3 pt-1">
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                          KPI Score
+                        </p>
+                        <p className="text-sm font-semibold tabular-nums">
+                          {c.kpiScore.toFixed(1)}/100
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                          Rating
+                        </p>
+                        <p className="text-sm font-semibold tabular-nums">
+                          {c.rating}/5
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                          Band
+                        </p>
+                        <p className="text-sm font-medium">{c.band}</p>
+                      </div>
                     </div>
-                    <Progress value={g.progress} className="h-2" />
+                    <Progress value={c.kpiScore} className="h-1.5" />
                   </div>
                 ))}
               </div>
             </CardContent>
           </Card>
-          <div className="flex gap-2">
-            <Button variant="outline" className="flex-1">
-              <MessageSquare className="h-4 w-4 mr-2" /> Request Feedback
-            </Button>
-            <Button variant="outline" className="flex-1">
-              <Target className="h-4 w-4 mr-2" /> Set Goal
-            </Button>
-          </div>
         </TabsContent>
+
 
         <TabsContent value="payroll" className="space-y-4">
           <DummyNotice />
