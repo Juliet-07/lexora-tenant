@@ -33,7 +33,6 @@ export interface HrTeam {
   createdAt: string;
 }
 
-
 export const fetchTeams = async (): Promise<HrTeam[]> => {
   const res = await api.get("/hr/teams");
   const d = res.data?.data ?? res.data;
@@ -250,7 +249,6 @@ export interface CreateEmployeeDto {
   roleLevel?: RoleLevel;
   hierarchyRole: string;
   reportsToManagerId?: string | null;
-
 }
 
 export interface TerminateEmployeeDto {
@@ -1346,6 +1344,21 @@ export interface MyPayslipSummary {
   emailedAt: string | null;
 }
 
+export interface PayslipMonthSummary {
+  period: string;
+  grossPay: number;
+  netPay: number;
+  status: string;
+  _id: string;
+}
+
+export interface PayrollSummary {
+  ytdGross: number;
+  ytdNet: number;
+  ytdDeductions: number;
+  months: PayslipMonthSummary[];
+}
+
 export const uploadPayslipLogo = async (
   file: File,
 ): Promise<PayslipTemplate> => {
@@ -1378,6 +1391,11 @@ export interface EmployeePeriodStatus {
   netSalary: number;
   payCurrency: string;
 }
+
+export const fetchMyPayrollSummary = async (): Promise<PayrollSummary> => {
+  const res = await api.get("/employee/payroll/my-summary");
+  return res.data?.data ?? res.data;
+};
 
 // NEW — returns a map keyed by employeeId. Employees with no entry
 // simply haven't been calculated for this period yet ("not_started").
@@ -1480,7 +1498,6 @@ export interface DirectReport {
   probationEndDate?: string | null;
 }
 
-
 export interface TerminateEmployeeDto {
   endDate: string;
   reason: string;
@@ -1541,7 +1558,10 @@ export const fetchMyDepartment = async (): Promise<MyDepartmentResponse> => {
       const managers = d as DepartmentManager[];
       return {
         managers,
-        totalEmployees: managers.reduce((s, m) => s + (m.reports?.length ?? 0), 0),
+        totalEmployees: managers.reduce(
+          (s, m) => s + (m.reports?.length ?? 0),
+          0,
+        ),
       };
     }
   } catch {
@@ -1549,4 +1569,3 @@ export const fetchMyDepartment = async (): Promise<MyDepartmentResponse> => {
   }
   return { managers: [], totalEmployees: 0 };
 };
-

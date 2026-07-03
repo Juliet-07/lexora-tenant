@@ -18,6 +18,7 @@ interface AppLayoutProps {
 
 export function AppLayout({ children }: AppLayoutProps) {
   const { user, logout, isAdmin } = useAuth();
+  const hierarchyRole = user?.hierarchyRole ?? null;
 
   return (
     <SidebarProvider>
@@ -30,12 +31,23 @@ export function AppLayout({ children }: AppLayoutProps) {
               {isAdmin && <ModuleSwitcher />}
               <div className="relative hidden lg:block">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input placeholder="Search..." className="pl-9 w-56 h-9 bg-muted/50 border-0" />
+                <Input
+                  placeholder="Search..."
+                  className="pl-9 w-56 h-9 bg-muted/50 border-0"
+                />
               </div>
             </div>
             <div className="flex items-center gap-3">
               {!isAdmin && <OnboardingProgressPill />}
-              <Badge variant="outline" className="text-xs">{isAdmin ? "Admin" : "Team Member"}</Badge>
+              <Badge variant="outline" className="text-xs">
+                {isAdmin
+                  ? "Admin"
+                  : hierarchyRole === "head_of_department"
+                    ? "HOD"
+                    : hierarchyRole === "manager"
+                      ? "Manager"
+                      : "Team Member"}
+              </Badge>
               <Button variant="ghost" size="icon" className="relative">
                 <Bell className="h-4 w-4" />
                 <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-destructive rounded-full" />
@@ -43,21 +55,26 @@ export function AppLayout({ children }: AppLayoutProps) {
               <div className="flex items-center gap-2">
                 <Avatar className="h-8 w-8">
                   <AvatarFallback className="bg-gradient-to-br from-primary to-secondary text-white text-xs font-semibold">
-                    {user ? `${user.firstName?.[0] ?? ""}${user.lastName?.[0] ?? ""}` : "?"}
+                    {user
+                      ? `${user.firstName?.[0] ?? ""}${user.lastName?.[0] ?? ""}`
+                      : "?"}
                   </AvatarFallback>
                 </Avatar>
                 <span className="text-sm font-medium hidden md:block">
                   {user ? `${user.firstName} ${user.lastName}` : ""}
                 </span>
               </div>
-              <Button variant="ghost" size="icon" onClick={logout} title="Sign Out">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={logout}
+                title="Sign Out"
+              >
                 <LogOut className="h-4 w-4" />
               </Button>
             </div>
           </header>
-          <main className="flex-1 overflow-auto p-6">
-            {children}
-          </main>
+          <main className="flex-1 overflow-auto p-6">{children}</main>
         </div>
         {!isAdmin && <OnboardingReminder />}
       </div>

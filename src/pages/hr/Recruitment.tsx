@@ -1386,7 +1386,7 @@ function DummyJobDialog({ jobs }: { jobs: JobOpening[] }) {
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button className="bg-gradient-to-r from-primary to-secondary">
-          <Plus className="h-4 w-4 mr-2" /> Post a Role
+          <Plus className="h-4 w-4 mr-2" /> Create Role
         </Button>
       </DialogTrigger>
       <DialogContent>
