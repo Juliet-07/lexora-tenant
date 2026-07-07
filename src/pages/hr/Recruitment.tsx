@@ -203,7 +203,7 @@ export default function HRRecruitment() {
             Manage roles, pipelines and candidate decisions.
           </p>
         </div>
-        <DummyJobDialog jobs={jobs} />
+        <JobOpeningDialog trigger={<Button className="bg-gradient-to-r from-primary to-secondary"><Plus className="h-4 w-4 mr-2" /> Create Role</Button>} />
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -385,50 +385,31 @@ export default function HRRecruitment() {
           <SuccessionPlanning />
         </TabsContent>
 
-        {/* ── Job Openings — DUMMY, unchanged ── */}
-        <TabsContent
-          value="openings"
-          className="grid grid-cols-1 lg:grid-cols-2 gap-4"
-        >
-          <div className="lg:col-span-2 text-xs text-muted-foreground bg-muted/40 border rounded-lg px-3 py-2">
-            This section uses placeholder data — the underlying module isn't
-            built yet.
+        {/* ── Job Openings — record of roles within the org ── */}
+        <TabsContent value="openings" className="space-y-3">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <p className="text-xs text-muted-foreground">
+              Keep a record of all open, on-hold, draft and closed roles across your organization.
+            </p>
+            <JobOpeningDialog
+              trigger={
+                <Button size="sm" variant="outline">
+                  <Plus className="h-4 w-4 mr-2" /> New Opening
+                </Button>
+              }
+            />
           </div>
-          {jobs.map((j) => (
-            <Card key={j.id} className="hover:shadow-md transition-shadow">
-              <CardContent className="p-5 space-y-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <h3 className="font-semibold">{j.title}</h3>
-                    <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
-                      <MapPin className="h-3 w-3" />
-                      {j.location} · {j.type}
-                    </p>
-                  </div>
-                  <Badge
-                    variant="outline"
-                    className={
-                      j.status === "Open"
-                        ? "bg-success/10 text-success border-success/20"
-                        : j.status === "On Hold"
-                          ? "bg-warning/10 text-warning border-warning/20"
-                          : "bg-muted"
-                    }
-                  >
-                    {j.status}
-                  </Badge>
-                </div>
-                <div className="text-sm text-muted-foreground line-clamp-2">
-                  {j.description}
-                </div>
-                <div className="flex items-center justify-between text-xs text-muted-foreground">
-                  <span>Hiring Manager · {j.hiringManager}</span>
-                  <span>{j.applicants} applicants</span>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+          {jobs.length === 0 ? (
+            <EmptyCard text="No job openings yet. Create one to get started." />
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {jobs.map((j) => (
+                <JobOpeningCard key={j.id} job={j} />
+              ))}
+            </div>
+          )}
         </TabsContent>
+
       </Tabs>
 
       <AddCandidateDialog
