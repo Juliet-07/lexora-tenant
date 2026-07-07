@@ -150,7 +150,7 @@ export default function HRRecruitment() {
   const queryClient = useQueryClient();
 
   // ── Job Openings stays dummy, per scope — no API calls here ──
-  const [jobs] = useState<JobOpening[]>(initialJobs);
+  const jobs = useJobOpenings();
 
   // ── Real data ──
   const { data: candidates = [], isLoading: candidatesLoading } = useQuery({
