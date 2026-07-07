@@ -65,7 +65,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { fetchEmployees, type Employee } from "@/lib/hr-api";
+import { fetchEmployees, fetchTeams, fetchLocations, type Employee } from "@/lib/hr-api";
 import {
   fetchAllCandidates,
   fetchCandidateStageCounts,
