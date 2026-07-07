@@ -32,10 +32,10 @@ export interface JobOpening {
   department: string;
   location: string;
   type: "Full-time" | "Part-time" | "Contract";
-  status: "Draft" | "Open" | "On Hold" | "Closed";
+  status: "Open" | "Interviewing" | "Filled";
   postedDate: string;
   applicants: number;
-  hiringManager: string;
+  hiringManager?: string;
   description: string;
   pipeline: {
     sourced: number;
@@ -45,6 +45,7 @@ export interface JobOpening {
     hired: number;
   };
 }
+
 
 export interface Applicant {
   id: string;
@@ -240,12 +241,12 @@ export const employees: Employee[] = [
 ];
 
 export const jobOpenings: JobOpening[] = [
-  { id: "JOB-001", title: "Senior Frontend Engineer", department: "Engineering", location: "Remote (EMEA)", type: "Full-time", status: "Open", postedDate: "2026-05-12", applicants: 47, hiringManager: "Amelia Okonkwo", description: "Build delightful experiences in our React/TypeScript codebase.", pipeline: { sourced: 47, screening: 18, interview: 9, offer: 2, hired: 0 } },
-  { id: "JOB-002", title: "Product Designer", department: "Design", location: "Lagos, NG", type: "Full-time", status: "Open", postedDate: "2026-05-20", applicants: 23, hiringManager: "Priya Iyer", description: "Own end-to-end design for our compliance suite.", pipeline: { sourced: 23, screening: 11, interview: 4, offer: 1, hired: 0 } },
-  { id: "JOB-003", title: "Customer Success Manager", department: "Operations", location: "Mexico City, MX", type: "Full-time", status: "Open", postedDate: "2026-05-25", applicants: 31, hiringManager: "Chloe Sullivan", description: "Be the trusted advisor for our LATAM customers.", pipeline: { sourced: 31, screening: 14, interview: 6, offer: 0, hired: 0 } },
-  { id: "JOB-004", title: "Compliance Analyst", department: "Operations", location: "Kigali, RW", type: "Full-time", status: "On Hold", postedDate: "2026-04-15", applicants: 19, hiringManager: "Chloe Sullivan", description: "Support AML reviews and policy implementation.", pipeline: { sourced: 19, screening: 7, interview: 2, offer: 0, hired: 0 } },
-  { id: "JOB-005", title: "DevOps Engineer", department: "Engineering", location: "Remote", type: "Contract", status: "Draft", postedDate: "2026-06-02", applicants: 0, hiringManager: "Amelia Okonkwo", description: "Hardening our deployment pipelines.", pipeline: { sourced: 0, screening: 0, interview: 0, offer: 0, hired: 0 } },
+  { id: "JOB-001", title: "Senior Frontend Engineer", department: "Engineering", location: "Remote (EMEA)", type: "Full-time", status: "Open", postedDate: "2026-05-12", applicants: 47, description: "Build delightful experiences in our React/TypeScript codebase.", pipeline: { sourced: 47, screening: 18, interview: 9, offer: 2, hired: 0 } },
+  { id: "JOB-002", title: "Product Designer", department: "Design", location: "Lagos, NG", type: "Full-time", status: "Interviewing", postedDate: "2026-05-20", applicants: 23, description: "Own end-to-end design for our compliance suite.", pipeline: { sourced: 23, screening: 11, interview: 4, offer: 1, hired: 0 } },
+  { id: "JOB-003", title: "Customer Success Manager", department: "Operations", location: "Mexico City, MX", type: "Full-time", status: "Open", postedDate: "2026-05-25", applicants: 31, description: "Be the trusted advisor for our LATAM customers.", pipeline: { sourced: 31, screening: 14, interview: 6, offer: 0, hired: 0 } },
+  { id: "JOB-004", title: "Compliance Analyst", department: "Operations", location: "Kigali, RW", type: "Full-time", status: "Filled", postedDate: "2026-04-15", applicants: 19, description: "Support AML reviews and policy implementation.", pipeline: { sourced: 19, screening: 7, interview: 2, offer: 0, hired: 1 } },
 ];
+
 
 export const applicants: Applicant[] = [
   { id: "APP-001", jobId: "JOB-001", name: "Olusegun Adebayo", email: "olu.a@example.com", stage: "Interview", rating: 4.5, appliedDate: "2026-05-15", source: "LinkedIn", notes: "Strong React, good system design" },

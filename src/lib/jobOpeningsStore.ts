@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { jobOpenings as seed, type JobOpening } from "@/data/hrMockData";
 
-const KEY = "lexora.jobOpenings.v1";
+const KEY = "lexora.jobOpenings.v2";
 
 function load(): JobOpening[] {
   if (typeof window === "undefined") return seed;
