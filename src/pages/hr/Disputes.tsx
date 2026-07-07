@@ -913,44 +913,13 @@ export default function HRDisputes() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Card>
-          <CardContent className="p-4 flex items-center gap-3">
-            <FileText className="h-5 w-5 text-muted-foreground" />
-            <div>
-              <p className="text-2xl font-bold">{total}</p>
-              <p className="text-xs text-muted-foreground">Total</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 flex items-center gap-3">
-            <AlertTriangle className="h-5 w-5 text-info" />
-            <div>
-              <p className="text-2xl font-bold">{open}</p>
-              <p className="text-xs text-muted-foreground">Open</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 flex items-center gap-3">
-            <Clock className="h-5 w-5 text-warning" />
-            <div>
-              <p className="text-2xl font-bold">{investigating}</p>
-              <p className="text-xs text-muted-foreground">Investigating</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 flex items-center gap-3">
-            <CheckCircle2 className="h-5 w-5 text-success" />
-            <div>
-              <p className="text-2xl font-bold">{resolved}</p>
-              <p className="text-xs text-muted-foreground">Resolved</p>
-            </div>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <DisputeStat label="Total" value={total} icon={FileText} tone="from-primary to-secondary" />
+        <DisputeStat label="Open" value={open} icon={AlertTriangle} tone="from-blue-500 to-cyan-500" />
+        <DisputeStat label="Investigating" value={investigating} icon={Clock} tone="from-amber-500 to-orange-500" />
+        <DisputeStat label="Resolved" value={resolved} icon={CheckCircle2} tone="from-emerald-500 to-teal-500" />
       </div>
+
 
       {/* Filters + Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
