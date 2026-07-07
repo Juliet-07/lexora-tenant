@@ -21,6 +21,14 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
   AlertTriangle,
   FileText,
   Clock,
@@ -28,18 +36,17 @@ import {
   Plus,
   Loader2,
   Scale,
+  Lock,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   fetchMyDisputeCases,
-  fetchTeamDisputeCases,
   fetchDepartmentDisputeCases,
   openDisputeCaseAsEmployee,
   type DisputeCase,
   type DisputeType,
 } from "@/lib/hr-dispute-api";
-import { fetchMyDirectReports, type DirectReport } from "@/lib/hr-api";
 
 // ── helpers ──────────────────────────────────────────────────────
 
@@ -93,51 +100,16 @@ function StageBadge({ stage }: { stage: string }) {
   );
 }
 
-function DisputeCard({
-  dispute,
-  onClick,
-  showComplainant = false,
-}: {
-  dispute: DisputeCase;
-  onClick: () => void;
-  showComplainant?: boolean;
-}) {
-  return (
-    <Card
-      className="cursor-pointer hover:shadow-md transition-shadow"
-      onClick={onClick}
-    >
-      <CardContent className="p-4 space-y-3">
-        <div className="flex items-start justify-between gap-3 flex-wrap">
-          <div className="space-y-1">
-            <p className="text-xs text-muted-foreground font-mono">
-              {dispute.caseNumber}
-            </p>
-            <p className="text-sm font-semibold capitalize">{dispute.type}</p>
-          </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <StatusBadge status={dispute.status} />
-            <StageBadge stage={dispute.stage} />
-          </div>
-        </div>
-        <p className="text-xs text-muted-foreground line-clamp-2">
-          {dispute.description}
-        </p>
-        {showComplainant && dispute.complainant && (
-          <p className="text-xs text-muted-foreground">
-            Filed by:{" "}
-            <span className="font-medium">
-              {dispute.complainant.firstName} {dispute.complainant.lastName}
-            </span>{" "}
-            · {dispute.complainant.jobTitle}
-          </p>
-        )}
-        <p className="text-[10px] text-muted-foreground">
-          Filed {new Date(dispute.filedAt).toLocaleDateString()}
-        </p>
-      </CardContent>
-    </Card>
-  );
+function lastAction(d: DisputeCase): string {
+  const history = d.stageHistory ?? [];
+  const done = history.filter((h) => h.completedAt);
+  const latest = done[done.length - 1] ?? history[history.length - 1];
+  if (!latest) return "—";
+  const when = latest.completedAt ?? latest.enteredAt;
+  const label = latest.stage
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+  return `${label} · ${new Date(when).toLocaleDateString()}`;
 }
 
 // ── Log Dispute Dialog ────────────────────────────────────────────
@@ -145,11 +117,9 @@ function DisputeCard({
 interface LogDisputeDialogProps {
   open: boolean;
   onClose: () => void;
-  hierarchyRole: string | null;
   onSubmit: (dto: {
     type: DisputeType;
     description: string;
-    respondentId?: string;
     witnesses?: string[];
   }) => void;
   isSubmitting: boolean;
@@ -158,27 +128,13 @@ interface LogDisputeDialogProps {
 function LogDisputeDialog({
   open,
   onClose,
-  hierarchyRole,
   onSubmit,
   isSubmitting,
 }: LogDisputeDialogProps) {
   const [type, setType] = useState<DisputeType>("grievance");
   const [description, setDescription] = useState("");
-  const [respondentId, setRespondentId] = useState("none");
   const [witnessInput, setWitnessInput] = useState("");
   const [witnesses, setWitnesses] = useState<string[]>([]);
-
-  // Fetch direct reports for respondent selector (managers/HoD)
-  const { data: directReports = [] } = useQuery({
-    queryKey: ["my-direct-reports"],
-    queryFn: fetchMyDirectReports,
-    enabled:
-      open &&
-      (hierarchyRole === "manager" || hierarchyRole === "head_of_department"),
-  });
-
-  const canChooseType =
-    hierarchyRole === "manager" || hierarchyRole === "head_of_department";
 
   const handleAddWitness = () => {
     const trimmed = witnessInput.trim();
@@ -188,25 +144,9 @@ function LogDisputeDialog({
     }
   };
 
-  const handleRemoveWitness = (w: string) => {
-    setWitnesses((prev) => prev.filter((x) => x !== w));
-  };
-
-  const handleSubmit = () => {
-    if (!description.trim()) return;
-    onSubmit({
-      type,
-      description: description.trim(),
-      respondentId:
-        respondentId && respondentId !== "none" ? respondentId : undefined,
-      witnesses: witnesses.length > 0 ? witnesses : undefined,
-    });
-  };
-
   const handleClose = () => {
     setType("grievance");
     setDescription("");
-    setRespondentId("");
     setWitnessInput("");
     setWitnesses([]);
     onClose();
@@ -219,31 +159,19 @@ function LogDisputeDialog({
           <DialogTitle>Log a Dispute</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-2">
-          {/* Type selector — all roles for manager/HoD, grievance-only for regular */}
           <div className="space-y-1.5">
             <Label className="text-xs">Dispute Type</Label>
-            {canChooseType ? (
-              <Select
-                value={type}
-                onValueChange={(v) => setType(v as DisputeType)}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="grievance">Grievance</SelectItem>
-                  <SelectItem value="incident">Incident</SelectItem>
-                  <SelectItem value="disciplinary">Disciplinary</SelectItem>
-                </SelectContent>
-              </Select>
-            ) : (
-              <div className="rounded-md border px-3 py-2 text-sm text-muted-foreground bg-muted/40">
-                Grievance
-              </div>
-            )}
+            <Select value={type} onValueChange={(v) => setType(v as DisputeType)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="grievance">Grievance</SelectItem>
+                <SelectItem value="incident">Incident</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
-          {/* Description */}
           <div className="space-y-1.5">
             <Label className="text-xs">Description *</Label>
             <Textarea
@@ -254,27 +182,6 @@ function LogDisputeDialog({
             />
           </div>
 
-          {/* Respondent — only for manager/HoD with direct reports */}
-          {canChooseType && directReports.length > 0 && (
-            <div className="space-y-1.5">
-              <Label className="text-xs">Respondent (optional)</Label>
-              <Select value={respondentId} onValueChange={setRespondentId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a team member…" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">None</SelectItem>
-                  {directReports.map((r: DirectReport) => (
-                    <SelectItem key={r._id} value={r._id}>
-                      {r.firstName} {r.lastName} — {r.jobTitle}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-
-          {/* Witnesses */}
           <div className="space-y-1.5">
             <Label className="text-xs">Witnesses (optional)</Label>
             <div className="flex gap-2">
@@ -300,7 +207,9 @@ function LogDisputeDialog({
                     key={w}
                     variant="outline"
                     className="text-xs cursor-pointer hover:bg-destructive/10"
-                    onClick={() => handleRemoveWitness(w)}
+                    onClick={() =>
+                      setWitnesses((prev) => prev.filter((x) => x !== w))
+                    }
                   >
                     {w} ×
                   </Badge>
@@ -314,7 +223,14 @@ function LogDisputeDialog({
             Cancel
           </Button>
           <Button
-            onClick={handleSubmit}
+            onClick={() => {
+              if (!description.trim()) return;
+              onSubmit({
+                type,
+                description: description.trim(),
+                witnesses: witnesses.length > 0 ? witnesses : undefined,
+              });
+            }}
             disabled={!description.trim() || isSubmitting}
           >
             {isSubmitting ? (
@@ -334,23 +250,13 @@ function LogDisputeDialog({
 export default function MyDisputes() {
   const { user } = useAuth();
   const hierarchyRole = user?.hierarchyRole ?? "regular";
+  const isHoD = hierarchyRole === "head_of_department";
   const queryClient = useQueryClient();
   const [logOpen, setLogOpen] = useState(false);
 
-  // Role-aware query
-  const queryKey =
-    hierarchyRole === "head_of_department"
-      ? ["department-disputes"]
-      : hierarchyRole === "manager"
-        ? ["team-disputes"]
-        : ["my-disputes"];
-
-  const queryFn =
-    hierarchyRole === "head_of_department"
-      ? fetchDepartmentDisputeCases
-      : hierarchyRole === "manager"
-        ? fetchTeamDisputeCases
-        : fetchMyDisputeCases;
+  // HoD → department-wide read-only view. Manager & regular → their own filings.
+  const queryKey = isHoD ? ["department-disputes"] : ["my-disputes"];
+  const queryFn = isHoD ? fetchDepartmentDisputeCases : fetchMyDisputeCases;
 
   const { data: disputes = [], isLoading } = useQuery({
     queryKey,
@@ -368,7 +274,6 @@ export default function MyDisputes() {
       toast.error(e?.response?.data?.message ?? "Failed to log dispute"),
   });
 
-  // Stats
   const total = disputes.length;
   const open = disputes.filter((d) => d.status === "open").length;
   const investigating = disputes.filter(
@@ -376,12 +281,10 @@ export default function MyDisputes() {
   ).length;
   const resolved = disputes.filter((d) => d.status === "closed").length;
 
-  const pageTitle =
-    hierarchyRole === "head_of_department"
-      ? "Department Disputes"
-      : hierarchyRole === "manager"
-        ? "Team Disputes"
-        : "My Disputes";
+  const pageTitle = isHoD ? "Department Disputes" : "My Disputes";
+  const subtitle = isHoD
+    ? "Read-only view of every dispute logged across your department, including who raised it and the latest action taken."
+    : "Log and track your workplace disputes.";
 
   return (
     <div className="space-y-6">
@@ -392,16 +295,19 @@ export default function MyDisputes() {
             <Scale className="h-6 w-6" />
             {pageTitle}
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            {hierarchyRole === "regular"
-              ? "Log and track your workplace disputes."
-              : "Read-only view of disputes involving your team."}
-          </p>
+          <p className="text-sm text-muted-foreground mt-1">{subtitle}</p>
         </div>
-        <Button onClick={() => setLogOpen(true)}>
-          <Plus className="h-4 w-4 mr-2" />
-          Log a Dispute
-        </Button>
+        {isHoD ? (
+          <Button disabled variant="outline" title="HoDs cannot log disputes">
+            <Lock className="h-4 w-4 mr-2" />
+            Log a Dispute
+          </Button>
+        ) : (
+          <Button onClick={() => setLogOpen(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Log a Dispute
+          </Button>
+        )}
       </div>
 
       {/* Stats */}
@@ -455,35 +361,98 @@ export default function MyDisputes() {
           <CardContent className="py-16 text-center">
             <Scale className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
             <p className="text-sm text-muted-foreground">
-              {hierarchyRole === "regular"
-                ? "You have no dispute cases on file."
-                : "No dispute cases involving your team."}
+              {isHoD
+                ? "No dispute cases have been logged in your department."
+                : "You have no dispute cases on file."}
             </p>
+          </CardContent>
+        </Card>
+      ) : isHoD ? (
+        <Card>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Case</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Logged by</TableHead>
+                  <TableHead>Filed</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Latest action</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {disputes.map((d) => (
+                  <TableRow key={d._id}>
+                    <TableCell className="font-mono text-xs">
+                      {d.caseNumber}
+                    </TableCell>
+                    <TableCell className="capitalize text-sm">
+                      {d.type}
+                    </TableCell>
+                    <TableCell className="text-sm">
+                      {d.complainant
+                        ? `${d.complainant.firstName} ${d.complainant.lastName}`
+                        : "—"}
+                      {d.complainant?.jobTitle && (
+                        <p className="text-[11px] text-muted-foreground">
+                          {d.complainant.jobTitle}
+                        </p>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {new Date(d.filedAt).toLocaleDateString()}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-col gap-1">
+                        <StatusBadge status={d.status} />
+                        <StageBadge stage={d.stage} />
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {lastAction(d)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           </CardContent>
         </Card>
       ) : (
         <div className="space-y-3">
           {disputes.map((d) => (
-            <DisputeCard
-              key={d._id}
-              dispute={d}
-              onClick={() => {
-                // Detail sheet can be added in a future pass
-              }}
-              showComplainant={
-                hierarchyRole === "manager" ||
-                hierarchyRole === "head_of_department"
-              }
-            />
+            <Card key={d._id}>
+              <CardContent className="p-4 space-y-3">
+                <div className="flex items-start justify-between gap-3 flex-wrap">
+                  <div className="space-y-1">
+                    <p className="text-xs text-muted-foreground font-mono">
+                      {d.caseNumber}
+                    </p>
+                    <p className="text-sm font-semibold capitalize">
+                      {d.type}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <StatusBadge status={d.status} />
+                    <StageBadge stage={d.stage} />
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground line-clamp-2">
+                  {d.description}
+                </p>
+                <p className="text-[10px] text-muted-foreground">
+                  Filed {new Date(d.filedAt).toLocaleDateString()} · Latest:{" "}
+                  {lastAction(d)}
+                </p>
+              </CardContent>
+            </Card>
           ))}
         </div>
       )}
 
-      {/* Log Dispute Dialog */}
       <LogDisputeDialog
         open={logOpen}
         onClose={() => setLogOpen(false)}
-        hierarchyRole={hierarchyRole}
         onSubmit={(dto) => openMutation.mutate(dto)}
         isSubmitting={openMutation.isPending}
       />
