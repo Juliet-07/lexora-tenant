@@ -301,6 +301,7 @@ export interface DepartmentTreeReport {
   firstName: string;
   lastName: string;
   jobTitle: string;
+  teamId?: { _id: string; name: string } | string | null;
 }
 
 export interface DepartmentTreeManager extends DepartmentTreeReport {
