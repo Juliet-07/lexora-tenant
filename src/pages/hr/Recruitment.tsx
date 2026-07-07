@@ -1383,12 +1383,14 @@ function AddSuccessorDialog({
 // ─── Job Openings — record of roles within the organization ──
 
 const JOB_TYPES: JobOpening["type"][] = ["Full-time", "Part-time", "Contract"];
-const JOB_STATUSES: JobOpening["status"][] = [
-  "Draft",
-  "Open",
-  "On Hold",
-  "Closed",
-];
+const JOB_STATUSES: JobOpening["status"][] = ["Open", "Interviewing", "Filled"];
+
+const jobStatusTone = (s: JobOpening["status"]) =>
+  s === "Open"
+    ? "bg-success/10 text-success border-success/20"
+    : s === "Interviewing"
+      ? "bg-info/10 text-info border-info/20"
+      : "bg-muted text-muted-foreground border-border";
 
 function JobOpeningCard({ job }: { job: JobOpening }) {
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -1403,27 +1405,34 @@ function JobOpeningCard({ job }: { job: JobOpening }) {
               {job.location} · {job.type} · {job.department}
             </p>
           </div>
-          <Badge
-            variant="outline"
-            className={
-              job.status === "Open"
-                ? "bg-success/10 text-success border-success/20"
-                : job.status === "On Hold"
-                  ? "bg-warning/10 text-warning border-warning/20"
-                  : job.status === "Draft"
-                    ? "bg-info/10 text-info border-info/20"
-                    : "bg-muted"
-            }
+          <Select
+            value={job.status}
+            onValueChange={(v) => {
+              updateJobOpening(job.id, {
+                status: v as JobOpening["status"],
+              });
+              toast.success(`Status set to ${v}.`);
+            }}
           >
-            {job.status}
-          </Badge>
+            <SelectTrigger
+              className={`h-7 w-[130px] text-xs px-2 ${jobStatusTone(job.status)}`}
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {JOB_STATUSES.map((s) => (
+                <SelectItem key={s} value={s}>
+                  {s}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
         <div className="text-sm text-muted-foreground line-clamp-2">
           {job.description}
         </div>
         <div className="flex items-center justify-between text-xs text-muted-foreground">
           <span></span>
-          {/* <span>Hiring Manager · {job.hiringManager}</span> */}
           <span>Posted {fmtDate(job.postedDate)}</span>
         </div>
         <div className="flex items-center justify-end gap-2 pt-1 border-t">
@@ -1479,13 +1488,25 @@ function JobOpeningDialog({
   trigger: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+
+  // Load teams & locations from the HR system so the tenant picks
+  // from what already exists (created on the Employees page).
+  const { data: teams = [] } = useQuery({
+    queryKey: ["hr-teams"],
+    queryFn: () => import("@/lib/hr-api").then((m) => m.fetchTeams()),
+    enabled: open,
+  });
+  const { data: locations = [] } = useQuery({
+    queryKey: ["hr-locations"],
+    queryFn: () => import("@/lib/hr-api").then((m) => m.fetchLocations()),
+    enabled: open,
+  });
+
   const [form, setForm] = useState(() => ({
     title: job?.title ?? "",
     department: job?.department ?? "",
     location: job?.location ?? "",
     type: (job?.type ?? "Full-time") as JobOpening["type"],
-    status: (job?.status ?? "Open") as JobOpening["status"],
-    hiringManager: job?.hiringManager ?? "",
     description: job?.description ?? "",
     applicants: job?.applicants ?? 0,
   }));
@@ -1497,8 +1518,6 @@ function JobOpeningDialog({
         department: job.department,
         location: job.location,
         type: job.type,
-        status: job.status,
-        hiringManager: job.hiringManager,
         description: job.description,
         applicants: job.applicants,
       });
@@ -1518,6 +1537,7 @@ function JobOpeningDialog({
       addJobOpening({
         id: nextJobOpeningId(),
         postedDate: new Date().toISOString().slice(0, 10),
+        status: "Open",
         pipeline: {
           sourced: 0,
           screening: 0,
@@ -1541,7 +1561,9 @@ function JobOpeningDialog({
             {isEdit ? "Edit Opening" : "New Job Opening"}
           </DialogTitle>
           <DialogDescription>
-            Keep a record of the role for your organization.
+            {isEdit
+              ? "Update the role details."
+              : "New openings start as Open — change the status on the card as hiring progresses."}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
@@ -1555,60 +1577,47 @@ function JobOpeningDialog({
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label className="text-xs">Department *</Label>
-              <Input
-                value={form.department}
-                onChange={(e) =>
-                  setForm({ ...form, department: e.target.value })
-                }
-                placeholder="Engineering"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Location *</Label>
-              <Input
-                value={form.location}
-                onChange={(e) => setForm({ ...form, location: e.target.value })}
-                placeholder="Remote / Lagos, NG"
-              />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label className="text-xs">Type</Label>
+              <Label className="text-xs">Department (Team) *</Label>
               <Select
-                value={form.type}
-                onValueChange={(v) =>
-                  setForm({ ...form, type: v as JobOpening["type"] })
-                }
+                value={form.department}
+                onValueChange={(v) => setForm({ ...form, department: v })}
               >
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue
+                    placeholder={
+                      teams.length === 0 ? "No teams yet" : "Select team"
+                    }
+                  />
                 </SelectTrigger>
                 <SelectContent>
-                  {JOB_TYPES.map((t) => (
-                    <SelectItem key={t} value={t}>
-                      {t}
+                  {teams.map((t) => (
+                    <SelectItem key={t._id} value={t.name}>
+                      {t.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs">Status</Label>
+              <Label className="text-xs">Location *</Label>
               <Select
-                value={form.status}
-                onValueChange={(v) =>
-                  setForm({ ...form, status: v as JobOpening["status"] })
-                }
+                value={form.location}
+                onValueChange={(v) => setForm({ ...form, location: v })}
               >
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue
+                    placeholder={
+                      locations.length === 0
+                        ? "No locations yet"
+                        : "Select location"
+                    }
+                  />
                 </SelectTrigger>
                 <SelectContent>
-                  {JOB_STATUSES.map((s) => (
-                    <SelectItem key={s} value={s}>
-                      {s}
+                  {locations.map((l) => (
+                    <SelectItem key={l._id} value={l.name}>
+                      {l.name}
+                      {l.city ? ` · ${l.city}` : ""}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -1616,14 +1625,24 @@ function JobOpeningDialog({
             </div>
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs">Hiring Manager</Label>
-            <Input
-              value={form.hiringManager}
-              onChange={(e) =>
-                setForm({ ...form, hiringManager: e.target.value })
+            <Label className="text-xs">Type</Label>
+            <Select
+              value={form.type}
+              onValueChange={(v) =>
+                setForm({ ...form, type: v as JobOpening["type"] })
               }
-              placeholder="Full name"
-            />
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {JOB_TYPES.map((t) => (
+                  <SelectItem key={t} value={t}>
+                    {t}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs">Description</Label>
@@ -1649,6 +1668,7 @@ function JobOpeningDialog({
     </Dialog>
   );
 }
+
 
 function Stat({
   label,
