@@ -203,7 +203,6 @@ export default function HRRecruitment() {
             Manage roles, pipelines and candidate decisions.
           </p>
         </div>
-        <JobOpeningDialog trigger={<Button className="bg-gradient-to-r from-primary to-secondary"><Plus className="h-4 w-4 mr-2" /> Create Role</Button>} />
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -269,7 +268,7 @@ export default function HRRecruitment() {
               className="bg-gradient-to-r from-primary to-secondary"
               onClick={() => setNewCandidateOpen(true)}
             >
-              <Plus className="h-4 w-4 mr-2" /> Add Candidate
+              <Plus className="h-4 w-4" /> Add Candidate
             </Button>
           </div>
           {candidatesLoading ? (
@@ -389,12 +388,17 @@ export default function HRRecruitment() {
         <TabsContent value="openings" className="space-y-3">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <p className="text-xs text-muted-foreground">
-              Keep a record of all open, on-hold, draft and closed roles across your organization.
+              Keep a record of all open, on-hold, draft and closed roles across
+              your organization.
             </p>
             <JobOpeningDialog
               trigger={
-                <Button size="sm" variant="outline">
-                  <Plus className="h-4 w-4 mr-2" /> New Opening
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="bg-gradient-to-r from-primary to-secondary text-white"
+                >
+                  <Plus className="h-4 w-4" /> New Opening
                 </Button>
               }
             />
@@ -409,7 +413,6 @@ export default function HRRecruitment() {
             </div>
           )}
         </TabsContent>
-
       </Tabs>
 
       <AddCandidateDialog
@@ -1055,7 +1058,7 @@ function SuccessionPlanning() {
           className="bg-gradient-to-r from-primary to-secondary"
           onClick={() => setCreateOpen(true)}
         >
-          <Plus className="h-4 w-4 mr-2" /> New Plan
+          <Plus className="h-4 w-4" /> New Plan
         </Button>
       </div>
 
@@ -1380,7 +1383,12 @@ function AddSuccessorDialog({
 // ─── Job Openings — record of roles within the organization ──
 
 const JOB_TYPES: JobOpening["type"][] = ["Full-time", "Part-time", "Contract"];
-const JOB_STATUSES: JobOpening["status"][] = ["Draft", "Open", "On Hold", "Closed"];
+const JOB_STATUSES: JobOpening["status"][] = [
+  "Draft",
+  "Open",
+  "On Hold",
+  "Closed",
+];
 
 function JobOpeningCard({ job }: { job: JobOpening }) {
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -1414,8 +1422,9 @@ function JobOpeningCard({ job }: { job: JobOpening }) {
           {job.description}
         </div>
         <div className="flex items-center justify-between text-xs text-muted-foreground">
-          <span>Hiring Manager · {job.hiringManager}</span>
-          <span>{job.applicants} applicants · Posted {fmtDate(job.postedDate)}</span>
+          <span></span>
+          {/* <span>Hiring Manager · {job.hiringManager}</span> */}
+          <span>Posted {fmtDate(job.postedDate)}</span>
         </div>
         <div className="flex items-center justify-end gap-2 pt-1 border-t">
           <JobOpeningDialog
@@ -1440,7 +1449,8 @@ function JobOpeningCard({ job }: { job: JobOpening }) {
             <AlertDialogHeader>
               <AlertDialogTitle>Delete this opening?</AlertDialogTitle>
               <AlertDialogDescription>
-                This will permanently remove "{job.title}" from your job openings record.
+                This will permanently remove "{job.title}" from your job
+                openings record.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
@@ -1496,7 +1506,8 @@ function JobOpeningDialog({
   }, [open, job]);
 
   const isEdit = Boolean(job);
-  const canSave = form.title.trim() && form.department.trim() && form.location.trim();
+  const canSave =
+    form.title.trim() && form.department.trim() && form.location.trim();
 
   const handleSave = () => {
     if (!canSave) return;
@@ -1507,7 +1518,13 @@ function JobOpeningDialog({
       addJobOpening({
         id: nextJobOpeningId(),
         postedDate: new Date().toISOString().slice(0, 10),
-        pipeline: { sourced: 0, screening: 0, interview: 0, offer: 0, hired: 0 },
+        pipeline: {
+          sourced: 0,
+          screening: 0,
+          interview: 0,
+          offer: 0,
+          hired: 0,
+        },
         ...form,
       });
       toast.success("Opening created.");
@@ -1520,7 +1537,9 @@ function JobOpeningDialog({
       <DialogTrigger asChild>{trigger}</DialogTrigger>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>{isEdit ? "Edit Opening" : "New Job Opening"}</DialogTitle>
+          <DialogTitle>
+            {isEdit ? "Edit Opening" : "New Job Opening"}
+          </DialogTitle>
           <DialogDescription>
             Keep a record of the role for your organization.
           </DialogDescription>
@@ -1539,7 +1558,9 @@ function JobOpeningDialog({
               <Label className="text-xs">Department *</Label>
               <Input
                 value={form.department}
-                onChange={(e) => setForm({ ...form, department: e.target.value })}
+                onChange={(e) =>
+                  setForm({ ...form, department: e.target.value })
+                }
                 placeholder="Engineering"
               />
             </div>
@@ -1557,12 +1578,18 @@ function JobOpeningDialog({
               <Label className="text-xs">Type</Label>
               <Select
                 value={form.type}
-                onValueChange={(v) => setForm({ ...form, type: v as JobOpening["type"] })}
+                onValueChange={(v) =>
+                  setForm({ ...form, type: v as JobOpening["type"] })
+                }
               >
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
                   {JOB_TYPES.map((t) => (
-                    <SelectItem key={t} value={t}>{t}</SelectItem>
+                    <SelectItem key={t} value={t}>
+                      {t}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -1571,12 +1598,18 @@ function JobOpeningDialog({
               <Label className="text-xs">Status</Label>
               <Select
                 value={form.status}
-                onValueChange={(v) => setForm({ ...form, status: v as JobOpening["status"] })}
+                onValueChange={(v) =>
+                  setForm({ ...form, status: v as JobOpening["status"] })
+                }
               >
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
                   {JOB_STATUSES.map((s) => (
-                    <SelectItem key={s} value={s}>{s}</SelectItem>
+                    <SelectItem key={s} value={s}>
+                      {s}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -1586,7 +1619,9 @@ function JobOpeningDialog({
             <Label className="text-xs">Hiring Manager</Label>
             <Input
               value={form.hiringManager}
-              onChange={(e) => setForm({ ...form, hiringManager: e.target.value })}
+              onChange={(e) =>
+                setForm({ ...form, hiringManager: e.target.value })
+              }
               placeholder="Full name"
             />
           </div>
@@ -1595,13 +1630,17 @@ function JobOpeningDialog({
             <Textarea
               rows={3}
               value={form.description}
-              onChange={(e) => setForm({ ...form, description: e.target.value })}
+              onChange={(e) =>
+                setForm({ ...form, description: e.target.value })
+              }
               placeholder="Short summary of the role…"
             />
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+          <Button variant="outline" onClick={() => setOpen(false)}>
+            Cancel
+          </Button>
           <Button disabled={!canSave} onClick={handleSave}>
             {isEdit ? "Save Changes" : "Create Opening"}
           </Button>
@@ -1610,7 +1649,6 @@ function JobOpeningDialog({
     </Dialog>
   );
 }
-
 
 function Stat({
   label,
