@@ -296,6 +296,21 @@ export interface EmployeeDetailResponse {
   };
 }
 
+export interface DepartmentTreeReport {
+  _id: string;
+  firstName: string;
+  lastName: string;
+  jobTitle: string;
+}
+
+export interface DepartmentTreeManager extends DepartmentTreeReport {
+  directReports: DepartmentTreeReport[];
+}
+
+export interface DepartmentTree {
+  managers: DepartmentTreeManager[];
+}
+
 // ─────────────────────────────────────────────────────────────
 // EMPLOYEES — API calls
 // ─────────────────────────────────────────────────────────────
@@ -366,6 +381,12 @@ export const fetchEmployeesByHierarchyRole = async (
   const d = res.data?.data ?? res.data;
   return Array.isArray(d) ? d : [];
 };
+
+export const fetchDepartmentTree = async (): Promise<DepartmentTree> => {
+  const res = await api.get("/employee/department/tree");
+  return res.data?.data ?? res.data;
+};
+
 // ─────────────────────────────────────────────────────────────
 // LEAVE — Types & API (keep as-is, clientId removed internally)
 // ─────────────────────────────────────────────────────────────

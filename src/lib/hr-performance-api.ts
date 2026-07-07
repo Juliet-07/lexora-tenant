@@ -272,31 +272,21 @@ export interface PerformanceReview {
   } | null;
 }
 
-export interface ScoredPerformanceReview {
+export interface PerformanceReviewSummaryItem {
   _id: string;
-  employeeName: string;
-  jobTitle: string;
-  status: string;
+  cycle: string;
+  score: number | null;
+  rating: string;
+  completedAt: string | null;
   managerName: string | null;
-  managerSignedAt: string | null;
   managerConclusions: string | null;
-  scores: {
-    kpiSection: {
-      totalWeightedScore: number | null;
-      ratingBand: string;
-      employeeAverage: number | null;
-      managerAverage: number | null;
-    };
-    competencySection: {
-      overallScore: number | null;
-      ratingBand: string;
-    };
-    valuesSection: {
-      overallScore: number | null;
-      ratingBand: string;
-    };
-  };
 }
+
+export interface MyPerformanceSummary {
+  latestReview: PerformanceReviewSummaryItem | null;
+  reviews: PerformanceReviewSummaryItem[];
+}
+
 // ── Live-computed scores, returned alongside a review ───────────
 
 export interface KpiScoreResult {
@@ -468,13 +458,11 @@ export const fetchMyReviewById = async (
   return res.data?.data ?? res.data;
 };
 
-export const fetchMyScoredPerformanceReviews = async (): Promise<
-  ScoredPerformanceReview[]
-> => {
-  const res = await api.get("/employee/performance/reviews/scored");
-  const d = res.data?.data ?? res.data;
-  return Array.isArray(d) ? d : [];
-};
+export const fetchMyPerformanceSummary =
+  async (): Promise<MyPerformanceSummary> => {
+    const res = await api.get("/employee/performance/summary");
+    return res.data?.data ?? res.data;
+  };
 
 export const updateMyReviewSection = async (
   reviewId: string,

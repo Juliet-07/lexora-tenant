@@ -1,157 +1,118 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Users, Briefcase, Eye } from "lucide-react";
-
-const initials = (first: string, last: string) =>
-  `${(first?.[0] ?? "").toUpperCase()}${(last?.[0] ?? "").toUpperCase()}`;
-
-// ── Dummy data ──────────────────────────────────────────────────
-interface DeptReport {
-  _id: string;
-  firstName: string;
-  lastName: string;
-  jobTitle: string;
-}
-interface DeptManager {
-  _id: string;
-  firstName: string;
-  lastName: string;
-  jobTitle: string;
-  team: string;
-  reports: DeptReport[];
-}
-
-const MOCK_MANAGERS: DeptManager[] = [
-  {
-    _id: "m1",
-    firstName: "Adaeze",
-    lastName: "Nwosu",
-    jobTitle: "Compliance Manager",
-    team: "Compliance",
-    reports: [
-      { _id: "r1", firstName: "Amara", lastName: "Okafor", jobTitle: "Senior Compliance Analyst" },
-      { _id: "r2", firstName: "David", lastName: "Mensah", jobTitle: "KYC Specialist" },
-      { _id: "r3", firstName: "Priya", lastName: "Sharma", jobTitle: "AML Investigator" },
-      { _id: "r4", firstName: "Jonas", lastName: "Becker", jobTitle: "Onboarding Associate" },
-      { _id: "r5", firstName: "Chiamaka", lastName: "Eze", jobTitle: "Junior Analyst" },
-    ],
-  },
-  {
-    _id: "m2",
-    firstName: "Tunde",
-    lastName: "Bakare",
-    jobTitle: "Risk & Monitoring Manager",
-    team: "Risk",
-    reports: [
-      { _id: "r6", firstName: "Liam", lastName: "O'Connor", jobTitle: "Risk Analyst" },
-      { _id: "r7", firstName: "Yuki", lastName: "Tanaka", jobTitle: "Transaction Monitoring Analyst" },
-      { _id: "r8", firstName: "Sofia", lastName: "Rossi", jobTitle: "Risk Analyst" },
-      { _id: "r9", firstName: "Marcus", lastName: "Hill", jobTitle: "Junior Risk Analyst" },
-    ],
-  },
-  {
-    _id: "m3",
-    firstName: "Fatima",
-    lastName: "Diallo",
-    jobTitle: "Operations Manager",
-    team: "Operations",
-    reports: [
-      { _id: "r10", firstName: "Sara", lastName: "Khan", jobTitle: "Ops Associate" },
-      { _id: "r11", firstName: "Daniel", lastName: "Owusu", jobTitle: "Ops Associate" },
-      { _id: "r12", firstName: "Hannah", lastName: "Cole", jobTitle: "Ops Coordinator" },
-      { _id: "r13", firstName: "Kwame", lastName: "Asante", jobTitle: "Ops Analyst" },
-      { _id: "r14", firstName: "Noor", lastName: "Hassan", jobTitle: "Junior Ops Associate" },
-    ],
-  },
-];
+import { Loader2, Eye } from "lucide-react";
+import { fetchDepartmentTree } from "@/lib/hr-api";
 
 export default function MyDepartment() {
-  const managers = MOCK_MANAGERS;
-  const totalEmployees = managers.reduce((s, m) => s + m.reports.length, 0);
-  const managerCount = managers.length;
+  const { data, isLoading } = useQuery({
+    queryKey: ["department-tree"],
+    queryFn: fetchDepartmentTree,
+  });
+  console.log(data);
+  const managers = data?.managers ?? [];
+  const totalEmployees =
+    managers.length +
+    managers.reduce((sum, m) => sum + (m.directReports?.length ?? 0), 0);
 
-  const subtitle =
-    managerCount === 0
-      ? "Read-only overview."
-      : `${managerCount} ${managerCount === 1 ? "Manager" : "Managers"}, ${totalEmployees} total ${totalEmployees === 1 ? "employee" : "employees"}.`;
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-16 gap-2 text-muted-foreground">
+        <Loader2 className="h-5 w-5 animate-spin" />
+        <span className="text-sm">Loading your department…</span>
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <div className="p-6 space-y-6">
+      {/* Page header */}
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">My Department</h1>
-          <p className="text-sm text-muted-foreground mt-1">{subtitle}</p>
+          <h1 className="text-2xl font-bold">My Department</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            {managers.length} Manager{managers.length !== 1 ? "s" : ""},{" "}
+            {totalEmployees} total employee{totalEmployees !== 1 ? "s" : ""}.
+          </p>
         </div>
-        <Badge variant="secondary" className="flex items-center gap-1.5">
-          <Eye className="h-3 w-3" />
+        <Badge
+          variant="outline"
+          className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-secondary/10 text-secondary border-secondary/20"
+        >
+          <Eye className="h-3.5 w-3.5" />
           Read-only overview
         </Badge>
       </div>
 
-      {managerCount === 0 ? (
-        <Card>
-          <CardContent className="py-20 text-center text-muted-foreground">
-            <Users className="h-10 w-10 mx-auto mb-3 opacity-40" />
-            <p className="text-sm">No Managers currently report to you.</p>
-          </CardContent>
-        </Card>
+      {managers.length === 0 ? (
+        <div className="text-center py-16 text-sm text-muted-foreground">
+          No team members in your department yet.
+        </div>
       ) : (
         <div className="space-y-4">
-          {managers.map((m) => (
-            <Card key={m._id}>
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="h-10 w-10 rounded-full bg-gradient-to-br from-primary to-secondary text-white flex items-center justify-center font-semibold text-sm shrink-0">
-                      {initials(m.firstName, m.lastName)}
-                    </div>
-                    <div className="min-w-0">
-                      <CardTitle className="text-base truncate">
-                        {m.firstName} {m.lastName}
-                      </CardTitle>
-                      <p className="text-xs text-muted-foreground flex items-center gap-2 mt-0.5 truncate">
-                        <span className="flex items-center gap-1">
-                          <Briefcase className="h-3 w-3" />
-                          {m.jobTitle}
-                        </span>
-                        <span aria-hidden>·</span>
-                        <span className="flex items-center gap-1">
-                          <Users className="h-3 w-3" />
-                          {m.team}
-                        </span>
+          {managers.map((manager) => (
+            <div
+              key={manager._id}
+              className="rounded-xl border bg-card overflow-hidden"
+            >
+              {/* Manager row */}
+              <div className="flex items-center justify-between px-5 py-4 bg-muted/30">
+                <div className="flex items-center gap-3">
+                  <Avatar className="h-10 w-10">
+                    <AvatarFallback className="bg-gradient-to-br from-primary to-secondary text-white text-sm font-semibold">
+                      {manager.firstName?.[0] ?? ""}
+                      {manager.lastName?.[0] ?? ""}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <p className="text-sm font-semibold">
+                      {manager.firstName} {manager.lastName}
+                    </p>
+                    <p className="text-xs text-muted-foreground flex items-center gap-2">
+                      <span>{manager.jobTitle ?? "—"}</span>
+                      {manager.teamId && typeof manager.teamId === "object" && (
+                        <>
+                          <span>·</span>
+                          <span>{manager.teamId.name}</span>
+                        </>
+                      )}
+                    </p>
+                  </div>
+                </div>
+                <Badge className="text-xs bg-primary/10 text-primary border-primary/20 font-medium">
+                  {manager.directReports?.length ?? 0} report
+                  {(manager.directReports?.length ?? 0) !== 1 ? "s" : ""}
+                </Badge>
+              </div>
+
+              {/* Direct reports */}
+              {(manager.directReports ?? []).length > 0 && (
+                <div className="divide-y">
+                  {manager.directReports.map((report) => (
+                    <div
+                      key={report._id}
+                      className="flex items-center justify-between px-5 py-3 pl-16"
+                    >
+                      <div className="flex items-center gap-3">
+                        <Avatar className="h-7 w-7">
+                          <AvatarFallback className="bg-muted text-muted-foreground text-xs font-medium">
+                            {report.firstName?.[0] ?? ""}
+                            {report.lastName?.[0] ?? ""}
+                          </AvatarFallback>
+                        </Avatar>
+                        <p className="text-sm">
+                          {report.firstName} {report.lastName}
+                        </p>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {report.jobTitle ?? "—"}
                       </p>
                     </div>
-                  </div>
-                  <Badge variant="secondary" className="shrink-0">
-                    {m.reports.length}{" "}
-                    {m.reports.length === 1 ? "report" : "reports"}
-                  </Badge>
+                  ))}
                 </div>
-              </CardHeader>
-              <CardContent className="pt-0">
-                {m.reports.length === 0 ? (
-                  <p className="text-xs text-muted-foreground italic pl-1">
-                    No direct reports.
-                  </p>
-                ) : (
-                  <ul className="divide-y border rounded-md">
-                    {m.reports.map((r) => (
-                      <li
-                        key={r._id}
-                        className="flex items-center justify-between px-4 py-2.5 text-sm gap-3"
-                      >
-                        <span className="font-medium truncate">
-                          {r.firstName} {r.lastName}
-                        </span>
-                        <span className="text-xs text-muted-foreground truncate text-right">
-                          {r.jobTitle}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </CardContent>
-            </Card>
+              )}
+            </div>
           ))}
         </div>
       )}

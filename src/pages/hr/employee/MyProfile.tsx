@@ -57,7 +57,10 @@ import {
   type HrTeam,
   type HrLocation,
   type UpdateMyProfileDto,
+  downloadMyPayslipPdf,
+  fetchMyPayrollSummary,
 } from "@/lib/hr-api";
+import { fetchMyPerformanceSummary } from "@/lib/hr-performance-api";
 
 // ─── Dummy data — for modules with no backend yet ──────────────
 
@@ -282,6 +285,16 @@ export default function MyProfile() {
     staleTime: 60_000,
   });
 
+  const { data: payrollData, isLoading: payrollLoading } = useQuery({
+    queryKey: ["my-payroll-summary"],
+    queryFn: fetchMyPayrollSummary,
+  });
+
+  const { data: performanceData, isLoading: performanceLoading } = useQuery({
+    queryKey: ["my-performance-summary"],
+    queryFn: fetchMyPerformanceSummary,
+  });
+
   const leaveBalances = leaveBalanceResp?.balances ?? [];
   const annualBalance = leaveBalances.find((b) => b.type === "annual");
   const sickBalance = leaveBalances.find((b) => b.type === "sick");
@@ -378,7 +391,12 @@ export default function MyProfile() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-5 text-sm">
           <div className="bg-white/10 rounded-lg p-3">
             <p className="text-xs opacity-80">Performance</p>
-            <p className="font-bold text-lg">{d.performance.overall}%</p>
+            <p className="font-bold text-lg">
+              {performanceData?.latestReview?.score != null
+                ? `${performanceData.latestReview.score}`
+                : "—"}
+              %
+            </p>
           </div>
           <div className="bg-white/10 rounded-lg p-3">
             <p className="text-xs opacity-80">This month</p>
@@ -392,7 +410,11 @@ export default function MyProfile() {
           </div>
           <div className="bg-white/10 rounded-lg p-3">
             <p className="text-xs opacity-80">YTD Gross</p>
-            <p className="font-bold text-lg">{currency(d.payroll.ytdGross)}</p>
+            <p className="font-bold text-lg">
+              {payrollData?.ytdGross != null
+                ? `$${payrollData.ytdGross.toLocaleString()}`
+                : "—"}
+            </p>
           </div>
         </div>
       </div>
@@ -826,203 +848,211 @@ export default function MyProfile() {
         </TabsContent>
 
         <TabsContent value="performance" className="space-y-4">
-          <DummyNotice />
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <MiniStat
-              label="Latest Score"
-              value={`${d.performance.cycles[0].kpiScore.toFixed(1)}%`}
-              icon={TrendingUp}
-            />
-            <MiniStat
-              label="Latest Rating"
-              value={`${d.performance.cycles[0].rating}/5`}
-              icon={Star}
-            />
-            <MiniStat
-              label="Cycles Completed"
-              value={`${d.performance.cycles.length}`}
-              icon={CheckCircle2}
-            />
-            <MiniStat
-              label="Avg Score"
-              value={`${(
-                d.performance.cycles.reduce((a, c) => a + c.kpiScore, 0) /
-                d.performance.cycles.length
-              ).toFixed(1)}%`}
-              icon={Target}
-            />
-          </div>
-          <Card>
-            <CardContent className="p-4">
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-3">
-                Review Cycles
-              </p>
-              <div className="space-y-3">
-                {d.performance.cycles.map((c) => (
-                  <div
-                    key={c.cycle}
-                    className="rounded-lg border p-3 space-y-2"
-                  >
-                    <div className="flex items-start justify-between gap-2 flex-wrap">
-                      <div>
-                        <p className="text-sm font-semibold">{c.cycle}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {c.period} · Reviewed by {c.reviewer} ·{" "}
-                          {new Date(c.completedOn).toLocaleDateString()}
-                        </p>
-                      </div>
-                      <Badge
-                        variant="outline"
-                        className="bg-success/10 text-success border-success/20"
-                      >
-                        {c.status}
-                      </Badge>
-                    </div>
-                    <div className="grid grid-cols-3 gap-3 pt-1">
-                      <div>
-                        <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                          KPI Score
-                        </p>
-                        <p className="text-sm font-semibold tabular-nums">
-                          {c.kpiScore.toFixed(1)}/100
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                          Rating
-                        </p>
-                        <p className="text-sm font-semibold tabular-nums">
-                          {c.rating}/5
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                          Band
-                        </p>
-                        <p className="text-sm font-medium">{c.band}</p>
-                      </div>
-                    </div>
-                    <Progress value={c.kpiScore} className="h-1.5" />
-                  </div>
-                ))}
+          {performanceLoading ? (
+            <div className="flex items-center justify-center py-10 gap-2 text-muted-foreground">
+              <Loader2 className="h-5 w-5 animate-spin" />
+              <span className="text-sm">Loading performance history…</span>
+            </div>
+          ) : !performanceData || performanceData.reviews.length === 0 ? (
+            <Card>
+              <CardContent className="p-8 text-center text-sm text-muted-foreground">
+                No completed performance reviews yet.
+              </CardContent>
+            </Card>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <MiniStat
+                  label="Latest Score"
+                  value={
+                    performanceData.latestReview?.score != null
+                      ? `${performanceData.latestReview.score.toFixed(1)}%`
+                      : "—"
+                  }
+                  icon={TrendingUp}
+                />
+                <MiniStat
+                  label="Latest Rating"
+                  value={performanceData.latestReview?.rating ?? "—"}
+                  icon={Star}
+                />
+                <MiniStat
+                  label="Cycles Completed"
+                  value={`${performanceData.reviews.length}`}
+                  icon={CheckCircle2}
+                />
+                <MiniStat
+                  label="Avg Score"
+                  value={(() => {
+                    const scored = performanceData.reviews.filter(
+                      (r) => r.score != null,
+                    );
+                    if (scored.length === 0) return "—";
+                    const avg =
+                      scored.reduce((a, r) => a + r.score!, 0) / scored.length;
+                    return `${avg.toFixed(1)}%`;
+                  })()}
+                  icon={Target}
+                />
               </div>
-            </CardContent>
-          </Card>
+              <Card>
+                <CardContent className="p-4">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-3">
+                    Review Cycles
+                  </p>
+                  <div className="space-y-3">
+                    {performanceData.reviews.map((r) => (
+                      <div
+                        key={r._id}
+                        className="rounded-lg border p-3 space-y-2"
+                      >
+                        <div className="flex items-start justify-between gap-2 flex-wrap">
+                          <div>
+                            <p className="text-sm font-semibold">{r.cycle}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {r.managerName
+                                ? `Reviewed by ${r.managerName}`
+                                : "Review completed"}
+                              {r.completedAt
+                                ? ` · ${new Date(r.completedAt).toLocaleDateString()}`
+                                : ""}
+                            </p>
+                          </div>
+                          <Badge
+                            variant="outline"
+                            className="bg-success/10 text-success border-success/20"
+                          >
+                            Completed
+                          </Badge>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3 pt-1">
+                          <div>
+                            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                              KPI Score
+                            </p>
+                            <p className="text-sm font-semibold tabular-nums">
+                              {r.score != null
+                                ? `${r.score.toFixed(1)}/100`
+                                : "—"}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                              Rating Band
+                            </p>
+                            <p className="text-sm font-medium">{r.rating}</p>
+                          </div>
+                        </div>
+                        {r.score != null && (
+                          <Progress value={r.score} className="h-1.5" />
+                        )}
+                        {r.managerConclusions && (
+                          <p className="text-xs text-muted-foreground line-clamp-2 pt-1">
+                            {r.managerConclusions}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </>
+          )}
         </TabsContent>
 
-
         <TabsContent value="payroll" className="space-y-4">
-          <DummyNotice />
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <MiniStat
-              label="YTD Gross"
-              value={currency(d.payroll.ytdGross)}
-              icon={Banknote}
-            />
-            <MiniStat
-              label="Next Pay"
-              value={fmtShort(d.payroll.nextPayDate)}
-              icon={CalendarDays}
-            />
-            <MiniStat
-              label="Pension Pot"
-              value={currency(d.payroll.pensionPot)}
-              icon={PiggyBank}
-            />
-            <MiniStat
-              label="Loan Bal"
-              value={currency(d.payroll.loans[0].balance)}
-              icon={CreditCard}
-            />
-          </div>
-          <Card>
-            <CardContent className="p-4">
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-3">
-                Recent Payslips
-              </p>
-              <div className="space-y-2">
-                {d.payroll.payslips.map((p) => (
-                  <div
-                    key={p.period}
-                    className="flex items-center justify-between py-3 border-b last:border-b-0 hover:bg-muted/30 px-2 rounded transition-colors"
-                  >
-                    <div>
-                      <p className="text-sm font-medium">{p.period}</p>
-                      <p className="text-xs text-muted-foreground">
-                        Paid {fmt(p.date)}
-                      </p>
-                    </div>
-                    <div className="hidden md:flex items-center gap-8 text-xs">
-                      <div className="text-right">
-                        <p className="text-muted-foreground">Gross</p>
-                        <p className="font-mono text-sm text-foreground">
-                          {currency(p.gross)}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-muted-foreground">Net</p>
-                        <p className="font-mono text-sm font-semibold text-foreground">
-                          {currency(p.net)}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Badge
-                        variant="outline"
-                        className="bg-success/10 text-success border-success/20"
-                      >
-                        Paid
-                      </Badge>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => setActivePayslip(p)}
-                      >
-                        View
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => download(`Payslip ${p.period}`)}
-                      >
-                        <Download className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
+          {payrollLoading ? (
+            <div className="flex items-center justify-center py-10 gap-2 text-muted-foreground">
+              <Loader2 className="h-5 w-5 animate-spin" />
+              <span className="text-sm">Loading payroll data…</span>
+            </div>
+          ) : !payrollData ? (
+            <Card>
+              <CardContent className="p-8 text-center text-sm text-muted-foreground">
+                No payroll data available yet.
+              </CardContent>
+            </Card>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <MiniStat
+                  label="YTD Gross"
+                  value={`$${payrollData.ytdGross.toLocaleString()}`}
+                  icon={TrendingUp}
+                />
+                <MiniStat
+                  label="YTD Net"
+                  value={`$${payrollData.ytdNet.toLocaleString()}`}
+                  icon={CheckCircle2}
+                />
+                <MiniStat
+                  label="YTD Deductions"
+                  value={`$${payrollData.ytdDeductions.toLocaleString()}`}
+                  icon={Target}
+                />
+                <MiniStat
+                  label="Payslips This Year"
+                  value={`${payrollData.months.length}`}
+                  icon={Star}
+                />
               </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-3">
-                Active Benefits
-              </p>
-              <div className="space-y-2">
-                {d.benefits.map((b) => (
-                  <div
-                    key={b.name}
-                    className="flex items-center justify-between py-3 border-b last:border-b-0"
-                  >
-                    <div>
-                      <p className="text-sm font-medium">{b.name}</p>
-                      {b.note && (
-                        <p className="text-xs text-muted-foreground">
-                          {b.note}
-                        </p>
-                      )}
+              <Card>
+                <CardContent className="p-4">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-3">
+                    Payslip History
+                  </p>
+                  {payrollData.months.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-4">
+                      No payslips for this year yet.
+                    </p>
+                  ) : (
+                    <div className="space-y-3">
+                      {payrollData.months.map((m) => (
+                        <div
+                          key={m._id}
+                          className="rounded-lg border p-3 flex items-center justify-between gap-3 flex-wrap"
+                        >
+                          <div className="space-y-1">
+                            <p className="text-sm font-semibold">
+                              {new Date(m.period).toLocaleDateString("en-US", {
+                                month: "long",
+                                year: "numeric",
+                              })}
+                            </p>
+                            <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                              <span>Gross: ${m.grossPay.toLocaleString()}</span>
+                              <span>·</span>
+                              <span>Net: ${m.netPay.toLocaleString()}</span>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Badge
+                              variant="outline"
+                              className={
+                                m.status === "paid"
+                                  ? "bg-success/10 text-success border-success/20"
+                                  : "bg-warning/10 text-warning border-warning/20"
+                              }
+                            >
+                              {m.status}
+                            </Badge>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => downloadMyPayslipPdf(m._id)}
+                            >
+                              <Download className="h-3.5 w-3.5 mr-1.5" />
+                              Download
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                    <Badge
-                      variant="outline"
-                      className="bg-success/10 text-success border-success/20"
-                    >
-                      {b.value}
-                    </Badge>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+                  )}
+                </CardContent>
+              </Card>
+            </>
+          )}
         </TabsContent>
 
         <TabsContent value="documents" className="space-y-4">
