@@ -1493,12 +1493,12 @@ function JobOpeningDialog({
   // from what already exists (created on the Employees page).
   const { data: teams = [] } = useQuery({
     queryKey: ["hr-teams"],
-    queryFn: () => import("@/lib/hr-api").then((m) => m.fetchTeams()),
+    queryFn: fetchTeams,
     enabled: open,
   });
   const { data: locations = [] } = useQuery({
     queryKey: ["hr-locations"],
-    queryFn: () => import("@/lib/hr-api").then((m) => m.fetchLocations()),
+    queryFn: fetchLocations,
     enabled: open,
   });
 
