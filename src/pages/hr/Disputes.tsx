@@ -1,10 +1,11 @@
-import { useMemo, useState } from "react";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { useState, useMemo } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -12,804 +13,1044 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Sheet,
   SheetContent,
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  Gavel,
   AlertTriangle,
-  CheckCircle2,
+  FileText,
   Clock,
-  Search,
-  ArrowUpRight,
-  ShieldAlert,
-  ScrollText,
+  CheckCircle2,
   Scale,
+  Loader2,
+  ChevronRight,
+  Paperclip,
+  Upload,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
-  useDisputes,
-  updateDispute,
-  appendInvestigationNote,
-  appendHearingNote,
-  STAGE_LABEL,
-  STAGE_TONE,
-  SEVERITY_TONE,
-  type Dispute,
-  type DisputeStage,
-} from "@/lib/disputesStore";
+  fetchAllDisputeCases,
+  acknowledgeDisputeCase,
+  investigateDisputeCase,
+  scheduleDisputeHearing,
+  recordDisputeOutcome,
+  resolveDisputeAppeal,
+  escalateDisputeExternal,
+  closeDisputeCase,
+  attachDisputeForm,
+  attachDisputeDocument,
+  openDisputeCase,
+  type DisputeCase,
+  type DisputeStatus,
+  type DisputeType,
+  type DisputeOutcomeDecision,
+  type DisputeFormType,
+} from "@/lib/hr-dispute-api";
 
-export default function HRDisputes() {
-  const items = useDisputes();
-  const [search, setSearch] = useState("");
-  const [stage, setStage] = useState<string>("all");
-  const [active, setActive] = useState<Dispute | null>(null);
+// ── helpers ──────────────────────────────────────────────────────
 
-  const filtered = useMemo(
-    () =>
-      items.filter(
-        (d) =>
-          (stage === "all" || d.stage === stage) &&
-          (!search ||
-            d.reporterName.toLowerCase().includes(search.toLowerCase()) ||
-            d.againstName.toLowerCase().includes(search.toLowerCase()) ||
-            d.title.toLowerCase().includes(search.toLowerCase())),
-      ),
-    [items, search, stage],
-  );
-
-  const stats = {
-    open: items.filter((d) => d.stage !== "closed" && d.stage !== "court")
-      .length,
-    high: items.filter((d) => d.severity === "High" && d.stage !== "closed")
-      .length,
-    hearing: items.filter((d) => d.stage === "hearing").length,
-    escalated: items.filter((d) =>
-      ["escalated_local", "escalated_national", "court"].includes(d.stage),
-    ).length,
+function StatusBadge({ status }: { status: string }) {
+  const map: Record<string, { label: string; className: string }> = {
+    open: { label: "Open", className: "bg-info/10 text-info border-info/20" },
+    under_investigation: {
+      label: "Investigating",
+      className: "bg-warning/10 text-warning border-warning/20",
+    },
+    hearing_scheduled: {
+      label: "Hearing",
+      className: "bg-secondary/10 text-secondary border-secondary/20",
+    },
+    outcome_recorded: {
+      label: "Outcome",
+      className: "bg-primary/10 text-primary border-primary/20",
+    },
+    appealed: {
+      label: "Appealed",
+      className: "bg-destructive/10 text-destructive border-destructive/20",
+    },
+    closed: {
+      label: "Closed",
+      className: "bg-success/10 text-success border-success/20",
+    },
+    escalated_external: {
+      label: "Escalated",
+      className: "bg-destructive/10 text-destructive border-destructive/20",
+    },
   };
-
+  const { label, className } = map[status] ?? { label: status, className: "" };
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold">Dispute Management</h1>
-          <p className="text-sm text-muted-foreground">
-            Acknowledge cases within 2 working days, investigate, hear, decide,
-            and hand appeals to next-level authority. Escalate to the Labour
-            Inspectorate only after internal resolution fails.
-          </p>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Stat label="Open" value={stats.open} icon={Gavel} tone="from-primary to-secondary" />
-        <Stat label="High severity" value={stats.high} icon={AlertTriangle} tone="from-rose-500 to-red-600" />
-        <Stat label="In hearing" value={stats.hearing} icon={Clock} tone="from-amber-500 to-orange-500" />
-        <Stat label="Escalated externally" value={stats.escalated} icon={Scale} tone="from-fuchsia-500 to-purple-600" />
-      </div>
-
-      <Card>
-        <CardContent className="p-4 flex flex-wrap gap-3 items-center">
-          <div className="relative flex-1 min-w-[200px]">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              className="pl-9"
-              placeholder="Search employee, respondent or title…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
-          <Select value={stage} onValueChange={setStage}>
-            <SelectTrigger className="w-[220px]">
-              <SelectValue placeholder="All stages" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All stages</SelectItem>
-              {Object.entries(STAGE_LABEL).map(([k, v]) => (
-                <SelectItem key={k} value={k}>
-                  {v}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </CardContent>
-      </Card>
-
-      <Tabs defaultValue="list">
-        <TabsList>
-          <TabsTrigger value="list">Cases</TabsTrigger>
-          <TabsTrigger value="board">Pipeline</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="list" className="space-y-3 mt-4">
-          {filtered.length === 0 ? (
-            <Card>
-              <CardContent className="p-10 text-center text-sm text-muted-foreground">
-                No cases match your filters.
-              </CardContent>
-            </Card>
-          ) : (
-            filtered.map((d) => (
-              <CaseRow key={d.id} d={d} onOpen={() => setActive(d)} />
-            ))
-          )}
-        </TabsContent>
-
-        <TabsContent value="board" className="mt-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-4 gap-3">
-            {(
-              [
-                "reported",
-                "acknowledged",
-                "investigation",
-                "hearing",
-                "outcome",
-                "appeal",
-                "closed",
-                "escalated_local",
-              ] as DisputeStage[]
-            ).map((s) => (
-              <Card key={s}>
-                <CardContent className="p-3 space-y-2">
-                  <div className="flex items-center justify-between text-xs font-semibold">
-                    <span>{STAGE_LABEL[s]}</span>
-                    <Badge variant="outline">
-                      {items.filter((d) => d.stage === s).length}
-                    </Badge>
-                  </div>
-                  {items
-                    .filter((d) => d.stage === s)
-                    .map((d) => (
-                      <button
-                        key={d.id}
-                        onClick={() => setActive(d)}
-                        className="w-full text-left border rounded-md p-2 text-xs space-y-1 hover:bg-muted/50"
-                      >
-                        <p className="font-medium">{d.title}</p>
-                        <p className="text-muted-foreground">
-                          {d.reporterName} → {d.againstName}
-                        </p>
-                        <Badge
-                          variant="outline"
-                          className={`${SEVERITY_TONE[d.severity]} text-[10px]`}
-                        >
-                          {d.severity}
-                        </Badge>
-                      </button>
-                    ))}
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </TabsContent>
-      </Tabs>
-
-      <CaseSheet
-        dispute={active}
-        onClose={() => setActive(null)}
-        onChange={(next) => setActive(next)}
-      />
-    </div>
+    <Badge variant="outline" className={`text-[10px] ${className}`}>
+      {label}
+    </Badge>
   );
 }
 
-function CaseRow({ d, onOpen }: { d: Dispute; onOpen: () => void }) {
+function StageBadge({ stage }: { stage: string }) {
+  const label = stage
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
   return (
-    <Card className="hover:border-primary/40 transition-colors">
-      <CardContent className="p-4 flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 flex-wrap">
-            <p className="font-semibold text-sm">{d.title}</p>
-            <Badge variant="outline" className={SEVERITY_TONE[d.severity]}>
-              {d.severity}
-            </Badge>
-            <Badge variant="outline">{d.type}</Badge>
-            {d.managerLooped ? (
-              <Badge variant="outline" className="text-[10px]">
-                Manager looped: {d.loopedManagerName}
-              </Badge>
-            ) : (
-              <Badge variant="outline" className="text-[10px]">
-                Tenant-only
-              </Badge>
-            )}
-          </div>
-          <p className="text-xs text-muted-foreground mt-1">
-            Filed by <strong>{d.reporterName}</strong> ({d.reporterRole}) against{" "}
-            <strong>{d.againstName}</strong> ({d.againstRole}) · {d.filedOn}
-          </p>
-          <p className="text-sm mt-2 line-clamp-2">{d.description}</p>
-        </div>
-        <div className="flex flex-col items-end gap-2">
-          <Badge variant="outline" className={STAGE_TONE[d.stage]}>
-            {STAGE_LABEL[d.stage]}
-          </Badge>
-          <Button size="sm" variant="outline" onClick={onOpen}>
-            Open case <ArrowUpRight className="h-3.5 w-3.5 ml-1" />
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
+    <Badge variant="outline" className="text-[10px] text-muted-foreground">
+      {label}
+    </Badge>
   );
 }
 
-// ─── Detail sheet with stage actions ─────────────────────────────
-function CaseSheet({
+const fmtDate = (d?: string | null) =>
+  d
+    ? new Date(d).toLocaleDateString("en-US", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      })
+    : "—";
+
+// ── DisputeDetailSheet ────────────────────────────────────────────
+
+function DisputeDetailSheet({
   dispute,
   onClose,
-  onChange,
+  onUpdated,
 }: {
-  dispute: Dispute | null;
+  dispute: DisputeCase | null;
   onClose: () => void;
-  onChange: (d: Dispute) => void;
+  onUpdated: (updated: DisputeCase) => void;
 }) {
-  const [ackNote, setAckNote] = useState("");
-  const [invNote, setInvNote] = useState("");
+  // Action form state
+  const [ackText, setAckText] = useState("");
+  const [ackNotes, setAckNotes] = useState("");
+  const [findings, setFindings] = useState("");
+  const [findingsNotes, setFindingsNotes] = useState("");
   const [hearingDate, setHearingDate] = useState("");
   const [hearingVenue, setHearingVenue] = useState("");
-  const [hearingNote, setHearingNote] = useState("");
-  const [outcomeDecision, setOutcomeDecision] = useState<any>(
-    "First written warning",
-  );
-  const [outcomeRationale, setOutcomeRationale] = useState("");
-  const [appealDecision, setAppealDecision] = useState<"Upheld" | "Dismissed" | "Modified">("Dismissed");
-  const [appealNote, setAppealNote] = useState("");
-  const [escalationNote, setEscalationNote] = useState("");
+  const [hearingNotes, setHearingNotes] = useState("");
+  const [outcomeDecision, setOutcomeDecision] =
+    useState<DisputeOutcomeDecision>("no_action");
+  const [outcomeNotes, setOutcomeNotes] = useState("");
+  const [appealDecision, setAppealDecision] = useState("");
+  const [appealNotes, setAppealNotes] = useState("");
+  const [escalateBody, setEscalateBody] = useState<
+    "labour_local" | "labour_national" | "court"
+  >("labour_local");
+  const [escalateCaseRef, setEscalateCaseRef] = useState("");
+  const [escalateNotes, setEscalateNotes] = useState("");
+  const [closeNotes, setCloseNotes] = useState("");
+  const [formType, setFormType] = useState<DisputeFormType>("D1");
+  const [formUrl, setFormUrl] = useState("");
+  const [docName, setDocName] = useState("");
+  const [docUrl, setDocUrl] = useState("");
 
-  const [outcomeOpen, setOutcomeOpen] = useState(false);
+  const handleSuccess = (updated: DisputeCase, msg: string) => {
+    onUpdated(updated);
+    toast.success(msg);
+  };
+  const handleError = (e: any) =>
+    toast.error(e?.response?.data?.message ?? "Action failed");
+
+  const ackMutation = useMutation({
+    mutationFn: () =>
+      acknowledgeDisputeCase(dispute!._id, {
+        acknowledgmentText: ackText,
+        notes: ackNotes || undefined,
+      }),
+    onSuccess: (u) => {
+      handleSuccess(u, "Case acknowledged.");
+      setAckText("");
+      setAckNotes("");
+    },
+    onError: handleError,
+  });
+
+  const investigateMutation = useMutation({
+    mutationFn: () =>
+      investigateDisputeCase(dispute!._id, {
+        findings,
+        notes: findingsNotes || undefined,
+      }),
+    onSuccess: (u) => {
+      handleSuccess(u, "Investigation recorded.");
+      setFindings("");
+      setFindingsNotes("");
+    },
+    onError: handleError,
+  });
+
+  const hearingMutation = useMutation({
+    mutationFn: () =>
+      scheduleDisputeHearing(dispute!._id, {
+        scheduledAt: hearingDate,
+        venue: hearingVenue,
+        notes: hearingNotes || undefined,
+      }),
+    onSuccess: (u) => {
+      handleSuccess(u, "Hearing scheduled.");
+      setHearingDate("");
+      setHearingVenue("");
+      setHearingNotes("");
+    },
+    onError: handleError,
+  });
+
+  const outcomeMutation = useMutation({
+    mutationFn: () =>
+      recordDisputeOutcome(dispute!._id, {
+        decision: outcomeDecision,
+        notes: outcomeNotes || undefined,
+      }),
+    onSuccess: (u) => {
+      handleSuccess(u, "Outcome recorded.");
+      setOutcomeNotes("");
+    },
+    onError: handleError,
+  });
+
+  const appealMutation = useMutation({
+    mutationFn: () =>
+      resolveDisputeAppeal(dispute!._id, {
+        decision: appealDecision,
+        notes: appealNotes || undefined,
+      }),
+    onSuccess: (u) => {
+      handleSuccess(u, "Appeal resolved.");
+      setAppealDecision("");
+      setAppealNotes("");
+    },
+    onError: handleError,
+  });
+
+  const escalateMutation = useMutation({
+    mutationFn: () =>
+      escalateDisputeExternal(dispute!._id, {
+        body: escalateBody,
+        caseRef: escalateCaseRef || undefined,
+        notes: escalateNotes || undefined,
+      }),
+    onSuccess: (u) => {
+      handleSuccess(u, "Case escalated externally.");
+      setEscalateCaseRef("");
+      setEscalateNotes("");
+    },
+    onError: handleError,
+  });
+
+  const closeMutation = useMutation({
+    mutationFn: () =>
+      closeDisputeCase(dispute!._id, { notes: closeNotes || undefined }),
+    onSuccess: (u) => {
+      handleSuccess(u, "Case closed.");
+      setCloseNotes("");
+    },
+    onError: handleError,
+  });
+
+  const attachFormMutation = useMutation({
+    mutationFn: () =>
+      attachDisputeForm(dispute!._id, {
+        formType,
+        attachmentUrl: formUrl || undefined,
+      }),
+    onSuccess: (u) => {
+      handleSuccess(u, "Form attached.");
+      setFormUrl("");
+    },
+    onError: handleError,
+  });
+
+  const attachDocMutation = useMutation({
+    mutationFn: () =>
+      attachDisputeDocument(dispute!._id, { name: docName, url: docUrl }),
+    onSuccess: (u) => {
+      handleSuccess(u, "Document attached.");
+      setDocName("");
+      setDocUrl("");
+    },
+    onError: handleError,
+  });
 
   if (!dispute) return null;
-  const d = dispute;
 
-  const patch = (next: Partial<Dispute>) => {
-    updateDispute(d.id, next);
-    onChange({ ...d, ...next });
-  };
+  const stage = dispute.stage;
+  const status = dispute.status;
+  const canClose = status !== "closed";
+  const canEscalate =
+    ["outcome_recorded", "appealed", "closed"].includes(status) &&
+    status !== "escalated_external";
 
   return (
     <Sheet open={!!dispute} onOpenChange={(o) => !o && onClose()}>
       <SheetContent className="w-full sm:max-w-2xl overflow-y-auto">
-        <SheetHeader>
-          <SheetTitle>{d.title}</SheetTitle>
+        <SheetHeader className="pb-4">
+          <SheetTitle className="flex items-center gap-2 flex-wrap">
+            <span className="font-mono text-sm text-muted-foreground">
+              {dispute.caseNumber}
+            </span>
+            <span className="capitalize font-bold">{dispute.type}</span>
+            <StatusBadge status={dispute.status} />
+            <StageBadge stage={dispute.stage} />
+          </SheetTitle>
           <p className="text-xs text-muted-foreground">
-            {d.id} · Filed {d.filedOn} · {d.type}
+            Filed {fmtDate(dispute.filedAt)}
           </p>
         </SheetHeader>
-
-        <div className="mt-4 space-y-5">
-          <Card>
-            <CardContent className="p-4 space-y-1 text-sm">
-              <p>
-                <span className="text-muted-foreground">Reporter:</span>{" "}
-                <strong>{d.reporterName}</strong> ({d.reporterRole})
+        {/* Complainant details */}
+        {dispute.complainant && (
+          <div className="rounded-md bg-muted/40 p-3 space-y-1 text-xs">
+            <p className="font-semibold uppercase tracking-wide text-muted-foreground text-[10px]">
+              Filed By
+            </p>
+            <p className="font-medium text-sm">
+              {dispute.complainant.firstName} {dispute.complainant.lastName}
+            </p>
+            <p className="text-muted-foreground">
+              {dispute.complainant.jobTitle}
+            </p>
+            {dispute.complainant.department && (
+              <p className="text-muted-foreground">
+                Department: {dispute.complainant.department}
               </p>
-              <p>
-                <span className="text-muted-foreground">Respondent:</span>{" "}
-                <strong>{d.againstName}</strong> ({d.againstRole}) —{" "}
-                {d.againstDepartment ?? "—"}
+            )}
+            {dispute.complainant.managerName && (
+              <p className="text-muted-foreground">
+                Manager: {dispute.complainant.managerName}
               </p>
-              <p>
-                <span className="text-muted-foreground">Severity:</span>{" "}
-                <Badge variant="outline" className={SEVERITY_TONE[d.severity]}>
-                  {d.severity}
-                </Badge>
-              </p>
-              <p>
-                <span className="text-muted-foreground">Stage:</span>{" "}
-                <Badge variant="outline" className={STAGE_TONE[d.stage]}>
-                  {STAGE_LABEL[d.stage]}
-                </Badge>
-              </p>
-              <p className="text-sm pt-2">{d.description}</p>
-              {d.outcomeSought && (
+            )}
+          </div>
+        )}
+        <div className="space-y-6">
+          {/* Description */}
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">
+              Description
+            </p>
+            <p className="text-sm">{dispute.description}</p>
+            {dispute.witnesses?.length > 0 && (
+              <div className="mt-2">
                 <p className="text-xs text-muted-foreground">
-                  Outcome sought: {d.outcomeSought}
+                  Witnesses: {dispute.witnesses.join(", ")}
                 </p>
-              )}
-              {d.witnesses && (
-                <p className="text-xs text-muted-foreground">
-                  Witnesses: {d.witnesses}
-                </p>
-              )}
-              {d.managerLooped && (
-                <p className="text-xs pt-1">
-                  <ShieldAlert className="h-3 w-3 inline mr-1" />
-                  Investigation shared with reporter's manager (
-                  {d.loopedManagerName}).
-                </p>
-              )}
-            </CardContent>
-          </Card>
+              </div>
+            )}
+          </div>
 
-          {/* Acknowledge */}
-          {d.stage === "reported" && (
-            <Section title="Step 1 — Acknowledge">
-              <p className="text-xs text-muted-foreground">
-                Issue written acknowledgment within 2 working days;
-                confidentiality explained.
+          {/* Stage history */}
+          {dispute.stageHistory?.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+                Stage History
               </p>
-              <Textarea
-                rows={3}
-                value={ackNote}
-                onChange={(e) => setAckNote(e.target.value)}
-                placeholder="Acknowledgment note to reporter…"
-              />
-              <Button
-                size="sm"
-                onClick={() => {
-                  patch({
-                    stage: "acknowledged",
-                    acknowledgement: {
-                      at: today(),
-                      by: "HR",
-                      note: ackNote || "Acknowledged; investigation to follow.",
-                    },
-                  });
-                  setAckNote("");
-                  toast.success("Case acknowledged.");
-                }}
-              >
-                Acknowledge case
-              </Button>
-            </Section>
+              <div className="space-y-2">
+                {dispute.stageHistory.map((h, i) => (
+                  <div key={i} className="flex items-start gap-2 text-xs">
+                    <ChevronRight className="h-3 w-3 mt-0.5 text-muted-foreground shrink-0" />
+                    <div>
+                      <span className="font-medium capitalize">
+                        {h.stage.replace(/_/g, " ")}
+                      </span>
+                      <span className="text-muted-foreground ml-2">
+                        {fmtDate(h.enteredAt)}
+                      </span>
+                      {h.notes && (
+                        <p className="text-muted-foreground mt-0.5">
+                          {h.notes}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
 
-          {d.acknowledgement && (
-            <Section title="Acknowledgement">
-              <p className="text-xs">
-                {d.acknowledgement.by} · {d.acknowledgement.at}
+          {/* Outcome */}
+          {dispute.outcome && (
+            <div className="rounded-md bg-muted/40 p-3 text-xs space-y-1">
+              <p className="font-semibold uppercase tracking-wide text-muted-foreground">
+                Outcome
               </p>
-              <p className="text-sm">{d.acknowledgement.note}</p>
-            </Section>
+              <p className="capitalize font-medium">
+                {dispute.outcome.decision.replace(/_/g, " ")}
+              </p>
+              {dispute.outcome.notes && (
+                <p className="text-muted-foreground">{dispute.outcome.notes}</p>
+              )}
+              <p className="text-muted-foreground">
+                Recorded {fmtDate(dispute.outcome.recordedAt)}
+              </p>
+            </div>
+          )}
+
+          {/* Appeal */}
+          {dispute.appeal && (
+            <div className="rounded-md bg-warning/10 border border-warning/20 p-3 text-xs space-y-1">
+              <p className="font-semibold uppercase tracking-wide text-warning">
+                Appeal Filed
+              </p>
+              <p>{dispute.appeal.grounds}</p>
+              <p className="text-muted-foreground">
+                Filed {fmtDate(dispute.appeal.filedAt)}
+              </p>
+              {dispute.appeal.decision && (
+                <p className="font-medium">
+                  Decision: {dispute.appeal.decision}
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* External escalation */}
+          {dispute.externalEscalation && (
+            <div className="rounded-md bg-destructive/10 border border-destructive/20 p-3 text-xs space-y-1">
+              <p className="font-semibold uppercase tracking-wide text-destructive">
+                External Escalation
+              </p>
+              <p className="capitalize">
+                {dispute.externalEscalation.body.replace(/_/g, " ")}
+              </p>
+              {dispute.externalEscalation.caseRef && (
+                <p>Ref: {dispute.externalEscalation.caseRef}</p>
+              )}
+              <p className="text-muted-foreground">
+                Referred {fmtDate(dispute.externalEscalation.referredAt)}
+              </p>
+            </div>
+          )}
+
+          {/* ── ACTION SECTIONS ── */}
+
+          {/* Acknowledge */}
+          {stage === "case_reported" && (
+            <div className="rounded-md border p-4 space-y-3">
+              <p className="text-sm font-semibold">Acknowledge Case</p>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Acknowledgment text *</Label>
+                <Textarea
+                  rows={3}
+                  placeholder="Written acknowledgment to complainant…"
+                  value={ackText}
+                  onChange={(e) => setAckText(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Internal notes (optional)</Label>
+                <Textarea
+                  rows={2}
+                  value={ackNotes}
+                  onChange={(e) => setAckNotes(e.target.value)}
+                />
+              </div>
+              <Button
+                size="sm"
+                disabled={!ackText.trim() || ackMutation.isPending}
+                onClick={() => ackMutation.mutate()}
+              >
+                {ackMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  "Acknowledge"
+                )}
+              </Button>
+            </div>
           )}
 
           {/* Investigate */}
-          {(d.stage === "acknowledged" || d.stage === "investigation") && (
-            <Section title="Step 2 — Investigate">
-              <p className="text-xs text-muted-foreground">
-                {d.managerLooped
-                  ? `HR + ${d.loopedManagerName} both add findings. 5–10 working days target.`
-                  : "Tenant-only investigation (respondent is a manager/HoD)."}
+          {stage === "acknowledge" && (
+            <div className="rounded-md border p-4 space-y-3">
+              <p className="text-sm font-semibold">
+                Record Investigation Findings
               </p>
-              <Textarea
-                rows={3}
-                value={invNote}
-                onChange={(e) => setInvNote(e.target.value)}
-                placeholder="Interview / evidence note…"
-              />
-              <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    if (!invNote.trim()) return;
-                    appendInvestigationNote(d.id, {
-                      by: "HR",
-                      role: "HR",
-                      note: invNote,
-                      at: today(),
-                    });
-                    setInvNote("");
-                    if (d.stage !== "investigation") patch({ stage: "investigation" });
-                    onChange({
-                      ...d,
-                      stage: "investigation",
-                      investigationNotes: [
-                        ...d.investigationNotes,
-                        { by: "HR", role: "HR", note: invNote, at: today() },
-                      ],
-                    });
-                  }}
-                >
-                  Add finding
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={() => {
-                    patch({
-                      stage: "hearing",
-                      hearing: d.hearing ?? { notes: [] },
-                    });
-                    toast.success("Moved to hearing.");
-                  }}
-                >
-                  Close investigation → Hearing
-                </Button>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Findings *</Label>
+                <Textarea
+                  rows={4}
+                  placeholder="Summary of investigation findings…"
+                  value={findings}
+                  onChange={(e) => setFindings(e.target.value)}
+                />
               </div>
-              {d.investigationNotes.length > 0 && (
-                <ul className="mt-3 space-y-2 text-sm">
-                  {d.investigationNotes.map((n, i) => (
-                    <li key={i} className="border rounded-md p-2">
-                      <p className="text-xs text-muted-foreground">
-                        {n.by} ({n.role}) · {n.at}
-                      </p>
-                      <p>{n.note}</p>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </Section>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Notes (optional)</Label>
+                <Textarea
+                  rows={2}
+                  value={findingsNotes}
+                  onChange={(e) => setFindingsNotes(e.target.value)}
+                />
+              </div>
+              <Button
+                size="sm"
+                disabled={!findings.trim() || investigateMutation.isPending}
+                onClick={() => investigateMutation.mutate()}
+              >
+                {investigateMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  "Submit Findings"
+                )}
+              </Button>
+            </div>
           )}
 
-          {/* Hearing */}
-          {d.stage === "hearing" && (
-            <Section title="Step 3 — Hearing">
-              <p className="text-xs text-muted-foreground">
-                Schedule within 5 working days of investigation close. Employee
-                has right of representation.
-              </p>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <Label className="text-xs">Date</Label>
+          {/* Schedule Hearing */}
+          {stage === "investigate" && (
+            <div className="rounded-md border p-4 space-y-3">
+              <p className="text-sm font-semibold">Schedule Hearing</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Date & Time *</Label>
                   <Input
-                    type="date"
-                    value={hearingDate || d.hearing?.scheduledAt || ""}
+                    type="datetime-local"
+                    value={hearingDate}
                     onChange={(e) => setHearingDate(e.target.value)}
                   />
                 </div>
-                <div>
-                  <Label className="text-xs">Venue</Label>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Venue *</Label>
                   <Input
-                    value={hearingVenue || d.hearing?.venue || ""}
+                    placeholder="Room / location…"
+                    value={hearingVenue}
                     onChange={(e) => setHearingVenue(e.target.value)}
-                    placeholder="e.g. HR Boardroom"
                   />
                 </div>
               </div>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  const hearing = {
-                    ...(d.hearing ?? { notes: [] }),
-                    scheduledAt: hearingDate || d.hearing?.scheduledAt,
-                    venue: hearingVenue || d.hearing?.venue,
-                  };
-                  patch({ hearing });
-                  toast.success("Hearing scheduled.");
-                }}
-              >
-                Save hearing details
-              </Button>
-
-              <Textarea
-                rows={3}
-                value={hearingNote}
-                onChange={(e) => setHearingNote(e.target.value)}
-                placeholder="Hearing minute / testimony note…"
-                className="mt-2"
-              />
-              <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    if (!hearingNote.trim()) return;
-                    appendHearingNote(d.id, {
-                      by: "HR",
-                      role: "HR",
-                      note: hearingNote,
-                      at: today(),
-                    });
-                    const hearing = d.hearing ?? { notes: [] };
-                    onChange({
-                      ...d,
-                      hearing: {
-                        ...hearing,
-                        notes: [
-                          ...hearing.notes,
-                          { by: "HR", role: "HR", note: hearingNote, at: today() },
-                        ],
-                      },
-                    });
-                    setHearingNote("");
-                  }}
-                >
-                  Add hearing note
-                </Button>
-                <Button size="sm" onClick={() => setOutcomeOpen(true)}>
-                  Record outcome
-                </Button>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Notes (optional)</Label>
+                <Textarea
+                  rows={2}
+                  value={hearingNotes}
+                  onChange={(e) => setHearingNotes(e.target.value)}
+                />
               </div>
-              {d.hearing?.notes?.length ? (
-                <ul className="mt-3 space-y-2 text-sm">
-                  {d.hearing.notes.map((n, i) => (
-                    <li key={i} className="border rounded-md p-2">
-                      <p className="text-xs text-muted-foreground">
-                        {n.by} · {n.at}
-                      </p>
-                      <p>{n.note}</p>
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-            </Section>
-          )}
-
-          {/* Outcome recorded */}
-          {d.outcome && (
-            <Section title="Outcome">
-              <p className="text-xs text-muted-foreground">
-                {d.outcome.by} · {d.outcome.at}
-              </p>
-              <p>
-                <Badge variant="outline">{d.outcome.decision}</Badge>
-              </p>
-              <p className="text-sm">{d.outcome.rationale}</p>
-            </Section>
-          )}
-
-          {/* Appeal window (after outcome) */}
-          {d.stage === "outcome" && (
-            <Section title="Step 5 — Appeal window">
-              <p className="text-xs text-muted-foreground">
-                Employee has 5 working days to appeal. Move directly to close if
-                no appeal is filed.
-              </p>
               <Button
                 size="sm"
-                variant="outline"
-                onClick={() => patch({ stage: "closed" })}
-              >
-                Close case (no appeal)
-              </Button>
-            </Section>
-          )}
-
-          {/* Appeal review */}
-          {d.stage === "appeal" && d.appeal && (
-            <Section title="Step 5 — Review appeal">
-              <p className="text-xs text-muted-foreground">
-                Filed {d.appeal.filedAt} · reviewed by next-level authority.
-              </p>
-              <p className="text-sm">
-                <strong>Grounds:</strong> {d.appeal.grounds}
-              </p>
-              <p className="text-sm">
-                <strong>Remedy sought:</strong> {d.appeal.remedySought}
-              </p>
-              <Select
-                value={appealDecision}
-                onValueChange={(v: any) => setAppealDecision(v)}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {["Upheld", "Dismissed", "Modified"].map((s) => (
-                    <SelectItem key={s} value={s}>
-                      {s}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Textarea
-                rows={3}
-                value={appealNote}
-                onChange={(e) => setAppealNote(e.target.value)}
-                placeholder="Appeal decision rationale…"
-              />
-              <Button
-                size="sm"
-                onClick={() => {
-                  patch({
-                    stage: "closed",
-                    appeal: {
-                      ...d.appeal!,
-                      decision: appealDecision,
-                      decisionNote: appealNote,
-                      decidedAt: today(),
-                    },
-                  });
-                  toast.success("Appeal decided; case closed.");
-                }}
-              >
-                Decide appeal & close
-              </Button>
-            </Section>
-          )}
-
-          {/* Escalation */}
-          <Section title="External escalation (Labour Inspectorate / Courts)">
-            <p className="text-xs text-muted-foreground">
-              Use only after internal resolution has failed. Mandatory referral
-              path under Rwandan labour law.
-            </p>
-            <Textarea
-              rows={2}
-              value={escalationNote}
-              onChange={(e) => setEscalationNote(e.target.value)}
-              placeholder="Reason for escalation…"
-            />
-            <div className="flex flex-wrap gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() =>
-                  escalate(d, "escalated_local", escalationNote, patch, onChange)
+                disabled={
+                  !hearingDate ||
+                  !hearingVenue.trim() ||
+                  hearingMutation.isPending
                 }
+                onClick={() => hearingMutation.mutate()}
               >
-                Refer to Labour Inspectorate (local)
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() =>
-                  escalate(d, "escalated_national", escalationNote, patch, onChange)
-                }
-              >
-                Escalate to national inspector
-              </Button>
-              <Button
-                size="sm"
-                variant="destructive"
-                onClick={() =>
-                  escalate(d, "court", escalationNote, patch, onChange)
-                }
-              >
-                Refer to Primary Court
+                {hearingMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  "Schedule Hearing"
+                )}
               </Button>
             </div>
-            {d.escalation.length > 0 && (
-              <ul className="mt-2 space-y-1 text-xs">
-                {d.escalation.map((e, i) => (
-                  <li key={i} className="border rounded-md p-2">
-                    <strong>{e.level}</strong> · {e.at}
-                    <div>{e.note}</div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Section>
-        </div>
+          )}
 
-        {/* Outcome dialog */}
-        <Dialog open={outcomeOpen} onOpenChange={setOutcomeOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Record outcome</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-3">
-              <div>
-                <Label className="text-xs">Decision</Label>
+          {/* Record Outcome */}
+          {stage === "hearing" && (
+            <div className="rounded-md border p-4 space-y-3">
+              <p className="text-sm font-semibold">Record Outcome</p>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Decision *</Label>
                 <Select
                   value={outcomeDecision}
-                  onValueChange={(v: any) => setOutcomeDecision(v)}
+                  onValueChange={(v) =>
+                    setOutcomeDecision(v as DisputeOutcomeDecision)
+                  }
                 >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {[
-                      "Verbal warning",
-                      "First written warning",
-                      "Final written warning",
-                      "Suspension",
-                      "Termination",
-                      "Grievance upheld",
-                      "Grievance dismissed",
-                      "No case to answer",
-                    ].map((s) => (
-                      <SelectItem key={s} value={s}>
-                        {s}
-                      </SelectItem>
-                    ))}
+                    <SelectItem value="first_warning">First Warning</SelectItem>
+                    <SelectItem value="second_warning">
+                      Second Warning
+                    </SelectItem>
+                    <SelectItem value="final_warning">Final Warning</SelectItem>
+                    <SelectItem value="suspension">Suspension</SelectItem>
+                    <SelectItem value="termination">Termination</SelectItem>
+                    <SelectItem value="grievance_resolved">
+                      Grievance Resolved
+                    </SelectItem>
+                    <SelectItem value="no_action">No Action</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-              <div>
-                <Label className="text-xs">Rationale</Label>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Notes (optional)</Label>
                 <Textarea
                   rows={3}
-                  value={outcomeRationale}
-                  onChange={(e) => setOutcomeRationale(e.target.value)}
+                  value={outcomeNotes}
+                  onChange={(e) => setOutcomeNotes(e.target.value)}
+                />
+              </div>
+              <Button
+                size="sm"
+                disabled={outcomeMutation.isPending}
+                onClick={() => outcomeMutation.mutate()}
+              >
+                {outcomeMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  "Record Outcome"
+                )}
+              </Button>
+            </div>
+          )}
+
+          {/* Resolve Appeal */}
+          {stage === "appeal" && dispute.appeal && !dispute.appeal.decision && (
+            <div className="rounded-md border p-4 space-y-3">
+              <p className="text-sm font-semibold">Resolve Appeal</p>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Decision *</Label>
+                <Input
+                  placeholder="e.g. Appeal upheld, Warning reduced…"
+                  value={appealDecision}
+                  onChange={(e) => setAppealDecision(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Notes (optional)</Label>
+                <Textarea
+                  rows={2}
+                  value={appealNotes}
+                  onChange={(e) => setAppealNotes(e.target.value)}
+                />
+              </div>
+              <Button
+                size="sm"
+                disabled={!appealDecision.trim() || appealMutation.isPending}
+                onClick={() => appealMutation.mutate()}
+              >
+                {appealMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  "Resolve Appeal"
+                )}
+              </Button>
+            </div>
+          )}
+
+          {/* Escalate Externally */}
+          {canEscalate && (
+            <div className="rounded-md border border-destructive/20 p-4 space-y-3">
+              <p className="text-sm font-semibold text-destructive">
+                Escalate to External Body
+              </p>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Body *</Label>
+                <Select
+                  value={escalateBody}
+                  onValueChange={(v) =>
+                    setEscalateBody(v as typeof escalateBody)
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="labour_local">
+                      Local Labour Inspectorate
+                    </SelectItem>
+                    <SelectItem value="labour_national">
+                      National Labour Inspectorate
+                    </SelectItem>
+                    <SelectItem value="court">Court</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">
+                  External case reference (optional)
+                </Label>
+                <Input
+                  placeholder="REF-2026-001…"
+                  value={escalateCaseRef}
+                  onChange={(e) => setEscalateCaseRef(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Notes (optional)</Label>
+                <Textarea
+                  rows={2}
+                  value={escalateNotes}
+                  onChange={(e) => setEscalateNotes(e.target.value)}
+                />
+              </div>
+              <Button
+                size="sm"
+                variant="destructive"
+                disabled={escalateMutation.isPending}
+                onClick={() => escalateMutation.mutate()}
+              >
+                {escalateMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  "Escalate Externally"
+                )}
+              </Button>
+            </div>
+          )}
+
+          {/* Close Case */}
+          {canClose && (
+            <div className="rounded-md border p-4 space-y-3">
+              <p className="text-sm font-semibold">Close Case</p>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Closing notes (optional)</Label>
+                <Textarea
+                  rows={2}
+                  value={closeNotes}
+                  onChange={(e) => setCloseNotes(e.target.value)}
+                />
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={closeMutation.isPending}
+                onClick={() => closeMutation.mutate()}
+              >
+                {closeMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  "Close Case"
+                )}
+              </Button>
+            </div>
+          )}
+
+          {/* Attach Form */}
+          <div className="rounded-md border p-4 space-y-3">
+            <p className="text-sm font-semibold flex items-center gap-2">
+              <Paperclip className="h-4 w-4" /> Attach Form
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Form Type</Label>
+                <Select
+                  value={formType}
+                  onValueChange={(v) => setFormType(v as DisputeFormType)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="D1">D1 — Formal Grievance</SelectItem>
+                    <SelectItem value="D2">D2 — Warning Letter</SelectItem>
+                    <SelectItem value="D3">D3 — Appeal Form</SelectItem>
+                    <SelectItem value="D4">D4 — Hearing Notice</SelectItem>
+                    <SelectItem value="E1">E1 — Incident Report</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Document URL (optional)</Label>
+                <Input
+                  placeholder="https://…"
+                  value={formUrl}
+                  onChange={(e) => setFormUrl(e.target.value)}
                 />
               </div>
             </div>
-            <DialogFooter>
-              <Button
-                onClick={() => {
-                  patch({
-                    stage: "outcome",
-                    outcome: {
-                      decision: outcomeDecision,
-                      rationale: outcomeRationale,
-                      at: today(),
-                      by: "HR",
-                    },
-                  });
-                  setOutcomeOpen(false);
-                  setOutcomeRationale("");
-                  toast.success("Outcome recorded.");
-                }}
-              >
-                Save outcome
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={attachFormMutation.isPending}
+              onClick={() => attachFormMutation.mutate()}
+            >
+              {attachFormMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                "Attach Form"
+              )}
+            </Button>
+            {dispute.forms?.length > 0 && (
+              <div className="space-y-1 pt-1">
+                {dispute.forms.map((f, i) => (
+                  <div
+                    key={i}
+                    className="flex items-center gap-2 text-xs text-muted-foreground"
+                  >
+                    <FileText className="h-3 w-3" />
+                    <span className="font-medium">{f.formType}</span>
+                    {f.attachmentUrl && (
+                      <a
+                        href={f.attachmentUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="underline"
+                      >
+                        View
+                      </a>
+                    )}
+                    <span>{fmtDate(f.createdAt)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Supporting Documents */}
+          <div className="rounded-md border p-4 space-y-3">
+            <p className="text-sm font-semibold flex items-center gap-2">
+              <Upload className="h-4 w-4" /> Supporting Documents
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Document name *</Label>
+                <Input
+                  placeholder="e.g. Witness statement…"
+                  value={docName}
+                  onChange={(e) => setDocName(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">URL *</Label>
+                <Input
+                  placeholder="https://…"
+                  value={docUrl}
+                  onChange={(e) => setDocUrl(e.target.value)}
+                />
+              </div>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={
+                !docName.trim() || !docUrl.trim() || attachDocMutation.isPending
+              }
+              onClick={() => attachDocMutation.mutate()}
+            >
+              {attachDocMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                "Attach Document"
+              )}
+            </Button>
+            {dispute.supportingDocs?.length > 0 && (
+              <div className="space-y-1 pt-1">
+                {dispute.supportingDocs.map((doc, i) => (
+                  <div
+                    key={i}
+                    className="flex items-center gap-2 text-xs text-muted-foreground"
+                  >
+                    <FileText className="h-3 w-3" />
+                    <a
+                      href={doc.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="underline"
+                    >
+                      {doc.name}
+                    </a>
+                    <span>{fmtDate(doc.uploadedAt)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       </SheetContent>
     </Sheet>
   );
 }
 
-function escalate(
-  d: Dispute,
-  level: DisputeStage,
-  note: string,
-  patch: (n: Partial<Dispute>) => void,
-  onChange: (d: Dispute) => void,
-) {
-  const entry = {
-    level: STAGE_LABEL[level],
-    at: today(),
-    note: note || "Escalated externally.",
-  };
-  patch({ stage: level, escalation: [...d.escalation, entry] });
-  onChange({ ...d, stage: level, escalation: [...d.escalation, entry] });
-  toast.success(`Escalated to ${STAGE_LABEL[level]}.`);
-}
+// ── Main page ─────────────────────────────────────────────────────
 
-function Section({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
+const TAB_STATUS_MAP: Record<string, DisputeStatus | undefined> = {
+  all: undefined,
+  open: "open",
+  investigating: "under_investigation",
+  hearing: "hearing_scheduled",
+  closed: "closed",
+};
+
+export default function HRDisputes() {
+  const queryClient = useQueryClient();
+  const [activeTab, setActiveTab] = useState("all");
+  const [typeFilter, setTypeFilter] = useState<DisputeType | "all">("all");
+  const [selected, setSelected] = useState<DisputeCase | null>(null);
+
+  const { data: disputes = [], isLoading } = useQuery({
+    queryKey: ["hr-disputes", activeTab],
+    queryFn: () =>
+      fetchAllDisputeCases(
+        TAB_STATUS_MAP[activeTab]
+          ? { status: TAB_STATUS_MAP[activeTab] }
+          : undefined,
+      ),
+  });
+
+  const filtered = useMemo(
+    () =>
+      typeFilter === "all"
+        ? disputes
+        : disputes.filter((d) => d.type === typeFilter),
+    [disputes, typeFilter],
+  );
+
+  const total = disputes.length;
+  const open = disputes.filter((d) => d.status === "open").length;
+  const investigating = disputes.filter(
+    (d) => d.status === "under_investigation",
+  ).length;
+  const resolved = disputes.filter((d) => d.status === "closed").length;
+
+  const handleUpdated = (updated: DisputeCase) => {
+    setSelected(updated);
+    queryClient.invalidateQueries({ queryKey: ["hr-disputes"] });
+  };
+
   return (
-    <div className="space-y-2 border rounded-lg p-3">
-      <p className="text-sm font-semibold flex items-center gap-2">
-        <ScrollText className="h-4 w-4 text-muted-foreground" />
-        {title}
-      </p>
-      {children}
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-2xl font-bold flex items-center gap-2">
+            <Scale className="h-6 w-6" /> Dispute Management
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Manage internal grievances, disciplinary cases, and external
+            escalations.
+          </p>
+        </div>
+      </div>
+
+      {/* Stats */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <Card>
+          <CardContent className="p-4 flex items-center gap-3">
+            <FileText className="h-5 w-5 text-muted-foreground" />
+            <div>
+              <p className="text-2xl font-bold">{total}</p>
+              <p className="text-xs text-muted-foreground">Total</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4 flex items-center gap-3">
+            <AlertTriangle className="h-5 w-5 text-info" />
+            <div>
+              <p className="text-2xl font-bold">{open}</p>
+              <p className="text-xs text-muted-foreground">Open</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4 flex items-center gap-3">
+            <Clock className="h-5 w-5 text-warning" />
+            <div>
+              <p className="text-2xl font-bold">{investigating}</p>
+              <p className="text-xs text-muted-foreground">Investigating</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4 flex items-center gap-3">
+            <CheckCircle2 className="h-5 w-5 text-success" />
+            <div>
+              <p className="text-2xl font-bold">{resolved}</p>
+              <p className="text-xs text-muted-foreground">Resolved</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Filters + Tabs */}
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <div className="w-full flex items-center justify-between">
+          <TabsList>
+            <TabsTrigger value="all">All</TabsTrigger>
+            <TabsTrigger value="open">Open</TabsTrigger>
+            <TabsTrigger value="investigating">Investigating</TabsTrigger>
+            <TabsTrigger value="hearing">Hearing</TabsTrigger>
+            <TabsTrigger value="closed">Closed</TabsTrigger>
+          </TabsList>
+          <div className="flex items-center gap-3 flex-wrap">
+            <Select
+              value={typeFilter}
+              onValueChange={(v) => setTypeFilter(v as typeof typeFilter)}
+            >
+              <SelectTrigger className="w-44">
+                <SelectValue placeholder="Filter by type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Types</SelectItem>
+                <SelectItem value="grievance">Grievance</SelectItem>
+                <SelectItem value="disciplinary">Disciplinary</SelectItem>
+                <SelectItem value="incident">Incident</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        {["all", "open", "investigating", "hearing", "closed"].map((tab) => (
+          <TabsContent key={tab} value={tab} className="mt-4">
+            {isLoading ? (
+              <div className="flex items-center justify-center py-16 gap-2 text-muted-foreground">
+                <Loader2 className="h-5 w-5 animate-spin" />
+                <span className="text-sm">Loading cases…</span>
+              </div>
+            ) : filtered.length === 0 ? (
+              <Card>
+                <CardContent className="py-16 text-center">
+                  <Scale className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
+                  <p className="text-sm text-muted-foreground">
+                    No dispute cases found.
+                  </p>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="space-y-3">
+                {filtered.map((d) => (
+                  <Card
+                    key={d._id}
+                    className="cursor-pointer hover:shadow-md transition-shadow"
+                    onClick={() => setSelected(d)}
+                  >
+                    <CardContent className="p-4">
+                      <div className="flex items-start justify-between gap-3 flex-wrap">
+                        <div className="space-y-1">
+                          <p className="text-xs text-muted-foreground font-mono">
+                            {d.caseNumber}
+                          </p>
+                          <p className="text-sm font-semibold capitalize">
+                            {d.type}
+                          </p>
+                          <p className="text-xs text-muted-foreground line-clamp-1">
+                            {d.description}
+                          </p>
+                          {d.complainant && (
+                            <p className="text-xs text-muted-foreground">
+                              Filed by:{" "}
+                              <span className="font-medium text-foreground">
+                                {d.complainant.firstName}{" "}
+                                {d.complainant.lastName}
+                              </span>
+                              {d.complainant.department &&
+                                ` · ${d.complainant.department}`}
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 flex-wrap shrink-0">
+                          <StatusBadge status={d.status} />
+                          <StageBadge stage={d.stage} />
+                          <span className="text-xs text-muted-foreground">
+                            {fmtDate(d.filedAt)}
+                          </span>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+        ))}
+      </Tabs>
+
+      {/* Detail sheet */}
+      <DisputeDetailSheet
+        dispute={selected}
+        onClose={() => setSelected(null)}
+        onUpdated={handleUpdated}
+      />
     </div>
   );
-}
-
-function Stat({
-  label,
-  value,
-  icon: Icon,
-  tone,
-}: {
-  label: string;
-  value: any;
-  icon: any;
-  tone: string;
-}) {
-  return (
-    <Card>
-      <CardContent className="p-5 flex items-center justify-between">
-        <div>
-          <p className="text-xs text-muted-foreground uppercase tracking-wide">
-            {label}
-          </p>
-          <p className="text-2xl font-bold mt-1">{value}</p>
-        </div>
-        <div
-          className={`h-10 w-10 rounded-lg bg-gradient-to-br ${tone} flex items-center justify-center`}
-        >
-          <Icon className="h-5 w-5 text-white" />
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function today() {
-  return new Date().toISOString().slice(0, 10);
 }

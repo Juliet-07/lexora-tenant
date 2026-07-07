@@ -122,6 +122,8 @@ export interface DisputeCase {
     lastName: string;
     jobTitle: string;
     hierarchyRole: string;
+    department: string | null;
+    managerName: string | null;
   } | null;
 }
 
