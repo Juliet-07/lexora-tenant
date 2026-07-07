@@ -46,7 +46,25 @@ import {
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
-import { jobOpenings as initialJobs, type JobOpening } from "@/data/hrMockData";
+import { type JobOpening } from "@/data/hrMockData";
+import {
+  useJobOpenings,
+  addJobOpening,
+  updateJobOpening,
+  deleteJobOpening,
+  nextJobOpeningId,
+} from "@/lib/jobOpeningsStore";
+import { Pencil } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { fetchEmployees, type Employee } from "@/lib/hr-api";
 import {
   fetchAllCandidates,
