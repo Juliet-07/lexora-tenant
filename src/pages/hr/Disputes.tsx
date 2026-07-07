@@ -1023,3 +1023,33 @@ export default function HRDisputes() {
     </div>
   );
 }
+
+function DisputeStat({
+  label,
+  value,
+  icon: Icon,
+  tone,
+}: {
+  label: string;
+  value: number | string;
+  icon: any;
+  tone: string;
+}) {
+  return (
+    <Card>
+      <CardContent className="p-5 flex items-center justify-between">
+        <div>
+          <p className="text-xs text-muted-foreground uppercase tracking-wide">
+            {label}
+          </p>
+          <p className="text-2xl font-bold mt-1">{value}</p>
+        </div>
+        <div
+          className={`h-10 w-10 rounded-lg bg-gradient-to-br ${tone} flex items-center justify-center shadow-md`}
+        >
+          <Icon className="h-5 w-5 text-white" />
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
