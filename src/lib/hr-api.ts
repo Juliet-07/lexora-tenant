@@ -362,6 +362,10 @@ export const terminateEmployee = async (
   return res.data?.data ?? res.data;
 };
 
+export const resendWelcomeEmail = async (employeeId: string): Promise<void> => {
+  await api.post(`/hr/employees/${employeeId}/resend-welcome`);
+};
+
 export const fetchEmployeeDetail = async (
   id: string,
 ): Promise<EmployeeDetailResponse> => {

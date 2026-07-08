@@ -65,6 +65,7 @@ import {
   fetchEmployeeOnboardingRecord,
   fetchEmployeePayrollSnapshot,
   fetchEmployeesByHierarchyRole,
+  resendWelcomeEmail,
   terminateEmployee,
 } from "@/lib/hr-api";
 import { downloadEmployeeReport } from "@/lib/employeeReport";
@@ -353,6 +354,13 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
       ),
   });
 
+  const resendMutation = useMutation({
+    mutationFn: () => resendWelcomeEmail(employee._id),
+    onSuccess: () => toast.success("Welcome email resent successfully."),
+    onError: (e: any) =>
+      toast.error(e?.response?.data?.message ?? "Failed to resend email"),
+  });
+
   if (!employee) return null;
 
   const emp = detail?.employee ?? employee;
@@ -497,6 +505,19 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
                   <UserX className="h-4 w-4 mr-2" /> Terminate
                 </Button>
               )}
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={resendMutation.isPending}
+              onClick={() => resendMutation.mutate()}
+            >
+              {resendMutation.isPending ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+              ) : (
+                <Mail className="h-3.5 w-3.5 mr-1.5" />
+              )}
+              Resend Welcome Email
+            </Button>
           </div>
         </div>
 
