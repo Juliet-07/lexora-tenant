@@ -113,13 +113,18 @@ interface Props {
     jobTitle: string;
   } | null;
   onClose: () => void;
+  mode?: "manager" | "tenant";
 }
 
-export function ManagerProbationSheet({ employee, onClose }: Props) {
+export function ManagerProbationSheet({
+  employee,
+  onClose,
+  mode = "manager",
+}: Props) {
   return (
     <Sheet open={!!employee} onOpenChange={(o) => !o && onClose()}>
       <SheetContent className="w-full sm:max-w-2xl overflow-y-auto">
-        {employee && <ProbationRunnerPanel employee={employee} />}
+        {employee && <ProbationRunnerPanel employee={employee} mode={mode} />}
       </SheetContent>
     </Sheet>
   );
