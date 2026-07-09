@@ -133,13 +133,25 @@ export function ManagerProbationSheet({ employee, onClose }: Props) {
   return (
     <Sheet open={!!employee} onOpenChange={(o) => !o && onClose()}>
       <SheetContent className="w-full sm:max-w-2xl overflow-y-auto">
-        {employee && <Inner employee={employee} />}
+        {employee && <ProbationRunnerPanel employee={employee} />}
       </SheetContent>
     </Sheet>
   );
 }
 
-function Inner({ employee }: { employee: NonNullable<Props["employee"]> }) {
+/**
+ * The interactive probation runner body — used by:
+ *   - line managers running probation for direct reports
+ *   - HODs running probation for managers on their department
+ *   - tenants (HR) running probation for HODs
+ * All three drive the SAME manager-side stages against the same
+ * endpoints; the backend authorises based on the caller's role.
+ */
+export function ProbationRunnerPanel({
+  employee,
+}: {
+  employee: NonNullable<Props["employee"]>;
+}) {
   const queryClient = useQueryClient();
   const { data, isLoading } = useQuery({
     queryKey: ["my-team-probation", employee._id],
