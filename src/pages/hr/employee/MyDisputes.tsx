@@ -37,6 +37,8 @@ import {
   Loader2,
   Scale,
   Lock,
+  Paperclip,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
@@ -44,9 +46,32 @@ import {
   fetchMyDisputeCases,
   fetchDepartmentDisputeCases,
   openDisputeCaseAsEmployee,
+  attachEmployeeDisputeDocument,
   type DisputeCase,
   type DisputeType,
 } from "@/lib/hr-dispute-api";
+
+// UI type extends backend DisputeType with a "report" sub-flow
+// which is submitted as `grievance` with a `[REPORT]` tag in the description.
+type UiDisputeType = "grievance" | "report" | "incident";
+
+const GRIEVANCE_NATURES = [
+  "Harassment or bullying",
+  "Discrimination",
+  "Unfair treatment",
+  "Violation of policy",
+  "Pay or benefits dispute",
+  "Working conditions",
+  "Health and safety",
+  "Other",
+] as const;
+
+const INJURY_LEVELS = [
+  { value: "none", label: "No injury" },
+  { value: "minor", label: "Minor injury (first aid only)" },
+  { value: "serious", label: "Serious injury (hospitalisation)" },
+  { value: "fatality", label: "Fatality" },
+] as const;
 
 // ── helpers ──────────────────────────────────────────────────────
 
@@ -114,14 +139,17 @@ function lastAction(d: DisputeCase): string {
 
 // ── Log Dispute Dialog ────────────────────────────────────────────
 
+export interface LogDisputeSubmission {
+  type: DisputeType;
+  description: string;
+  witnesses?: string[];
+  attachments: { name: string; url: string }[];
+}
+
 interface LogDisputeDialogProps {
   open: boolean;
   onClose: () => void;
-  onSubmit: (dto: {
-    type: DisputeType;
-    description: string;
-    witnesses?: string[];
-  }) => void;
+  onSubmit: (dto: LogDisputeSubmission) => void;
   isSubmitting: boolean;
 }
 
@@ -131,88 +159,369 @@ function LogDisputeDialog({
   onSubmit,
   isSubmitting,
 }: LogDisputeDialogProps) {
-  const [type, setType] = useState<DisputeType>("grievance");
-  const [description, setDescription] = useState("");
-  const [witnessInput, setWitnessInput] = useState("");
-  const [witnesses, setWitnesses] = useState<string[]>([]);
+  const [uiType, setUiType] = useState<UiDisputeType>("grievance");
 
-  const handleAddWitness = () => {
-    const trimmed = witnessInput.trim();
-    if (trimmed && !witnesses.includes(trimmed)) {
-      setWitnesses((prev) => [...prev, trimmed]);
-      setWitnessInput("");
-    }
+  // Common
+  const [description, setDescription] = useState("");
+  const [involvedInput, setInvolvedInput] = useState("");
+  const [involved, setInvolved] = useState<string[]>([]);
+  const [attachments, setAttachments] = useState<File[]>([]);
+
+  // Grievance-specific
+  const [nature, setNature] = useState<string>("");
+  const [adverseEffect, setAdverseEffect] = useState("");
+  const [informalSteps, setInformalSteps] = useState("");
+  const [remedy, setRemedy] = useState("");
+
+  // Incident-specific
+  const [cause, setCause] = useState("");
+  const [injuryLevel, setInjuryLevel] = useState<string>("none");
+  const [injuryNature, setInjuryNature] = useState("");
+  const [medicalTreatment, setMedicalTreatment] = useState("");
+
+  const reset = () => {
+    setUiType("grievance");
+    setDescription("");
+    setInvolvedInput("");
+    setInvolved([]);
+    setAttachments([]);
+    setNature("");
+    setAdverseEffect("");
+    setInformalSteps("");
+    setRemedy("");
+    setCause("");
+    setInjuryLevel("none");
+    setInjuryNature("");
+    setMedicalTreatment("");
   };
 
   const handleClose = () => {
-    setType("grievance");
-    setDescription("");
-    setWitnessInput("");
-    setWitnesses([]);
+    reset();
     onClose();
   };
 
+  const handleAddInvolved = () => {
+    const trimmed = involvedInput.trim();
+    if (trimmed && !involved.includes(trimmed)) {
+      setInvolved((prev) => [...prev, trimmed]);
+      setInvolvedInput("");
+    }
+  };
+
+  const handleFiles = (files: FileList | null) => {
+    if (!files) return;
+    const arr = Array.from(files);
+    setAttachments((prev) => [...prev, ...arr]);
+  };
+
+  const canSubmit = () => {
+    if (isSubmitting) return false;
+    if (!description.trim()) return false;
+    if (uiType === "grievance") {
+      return !!nature && !!adverseEffect.trim();
+    }
+    if (uiType === "incident") {
+      return !!cause.trim() && !!injuryLevel;
+    }
+    // report
+    return !!adverseEffect.trim();
+  };
+
+  const buildDescription = (): string => {
+    const parts: string[] = [];
+    const tag =
+      uiType === "report"
+        ? "[REPORT]"
+        : uiType === "grievance"
+          ? "[GRIEVANCE]"
+          : "[INCIDENT]";
+    parts.push(`${tag} ${description.trim()}`);
+
+    if (involved.length > 0) {
+      parts.push(`\nEmployees involved: ${involved.join(", ")}`);
+    }
+
+    if (uiType === "grievance") {
+      parts.push(`\nNature of grievance: ${nature}`);
+      parts.push(`\nHow this has adversely affected me:\n${adverseEffect.trim()}`);
+      if (informalSteps.trim())
+        parts.push(
+          `\nSteps taken for informal resolution & outcome:\n${informalSteps.trim()}`,
+        );
+      if (remedy.trim())
+        parts.push(`\nRemedy or outcome sought:\n${remedy.trim()}`);
+    } else if (uiType === "incident") {
+      parts.push(`\nCause of incident:\n${cause.trim()}`);
+      const injuryLabel =
+        INJURY_LEVELS.find((i) => i.value === injuryLevel)?.label ?? injuryLevel;
+      parts.push(`\nInjury / medical treatment: ${injuryLabel}`);
+      if (injuryNature.trim())
+        parts.push(
+          `\nNature of injury / body part affected: ${injuryNature.trim()}`,
+        );
+      if (medicalTreatment.trim())
+        parts.push(
+          `\nMedical treatment provided / referral:\n${medicalTreatment.trim()}`,
+        );
+    } else {
+      parts.push(`\nHow this has adversely affected me:\n${adverseEffect.trim()}`);
+    }
+
+    if (attachments.length > 0) {
+      parts.push(
+        `\nAttachments: ${attachments.map((f) => f.name).join(", ")}`,
+      );
+    }
+
+    return parts.join("\n");
+  };
+
+  const backendType: DisputeType =
+    uiType === "incident" ? "incident" : "grievance";
+
   return (
     <Dialog open={open} onOpenChange={(o) => !o && handleClose()}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Log a Dispute</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-2">
+          {/* Type */}
           <div className="space-y-1.5">
-            <Label className="text-xs">Dispute Type</Label>
-            <Select value={type} onValueChange={(v) => setType(v as DisputeType)}>
+            <Label className="text-xs">Dispute Type *</Label>
+            <Select
+              value={uiType}
+              onValueChange={(v) => setUiType(v as UiDisputeType)}
+            >
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="grievance">Grievance</SelectItem>
+                <SelectItem value="report">Report</SelectItem>
                 <SelectItem value="incident">Incident</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
+          {/* Employees involved */}
           <div className="space-y-1.5">
-            <Label className="text-xs">Description *</Label>
-            <Textarea
-              rows={4}
-              placeholder="Describe the dispute in detail…"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label className="text-xs">Witnesses (optional)</Label>
+            <Label className="text-xs">Employees involved (optional)</Label>
             <div className="flex gap-2">
               <Input
-                placeholder="Witness name…"
-                value={witnessInput}
-                onChange={(e) => setWitnessInput(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleAddWitness()}
+                placeholder="Type a name and press Enter…"
+                value={involvedInput}
+                onChange={(e) => setInvolvedInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleAddInvolved();
+                  }
+                }}
               />
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={handleAddWitness}
+                onClick={handleAddInvolved}
               >
                 Add
               </Button>
             </div>
-            {witnesses.length > 0 && (
+            {involved.length > 0 && (
               <div className="flex flex-wrap gap-1.5 pt-1">
-                {witnesses.map((w) => (
+                {involved.map((w) => (
                   <Badge
                     key={w}
                     variant="outline"
                     className="text-xs cursor-pointer hover:bg-destructive/10"
                     onClick={() =>
-                      setWitnesses((prev) => prev.filter((x) => x !== w))
+                      setInvolved((prev) => prev.filter((x) => x !== w))
                     }
                   >
                     {w} ×
                   </Badge>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Short description */}
+          <div className="space-y-1.5">
+            <Label className="text-xs">Brief description *</Label>
+            <Textarea
+              rows={3}
+              placeholder="Summarise what happened…"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+            />
+          </div>
+
+          {/* Grievance-specific */}
+          {uiType === "grievance" && (
+            <>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Nature of grievance *</Label>
+                <Select value={nature} onValueChange={setNature}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select nature…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {GRIEVANCE_NATURES.map((n) => (
+                      <SelectItem key={n} value={n}>
+                        {n}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">
+                  How has this adversely affected you? *
+                </Label>
+                <Textarea
+                  rows={3}
+                  value={adverseEffect}
+                  onChange={(e) => setAdverseEffect(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">
+                  Steps taken for informal resolution and outcome (if any)
+                </Label>
+                <Textarea
+                  rows={3}
+                  value={informalSteps}
+                  onChange={(e) => setInformalSteps(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">
+                  What specific outcome or remedy are you seeking?
+                </Label>
+                <Textarea
+                  rows={2}
+                  value={remedy}
+                  onChange={(e) => setRemedy(e.target.value)}
+                />
+              </div>
+            </>
+          )}
+
+          {/* Report-specific */}
+          {uiType === "report" && (
+            <div className="space-y-1.5">
+              <Label className="text-xs">
+                How has this adversely affected you? *
+              </Label>
+              <Textarea
+                rows={3}
+                value={adverseEffect}
+                onChange={(e) => setAdverseEffect(e.target.value)}
+              />
+            </div>
+          )}
+
+          {/* Incident-specific */}
+          {uiType === "incident" && (
+            <>
+              <div className="space-y-1.5">
+                <Label className="text-xs">
+                  Cause of incident — what do you believe caused this? *
+                </Label>
+                <Textarea
+                  rows={3}
+                  value={cause}
+                  onChange={(e) => setCause(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Injury / medical treatment *</Label>
+                <Select value={injuryLevel} onValueChange={setInjuryLevel}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {INJURY_LEVELS.map((i) => (
+                      <SelectItem key={i.value} value={i.value}>
+                        {i.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              {injuryLevel !== "none" && (
+                <>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">
+                      Nature of injury and body part affected
+                    </Label>
+                    <Input
+                      value={injuryNature}
+                      onChange={(e) => setInjuryNature(e.target.value)}
+                      placeholder="e.g. Sprained left ankle"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">
+                      Medical treatment provided / referral made
+                    </Label>
+                    <Textarea
+                      rows={2}
+                      value={medicalTreatment}
+                      onChange={(e) => setMedicalTreatment(e.target.value)}
+                    />
+                  </div>
+                </>
+              )}
+            </>
+          )}
+
+          {/* Attachments */}
+          <div className="space-y-1.5">
+            <Label className="text-xs">
+              Attach documents, screenshots or images (optional)
+            </Label>
+            <div className="flex items-center gap-2">
+              <label className="flex items-center gap-2 px-3 py-1.5 border rounded-md text-xs cursor-pointer hover:bg-muted">
+                <Paperclip className="h-3.5 w-3.5" />
+                Choose files
+                <input
+                  type="file"
+                  className="hidden"
+                  multiple
+                  accept="image/*,.pdf,.doc,.docx"
+                  onChange={(e) => {
+                    handleFiles(e.target.files);
+                    e.target.value = "";
+                  }}
+                />
+              </label>
+              <span className="text-[11px] text-muted-foreground">
+                {attachments.length} file
+                {attachments.length === 1 ? "" : "s"} selected
+              </span>
+            </div>
+            {attachments.length > 0 && (
+              <div className="flex flex-col gap-1 pt-1">
+                {attachments.map((f, idx) => (
+                  <div
+                    key={`${f.name}-${idx}`}
+                    className="flex items-center justify-between text-xs bg-muted/40 rounded px-2 py-1"
+                  >
+                    <span className="truncate">{f.name}</span>
+                    <button
+                      type="button"
+                      className="text-muted-foreground hover:text-destructive"
+                      onClick={() =>
+                        setAttachments((prev) =>
+                          prev.filter((_, i) => i !== idx),
+                        )
+                      }
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
                 ))}
               </div>
             )}
@@ -224,14 +533,18 @@ function LogDisputeDialog({
           </Button>
           <Button
             onClick={() => {
-              if (!description.trim()) return;
+              if (!canSubmit()) return;
               onSubmit({
-                type,
-                description: description.trim(),
-                witnesses: witnesses.length > 0 ? witnesses : undefined,
+                type: backendType,
+                description: buildDescription(),
+                witnesses: involved.length > 0 ? involved : undefined,
+                attachments: attachments.map((f) => ({
+                  name: f.name,
+                  url: `attachment://${encodeURIComponent(f.name)}`,
+                })),
               });
             }}
-            disabled={!description.trim() || isSubmitting}
+            disabled={!canSubmit()}
           >
             {isSubmitting ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -244,6 +557,8 @@ function LogDisputeDialog({
     </Dialog>
   );
 }
+
+
 
 // ── Main page ─────────────────────────────────────────────────────
 
@@ -264,7 +579,22 @@ export default function MyDisputes() {
   });
 
   const openMutation = useMutation({
-    mutationFn: openDisputeCaseAsEmployee,
+    mutationFn: async (dto: LogDisputeSubmission) => {
+      const created = await openDisputeCaseAsEmployee({
+        type: dto.type,
+        description: dto.description,
+        witnesses: dto.witnesses,
+      });
+      // Best-effort attach documents; ignore individual failures.
+      for (const doc of dto.attachments) {
+        try {
+          await attachEmployeeDisputeDocument(created._id, doc);
+        } catch {
+          /* keep going */
+        }
+      }
+      return created;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey });
       setLogOpen(false);
