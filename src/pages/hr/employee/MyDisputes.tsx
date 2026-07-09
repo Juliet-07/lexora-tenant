@@ -579,7 +579,22 @@ export default function MyDisputes() {
   });
 
   const openMutation = useMutation({
-    mutationFn: openDisputeCaseAsEmployee,
+    mutationFn: async (dto: LogDisputeSubmission) => {
+      const created = await openDisputeCaseAsEmployee({
+        type: dto.type,
+        description: dto.description,
+        witnesses: dto.witnesses,
+      });
+      // Best-effort attach documents; ignore individual failures.
+      for (const doc of dto.attachments) {
+        try {
+          await attachEmployeeDisputeDocument(created._id, doc);
+        } catch {
+          /* keep going */
+        }
+      }
+      return created;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey });
       setLogOpen(false);
