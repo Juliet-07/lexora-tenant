@@ -142,11 +142,32 @@ const fmtDate = (iso: string) => new Date(iso).toLocaleDateString();
 
 export default function HRProbation() {
   const [openEmployeeId, setOpenEmployeeId] = useState<string | null>(null);
+  const [hodProbationFor, setHodProbationFor] = useState<{
+    _id: string;
+    firstName: string;
+    lastName: string;
+    jobTitle: string;
+  } | null>(null);
 
   const { data: items = [], isLoading } = useQuery({
     queryKey: ["probation-all"],
     queryFn: fetchAllProbationRecords,
   });
+
+  const { data: hods = [] } = useQuery({
+    queryKey: ["employees-by-role", "head_of_department"],
+    queryFn: () => fetchEmployeesByHierarchyRole("head_of_department"),
+  });
+  const hodIds = new Set(hods.map((e) => e._id));
+  const hodProbationItems = items.filter(
+    ({ employee }) =>
+      employee &&
+      (employee as any).hierarchyRole === "head_of_department"
+        ? true
+        : employee
+        ? hodIds.has(employee._id)
+        : false,
+  );
 
   const totals = {
     active: items.length,
