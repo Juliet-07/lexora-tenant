@@ -206,39 +206,62 @@ export function MyProbationPanel() {
         </CardContent>
       </Card>
 
-      {/* Month 1 & 2 — STATUS ONLY, no employee input, confirmed
-          manager-only per the source document. */}
       {monthly
         .filter((s) => s.type !== "month_3")
-        .map((s) => (
-          <Card key={s.type}>
-            <CardHeader className="pb-2">
-              <div className="flex items-center justify-between gap-2 flex-wrap">
-                <div>
-                  <CardTitle className="text-sm">
-                    {STAGE_LABELS[s.type]}
-                  </CardTitle>
-                  <CardDescription className="text-xs">
-                    {STAGE_WINDOWS[s.type]}
-                  </CardDescription>
+        .map((s) => {
+          const responseText = s.type === "month_1" ? s.note : s.progressNote;
+          return (
+            <Card key={s.type}>
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div>
+                    <CardTitle className="text-sm">
+                      {STAGE_LABELS[s.type]}
+                    </CardTitle>
+                    <CardDescription className="text-xs">
+                      {STAGE_WINDOWS[s.type]}
+                    </CardDescription>
+                  </div>
+                  {stageBadge(s)}
                 </div>
-                {stageBadge(s)}
-              </div>
-            </CardHeader>
-            <CardContent className="text-xs text-muted-foreground flex items-center gap-1.5">
-              <ClipboardList className="h-3 w-3" />
-              {s.status === "completed"
-                ? `Your manager completed this check-in on ${fmtDate(s.completedAt)}.`
-                : "Your manager will check in with you directly during this window — no action needed from you here."}
-            </CardContent>
-          </Card>
-        ))}
+              </CardHeader>
+              <CardContent className="space-y-2 text-sm">
+                {s.status === "completed" ? (
+                  <>
+                    <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                      <ClipboardList className="h-3 w-3" />
+                      Your manager completed this check-in on{" "}
+                      {fmtDate(s.completedAt)}.
+                    </p>
+                    {responseText ? (
+                      <div>
+                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-1">
+                          {s.type === "month_1"
+                            ? "Manager's note"
+                            : "Manager's progress note"}
+                        </p>
+                        <p className="whitespace-pre-wrap">{responseText}</p>
+                      </div>
+                    ) : (
+                      s.type === "month_1" && (
+                        <p className="text-xs text-muted-foreground italic">
+                          No additional note was left for this check-in.
+                        </p>
+                      )
+                    )}
+                  </>
+                ) : (
+                  <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                    <ClipboardList className="h-3 w-3" />
+                    Your manager will check in with you directly during this
+                    window — no action needed from you here.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          );
+        })}
 
-      {/* Month 3 — status card pointing at the REAL review, not a
-          local form. The actual self-assessment happens through the
-          normal performance-review screen once the manager starts
-          it (CurrentReview / MyPerformance.tsx already handles
-          that flow — this card just orients the employee). */}
       {(() => {
         const m3 = monthly.find((s) => s.type === "month_3");
         if (!m3) return null;

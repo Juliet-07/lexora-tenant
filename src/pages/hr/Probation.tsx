@@ -419,79 +419,80 @@ function ProbationDetail({
                 lastName: employee.lastName,
                 jobTitle: employee.jobTitle,
               }}
+              mode="tenant"
             />
           ) : (
             stages
-            .filter((s) => s.type !== "final_decision")
-            .map((s) => (
-              <Card key={s.type}>
-                <CardHeader className="pb-2">
-                  <div className="flex items-center justify-between gap-2 flex-wrap">
-                    <div>
-                      <CardTitle className="text-sm">
-                        {STAGE_LABELS[s.type]}
-                      </CardTitle>
-                      <CardDescription className="text-xs flex items-center gap-1">
-                        {STAGE_WINDOWS[s.type]} · {STAGE_OWNERS[s.type]}
-                        <Lock className="h-3 w-3 ml-1" />
-                      </CardDescription>
+              .filter((s) => s.type !== "final_decision")
+              .map((s) => (
+                <Card key={s.type}>
+                  <CardHeader className="pb-2">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <div>
+                        <CardTitle className="text-sm">
+                          {STAGE_LABELS[s.type]}
+                        </CardTitle>
+                        <CardDescription className="text-xs flex items-center gap-1">
+                          {STAGE_WINDOWS[s.type]} · {STAGE_OWNERS[s.type]}
+                          <Lock className="h-3 w-3 ml-1" />
+                        </CardDescription>
+                      </div>
+                      {stageBadge(s)}
                     </div>
-                    {stageBadge(s)}
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-2 text-sm">
-                  {s.type === "onboarding" && s.objectives && (
-                    <>
-                      <p>
-                        <span className="font-medium">Objectives: </span>
-                        {s.objectives.objectives}
-                      </p>
-                      {s.objectives.successMeasures && (
+                  </CardHeader>
+                  <CardContent className="space-y-2 text-sm">
+                    {s.type === "onboarding" && s.objectives && (
+                      <>
+                        <p>
+                          <span className="font-medium">Objectives: </span>
+                          {s.objectives.objectives}
+                        </p>
+                        {s.objectives.successMeasures && (
+                          <p>
+                            <span className="font-medium">
+                              Success measures:{" "}
+                            </span>
+                            {s.objectives.successMeasures}
+                          </p>
+                        )}
+                      </>
+                    )}
+                    {s.type === "month_1" && s.note && (
+                      <p className="text-muted-foreground italic">{s.note}</p>
+                    )}
+                    {s.type === "month_2" && s.progressNote && (
+                      <p>{s.progressNote}</p>
+                    )}
+                    {s.type === "month_3" && s.recommendation && (
+                      <div className="rounded-md bg-muted/40 p-3 space-y-1">
                         <p>
                           <span className="font-medium">
-                            Success measures:{" "}
+                            Manager's recommendation:{" "}
                           </span>
-                          {s.objectives.successMeasures}
+                          <span className="capitalize">
+                            {s.recommendation.suggestedOutcome}
+                          </span>{" "}
+                          (rated {s.recommendation.basedOnRatingBand})
                         </p>
-                      )}
-                    </>
-                  )}
-                  {s.type === "month_1" && s.note && (
-                    <p className="text-muted-foreground italic">{s.note}</p>
-                  )}
-                  {s.type === "month_2" && s.progressNote && (
-                    <p>{s.progressNote}</p>
-                  )}
-                  {s.type === "month_3" && s.recommendation && (
-                    <div className="rounded-md bg-muted/40 p-3 space-y-1">
-                      <p>
-                        <span className="font-medium">
-                          Manager's recommendation:{" "}
-                        </span>
-                        <span className="capitalize">
-                          {s.recommendation.suggestedOutcome}
-                        </span>{" "}
-                        (rated {s.recommendation.basedOnRatingBand})
+                        <p className="text-muted-foreground">
+                          {s.recommendation.managerReasoning}
+                        </p>
+                      </div>
+                    )}
+                    {s.status !== "completed" && (
+                      <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                        <Lock className="h-3 w-3" /> This stage is completed by
+                        the employee's manager — no action needed from you here.
                       </p>
-                      <p className="text-muted-foreground">
-                        {s.recommendation.managerReasoning}
+                    )}
+                    {s.completedAt && (
+                      <p className="text-xs text-muted-foreground">
+                        Completed {fmtDate(s.completedAt)}
                       </p>
-                    </div>
-                  )}
-                  {s.status !== "completed" && (
-                    <p className="text-xs text-muted-foreground flex items-center gap-1.5">
-                      <Lock className="h-3 w-3" /> This stage is completed by
-                      the employee's manager — no action needed from you here.
-                    </p>
-                  )}
-                  {s.completedAt && (
-                    <p className="text-xs text-muted-foreground">
-                      Completed {fmtDate(s.completedAt)}
-                    </p>
-                  )}
-                </CardContent>
-              </Card>
-            ))
+                    )}
+                  </CardContent>
+                </Card>
+              ))
           )}
         </TabsContent>
 

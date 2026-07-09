@@ -183,3 +183,48 @@ export const fetchMyProbation = async (): Promise<{
     return null;
   }
 };
+
+// ── TENANT — acting as supervisor for a Head of Department ──────
+
+export const setProbationOnboardingAsTenant = async (
+  employeeId: string,
+  dto: { objectives: string; successMeasures?: string },
+): Promise<ProbationRecord> => {
+  const res = await api.patch(
+    `/hr/probation/employee/${employeeId}/onboarding`,
+    dto,
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const completeProbationMonth1AsTenant = async (
+  employeeId: string,
+  dto: { note?: string },
+): Promise<ProbationRecord> => {
+  const res = await api.patch(
+    `/hr/probation/employee/${employeeId}/month-1`,
+    dto,
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const completeProbationMonth2AsTenant = async (
+  employeeId: string,
+  dto: { progressNote: string },
+): Promise<ProbationRecord> => {
+  const res = await api.patch(
+    `/hr/probation/employee/${employeeId}/month-2`,
+    dto,
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const startProbationMonth3AsTenant = async (
+  employeeId: string,
+): Promise<{ _id: string }> => {
+  const res = await api.post(
+    `/hr/probation/employee/${employeeId}/month-3/start`,
+    {},
+  );
+  return res.data?.data ?? res.data;
+};

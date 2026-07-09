@@ -1,25 +1,3 @@
-// =================================================================
-// ManagerProbationSheet — CORRECTED
-// -----------------------------------------------------------------
-// Side-sheet for a line manager running a direct report's 90-day
-// probation. Stages stay strictly sequential, server-guarded.
-//
-//   1. Onboarding (Day 1)         → objectives + success measures
-//   2. Month 1 check-in (D25–30)  → manager-only informal note
-//                                    (confirmed: no employee input,
-//                                    per Probation_Workflow.docx)
-//   3. Month 2 review (D55–60)    → manager-only formal progress
-//                                    note (same confirmation)
-//   4. Month 3 evaluation (D80–85)→ generates a REAL performance
-//                                    review cycle; employee
-//                                    self-assesses, manager scores
-//                                    via the SAME ManagerReviewSheet
-//                                    used everywhere else; the
-//                                    recommendation is AUTO-COMPUTED
-//                                    on completion — the manager
-//                                    never hand-types an outcome.
-// =================================================================
-
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -53,16 +31,24 @@ import {
 import { toast } from "sonner";
 import {
   fetchProbationForMyReport,
+  fetchProbationRecordForEmployee,
   setProbationOnboarding,
+  setProbationOnboardingAsTenant,
   completeProbationMonth1,
+  completeProbationMonth1AsTenant,
   completeProbationMonth2,
+  completeProbationMonth2AsTenant,
   startProbationMonth3,
+  startProbationMonth3AsTenant,
   type ProbationStage,
 } from "@/lib/hr-probation-api";
 import {
   fetchReviewForReviewer,
   updateReviewManagerSection,
   completeReviewAsManager,
+  fetchReviewById,
+  updateManagerReviewSection,
+  completeReview,
   type PerformanceReview,
 } from "@/lib/hr-performance-api";
 import { ManagerReviewSheet } from "./ManagerReviewSheet";
@@ -149,13 +135,37 @@ export function ManagerProbationSheet({ employee, onClose }: Props) {
  */
 export function ProbationRunnerPanel({
   employee,
+  mode,
 }: {
   employee: NonNullable<Props["employee"]>;
+  mode: "manager" | "tenant";
 }) {
+  const isTenant = mode === "tenant";
+  const fetchFn = isTenant
+    ? fetchProbationRecordForEmployee
+    : fetchProbationForMyReport;
+  const onboardingFn = isTenant
+    ? setProbationOnboardingAsTenant
+    : setProbationOnboarding;
+  const month1Fn = isTenant
+    ? completeProbationMonth1AsTenant
+    : completeProbationMonth1;
+  const month2Fn = isTenant
+    ? completeProbationMonth2AsTenant
+    : completeProbationMonth2;
+  const month3StartFn = isTenant
+    ? startProbationMonth3AsTenant
+    : startProbationMonth3;
+  const reviewFetchFn = isTenant ? fetchReviewById : fetchReviewForReviewer;
+  const reviewSaveFn = isTenant
+    ? updateManagerReviewSection
+    : updateReviewManagerSection;
+  const reviewCompleteFn = isTenant ? completeReview : completeReviewAsManager;
+
   const queryClient = useQueryClient();
   const { data, isLoading } = useQuery({
-    queryKey: ["my-team-probation", employee._id],
-    queryFn: () => fetchProbationForMyReport(employee._id),
+    queryKey: ["probation-runner", mode, employee._id],
+    queryFn: () => fetchFn(employee._id),
   });
 
   if (isLoading || !data) {
@@ -176,11 +186,14 @@ export function ProbationRunnerPanel({
 
   const invalidate = () => {
     queryClient.invalidateQueries({
-      queryKey: ["my-team-probation", employee._id],
+      queryKey: ["probation-runner", mode, employee._id],
     });
     queryClient.invalidateQueries({ queryKey: ["my-team-probations"] });
+    queryClient.invalidateQueries({
+      queryKey: ["probation-detail", employee._id],
+    });
+    queryClient.invalidateQueries({ queryKey: ["probation-all"] });
   };
-
   return (
     <>
       <SheetHeader>
@@ -203,6 +216,7 @@ export function ProbationRunnerPanel({
           stage={onboarding}
           employeeId={employee._id}
           onSaved={invalidate}
+          onboardingFn={onboardingFn}
         />
         <MonthlyCard
           stage={m1}
@@ -211,7 +225,7 @@ export function ProbationRunnerPanel({
           onSaved={invalidate}
           field="note"
           placeholder="Informal review of settling-in, early performance, any concerns."
-          mutate={completeProbationMonth1}
+          mutate={month1Fn}
         />
         <MonthlyCard
           stage={m2}
@@ -220,13 +234,17 @@ export function ProbationRunnerPanel({
           onSaved={invalidate}
           field="progressNote"
           placeholder="Formal mid-point assessment against objectives + corrective actions if any."
-          mutate={completeProbationMonth2}
+          mutate={month2Fn}
         />
         <Month3Card
           stage={m3}
           prevDone={m2.status === "completed"}
           employeeId={employee._id}
           onSaved={invalidate}
+          startFn={month3StartFn}
+          reviewFetchFn={reviewFetchFn}
+          reviewSaveFn={reviewSaveFn}
+          reviewCompleteFn={reviewCompleteFn}
         />
 
         {finalDecision && (
@@ -292,10 +310,15 @@ function OnboardingCard({
   stage,
   employeeId,
   onSaved,
+  onboardingFn,
 }: {
   stage: ProbationStage;
   employeeId: string;
   onSaved: () => void;
+  onboardingFn: (
+    employeeId: string,
+    dto: { objectives: string; successMeasures?: string },
+  ) => Promise<any>;
 }) {
   const [objectives, setObjectives] = useState(
     stage.objectives?.objectives ?? "",
@@ -311,7 +334,7 @@ function OnboardingCard({
 
   const mut = useMutation({
     mutationFn: () =>
-      setProbationOnboarding(employeeId, {
+      onboardingFn(employeeId, {
         objectives,
         successMeasures: successMeasures || undefined,
       }),
@@ -468,16 +491,24 @@ function Month3Card({
   prevDone,
   employeeId,
   onSaved,
+  startFn,
+  reviewFetchFn,
+  reviewSaveFn,
+  reviewCompleteFn,
 }: {
   stage: ProbationStage;
   prevDone: boolean;
   employeeId: string;
   onSaved: () => void;
+  startFn: (employeeId: string) => Promise<{ _id: string }>;
+  reviewFetchFn: (reviewId: string) => Promise<PerformanceReview>;
+  reviewSaveFn: (reviewId: string, dto: any) => Promise<any>;
+  reviewCompleteFn: (reviewId: string) => Promise<any>;
 }) {
   const [reviewing, setReviewing] = useState<PerformanceReview | null>(null);
 
   const startMutation = useMutation({
-    mutationFn: () => startProbationMonth3(employeeId),
+    mutationFn: () => startFn(employeeId),
     onSuccess: () => {
       toast.success(
         "Month 3 evaluation started — the employee can now self-assess.",
@@ -562,9 +593,9 @@ function Month3Card({
           setReviewing(null);
           onSaved();
         }}
-        fetchFn={fetchReviewForReviewer}
-        saveFn={updateReviewManagerSection}
-        completeFn={completeReviewAsManager}
+        fetchFn={reviewFetchFn}
+        saveFn={reviewSaveFn}
+        completeFn={reviewCompleteFn}
       />
     </Card>
   );
