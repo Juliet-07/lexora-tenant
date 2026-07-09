@@ -4,7 +4,7 @@ import { api } from "./api";
 // TYPES
 // =================================================================
 
-export type DisputeType = "grievance" | "disciplinary" | "incident";
+export type DisputeType = "grievance" | "disciplinary" | "incident" | "report";
 export type DisputeTrack = "internal" | "external";
 export type DisputeStatus =
   | "open"
@@ -32,7 +32,21 @@ export type DisputeOutcomeDecision =
   | "termination"
   | "grievance_resolved"
   | "no_action";
-export type DisputeFormType = "D1" | "D2" | "D3" | "D4" | "E1";
+export type DisputeResolverLevel = "manager" | "tenant";
+export type GrievanceNature =
+  | "harassment_or_bullying"
+  | "discrimination"
+  | "unfair_treatment"
+  | "violation_of_policy"
+  | "pay_or_benefits_dispute"
+  | "working_conditions"
+  | "health_and_safety"
+  | "others";
+export type InjurySeverity =
+  | "no_injury"
+  | "minor_injury"
+  | "serious_injury"
+  | "fatality";
 
 export interface DisputeStageHistoryEntry {
   stage: DisputeStage;
@@ -70,14 +84,6 @@ export interface DisputeExternalEscalation {
   resolution: string | null;
 }
 
-export interface DisputeForm {
-  formType: DisputeFormType;
-  fields: Record<string, any>;
-  attachmentUrl: string | null;
-  createdAt: string;
-  createdBy: string;
-}
-
 export interface DisputeSupportingDoc {
   name: string;
   url: string;
@@ -112,7 +118,6 @@ export interface DisputeCase {
   outcome: DisputeOutcome | null;
   appeal: DisputeAppeal | null;
   externalEscalation: DisputeExternalEscalation | null;
-  forms: DisputeForm[];
   hearing: DisputeHearing | null;
   createdAt: string;
   updatedAt: string;
@@ -125,6 +130,32 @@ export interface DisputeCase {
     department: string | null;
     managerName: string | null;
   } | null;
+}
+
+// Shared shape for filing a case, employee or tenant side
+export interface OpenDisputePayload {
+  type: DisputeType;
+  description: string;
+  respondentIds?: string[];
+  witnesses?: string[];
+  filedAt?: string;
+  attachments?: { name: string; url: string }[];
+  natureOfGrievance?: GrievanceNature;
+  adverseEffect?: string;
+  informalResolutionSteps?: string;
+  desiredOutcome?: string;
+  causeOfIncident?: string;
+  injurySeverity?: InjurySeverity;
+  natureOfInjury?: string;
+  medicalTreatmentProvided?: string;
+}
+
+// Minimal shape for the "employees involved" directory picker
+export interface DirectoryEmployee {
+  _id: string;
+  firstName: string;
+  lastName: string;
+  jobTitle: string;
 }
 
 // =================================================================
@@ -225,18 +256,6 @@ export const closeDisputeCase = async (
   return res.data?.data ?? res.data;
 };
 
-export const attachDisputeForm = async (
-  caseId: string,
-  dto: {
-    formType: DisputeFormType;
-    fields?: Record<string, any>;
-    attachmentUrl?: string;
-  },
-): Promise<DisputeCase> => {
-  const res = await api.post(`/hr/disputes/${caseId}/forms`, dto);
-  return res.data?.data ?? res.data;
-};
-
 export const attachDisputeDocument = async (
   caseId: string,
   dto: { name: string; url: string },
@@ -253,34 +272,6 @@ export const fetchMyDisputeCases = async (): Promise<DisputeCase[]> => {
   const res = await api.get("/employee/disputes/my-cases");
   const d = res.data?.data ?? res.data;
   return Array.isArray(d) ? d : [];
-};
-
-export const raiseGrievance = async (dto: {
-  description: string;
-  respondentId?: string;
-  witnesses?: string[];
-}): Promise<DisputeCase> => {
-  const res = await api.post("/employee/disputes", {
-    ...dto,
-    type: "grievance",
-  });
-  return res.data?.data ?? res.data;
-};
-
-export const fileDisputeAppeal = async (
-  caseId: string,
-  dto: { grounds: string },
-): Promise<DisputeCase> => {
-  const res = await api.post(`/employee/disputes/${caseId}/appeal`, dto);
-  return res.data?.data ?? res.data;
-};
-
-export const attachEmployeeDisputeDocument = async (
-  caseId: string,
-  dto: { name: string; url: string },
-): Promise<DisputeCase> => {
-  const res = await api.post(`/employee/disputes/${caseId}/documents`, dto);
-  return res.data?.data ?? res.data;
 };
 
 export const fetchTeamDisputeCases = async (): Promise<DisputeCase[]> => {
@@ -303,4 +294,114 @@ export const openDisputeCaseAsEmployee = async (dto: {
 }): Promise<DisputeCase> => {
   const res = await api.post("/employee/disputes", dto);
   return res.data?.data ?? res.data;
+};
+
+export const fileDisputeAppeal = async (
+  caseId: string,
+  dto: { grounds: string },
+): Promise<DisputeCase> => {
+  const res = await api.post(`/employee/disputes/${caseId}/appeal`, dto);
+  return res.data?.data ?? res.data;
+};
+
+export const attachEmployeeDisputeDocument = async (
+  caseId: string,
+  dto: { name: string; url: string },
+): Promise<DisputeCase> => {
+  const res = await api.post(`/employee/disputes/${caseId}/documents`, dto);
+  return res.data?.data ?? res.data;
+};
+
+export const raiseGrievance = async (dto: {
+  description: string;
+  respondentId?: string;
+  witnesses?: string[];
+}): Promise<DisputeCase> => {
+  const res = await api.post("/employee/disputes", {
+    ...dto,
+    type: "grievance",
+  });
+  return res.data?.data ?? res.data;
+};
+
+// ── Manager actions ──────────────────────────────────────────────
+
+export const acknowledgeDisputeAsManager = async (
+  caseId: string,
+  dto: { acknowledgmentText: string; notes?: string },
+): Promise<DisputeCase> => {
+  const res = await api.patch(
+    `/employee/disputes/${caseId}/manager/acknowledge`,
+    dto,
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const investigateDisputeAsManager = async (
+  caseId: string,
+  dto: { findings: string; notes?: string },
+): Promise<DisputeCase> => {
+  const res = await api.patch(
+    `/employee/disputes/${caseId}/manager/investigate`,
+    dto,
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const scheduleDisputeHearingAsManager = async (
+  caseId: string,
+  dto: { scheduledAt: string; venue: string; notes?: string },
+): Promise<DisputeCase> => {
+  const res = await api.patch(
+    `/employee/disputes/${caseId}/manager/schedule-hearing`,
+    dto,
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const recordDisputeOutcomeAsManager = async (
+  caseId: string,
+  dto: {
+    decision: DisputeOutcomeDecision;
+    notes?: string;
+    attachmentUrl?: string;
+  },
+): Promise<DisputeCase> => {
+  const res = await api.patch(
+    `/employee/disputes/${caseId}/manager/outcome`,
+    dto,
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const closeDisputeCaseAsManager = async (
+  caseId: string,
+  dto?: { notes?: string },
+): Promise<DisputeCase> => {
+  const res = await api.patch(
+    `/employee/disputes/${caseId}/manager/close`,
+    dto ?? {},
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const escalateDisputeToTenant = async (
+  caseId: string,
+  notes?: string,
+): Promise<DisputeCase> => {
+  const res = await api.patch(
+    `/employee/disputes/${caseId}/manager/escalate-to-tenant`,
+    { notes },
+  );
+  return res.data?.data ?? res.data;
+};
+
+// ── Directory (for "employees involved" multi-select pickers) ────
+
+export const fetchEmployeeDirectory = async (): Promise<
+  DirectoryEmployee[]
+> => {
+  const res = await api.get("/employee/directory");
+  const d = res.data?.data ?? res.data;
+  return Array.isArray(d) ? d : [];
 };

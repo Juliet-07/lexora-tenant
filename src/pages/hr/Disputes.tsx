@@ -41,14 +41,12 @@ import {
   resolveDisputeAppeal,
   escalateDisputeExternal,
   closeDisputeCase,
-  attachDisputeForm,
   attachDisputeDocument,
   openDisputeCase,
   type DisputeCase,
   type DisputeStatus,
   type DisputeType,
   type DisputeOutcomeDecision,
-  type DisputeFormType,
 } from "@/lib/hr-dispute-api";
 
 // ── helpers ──────────────────────────────────────────────────────
@@ -139,7 +137,6 @@ function DisputeDetailSheet({
   const [escalateCaseRef, setEscalateCaseRef] = useState("");
   const [escalateNotes, setEscalateNotes] = useState("");
   const [closeNotes, setCloseNotes] = useState("");
-  const [formType, setFormType] = useState<DisputeFormType>("D1");
   const [formUrl, setFormUrl] = useState("");
   const [docName, setDocName] = useState("");
   const [docUrl, setDocUrl] = useState("");
@@ -243,19 +240,6 @@ function DisputeDetailSheet({
     onSuccess: (u) => {
       handleSuccess(u, "Case closed.");
       setCloseNotes("");
-    },
-    onError: handleError,
-  });
-
-  const attachFormMutation = useMutation({
-    mutationFn: () =>
-      attachDisputeForm(dispute!._id, {
-        formType,
-        attachmentUrl: formUrl || undefined,
-      }),
-    onSuccess: (u) => {
-      handleSuccess(u, "Form attached.");
-      setFormUrl("");
     },
     onError: handleError,
   });
@@ -716,7 +700,7 @@ function DisputeDetailSheet({
           )}
 
           {/* Attach Form */}
-          <div className="rounded-md border p-4 space-y-3">
+          {/* <div className="rounded-md border p-4 space-y-3">
             <p className="text-sm font-semibold flex items-center gap-2">
               <Paperclip className="h-4 w-4" /> Attach Form
             </p>
@@ -784,7 +768,7 @@ function DisputeDetailSheet({
                 ))}
               </div>
             )}
-          </div>
+          </div> */}
 
           {/* Supporting Documents */}
           <div className="rounded-md border p-4 space-y-3">
@@ -914,12 +898,31 @@ export default function HRDisputes() {
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <DisputeStat label="Total" value={total} icon={FileText} tone="from-primary to-secondary" />
-        <DisputeStat label="Open" value={open} icon={AlertTriangle} tone="from-blue-500 to-cyan-500" />
-        <DisputeStat label="Investigating" value={investigating} icon={Clock} tone="from-amber-500 to-orange-500" />
-        <DisputeStat label="Resolved" value={resolved} icon={CheckCircle2} tone="from-emerald-500 to-teal-500" />
+        <DisputeStat
+          label="Total"
+          value={total}
+          icon={FileText}
+          tone="from-primary to-secondary"
+        />
+        <DisputeStat
+          label="Open"
+          value={open}
+          icon={AlertTriangle}
+          tone="from-blue-500 to-cyan-500"
+        />
+        <DisputeStat
+          label="Investigating"
+          value={investigating}
+          icon={Clock}
+          tone="from-amber-500 to-orange-500"
+        />
+        <DisputeStat
+          label="Resolved"
+          value={resolved}
+          icon={CheckCircle2}
+          tone="from-emerald-500 to-teal-500"
+        />
       </div>
-
 
       {/* Filters + Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
