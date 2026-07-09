@@ -242,6 +242,79 @@ export default function HRProbation() {
         </Card>
       </div>
 
+      {hodProbationItems.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">
+              Heads of Department on probation
+            </CardTitle>
+            <CardDescription>
+              You run the 90-day plan and monthly check-ins for HODs directly —
+              same stages as any other probation.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {hodProbationItems.map(({ record, employee }) => {
+                if (!employee) return null;
+                const nextStage =
+                  record.stages.find((s) => s.status !== "completed") ?? null;
+                return (
+                  <div
+                    key={record._id}
+                    className="rounded-lg border p-4 flex flex-col gap-3 bg-card"
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="h-11 w-11 rounded-full bg-gradient-to-br from-primary to-secondary text-white flex items-center justify-center font-semibold shrink-0">
+                        {(employee.firstName?.[0] ?? "").toUpperCase()}
+                        {(employee.lastName?.[0] ?? "").toUpperCase()}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="font-semibold truncate">
+                          {employee.firstName} {employee.lastName}
+                        </p>
+                        <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5 truncate">
+                          <Briefcase className="h-3 w-3 shrink-0" />
+                          {employee.jobTitle}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <Badge
+                        variant="outline"
+                        className="bg-warning/10 text-warning border-warning/20"
+                      >
+                        <AlertTriangle className="h-3 w-3 mr-1" />
+                        Head of Department
+                      </Badge>
+                      {nextStage && stageBadge(nextStage)}
+                    </div>
+                    <Button
+                      size="sm"
+                      className="w-full"
+                      onClick={() =>
+                        setHodProbationFor({
+                          _id: employee._id,
+                          firstName: employee.firstName,
+                          lastName: employee.lastName,
+                          jobTitle: employee.jobTitle,
+                        })
+                      }
+                    >
+                      <ClipboardCheck className="h-4 w-4 mr-1.5" />
+                      Manage 90-day plan
+                    </Button>
+                    <p className="text-[10px] text-muted-foreground text-center">
+                      Ends {fmtDate(record.originalProbationEndDate)}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Active probations</CardTitle>
