@@ -64,7 +64,15 @@ import {
   type ProbationStage,
   type ProbationOutcome,
 } from "@/lib/hr-probation-api";
-import { ProbationRunnerPanel } from "@/components/hr/ManagerProbationSheet";
+import {
+  fetchEmployeesByHierarchyRole,
+  type Employee,
+} from "@/lib/hr-api";
+import {
+  ManagerProbationSheet,
+  ProbationRunnerPanel,
+} from "@/components/hr/ManagerProbationSheet";
+import { Briefcase, ClipboardCheck } from "lucide-react";
 
 const STAGE_LABELS: Record<string, string> = {
   onboarding: "Onboarding",
