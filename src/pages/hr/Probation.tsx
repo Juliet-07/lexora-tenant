@@ -64,6 +64,7 @@ import {
   type ProbationStage,
   type ProbationOutcome,
 } from "@/lib/hr-probation-api";
+import { ProbationRunnerPanel } from "@/components/hr/ManagerProbationSheet";
 
 const STAGE_LABELS: Record<string, string> = {
   onboarding: "Onboarding",
