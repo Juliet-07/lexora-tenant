@@ -274,6 +274,12 @@ export const fetchMyDisputeCases = async (): Promise<DisputeCase[]> => {
   return Array.isArray(d) ? d : [];
 };
 
+export const fetchDisputesAgainstMe = async (): Promise<DisputeCase[]> => {
+  const res = await api.get("/employee/disputes/against-me");
+  const d = res.data?.data ?? res.data;
+  return Array.isArray(d) ? d : [];
+};
+
 export const fetchTeamDisputeCases = async (): Promise<DisputeCase[]> => {
   const res = await api.get("/employee/disputes/team-cases");
   const d = res.data?.data ?? res.data;
