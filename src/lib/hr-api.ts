@@ -302,6 +302,9 @@ export interface DepartmentTreeReport {
   lastName: string;
   jobTitle: string;
   teamId?: { _id: string; name: string } | string | null;
+  employmentStatus?: EmploymentStatus;
+  probationEndDate?: string | null;
+  hierarchyRole?: "regular" | "manager" | "head_of_department";
 }
 
 export interface DepartmentTreeManager extends DepartmentTreeReport {
