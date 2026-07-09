@@ -420,6 +420,12 @@ export default function HRProbation() {
           )}
         </SheetContent>
       </Sheet>
+
+      <ManagerProbationSheet
+        employee={hodProbationFor}
+        mode="tenant"
+        onClose={() => setHodProbationFor(null)}
+      />
     </div>
   );
 }
