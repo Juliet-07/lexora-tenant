@@ -506,7 +506,7 @@ function Month3Card({
   employeeId: string;
   onSaved: () => void;
   startFn: (employeeId: string) => Promise<{ _id: string }>;
-  reviewFetchFn: (reviewId: string) => Promise<PerformanceReview>;
+  reviewFetchFn: (reviewId: string) => Promise<import("@/lib/hr-performance-api").ScoredReviewResponse>;
   reviewSaveFn: (reviewId: string, dto: any) => Promise<any>;
   reviewCompleteFn: (reviewId: string) => Promise<any>;
 }) {
