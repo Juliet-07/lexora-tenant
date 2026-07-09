@@ -159,6 +159,7 @@ export default function MyDepartment() {
               }
             : null
         }
+        mode="manager"
         onClose={() => setProbationFor(null)}
       />
     </div>
