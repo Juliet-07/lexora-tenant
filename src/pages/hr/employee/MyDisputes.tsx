@@ -58,6 +58,7 @@ import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   fetchMyDisputeCases,
+  fetchDisputesAgainstMe,
   fetchDepartmentDisputeCases,
   openDisputeCaseAsEmployee,
   attachEmployeeDisputeDocument,
@@ -68,6 +69,7 @@ import {
   type InjurySeverity,
   type OpenDisputePayload,
 } from "@/lib/hr-dispute-api";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
 // UI-only type — "report" and "disciplinary" both narrow to real
 // backend DisputeType values the employee is actually allowed to
