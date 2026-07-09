@@ -491,7 +491,8 @@ function ProbationDetail({
                   )}
                 </CardContent>
               </Card>
-            ))}
+            ))
+          )}
         </TabsContent>
 
         <TabsContent value="decision" className="space-y-4 mt-4">
