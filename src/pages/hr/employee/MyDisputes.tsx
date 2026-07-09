@@ -37,6 +37,8 @@ import {
   Loader2,
   Scale,
   Lock,
+  Paperclip,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
@@ -44,9 +46,32 @@ import {
   fetchMyDisputeCases,
   fetchDepartmentDisputeCases,
   openDisputeCaseAsEmployee,
+  attachEmployeeDisputeDocument,
   type DisputeCase,
   type DisputeType,
 } from "@/lib/hr-dispute-api";
+
+// UI type extends backend DisputeType with a "report" sub-flow
+// which is submitted as `grievance` with a `[REPORT]` tag in the description.
+type UiDisputeType = "grievance" | "report" | "incident";
+
+const GRIEVANCE_NATURES = [
+  "Harassment or bullying",
+  "Discrimination",
+  "Unfair treatment",
+  "Violation of policy",
+  "Pay or benefits dispute",
+  "Working conditions",
+  "Health and safety",
+  "Other",
+] as const;
+
+const INJURY_LEVELS = [
+  { value: "none", label: "No injury" },
+  { value: "minor", label: "Minor injury (first aid only)" },
+  { value: "serious", label: "Serious injury (hospitalisation)" },
+  { value: "fatality", label: "Fatality" },
+] as const;
 
 // ── helpers ──────────────────────────────────────────────────────
 
