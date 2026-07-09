@@ -378,6 +378,7 @@ function ProbationDetail({
   const finalDecision = stages.find((s) => s.type === "final_decision");
   const canDecide =
     month3?.status === "completed" && finalDecision?.status !== "completed";
+  const isHod = employee?.hierarchyRole === "head_of_department";
 
   return (
     <>
@@ -387,6 +388,11 @@ function ProbationDetail({
         </SheetTitle>
         <SheetDescription>
           {employee.jobTitle} · Started {fmtDate(employee.startDate)}
+          {isHod && (
+            <span className="ml-2 inline-flex items-center rounded-md bg-info/10 text-info border border-info/20 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide">
+              Head of Department · you run this end-to-end
+            </span>
+          )}
         </SheetDescription>
       </SheetHeader>
 
@@ -401,7 +407,21 @@ function ProbationDetail({
         </TabsList>
 
         <TabsContent value="timeline" className="space-y-3 mt-4">
-          {stages
+          {isHod ? (
+            // HOD on probation → tenant runs the full manager-side flow
+            // (onboarding, month 1, month 2, month 3) using the shared
+            // runner panel, then records the final decision in the
+            // adjacent tab. Same stage engine as everyone else.
+            <ProbationRunnerPanel
+              employee={{
+                _id: employee._id,
+                firstName: employee.firstName,
+                lastName: employee.lastName,
+                jobTitle: employee.jobTitle,
+              }}
+            />
+          ) : (
+            stages
             .filter((s) => s.type !== "final_decision")
             .map((s) => (
               <Card key={s.type}>
