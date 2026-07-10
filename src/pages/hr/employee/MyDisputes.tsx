@@ -63,6 +63,9 @@ import {
   openDisputeCaseAsEmployee,
   attachEmployeeDisputeDocument,
   fetchEmployeeDirectory,
+  fileDisputeAppeal,
+  resolveDisputeFileUrl,
+  isImageFile,
   type DisputeCase,
   type DisputeType,
   type GrievanceNature,
@@ -70,6 +73,14 @@ import {
   type OpenDisputePayload,
 } from "@/lib/hr-dispute-api";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 // UI-only type — "report" and "disciplinary" both narrow to real
 // backend DisputeType values the employee is actually allowed to
@@ -144,6 +155,487 @@ function StageBadge({ stage }: { stage: string }) {
     >
       {label}
     </Badge>
+  );
+}
+
+// ── Dispute Detail Sheet ─────────────────────────────────────────
+
+function humanize(stage: string): string {
+  return stage.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+interface DisputeDetailSheetProps {
+  dispute: DisputeCase | null;
+  canAppeal: boolean;
+  onClose: () => void;
+  onAppealFiled: () => void;
+}
+
+function DisputeDetailSheet({
+  dispute,
+  canAppeal,
+  onClose,
+  onAppealFiled,
+}: DisputeDetailSheetProps) {
+  const [appealOpen, setAppealOpen] = useState(false);
+  const [grounds, setGrounds] = useState("");
+
+  const appealMutation = useMutation({
+    mutationFn: (caseId: string) =>
+      fileDisputeAppeal(caseId, { grounds: grounds.trim() }),
+    onSuccess: () => {
+      toast.success("Appeal filed.");
+      setAppealOpen(false);
+      setGrounds("");
+      onAppealFiled();
+    },
+    onError: (e: any) =>
+      toast.error(e?.response?.data?.message ?? "Failed to file appeal"),
+  });
+
+  if (!dispute) return null;
+  const d = dispute;
+  const outcomeStage = d.stageHistory?.find((h) => h.stage === "outcome");
+  const investigateStage = d.stageHistory?.find(
+    (h) => h.stage === "investigate",
+  );
+  const ackStage = d.stageHistory?.find((h) => h.stage === "acknowledge");
+  const isEligibleForAppeal =
+    canAppeal && d.status === "outcome_recorded" && !d.appeal;
+
+  return (
+    <Sheet open={!!dispute} onOpenChange={(o) => !o && onClose()}>
+      <SheetContent className="w-full sm:max-w-2xl overflow-hidden flex flex-col">
+        <SheetHeader className="space-y-1">
+          <SheetTitle className="flex items-center gap-2">
+            <span className="font-mono text-sm text-muted-foreground">
+              {d.caseNumber}
+            </span>
+            <StatusBadge status={d.status} />
+            <StageBadge stage={d.stage} />
+          </SheetTitle>
+          <SheetDescription className="capitalize">
+            {d.type} · Filed {new Date(d.filedAt).toLocaleDateString()}
+          </SheetDescription>
+        </SheetHeader>
+
+        <ScrollArea className="flex-1 -mx-6 px-6 mt-4">
+          <div className="space-y-5 pb-8">
+            {/* Parties */}
+            <section className="space-y-2">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Parties
+              </h3>
+              {d.complainant && (
+                <div className="text-sm">
+                  <span className="text-muted-foreground text-xs">
+                    Complainant:{" "}
+                  </span>
+                  {d.complainant.firstName} {d.complainant.lastName}
+                  {d.complainant.jobTitle && (
+                    <span className="text-muted-foreground">
+                      {" "}
+                      · {d.complainant.jobTitle}
+                    </span>
+                  )}
+                </div>
+              )}
+              {d.respondents && d.respondents.length > 0 && (
+                <div className="text-sm">
+                  <span className="text-muted-foreground text-xs">
+                    Respondents:{" "}
+                  </span>
+                  {d.respondents
+                    .map((r) => `${r.firstName} ${r.lastName}`)
+                    .join(", ")}
+                </div>
+              )}
+              {d.witnesses && d.witnesses.length > 0 && (
+                <div className="text-sm">
+                  <span className="text-muted-foreground text-xs">
+                    Witnesses:{" "}
+                  </span>
+                  {d.witnesses.join(", ")}
+                </div>
+              )}
+            </section>
+
+            {/* Description */}
+            <section className="space-y-1.5">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Description
+              </h3>
+              <p className="text-sm whitespace-pre-wrap bg-muted/40 rounded p-3">
+                {d.description}
+              </p>
+            </section>
+
+            {/* Grievance-specific */}
+            {d.type === "grievance" && (
+              <section className="space-y-2">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Grievance details
+                </h3>
+                {d.natureOfGrievance && (
+                  <div className="text-sm">
+                    <span className="text-muted-foreground text-xs">
+                      Nature:{" "}
+                    </span>
+                    {humanize(d.natureOfGrievance)}
+                  </div>
+                )}
+                {d.adverseEffect && (
+                  <div className="text-sm">
+                    <p className="text-muted-foreground text-xs">
+                      Adverse effect
+                    </p>
+                    <p className="whitespace-pre-wrap">{d.adverseEffect}</p>
+                  </div>
+                )}
+                {d.informalResolutionSteps && (
+                  <div className="text-sm">
+                    <p className="text-muted-foreground text-xs">
+                      Informal steps taken
+                    </p>
+                    <p className="whitespace-pre-wrap">
+                      {d.informalResolutionSteps}
+                    </p>
+                  </div>
+                )}
+                {d.desiredOutcome && (
+                  <div className="text-sm">
+                    <p className="text-muted-foreground text-xs">
+                      Desired outcome
+                    </p>
+                    <p className="whitespace-pre-wrap">{d.desiredOutcome}</p>
+                  </div>
+                )}
+              </section>
+            )}
+
+            {/* Incident-specific */}
+            {d.type === "incident" && (
+              <section className="space-y-2">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Incident details
+                </h3>
+                {d.causeOfIncident && (
+                  <div className="text-sm">
+                    <p className="text-muted-foreground text-xs">Cause</p>
+                    <p className="whitespace-pre-wrap">{d.causeOfIncident}</p>
+                  </div>
+                )}
+                {d.injurySeverity && (
+                  <div className="text-sm">
+                    <span className="text-muted-foreground text-xs">
+                      Injury level:{" "}
+                    </span>
+                    {humanize(d.injurySeverity)}
+                  </div>
+                )}
+                {d.natureOfInjury && (
+                  <div className="text-sm">
+                    <span className="text-muted-foreground text-xs">
+                      Nature of injury:{" "}
+                    </span>
+                    {d.natureOfInjury}
+                  </div>
+                )}
+                {d.medicalTreatmentProvided && (
+                  <div className="text-sm">
+                    <p className="text-muted-foreground text-xs">
+                      Medical treatment / referral
+                    </p>
+                    <p className="whitespace-pre-wrap">
+                      {d.medicalTreatmentProvided}
+                    </p>
+                  </div>
+                )}
+              </section>
+            )}
+
+            {/* Acknowledgement */}
+            {ackStage?.notes && (
+              <section className="space-y-1.5">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Acknowledgement
+                </h3>
+                <p className="text-sm whitespace-pre-wrap bg-muted/40 rounded p-3">
+                  {ackStage.notes}
+                </p>
+                {ackStage.completedAt && (
+                  <p className="text-[11px] text-muted-foreground">
+                    {new Date(ackStage.completedAt).toLocaleString()}
+                  </p>
+                )}
+              </section>
+            )}
+
+            {/* Investigation findings */}
+            {investigateStage?.notes && (
+              <section className="space-y-1.5">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Investigation findings
+                </h3>
+                <p className="text-sm whitespace-pre-wrap bg-muted/40 rounded p-3">
+                  {investigateStage.notes}
+                </p>
+                {investigateStage.completedAt && (
+                  <p className="text-[11px] text-muted-foreground">
+                    {new Date(investigateStage.completedAt).toLocaleString()}
+                  </p>
+                )}
+              </section>
+            )}
+
+            {/* Hearing */}
+            {d.hearing && (
+              <section className="space-y-1.5">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Hearing
+                </h3>
+                <div className="text-sm bg-muted/40 rounded p-3 space-y-1">
+                  <p>
+                    <span className="text-muted-foreground text-xs">
+                      When:{" "}
+                    </span>
+                    {new Date(d.hearing.scheduledAt).toLocaleString()}
+                  </p>
+                  <p>
+                    <span className="text-muted-foreground text-xs">
+                      Venue:{" "}
+                    </span>
+                    {d.hearing.venue}
+                  </p>
+                  {d.hearing.notes && (
+                    <p className="whitespace-pre-wrap pt-1">
+                      {d.hearing.notes}
+                    </p>
+                  )}
+                </div>
+              </section>
+            )}
+
+            {/* Outcome / resolution */}
+            {d.outcome && (
+              <section className="space-y-1.5">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Outcome
+                </h3>
+                <div className="text-sm bg-muted/40 rounded p-3 space-y-1">
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="text-[10px]">
+                      {humanize(d.outcome.decision)}
+                    </Badge>
+                    <span className="text-[11px] text-muted-foreground">
+                      {new Date(d.outcome.recordedAt).toLocaleString()}
+                    </span>
+                  </div>
+                  {d.outcome.notes && (
+                    <p className="whitespace-pre-wrap pt-1">
+                      {d.outcome.notes}
+                    </p>
+                  )}
+                  {d.outcome.attachmentUrl && (
+                    <a
+                      href={resolveDisputeFileUrl(d.outcome.attachmentUrl)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 text-xs text-primary hover:underline pt-1"
+                    >
+                      <Paperclip className="h-3 w-3" />
+                      Outcome attachment
+                    </a>
+                  )}
+                </div>
+              </section>
+            )}
+
+            {/* Appeal */}
+            {d.appeal && (
+              <section className="space-y-1.5">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Appeal
+                </h3>
+                <div className="text-sm bg-muted/40 rounded p-3 space-y-1">
+                  <p className="text-[11px] text-muted-foreground">
+                    Filed {new Date(d.appeal.filedAt).toLocaleString()}
+                  </p>
+                  <div>
+                    <p className="text-muted-foreground text-xs">Grounds</p>
+                    <p className="whitespace-pre-wrap">{d.appeal.grounds}</p>
+                  </div>
+                  {d.appeal.decision && (
+                    <div className="pt-1">
+                      <p className="text-muted-foreground text-xs">
+                        Decision
+                      </p>
+                      <p className="whitespace-pre-wrap">
+                        {d.appeal.decision}
+                      </p>
+                    </div>
+                  )}
+                  {d.appeal.notes && (
+                    <p className="whitespace-pre-wrap pt-1">{d.appeal.notes}</p>
+                  )}
+                </div>
+              </section>
+            )}
+
+            {/* External escalation */}
+            {d.externalEscalation && (
+              <section className="space-y-1.5">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  External escalation
+                </h3>
+                <div className="text-sm bg-muted/40 rounded p-3 space-y-1">
+                  <p>
+                    <span className="text-muted-foreground text-xs">
+                      Body:{" "}
+                    </span>
+                    {humanize(d.externalEscalation.body)}
+                  </p>
+                  {d.externalEscalation.caseRef && (
+                    <p>
+                      <span className="text-muted-foreground text-xs">
+                        Ref:{" "}
+                      </span>
+                      {d.externalEscalation.caseRef}
+                    </p>
+                  )}
+                  {d.externalEscalation.notes && (
+                    <p className="whitespace-pre-wrap pt-1">
+                      {d.externalEscalation.notes}
+                    </p>
+                  )}
+                  {d.externalEscalation.resolution && (
+                    <div className="pt-1">
+                      <p className="text-muted-foreground text-xs">
+                        Resolution
+                      </p>
+                      <p className="whitespace-pre-wrap">
+                        {d.externalEscalation.resolution}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </section>
+            )}
+
+            {/* Attachments */}
+            {d.supportingDocs && d.supportingDocs.length > 0 && (
+              <section className="space-y-1.5">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Attachments
+                </h3>
+                <div className="grid grid-cols-2 gap-2">
+                  {d.supportingDocs.map((doc) => {
+                    const href = resolveDisputeFileUrl(doc.url);
+                    return (
+                      <a
+                        key={doc.url}
+                        href={href}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center gap-2 text-xs bg-muted/40 hover:bg-muted rounded p-2 truncate"
+                      >
+                        {isImageFile(doc.name) ? (
+                          <img
+                            src={href}
+                            alt={doc.name}
+                            className="h-8 w-8 rounded object-cover"
+                          />
+                        ) : (
+                          <Paperclip className="h-4 w-4 text-muted-foreground shrink-0" />
+                        )}
+                        <span className="truncate">{doc.name}</span>
+                      </a>
+                    );
+                  })}
+                </div>
+              </section>
+            )}
+
+            {/* Timeline */}
+            {d.stageHistory && d.stageHistory.length > 0 && (
+              <section className="space-y-2">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Timeline
+                </h3>
+                <ol className="border-l border-border pl-4 space-y-3">
+                  {d.stageHistory.map((h, i) => (
+                    <li key={i} className="relative">
+                      <span className="absolute -left-[21px] top-1 h-2.5 w-2.5 rounded-full bg-primary" />
+                      <p className="text-sm font-medium">{humanize(h.stage)}</p>
+                      <p className="text-[11px] text-muted-foreground">
+                        Entered {new Date(h.enteredAt).toLocaleString()}
+                        {h.completedAt &&
+                          ` · Completed ${new Date(h.completedAt).toLocaleString()}`}
+                      </p>
+                      {h.notes && (
+                        <p className="text-xs whitespace-pre-wrap pt-1 text-muted-foreground">
+                          {h.notes}
+                        </p>
+                      )}
+                    </li>
+                  ))}
+                </ol>
+              </section>
+            )}
+
+            {/* Appeal action */}
+            {isEligibleForAppeal && (
+              <section className="border-t pt-4">
+                {!appealOpen ? (
+                  <Button
+                    variant="outline"
+                    onClick={() => setAppealOpen(true)}
+                    className="w-full"
+                  >
+                    File an appeal
+                  </Button>
+                ) : (
+                  <div className="space-y-2">
+                    <Label className="text-xs">Grounds for appeal *</Label>
+                    <Textarea
+                      rows={4}
+                      value={grounds}
+                      onChange={(e) => setGrounds(e.target.value)}
+                      placeholder="Explain why you disagree with the outcome…"
+                    />
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setAppealOpen(false);
+                          setGrounds("");
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        size="sm"
+                        disabled={
+                          !grounds.trim() || appealMutation.isPending
+                        }
+                        onClick={() => appealMutation.mutate(d._id)}
+                      >
+                        {appealMutation.isPending ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          "Submit appeal"
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </section>
+            )}
+          </div>
+        </ScrollArea>
+      </SheetContent>
+    </Sheet>
   );
 }
 
@@ -670,6 +1162,7 @@ export default function MyDisputes() {
   const queryClient = useQueryClient();
   const [logOpen, setLogOpen] = useState(false);
   const [tab, setTab] = useState<"filed" | "against">("filed");
+  const [selected, setSelected] = useState<DisputeCase | null>(null);
 
   // HoD → department-wide read-only view. Manager & regular → their own filings.
   const queryKey = isHoD ? ["department-disputes"] : ["my-disputes"];
@@ -736,7 +1229,11 @@ export default function MyDisputes() {
   const renderCardsList = (items: DisputeCase[], showComplainant: boolean) => (
     <div className="space-y-3">
       {items.map((d) => (
-        <Card key={d._id}>
+        <Card
+          key={d._id}
+          className="cursor-pointer hover:border-primary/40 transition-colors"
+          onClick={() => setSelected(d)}
+        >
           <CardContent className="p-4 space-y-3">
             <div className="flex items-start justify-between gap-3 flex-wrap">
               <div className="space-y-1">
@@ -887,7 +1384,11 @@ export default function MyDisputes() {
                 </TableHeader>
                 <TableBody>
                   {disputes.map((d) => (
-                    <TableRow key={d._id}>
+                    <TableRow
+                      key={d._id}
+                      className="cursor-pointer"
+                      onClick={() => setSelected(d)}
+                    >
                       <TableCell className="font-mono text-xs">
                         {d.caseNumber}
                       </TableCell>
@@ -960,6 +1461,17 @@ export default function MyDisputes() {
         onClose={() => setLogOpen(false)}
         onSubmit={(dto, files) => openMutation.mutate({ dto, files })}
         isSubmitting={openMutation.isPending}
+      />
+
+      <DisputeDetailSheet
+        dispute={selected}
+        canAppeal={!isHoD && tab === "against"}
+        onClose={() => setSelected(null)}
+        onAppealFiled={() => {
+          queryClient.invalidateQueries({ queryKey: ["disputes-against-me"] });
+          queryClient.invalidateQueries({ queryKey });
+          setSelected(null);
+        }}
       />
     </div>
   );
