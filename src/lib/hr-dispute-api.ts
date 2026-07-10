@@ -106,11 +106,20 @@ export interface DisputeCase {
   track: DisputeTrack;
   status: DisputeStatus;
   stage: DisputeStage;
+  resolverLevel: DisputeResolverLevel;
   filedAt: string;
   filedBy: string;
   complainantId: string;
-  respondentId: string | null;
+  respondentIds: string[];
   description: string;
+  natureOfGrievance: GrievanceNature | null;
+  adverseEffect: string | null;
+  informalResolutionSteps: string | null;
+  desiredOutcome: string | null;
+  causeOfIncident: string | null;
+  injurySeverity: InjurySeverity | null;
+  natureOfInjury: string | null;
+  medicalTreatmentProvided: string | null;
   witnesses: string[];
   supportingDocs: DisputeSupportingDoc[];
   confidentialParties: string[];
@@ -130,6 +139,15 @@ export interface DisputeCase {
     department: string | null;
     managerName: string | null;
   } | null;
+  respondents?: {
+    _id: string;
+    firstName: string;
+    lastName: string;
+    jobTitle: string;
+    hierarchyRole: string;
+    department: string | null;
+    managerName: string | null;
+  }[];
 }
 
 // Shared shape for filing a case, employee or tenant side
@@ -139,7 +157,6 @@ export interface OpenDisputePayload {
   respondentIds?: string[];
   witnesses?: string[];
   filedAt?: string;
-  attachments?: { name: string; url: string }[];
   natureOfGrievance?: GrievanceNature;
   adverseEffect?: string;
   informalResolutionSteps?: string;
@@ -158,6 +175,17 @@ export interface DirectoryEmployee {
   jobTitle: string;
 }
 
+export const resolveDisputeFileUrl = (relativeUrl: string): string => {
+  const base = import.meta.env.VITE_REACT_APP_BASE_URL ?? "";
+  try {
+    return `${new URL(base).origin}${relativeUrl}`;
+  } catch {
+    return `${base}${relativeUrl}`;
+  }
+};
+
+export const isImageFile = (nameOrUrl: string): boolean =>
+  /\.(png|jpe?g|gif|webp)$/i.test(nameOrUrl);
 // =================================================================
 // HR / TENANT API FUNCTIONS
 // =================================================================
@@ -258,9 +286,13 @@ export const closeDisputeCase = async (
 
 export const attachDisputeDocument = async (
   caseId: string,
-  dto: { name: string; url: string },
+  file: File,
 ): Promise<DisputeCase> => {
-  const res = await api.post(`/hr/disputes/${caseId}/documents`, dto);
+  const formData = new FormData();
+  formData.append("file", file);
+  const res = await api.post(`/hr/disputes/${caseId}/documents`, formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
   return res.data?.data ?? res.data;
 };
 
@@ -312,9 +344,14 @@ export const fileDisputeAppeal = async (
 
 export const attachEmployeeDisputeDocument = async (
   caseId: string,
-  dto: { name: string; url: string },
+  file: File,
 ): Promise<DisputeCase> => {
-  const res = await api.post(`/employee/disputes/${caseId}/documents`, dto);
+  const formData = new FormData();
+  formData.append("file", file);
+  const res = await api.post(
+    `/employee/disputes/${caseId}/documents`,
+    formData,
+  );
   return res.data?.data ?? res.data;
 };
 
@@ -399,6 +436,13 @@ export const escalateDisputeToTenant = async (
     `/employee/disputes/${caseId}/manager/escalate-to-tenant`,
     { notes },
   );
+  return res.data?.data ?? res.data;
+};
+
+export const fetchDisputeCaseByIdAsManager = async (
+  caseId: string,
+): Promise<DisputeCase> => {
+  const res = await api.get(`/employee/disputes/${caseId}`);
   return res.data?.data ?? res.data;
 };
 

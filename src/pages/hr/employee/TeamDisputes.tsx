@@ -28,15 +28,23 @@ import {
   ClipboardCheck,
   Search as SearchIcon,
   Gavel,
+  CheckCircle2,
+  ArrowUpCircle,
+  Lock,
+  FileIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
   fetchTeamDisputeCases,
-  fetchDisputeCaseById,
-  acknowledgeDisputeCase,
-  investigateDisputeCase,
-  scheduleDisputeHearing,
+  fetchDisputeCaseByIdAsManager,
+  acknowledgeDisputeAsManager,
+  investigateDisputeAsManager,
+  scheduleDisputeHearingAsManager,
+  closeDisputeCaseAsManager,
+  escalateDisputeToTenant,
   type DisputeCase,
+  isImageFile,
+  resolveDisputeFileUrl,
 } from "@/lib/hr-dispute-api";
 
 // ── helpers ────────────────────────────────────────────────
@@ -83,10 +91,7 @@ export default function TeamDisputes() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
 
-  const {
-    data: cases = [],
-    isLoading,
-  } = useQuery({
+  const { data: cases = [], isLoading } = useQuery({
     queryKey: ["team-disputes"],
     queryFn: fetchTeamDisputeCases,
   });
@@ -123,8 +128,8 @@ export default function TeamDisputes() {
         </h1>
         <p className="text-sm text-muted-foreground mt-1">
           Manage disputes logged by employees who report to you. Acknowledge
-          cases, record investigation findings, and schedule hearings. HR
-          remains the case owner for outcomes and appeals.
+          cases, investigate, and either resolve them yourself or escalate to HR
+          if you're unable to reach a resolution.
         </p>
       </div>
 
@@ -221,10 +226,7 @@ export default function TeamDisputes() {
         </Card>
       )}
 
-      <ManageCaseSheet
-        caseId={activeId}
-        onClose={() => setActiveId(null)}
-      />
+      <ManageCaseSheet caseId={activeId} onClose={() => setActiveId(null)} />
     </div>
   );
 }
@@ -268,13 +270,14 @@ function ManageCaseSheet({
   const [hearingDate, setHearingDate] = useState("");
   const [hearingVenue, setHearingVenue] = useState("");
   const [hearingNote, setHearingNote] = useState("");
+  const [closeReport, setCloseReport] = useState("");
+  const [escalateReason, setEscalateReason] = useState("");
 
   const { data: dispute, isLoading } = useQuery({
     queryKey: ["dispute-case", caseId],
-    queryFn: () => fetchDisputeCaseById(caseId!),
+    queryFn: () => fetchDisputeCaseByIdAsManager(caseId!),
     enabled: !!caseId,
   });
-
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["team-disputes"] });
     queryClient.invalidateQueries({ queryKey: ["dispute-case", caseId] });
@@ -282,7 +285,7 @@ function ManageCaseSheet({
 
   const ackMut = useMutation({
     mutationFn: (dto: { acknowledgmentText: string; notes?: string }) =>
-      acknowledgeDisputeCase(caseId!, dto),
+      acknowledgeDisputeAsManager(caseId!, dto),
     onSuccess: () => {
       toast.success("Case acknowledged.");
       setAckText("");
@@ -295,7 +298,7 @@ function ManageCaseSheet({
 
   const invMut = useMutation({
     mutationFn: (dto: { findings: string; notes?: string }) =>
-      investigateDisputeCase(caseId!, dto),
+      investigateDisputeAsManager(caseId!, dto),
     onSuccess: () => {
       toast.success("Investigation finding recorded.");
       setFindings("");
@@ -308,7 +311,7 @@ function ManageCaseSheet({
 
   const hearMut = useMutation({
     mutationFn: (dto: { scheduledAt: string; venue: string; notes?: string }) =>
-      scheduleDisputeHearing(caseId!, dto),
+      scheduleDisputeHearingAsManager(caseId!, dto),
     onSuccess: () => {
       toast.success("Hearing scheduled.");
       setHearingDate("");
@@ -320,15 +323,40 @@ function ManageCaseSheet({
       toast.error(e?.response?.data?.message ?? "Failed to schedule hearing"),
   });
 
+  const closeMut = useMutation({
+    mutationFn: () =>
+      closeDisputeCaseAsManager(caseId!, { notes: closeReport.trim() }),
+    onSuccess: () => {
+      toast.success("Case resolved and closed. HR can see the full report.");
+      setCloseReport("");
+      invalidate();
+    },
+    onError: (e: any) =>
+      toast.error(e?.response?.data?.message ?? "Failed to close case"),
+  });
+
+  const escalateMut = useMutation({
+    mutationFn: () =>
+      escalateDisputeToTenant(caseId!, escalateReason.trim() || undefined),
+    onSuccess: () => {
+      toast.success("Case escalated to HR.");
+      setEscalateReason("");
+      invalidate();
+    },
+    onError: (e: any) =>
+      toast.error(e?.response?.data?.message ?? "Failed to escalate case"),
+  });
+
   const d = dispute as DisputeCase | undefined;
+  const isClosed = d?.status === "closed";
+  const isEscalated = d?.resolverLevel === "tenant";
+  const canResolveOrEscalate = d && !isClosed && !isEscalated;
 
   return (
     <Sheet open={!!caseId} onOpenChange={(o) => !o && onClose()}>
       <SheetContent className="w-full sm:max-w-2xl overflow-y-auto">
         <SheetHeader>
-          <SheetTitle>
-            {d ? `${d.caseNumber} — ${d.type}` : "Case"}
-          </SheetTitle>
+          <SheetTitle>{d ? `${d.caseNumber} — ${d.type}` : "Case"}</SheetTitle>
         </SheetHeader>
 
         {isLoading || !d ? (
@@ -356,6 +384,16 @@ function ManageCaseSheet({
                     · {d.complainant.jobTitle}
                   </p>
                 )}
+                {d.respondents && d.respondents.length > 0 && (
+                  <p>
+                    <span className="text-muted-foreground">
+                      Employees involved:
+                    </span>{" "}
+                    {d.respondents
+                      .map((r) => `${r.firstName} ${r.lastName}`)
+                      .join(", ")}
+                  </p>
+                )}
                 <p className="text-xs text-muted-foreground">
                   Filed {new Date(d.filedAt).toLocaleDateString()}
                 </p>
@@ -365,11 +403,160 @@ function ManageCaseSheet({
                     Witnesses: {d.witnesses.join(", ")}
                   </p>
                 )}
+
+                {/* Grievance-specific detail */}
+                {d.type === "grievance" && (
+                  <div className="pt-2 border-t space-y-1.5">
+                    {d.natureOfGrievance && (
+                      <p>
+                        <span className="text-muted-foreground">
+                          Nature of grievance:
+                        </span>{" "}
+                        <span className="capitalize">
+                          {d.natureOfGrievance.replace(/_/g, " ")}
+                        </span>
+                      </p>
+                    )}
+                    {d.adverseEffect && (
+                      <p>
+                        <span className="text-muted-foreground block">
+                          How this affected them:
+                        </span>{" "}
+                        {d.adverseEffect}
+                      </p>
+                    )}
+                    {d.informalResolutionSteps && (
+                      <p>
+                        <span className="text-muted-foreground block">
+                          Informal resolution steps taken:
+                        </span>{" "}
+                        {d.informalResolutionSteps}
+                      </p>
+                    )}
+                    {d.desiredOutcome && (
+                      <p>
+                        <span className="text-muted-foreground block">
+                          Outcome/remedy sought:
+                        </span>{" "}
+                        {d.desiredOutcome}
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {/* Report-specific detail */}
+                {d.type === "report" && d.adverseEffect && (
+                  <div className="pt-2 border-t">
+                    <p>
+                      <span className="text-muted-foreground block">
+                        How this affected them:
+                      </span>{" "}
+                      {d.adverseEffect}
+                    </p>
+                  </div>
+                )}
+
+                {/* Incident-specific detail */}
+                {d.type === "incident" && (
+                  <div className="pt-2 border-t space-y-1.5">
+                    {d.causeOfIncident && (
+                      <p>
+                        <span className="text-muted-foreground block">
+                          Believed cause:
+                        </span>{" "}
+                        {d.causeOfIncident}
+                      </p>
+                    )}
+                    {d.injurySeverity && (
+                      <p>
+                        <span className="text-muted-foreground">
+                          Injury / medical treatment:
+                        </span>{" "}
+                        <span className="capitalize">
+                          {d.injurySeverity.replace(/_/g, " ")}
+                        </span>
+                      </p>
+                    )}
+                    {d.natureOfInjury && (
+                      <p>
+                        <span className="text-muted-foreground block">
+                          Nature of injury / body part:
+                        </span>{" "}
+                        {d.natureOfInjury}
+                      </p>
+                    )}
+                    {d.medicalTreatmentProvided && (
+                      <p>
+                        <span className="text-muted-foreground block">
+                          Medical treatment provided:
+                        </span>{" "}
+                        {d.medicalTreatmentProvided}
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {/* Attachments */}
+                {d.supportingDocs && d.supportingDocs.length > 0 && (
+                  <div className="pt-2 border-t space-y-2">
+                    <p className="text-xs font-medium text-muted-foreground">
+                      Attachments
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {d.supportingDocs.map((doc, i) =>
+                        isImageFile(doc.url) ? (
+                          <a
+                            key={i}
+                            href={resolveDisputeFileUrl(doc.url)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="block"
+                          >
+                            <img
+                              src={resolveDisputeFileUrl(doc.url)}
+                              alt={doc.name}
+                              className="h-20 w-20 object-cover rounded-md border"
+                            />
+                          </a>
+                        ) : (
+                          <a
+                            key={i}
+                            href={resolveDisputeFileUrl(doc.url)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-1.5 text-xs border rounded-md px-2 py-1 hover:bg-muted"
+                          >
+                            <FileIcon className="h-3.5 w-3.5" />
+                            {doc.name}
+                          </a>
+                        ),
+                      )}
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
+            {/* Escalated banner */}
+            {isEscalated && (
+              <div className="rounded-md border border-warning/30 bg-warning/10 text-warning text-xs p-3 flex items-center gap-2">
+                <ArrowUpCircle className="h-4 w-4" />
+                This case has been escalated to HR. You no longer manage it — HR
+                will take it from here.
+              </div>
+            )}
+
+            {/* Closed banner */}
+            {isClosed && (
+              <div className="rounded-md border border-success/30 bg-success/10 text-success text-xs p-3 flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4" />
+                You resolved and closed this case. HR can see the full report
+                below.
+              </div>
+            )}
+
             {/* Acknowledge */}
-            {d.status === "open" && (
+            {canResolveOrEscalate && d.status === "open" && (
               <Section title="Acknowledge case">
                 <p className="text-xs text-muted-foreground">
                   Confirm receipt of the complaint within 2 working days.
@@ -378,12 +565,6 @@ function ManageCaseSheet({
                   placeholder="Acknowledgment text (shown to reporter)…"
                   value={ackText}
                   onChange={(e) => setAckText(e.target.value)}
-                />
-                <Textarea
-                  rows={2}
-                  placeholder="Internal notes (optional)"
-                  value={ackNote}
-                  onChange={(e) => setAckNote(e.target.value)}
                 />
                 <Button
                   size="sm"
@@ -405,46 +586,40 @@ function ManageCaseSheet({
             )}
 
             {/* Investigate */}
-            {(d.status === "open" ||
-              d.status === "under_investigation") && (
-              <Section title="Investigation finding">
-                <p className="text-xs text-muted-foreground">
-                  Add interview notes, evidence review, or observations. HR
-                  sees every entry you submit.
-                </p>
-                <Textarea
-                  rows={3}
-                  placeholder="Findings *"
-                  value={findings}
-                  onChange={(e) => setFindings(e.target.value)}
-                />
-                <Textarea
-                  rows={2}
-                  placeholder="Additional notes (optional)"
-                  value={invNote}
-                  onChange={(e) => setInvNote(e.target.value)}
-                />
-                <Button
-                  size="sm"
-                  disabled={!findings.trim() || invMut.isPending}
-                  onClick={() =>
-                    invMut.mutate({
-                      findings: findings.trim(),
-                      notes: invNote.trim() || undefined,
-                    })
-                  }
-                >
-                  {invMut.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    "Submit finding"
-                  )}
-                </Button>
-              </Section>
-            )}
+            {canResolveOrEscalate &&
+              (d.status === "open" || d.status === "under_investigation") && (
+                <Section title="Investigation finding">
+                  <p className="text-xs text-muted-foreground">
+                    Add interview notes, evidence review, or observations. HR
+                    sees every entry you submit.
+                  </p>
+                  <Textarea
+                    rows={3}
+                    placeholder="Findings *"
+                    value={findings}
+                    onChange={(e) => setFindings(e.target.value)}
+                  />
+                  <Button
+                    size="sm"
+                    disabled={!findings.trim() || invMut.isPending}
+                    onClick={() =>
+                      invMut.mutate({
+                        findings: findings.trim(),
+                        notes: invNote.trim() || undefined,
+                      })
+                    }
+                  >
+                    {invMut.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      "Submit finding"
+                    )}
+                  </Button>
+                </Section>
+              )}
 
             {/* Schedule hearing */}
-            {d.status === "under_investigation" && (
+            {canResolveOrEscalate && d.status === "under_investigation" && (
               <Section title="Schedule hearing">
                 <p className="text-xs text-muted-foreground">
                   Schedule within 5 working days of closing investigation.
@@ -476,9 +651,7 @@ function ManageCaseSheet({
                 <Button
                   size="sm"
                   disabled={
-                    !hearingDate ||
-                    !hearingVenue.trim() ||
-                    hearMut.isPending
+                    !hearingDate || !hearingVenue.trim() || hearMut.isPending
                   }
                   onClick={() =>
                     hearMut.mutate({
@@ -494,6 +667,67 @@ function ManageCaseSheet({
                     "Schedule hearing"
                   )}
                 </Button>
+              </Section>
+            )}
+
+            {/* Resolution — the two outcomes */}
+            {canResolveOrEscalate && (
+              <Section title="Resolution">
+                <p className="text-xs text-muted-foreground">
+                  Once you've reached an outcome, either close the case with a
+                  report of how it was handled, or escalate to HR if you weren't
+                  able to resolve it.
+                </p>
+
+                <div className="space-y-2 border rounded-md p-3">
+                  <p className="text-xs font-medium flex items-center gap-1.5">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-success" />
+                    Resolved — close the case
+                  </p>
+                  <Textarea
+                    rows={3}
+                    placeholder="Report of the interaction — what happened, what was agreed, and the outcome. HR will see this."
+                    value={closeReport}
+                    onChange={(e) => setCloseReport(e.target.value)}
+                  />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={!closeReport.trim() || closeMut.isPending}
+                    onClick={() => closeMut.mutate()}
+                  >
+                    {closeMut.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      "Resolve & close case"
+                    )}
+                  </Button>
+                </div>
+
+                <div className="space-y-2 border rounded-md p-3">
+                  <p className="text-xs font-medium flex items-center gap-1.5">
+                    <ArrowUpCircle className="h-3.5 w-3.5 text-warning" />
+                    Unresolved — escalate to HR
+                  </p>
+                  <Textarea
+                    rows={2}
+                    placeholder="Reason for escalation (optional)"
+                    value={escalateReason}
+                    onChange={(e) => setEscalateReason(e.target.value)}
+                  />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={escalateMut.isPending}
+                    onClick={() => escalateMut.mutate()}
+                  >
+                    {escalateMut.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      "Escalate to HR"
+                    )}
+                  </Button>
+                </div>
               </Section>
             )}
 

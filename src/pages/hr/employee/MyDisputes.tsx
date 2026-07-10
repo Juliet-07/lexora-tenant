@@ -264,7 +264,7 @@ function InvolvedEmployeesPicker({
 interface LogDisputeDialogProps {
   open: boolean;
   onClose: () => void;
-  onSubmit: (dto: OpenDisputePayload) => void;
+  onSubmit: (dto: OpenDisputePayload, files: File[]) => void;
   isSubmitting: boolean;
 }
 
@@ -359,10 +359,6 @@ function LogDisputeDialog({
       description: description.trim(),
       respondentIds: respondentIds.length > 0 ? respondentIds : undefined,
       witnesses: witnesses.length > 0 ? witnesses : undefined,
-      attachments: attachments.map((f) => ({
-        name: f.name,
-        url: `attachment://${encodeURIComponent(f.name)}`,
-      })),
     };
 
     if (uiType === "grievance") {
@@ -382,7 +378,7 @@ function LogDisputeDialog({
       payload.adverseEffect = adverseEffect.trim();
     }
 
-    onSubmit(payload);
+    onSubmit(payload, attachments);
   };
 
   return (
@@ -691,12 +687,18 @@ export default function MyDisputes() {
   });
 
   const openMutation = useMutation({
-    mutationFn: async (dto: OpenDisputePayload) => {
-      const { attachments, ...rest } = dto;
-      const created = await openDisputeCaseAsEmployee(rest);
-      for (const doc of attachments ?? []) {
+    mutationFn: async ({
+      dto,
+      files,
+    }: {
+      dto: OpenDisputePayload;
+      files: File[];
+    }) => {
+      const created = await openDisputeCaseAsEmployee(dto);
+      // Best-effort attach documents; ignore individual failures.
+      for (const file of files) {
         try {
-          await attachEmployeeDisputeDocument(created._id, doc);
+          await attachEmployeeDisputeDocument(created._id, file);
         } catch {
           /* keep going */
         }
@@ -745,7 +747,9 @@ export default function MyDisputes() {
                 {showComplainant && d.complainant && (
                   <p className="text-[11px] text-muted-foreground">
                     Filed by {d.complainant.firstName} {d.complainant.lastName}
-                    {d.complainant.jobTitle ? ` · ${d.complainant.jobTitle}` : ""}
+                    {d.complainant.jobTitle
+                      ? ` · ${d.complainant.jobTitle}`
+                      : ""}
                   </p>
                 )}
               </div>
@@ -920,7 +924,10 @@ export default function MyDisputes() {
           </Card>
         )
       ) : (
-        <Tabs value={tab} onValueChange={(v) => setTab(v as "filed" | "against")}>
+        <Tabs
+          value={tab}
+          onValueChange={(v) => setTab(v as "filed" | "against")}
+        >
           <TabsList>
             <TabsTrigger value="filed">
               Filed by me ({disputes.length})
@@ -951,7 +958,7 @@ export default function MyDisputes() {
       <LogDisputeDialog
         open={logOpen}
         onClose={() => setLogOpen(false)}
-        onSubmit={(dto) => openMutation.mutate(dto)}
+        onSubmit={(dto, files) => openMutation.mutate({ dto, files })}
         isSubmitting={openMutation.isPending}
       />
     </div>
