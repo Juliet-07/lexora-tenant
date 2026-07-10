@@ -772,30 +772,22 @@ function DisputeDetailSheet({
             <p className="text-sm font-semibold flex items-center gap-2">
               <Upload className="h-4 w-4" /> Supporting Documents
             </p>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label className="text-xs">Document name *</Label>
-                <Input
-                  placeholder="e.g. Witness statement…"
-                  value={docName}
-                  onChange={(e) => setDocName(e.target.value)}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">URL *</Label>
-                <Input
-                  placeholder="https://…"
-                  value={docUrl}
-                  onChange={(e) => setDocUrl(e.target.value)}
-                />
-              </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Choose file *</Label>
+              <Input
+                type="file"
+                onChange={(e) => setDocFile(e.target.files?.[0] ?? null)}
+              />
+              {docFile && (
+                <p className="text-[11px] text-muted-foreground">
+                  {docFile.name}
+                </p>
+              )}
             </div>
             <Button
               size="sm"
               variant="outline"
-              disabled={
-                !docName.trim() || !docUrl.trim() || attachDocMutation.isPending
-              }
+              disabled={!docFile || attachDocMutation.isPending}
               onClick={() => attachDocMutation.mutate()}
             >
               {attachDocMutation.isPending ? (
