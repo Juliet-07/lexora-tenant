@@ -1229,7 +1229,11 @@ export default function MyDisputes() {
   const renderCardsList = (items: DisputeCase[], showComplainant: boolean) => (
     <div className="space-y-3">
       {items.map((d) => (
-        <Card key={d._id}>
+        <Card
+          key={d._id}
+          className="cursor-pointer hover:border-primary/40 transition-colors"
+          onClick={() => setSelected(d)}
+        >
           <CardContent className="p-4 space-y-3">
             <div className="flex items-start justify-between gap-3 flex-wrap">
               <div className="space-y-1">
