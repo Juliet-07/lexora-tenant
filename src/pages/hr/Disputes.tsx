@@ -138,8 +138,7 @@ function DisputeDetailSheet({
   const [escalateNotes, setEscalateNotes] = useState("");
   const [closeNotes, setCloseNotes] = useState("");
   const [formUrl, setFormUrl] = useState("");
-  const [docName, setDocName] = useState("");
-  const [docUrl, setDocUrl] = useState("");
+  const [docFile, setDocFile] = useState<File | null>(null);
 
   const handleSuccess = (updated: DisputeCase, msg: string) => {
     onUpdated(updated);
