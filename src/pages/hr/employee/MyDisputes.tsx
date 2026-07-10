@@ -1462,6 +1462,17 @@ export default function MyDisputes() {
         onSubmit={(dto, files) => openMutation.mutate({ dto, files })}
         isSubmitting={openMutation.isPending}
       />
+
+      <DisputeDetailSheet
+        dispute={selected}
+        canAppeal={!isHoD && tab === "against"}
+        onClose={() => setSelected(null)}
+        onAppealFiled={() => {
+          queryClient.invalidateQueries({ queryKey: ["disputes-against-me"] });
+          queryClient.invalidateQueries({ queryKey });
+          setSelected(null);
+        }}
+      />
     </div>
   );
 }
