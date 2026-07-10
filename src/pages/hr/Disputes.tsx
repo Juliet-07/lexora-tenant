@@ -244,12 +244,10 @@ function DisputeDetailSheet({
   });
 
   const attachDocMutation = useMutation({
-    mutationFn: () =>
-      attachDisputeDocument(dispute!._id, { name: docName, url: docUrl }),
+    mutationFn: () => attachDisputeDocument(dispute!._id, docFile!),
     onSuccess: (u) => {
       handleSuccess(u, "Document attached.");
-      setDocName("");
-      setDocUrl("");
+      setDocFile(null);
     },
     onError: handleError,
   });
