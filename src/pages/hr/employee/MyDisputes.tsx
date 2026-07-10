@@ -1162,6 +1162,7 @@ export default function MyDisputes() {
   const queryClient = useQueryClient();
   const [logOpen, setLogOpen] = useState(false);
   const [tab, setTab] = useState<"filed" | "against">("filed");
+  const [selected, setSelected] = useState<DisputeCase | null>(null);
 
   // HoD → department-wide read-only view. Manager & regular → their own filings.
   const queryKey = isHoD ? ["department-disputes"] : ["my-disputes"];
