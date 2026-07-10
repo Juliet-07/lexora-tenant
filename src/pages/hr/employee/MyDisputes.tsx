@@ -1384,7 +1384,11 @@ export default function MyDisputes() {
                 </TableHeader>
                 <TableBody>
                   {disputes.map((d) => (
-                    <TableRow key={d._id}>
+                    <TableRow
+                      key={d._id}
+                      className="cursor-pointer"
+                      onClick={() => setSelected(d)}
+                    >
                       <TableCell className="font-mono text-xs">
                         {d.caseNumber}
                       </TableCell>
