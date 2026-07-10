@@ -63,6 +63,9 @@ import {
   openDisputeCaseAsEmployee,
   attachEmployeeDisputeDocument,
   fetchEmployeeDirectory,
+  fileDisputeAppeal,
+  resolveDisputeFileUrl,
+  isImageFile,
   type DisputeCase,
   type DisputeType,
   type GrievanceNature,
@@ -70,6 +73,14 @@ import {
   type OpenDisputePayload,
 } from "@/lib/hr-dispute-api";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 // UI-only type — "report" and "disciplinary" both narrow to real
 // backend DisputeType values the employee is actually allowed to
