@@ -526,7 +526,7 @@ function DisputeDetailSheet({
   const [hearingDate, setHearingDate] = useState("");
   const [hearingMode, setHearingMode] = useState<"physical" | "online">("physical");
   const [hearingVenue, setHearingVenue] = useState("");
-  const [hearingPlatform, setHearingPlatform] = useState("zoom");
+  const [hearingPlatform, setHearingPlatform] = useState<"google_meet" | "microsoft_teams" | "zoom">("zoom");
   const [hearingLink, setHearingLink] = useState("");
   const [hearingNotes, setHearingNotes] = useState("");
   const [outcomeDecision, setOutcomeDecision] =

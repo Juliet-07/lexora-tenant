@@ -275,9 +275,9 @@ function ManageCaseSheet({
   const [findings, setFindings] = useState("");
   const [invNote, setInvNote] = useState("");
   const [hearingDate, setHearingDate] = useState("");
-  const [hearingMode, setHearingMode] = useState("physical");
+  const [hearingMode, setHearingMode] = useState<"physical" | "online">("physical");
   const [hearingVenue, setHearingVenue] = useState("");
-  const [hearingPlatform, setHearingPlatform] = useState("zoom");
+  const [hearingPlatform, setHearingPlatform] = useState<"google_meet" | "microsoft_teams" | "zoom">("zoom");
   const [hearingLink, setHearingLink] = useState("");
   const [hearingNote, setHearingNote] = useState("");
   const [closeReport, setCloseReport] = useState("");
