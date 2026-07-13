@@ -16,6 +16,13 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Plus, Trash2, Loader2, Pencil, FileText } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { toast } from "sonner";
 import {
   fetchContractTemplates,
@@ -103,6 +110,17 @@ function TemplateList({ workerCategory }: { workerCategory: WorkerCategory }) {
                       Inactive
                     </Badge>
                   )}
+                  <Badge variant="outline" className="text-[10px] capitalize">
+                    {t.category ?? "contract"}
+                  </Badge>
+                  {t.requiresSignature === false && (
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] bg-info/10 text-info border-info/20"
+                    >
+                      No signature needed
+                    </Badge>
+                  )}
                 </div>
                 <div className="flex gap-2">
                   <Button
@@ -159,6 +177,12 @@ function TemplateEditorDialog({
   const [name, setName] = useState(template?.name ?? "");
   const [description, setDescription] = useState(template?.description ?? "");
   const [body, setBody] = useState(template?.body ?? "");
+  const [category, setCategory] = useState<"contract" | "letter">(
+    template?.category ?? "contract",
+  );
+  const [requiresSignature, setRequiresSignature] = useState(
+    template?.requiresSignature ?? true,
+  );
 
   const { data: mergeFields = [] } = useQuery({
     queryKey: ["contract-merge-fields"],
@@ -168,8 +192,21 @@ function TemplateEditorDialog({
   const saveMutation = useMutation({
     mutationFn: () =>
       template
-        ? updateContractTemplate(template._id, { name, description, body })
-        : createContractTemplate({ name, workerCategory, body, description }),
+        ? updateContractTemplate(template._id, {
+            name,
+            description,
+            body,
+            category,
+            requiresSignature,
+          })
+        : createContractTemplate({
+            name,
+            workerCategory,
+            body,
+            description,
+            category,
+            requiresSignature,
+          }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["contract-templates"] });
       onClose();
@@ -213,6 +250,54 @@ function TemplateEditorDialog({
               onChange={(e) => setDescription(e.target.value)}
             />
           </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label>Category</Label>
+              <Select
+                value={category}
+                onValueChange={(v) => {
+                  const next = v as "contract" | "letter";
+                  setCategory(next);
+                  setRequiresSignature(next === "contract");
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="contract">
+                    Contract (both parties sign)
+                  </SelectItem>
+                  <SelectItem value="letter">
+                    Letter (you sign only — warnings, suspension, etc.)
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label>Requires recipient signature?</Label>
+              <Select
+                value={requiresSignature ? "yes" : "no"}
+                onValueChange={(v) => setRequiresSignature(v === "yes")}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="yes">Yes</SelectItem>
+                  <SelectItem value="no">No — issued by you only</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {!requiresSignature && (
+            <div className="rounded-md bg-info/10 border border-info/20 text-info text-xs p-2">
+              This becomes a one-way letter: when generated for someone, you add
+              your own signature/stamp and it's emailed to them immediately as a
+              PDF — no signing link, no waiting on a reply.
+            </div>
+          )}
 
           <div className="flex flex-wrap gap-1.5">
             {mergeFields.map((f) => (

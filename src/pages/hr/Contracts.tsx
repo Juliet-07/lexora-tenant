@@ -47,6 +47,9 @@ import {
   Mail,
   Eraser,
   Download,
+  ChevronsUpDown,
+  Check,
+  UserSquare2,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -58,14 +61,31 @@ import {
   generateContractFromCandidate,
   fetchContractTemplates,
   countersignContract,
+  issueLetter,
   sendSignedCopy,
   type Contract,
   type ContractStatus,
   type InteractionType,
   type WorkerCategory,
   downloadContractPdf,
+  generateContractForEmployee,
 } from "@/lib/hr-contracts-api";
 import { ContractTemplatesPanel } from "@/components/hr/ContractTemplatesPanel";
+import { fetchEmployees } from "@/lib/hr-api";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import { SignaturePad } from "@/components/hr/SignaturePad";
 
 const STATUS_TONE: Record<ContractStatus, string> = {
   draft: "bg-muted text-muted-foreground",
@@ -73,6 +93,7 @@ const STATUS_TONE: Record<ContractStatus, string> = {
   signed: "bg-warning/10 text-warning border-warning/20",
   countersigned: "bg-success/10 text-success border-success/20",
   declined: "bg-destructive/10 text-destructive border-destructive/20",
+  issued: "bg-success/10 text-success border-success/20",
 };
 
 const STATUS_LABEL: Record<ContractStatus, string> = {
@@ -81,6 +102,7 @@ const STATUS_LABEL: Record<ContractStatus, string> = {
   signed: "Awaiting Your Countersignature",
   countersigned: "Fully Executed",
   declined: "Declined",
+  issued: "Issued",
 };
 
 const INTERACTION_ICON: Record<InteractionType, any> = {
@@ -94,6 +116,7 @@ const INTERACTION_ICON: Record<InteractionType, any> = {
   countersigned: ShieldCheck,
   signed_copy_sent: Mail,
   declined: XCircle,
+  issued: ShieldCheck,
 };
 
 const INTERACTION_LABEL: Record<InteractionType, string> = {
@@ -107,6 +130,7 @@ const INTERACTION_LABEL: Record<InteractionType, string> = {
   countersigned: "Countersigned by you",
   signed_copy_sent: "Signed copy emailed",
   declined: "Declined",
+  issued: "Issued by you",
 };
 
 const fmtDateTime = (d: string) =>
@@ -126,7 +150,9 @@ export default function HRContracts() {
   const [editedBody, setEditedBody] = useState("");
   const [changeNote, setChangeNote] = useState("");
   const [generateOpen, setGenerateOpen] = useState(false);
+  const [generateForEmployeeOpen, setGenerateForEmployeeOpen] = useState(false);
   const [countersignOpen, setCountersignOpen] = useState(false);
+  const [issueOpen, setIssueOpen] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
 
   const { data: items = [], isLoading } = useQuery({
@@ -214,6 +240,7 @@ export default function HRContracts() {
     sent: items.filter((c) => c.status === "sent").length,
     awaitingCountersign: items.filter((c) => c.status === "signed").length,
     declined: items.filter((c) => c.status === "declined").length,
+    issued: items.filter((c) => c.status === "issued").length,
   };
 
   return (
@@ -225,20 +252,28 @@ export default function HRContracts() {
             Employment agreements, consultant contracts, and e-signature.
           </p>
         </div>
-        <Button variant="outline" onClick={() => setGenerateOpen(true)}>
-          <Plus className="h-4 w-4 mr-2" /> Generate Contract
-          {pendingCandidates.length > 0 && (
-            <Badge
-              variant="outline"
-              className="ml-2 bg-warning/10 text-warning border-warning/20"
-            >
-              {pendingCandidates.length} pending
-            </Badge>
-          )}
-        </Button>
+        <div className="flex flex-wrap items-center gap-4">
+          <Button
+            variant="outline"
+            onClick={() => setGenerateForEmployeeOpen(true)}
+          >
+            <UserSquare2 className="h-4 w-4 mr-2" /> Generate for Employee
+          </Button>
+          <Button variant="outline" onClick={() => setGenerateOpen(true)}>
+            <Plus className="h-4 w-4 mr-2" /> Generate Contract
+            {pendingCandidates.length > 0 && (
+              <Badge
+                variant="outline"
+                className="ml-2 bg-warning/10 text-warning border-warning/20"
+              >
+                {pendingCandidates.length} pending
+              </Badge>
+            )}
+          </Button>
+        </div>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
         <Stat
           label="Total Contracts"
           value={counts.total}
@@ -262,6 +297,12 @@ export default function HRContracts() {
           value={counts.countersigned}
           icon={ShieldCheck}
           tone="from-emerald-500 to-teal-500"
+        />
+        <Stat
+          label="Letters Issued"
+          value={counts.issued}
+          icon={FileText}
+          tone="from-sky-500 to-blue-600"
         />
         <Stat
           label="Declined"
@@ -360,21 +401,32 @@ export default function HRContracts() {
                     {STATUS_LABEL[selected.status]}
                   </Badge>
                   <div className="flex gap-2">
-                    {selected.status === "draft" && (
-                      <Button
-                        size="sm"
-                        className="bg-gradient-to-r from-primary to-secondary"
-                        disabled={sendMutation.isPending}
-                        onClick={() => sendMutation.mutate(selected._id)}
-                      >
-                        {sendMutation.isPending ? (
-                          <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-                        ) : (
-                          <Send className="h-3.5 w-3.5 mr-1.5" />
-                        )}
-                        Send for Signature
-                      </Button>
-                    )}
+                    {selected.status === "draft" &&
+                      selected.requiresSignature !== false && (
+                        <Button
+                          size="sm"
+                          className="bg-gradient-to-r from-primary to-secondary"
+                          disabled={sendMutation.isPending}
+                          onClick={() => sendMutation.mutate(selected._id)}
+                        >
+                          {sendMutation.isPending ? (
+                            <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                          ) : (
+                            <Send className="h-3.5 w-3.5 mr-1.5" />
+                          )}
+                          Send for Signature
+                        </Button>
+                      )}
+                    {selected.status === "draft" &&
+                      selected.requiresSignature === false && (
+                        <Button
+                          size="sm"
+                          className="bg-gradient-to-r from-primary to-secondary"
+                          onClick={() => setIssueOpen(true)}
+                        >
+                          <Pencil className="h-3.5 w-3.5 mr-1.5" /> Issue Letter
+                        </Button>
+                      )}
                     {selected.status === "sent" && (
                       <Button
                         size="sm"
@@ -399,7 +451,8 @@ export default function HRContracts() {
                         <Pencil className="h-3.5 w-3.5 mr-1.5" /> Countersign
                       </Button>
                     )}
-                    {selected.status === "countersigned" && (
+                    {(selected.status === "countersigned" ||
+                      selected.status === "issued") && (
                       <>
                         <Button
                           size="sm"
@@ -469,7 +522,9 @@ export default function HRContracts() {
                       <Card>
                         <CardContent className="p-4 space-y-1 text-sm">
                           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                            Countersigned by
+                            {selected.status === "issued"
+                              ? "Issued by"
+                              : "Countersigned by"}
                           </p>
                           {selected.tenantSignature.signatureImageData ? (
                             <img
@@ -634,7 +689,8 @@ export default function HRContracts() {
                 </div>
 
                 {/* ── Respond to a comment ── */}
-                {selected.status !== "countersigned" &&
+                {selected.requiresSignature !== false &&
+                  selected.status !== "countersigned" &&
                   selected.status !== "declined" && (
                     <div className="space-y-2">
                       <Label className="text-xs">Reply to the signer</Label>
@@ -677,12 +733,26 @@ export default function HRContracts() {
         onClose={() => setGenerateOpen(false)}
       />
 
+      <GenerateForEmployeeDialog
+        open={generateForEmployeeOpen}
+        onClose={() => setGenerateForEmployeeOpen(false)}
+      />
+
       {selected && (
         <CountersignDialog
           open={countersignOpen}
           contract={selected}
           onClose={() => setCountersignOpen(false)}
           onCountersigned={(updated) => setSelected(updated)}
+        />
+      )}
+
+      {selected && (
+        <IssueLetterDialog
+          open={issueOpen}
+          contract={selected}
+          onClose={() => setIssueOpen(false)}
+          onIssued={(updated) => setSelected(updated)}
         />
       )}
     </div>
@@ -821,6 +891,213 @@ function ManualGenerateContractDialog({
   );
 }
 
+// ─── Generate for an existing employee — for letters (suspension,
+// warnings) as well as employee contracts outside the hiring flow ──
+
+function GenerateForEmployeeDialog({
+  open,
+  onClose,
+}: {
+  open: boolean;
+  onClose: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const [employeeId, setEmployeeId] = useState("");
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [templateId, setTemplateId] = useState("");
+  const [reason, setReason] = useState("");
+  const [effectiveDate, setEffectiveDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+
+  const { data: employeesPage } = useQuery({
+    queryKey: ["hr-employees-for-contract-picker"],
+    queryFn: () => fetchEmployees({ limit: 500 }),
+    enabled: open,
+  });
+  const employees = employeesPage?.items ?? [];
+  const selectedEmployee = employees.find((e) => e._id === employeeId);
+
+  const { data: templates = [] } = useQuery({
+    queryKey: ["contract-templates", selectedEmployee?.workerCategory],
+    queryFn: () =>
+      fetchContractTemplates(selectedEmployee?.workerCategory ?? "employee"),
+    enabled: !!selectedEmployee,
+  });
+
+  const selectedTemplate = templates.find((t) => t._id === templateId);
+
+  const generateMutation = useMutation({
+    mutationFn: () =>
+      generateContractForEmployee({
+        employeeId,
+        templateId,
+        reason: reason.trim() || undefined,
+        effectiveDate: effectiveDate || undefined,
+        endDate: endDate || undefined,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["contracts"] });
+      handleClose();
+      toast.success("Document draft created.");
+    },
+    onError: (err: any) =>
+      toast.error(
+        err?.response?.data?.message ?? "Failed to generate document",
+      ),
+  });
+
+  const handleClose = () => {
+    setEmployeeId("");
+    setTemplateId("");
+    setReason("");
+    setEffectiveDate("");
+    setEndDate("");
+    onClose();
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && handleClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Generate for Employee</DialogTitle>
+          <DialogDescription>
+            Create a contract or letter (e.g. suspension, warning) for any
+            current employee or consultant.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="space-y-1">
+            <Label>Employee</Label>
+            <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  role="combobox"
+                  className="w-full justify-between font-normal"
+                >
+                  {selectedEmployee
+                    ? `${selectedEmployee.firstName} ${selectedEmployee.lastName}`
+                    : "Select an employee…"}
+                  <ChevronsUpDown className="h-4 w-4 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+                <Command>
+                  <CommandInput placeholder="Search employees…" />
+                  <CommandList>
+                    <CommandEmpty>No employees found.</CommandEmpty>
+                    <CommandGroup>
+                      {employees.map((e) => (
+                        <CommandItem
+                          key={e._id}
+                          value={`${e.firstName} ${e.lastName}`}
+                          onSelect={() => {
+                            setEmployeeId(e._id);
+                            setTemplateId("");
+                            setPickerOpen(false);
+                          }}
+                        >
+                          <Check
+                            className={`mr-2 h-4 w-4 ${
+                              employeeId === e._id ? "opacity-100" : "opacity-0"
+                            }`}
+                          />
+                          <div className="flex flex-col">
+                            <span>
+                              {e.firstName} {e.lastName}
+                            </span>
+                            <span className="text-[11px] text-muted-foreground">
+                              {e.jobTitle}
+                            </span>
+                          </div>
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
+          </div>
+
+          {selectedEmployee && (
+            <div className="space-y-1">
+              <Label>Template</Label>
+              {templates.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-2">
+                  No templates exist yet for this worker category. Create one in
+                  the Templates tab first.
+                </p>
+              ) : (
+                <Select value={templateId} onValueChange={setTemplateId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a template" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {templates.map((t) => (
+                      <SelectItem key={t._id} value={t._id}>
+                        {t.name}
+                        {t.requiresSignature === false ? " (letter)" : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
+          )}
+
+          {selectedTemplate && selectedTemplate.requiresSignature === false && (
+            <>
+              <div className="space-y-1">
+                <Label>Reason (optional)</Label>
+                <Textarea
+                  rows={2}
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  placeholder="Grounds for this letter…"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label>Effective date (optional)</Label>
+                  <Input
+                    type="date"
+                    value={effectiveDate}
+                    onChange={(e) => setEffectiveDate(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label>End date (optional)</Label>
+                  <Input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                  />
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={handleClose}>
+            Cancel
+          </Button>
+          <Button
+            disabled={!employeeId || !templateId || generateMutation.isPending}
+            onClick={() => generateMutation.mutate()}
+            className="bg-gradient-to-r from-primary to-secondary"
+          >
+            {generateMutation.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              "Generate Draft"
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Countersign dialog — typed name + drawn signature + optional stamp ──
 
 function CountersignDialog({
@@ -944,94 +1221,127 @@ function CountersignDialog({
   );
 }
 
-// ─── Self-contained signature drawing canvas ──
+// ─── Issue Letter dialog — same action as countersigning (tenant
+// signs), just not gated on someone else having signed first ──
 
-function SignaturePad({
-  canvasRef,
-  onChange,
+function IssueLetterDialog({
+  open,
+  contract,
+  onClose,
+  onIssued,
 }: {
-  canvasRef: React.RefObject<HTMLCanvasElement>;
-  onChange: (dataUrl: string | null) => void;
+  open: boolean;
+  contract: Contract;
+  onClose: () => void;
+  onIssued: (updated: Contract) => void;
 }) {
-  const drawing = useRef(false);
+  const queryClient = useQueryClient();
+  const [signerName, setSignerName] = useState("");
+  const [signatureImageData, setSignatureImageData] = useState<string | null>(
+    null,
+  );
+  const [stampImageData, setStampImageData] = useState<string | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  const getPos = (
-    e: React.MouseEvent | React.TouchEvent,
-    canvas: HTMLCanvasElement,
-  ) => {
-    const rect = canvas.getBoundingClientRect();
-    if ("touches" in e) {
-      const touch = e.touches[0];
-      return { x: touch.clientX - rect.left, y: touch.clientY - rect.top };
-    }
-    return {
-      x: (e as React.MouseEvent).clientX - rect.left,
-      y: (e as React.MouseEvent).clientY - rect.top,
-    };
+  const issueMutation = useMutation({
+    mutationFn: () =>
+      issueLetter(contract._id, {
+        signerName,
+        signatureImageData: signatureImageData ?? undefined,
+        stampImageData: stampImageData ?? undefined,
+      }),
+    onSuccess: (updated) => {
+      queryClient.invalidateQueries({ queryKey: ["contracts"] });
+      onIssued(updated);
+      handleClose();
+      toast.success(`Issued and emailed to ${updated.signerEmail}.`);
+    },
+    onError: (err: any) =>
+      toast.error(err?.response?.data?.message ?? "Failed to issue letter"),
+  });
+
+  const handleClose = () => {
+    setSignerName("");
+    setSignatureImageData(null);
+    setStampImageData(null);
+    onClose();
   };
 
-  const start = (e: React.MouseEvent | React.TouchEvent) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    drawing.current = true;
-    const ctx = canvas.getContext("2d");
-    const { x, y } = getPos(e, canvas);
-    ctx?.beginPath();
-    ctx?.moveTo(x, y);
-  };
-
-  const move = (e: React.MouseEvent | React.TouchEvent) => {
-    if (!drawing.current) return;
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    const { x, y } = getPos(e, canvas);
-    if (ctx) {
-      ctx.lineWidth = 2;
-      ctx.lineCap = "round";
-      ctx.strokeStyle = "#1a1a2e";
-      ctx.lineTo(x, y);
-      ctx.stroke();
-    }
-  };
-
-  const end = () => {
-    if (!drawing.current) return;
-    drawing.current = false;
-    const canvas = canvasRef.current;
-    if (canvas) onChange(canvas.toDataURL("image/png"));
-  };
-
-  const clear = () => {
-    const canvas = canvasRef.current;
-    const ctx = canvas?.getContext("2d");
-    if (canvas && ctx) {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      onChange(null);
-    }
+  const handleStampUpload = (file: File | undefined) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setStampImageData(reader.result as string);
+    reader.readAsDataURL(file);
   };
 
   return (
-    <div className="space-y-1">
-      <div className="border rounded-md bg-white">
-        <canvas
-          ref={canvasRef}
-          width={460}
-          height={140}
-          className="w-full touch-none cursor-crosshair"
-          onMouseDown={start}
-          onMouseMove={move}
-          onMouseUp={end}
-          onMouseLeave={end}
-          onTouchStart={start}
-          onTouchMove={move}
-          onTouchEnd={end}
-        />
-      </div>
-      <Button type="button" size="sm" variant="ghost" onClick={clear}>
-        <Eraser className="h-3.5 w-3.5 mr-1.5" /> Clear
-      </Button>
-    </div>
+    <Dialog open={open} onOpenChange={(o) => !o && handleClose()}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Issue Letter</DialogTitle>
+          <DialogDescription>
+            This will be emailed to {contract.signerName} as a PDF immediately —
+            there's no signature required from them.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="space-y-1">
+            <Label>Your full name</Label>
+            <Input
+              value={signerName}
+              onChange={(e) => setSignerName(e.target.value)}
+              placeholder="Type your name"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <Label>Signature</Label>
+            <SignaturePad
+              canvasRef={canvasRef}
+              onChange={setSignatureImageData}
+            />
+            <p className="text-xs text-muted-foreground">
+              Draw your signature above, or leave blank to use your typed name
+              as the signature.
+            </p>
+          </div>
+
+          <div className="space-y-1">
+            <Label className="flex items-center gap-1.5">
+              <Stamp className="h-3.5 w-3.5" /> Company stamp (optional)
+            </Label>
+            <Input
+              type="file"
+              accept="image/*"
+              onChange={(e) => handleStampUpload(e.target.files?.[0])}
+            />
+            {stampImageData && (
+              <img
+                src={stampImageData}
+                alt="Stamp preview"
+                className="h-16 object-contain mt-2 border rounded"
+              />
+            )}
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={handleClose}>
+            Cancel
+          </Button>
+          <Button
+            disabled={!signerName.trim() || issueMutation.isPending}
+            onClick={() => issueMutation.mutate()}
+            className="bg-gradient-to-r from-primary to-secondary"
+          >
+            {issueMutation.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              "Issue & Send"
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

@@ -46,14 +46,6 @@ import {
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
-import { type JobOpening } from "@/data/hrMockData";
-import {
-  useJobOpenings,
-  addJobOpening,
-  updateJobOpening,
-  deleteJobOpening,
-  nextJobOpeningId,
-} from "@/lib/jobOpeningsStore";
 import { Pencil } from "lucide-react";
 import {
   AlertDialog,
@@ -65,7 +57,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { fetchEmployees, fetchTeams, fetchLocations, type Employee } from "@/lib/hr-api";
+import {
+  fetchEmployees,
+  fetchTeams,
+  fetchLocations,
+  type Employee,
+} from "@/lib/hr-api";
 import {
   fetchAllCandidates,
   fetchCandidateStageCounts,
@@ -80,6 +77,13 @@ import {
   removeSuccessor,
   getNextStage,
   getStageOrderFor,
+  fetchJobOpenings,
+  createJobOpening,
+  updateJobOpening as updateJobOpeningApi,
+  deleteJobOpening as deleteJobOpeningApi,
+  type JobOpening,
+  type JobOpeningType,
+  type JobOpeningStatus,
   type Candidate,
   type CandidateStage,
   type WorkerCategory,
@@ -149,8 +153,11 @@ const fmtDate = (d: string) =>
 export default function HRRecruitment() {
   const queryClient = useQueryClient();
 
-  // ── Job Openings stays dummy, per scope — no API calls here ──
-  const jobs = useJobOpenings();
+  // ── Job Openings — real, backend-persisted ──
+  const { data: jobs = [], isLoading: jobsLoading } = useQuery({
+    queryKey: ["job-openings"],
+    queryFn: fetchJobOpenings,
+  });
 
   // ── Real data ──
   const { data: candidates = [], isLoading: candidatesLoading } = useQuery({
@@ -389,7 +396,8 @@ export default function HRRecruitment() {
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <p className="text-xs text-muted-foreground">
               Keep a record of all open, on-hold, draft and closed roles across
-              your organization.
+              your organization. All employees are emailed when a new opening is
+              posted, and again once it's filled.
             </p>
             <JobOpeningDialog
               trigger={
@@ -403,12 +411,14 @@ export default function HRRecruitment() {
               }
             />
           </div>
-          {jobs.length === 0 ? (
+          {jobsLoading ? (
+            <LoadingRow label="Loading job openings…" />
+          ) : jobs.length === 0 ? (
             <EmptyCard text="No job openings yet. Create one to get started." />
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               {jobs.map((j) => (
-                <JobOpeningCard key={j.id} job={j} />
+                <JobOpeningCard key={j._id} job={j} />
               ))}
             </div>
           )}
@@ -1382,18 +1392,60 @@ function AddSuccessorDialog({
 
 // ─── Job Openings — record of roles within the organization ──
 
-const JOB_TYPES: JobOpening["type"][] = ["Full-time", "Part-time", "Contract"];
-const JOB_STATUSES: JobOpening["status"][] = ["Open", "Interviewing", "Filled"];
+const JOB_TYPES: JobOpeningType[] = ["Full-time", "Part-time", "Contract"];
+const JOB_STATUSES: JobOpeningStatus[] = ["Open", "Interviewing", "Filled"];
 
-const jobStatusTone = (s: JobOpening["status"]) =>
+const jobStatusTone = (s: JobOpeningStatus) =>
   s === "Open"
     ? "bg-success/10 text-success border-success/20"
     : s === "Interviewing"
       ? "bg-info/10 text-info border-info/20"
       : "bg-muted text-muted-foreground border-border";
 
+const teamDisplayName = (j: JobOpening) =>
+  typeof j.teamId === "object" && j.teamId !== null ? j.teamId.name : "—";
+const locationDisplayName = (j: JobOpening) =>
+  typeof j.locationId === "object" && j.locationId !== null
+    ? j.locationId.name
+    : "—";
+const teamIdOf = (j: JobOpening) =>
+  typeof j.teamId === "object" && j.teamId !== null
+    ? j.teamId._id
+    : ((j.teamId as string | null) ?? "");
+const locationIdOf = (j: JobOpening) =>
+  typeof j.locationId === "object" && j.locationId !== null
+    ? j.locationId._id
+    : ((j.locationId as string | null) ?? "");
+
 function JobOpeningCard({ job }: { job: JobOpening }) {
+  const queryClient = useQueryClient();
   const [confirmOpen, setConfirmOpen] = useState(false);
+
+  const statusMutation = useMutation({
+    mutationFn: (status: JobOpeningStatus) =>
+      updateJobOpeningApi(job._id, { status }),
+    onSuccess: (_updated, status) => {
+      queryClient.invalidateQueries({ queryKey: ["job-openings"] });
+      toast.success(
+        status === "Filled"
+          ? "Marked as filled — all employees have been notified."
+          : `Status set to ${status}.`,
+      );
+    },
+    onError: (err: any) =>
+      toast.error(err?.response?.data?.message ?? "Failed to update status"),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteJobOpeningApi(job._id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["job-openings"] });
+      toast.success("Opening deleted.");
+    },
+    onError: (err: any) =>
+      toast.error(err?.response?.data?.message ?? "Failed to delete opening"),
+  });
+
   return (
     <Card className="hover:shadow-md transition-shadow">
       <CardContent className="p-5 space-y-4">
@@ -1402,17 +1454,12 @@ function JobOpeningCard({ job }: { job: JobOpening }) {
             <h3 className="font-semibold truncate">{job.title}</h3>
             <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
               <MapPin className="h-3 w-3" />
-              {job.location} · {job.type} · {job.department}
+              {locationDisplayName(job)} · {job.type} · {teamDisplayName(job)}
             </p>
           </div>
           <Select
             value={job.status}
-            onValueChange={(v) => {
-              updateJobOpening(job.id, {
-                status: v as JobOpening["status"],
-              });
-              toast.success(`Status set to ${v}.`);
-            }}
+            onValueChange={(v) => statusMutation.mutate(v as JobOpeningStatus)}
           >
             <SelectTrigger
               className={`h-7 w-[130px] text-xs px-2 ${jobStatusTone(job.status)}`}
@@ -1432,7 +1479,11 @@ function JobOpeningCard({ job }: { job: JobOpening }) {
           {job.description}
         </div>
         <div className="flex items-center justify-between text-xs text-muted-foreground">
-          <span></span>
+          <span>
+            {job.status === "Filled" && job.filledAt
+              ? `Filled ${fmtDate(job.filledAt)}`
+              : ""}
+          </span>
           <span>Posted {fmtDate(job.postedDate)}</span>
         </div>
         <div className="flex items-center justify-end gap-2 pt-1 border-t">
@@ -1464,12 +1515,7 @@ function JobOpeningCard({ job }: { job: JobOpening }) {
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction
-                onClick={() => {
-                  deleteJobOpening(job.id);
-                  toast.success("Opening deleted.");
-                }}
-              >
+              <AlertDialogAction onClick={() => deleteMutation.mutate()}>
                 Delete
               </AlertDialogAction>
             </AlertDialogFooter>
@@ -1488,9 +1534,8 @@ function JobOpeningDialog({
   trigger: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+  const queryClient = useQueryClient();
 
-  // Load teams & locations from the HR system so the tenant picks
-  // from what already exists (created on the Employees page).
   const { data: teams = [] } = useQuery({
     queryKey: ["hr-teams"],
     queryFn: fetchTeams,
@@ -1504,52 +1549,77 @@ function JobOpeningDialog({
 
   const [form, setForm] = useState(() => ({
     title: job?.title ?? "",
-    department: job?.department ?? "",
-    location: job?.location ?? "",
-    type: (job?.type ?? "Full-time") as JobOpening["type"],
+    teamId: job ? teamIdOf(job) : "",
+    locationId: job ? locationIdOf(job) : "",
+    type: (job?.type ?? "Full-time") as JobOpeningType,
     description: job?.description ?? "",
-    applicants: job?.applicants ?? 0,
   }));
 
   useEffect(() => {
     if (open && job) {
       setForm({
         title: job.title,
-        department: job.department,
-        location: job.location,
+        teamId: teamIdOf(job),
+        locationId: locationIdOf(job),
         type: job.type,
-        description: job.description,
-        applicants: job.applicants,
+        description: job.description ?? "",
+      });
+    } else if (open && !job) {
+      setForm({
+        title: "",
+        teamId: "",
+        locationId: "",
+        type: "Full-time",
+        description: "",
       });
     }
   }, [open, job]);
 
   const isEdit = Boolean(job);
-  const canSave =
-    form.title.trim() && form.department.trim() && form.location.trim();
+  const canSave = form.title.trim().length > 0;
+
+  const createMutation = useMutation({
+    mutationFn: () =>
+      createJobOpening({
+        title: form.title.trim(),
+        teamId: form.teamId || undefined,
+        locationId: form.locationId || undefined,
+        type: form.type,
+        description: form.description.trim() || undefined,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["job-openings"] });
+      setOpen(false);
+      toast.success("Opening created — all employees have been notified.");
+    },
+    onError: (err: any) =>
+      toast.error(err?.response?.data?.message ?? "Failed to create opening"),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: () =>
+      updateJobOpeningApi(job!._id, {
+        title: form.title.trim(),
+        teamId: form.teamId || undefined,
+        locationId: form.locationId || undefined,
+        type: form.type,
+        description: form.description.trim() || undefined,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["job-openings"] });
+      setOpen(false);
+      toast.success("Opening updated.");
+    },
+    onError: (err: any) =>
+      toast.error(err?.response?.data?.message ?? "Failed to update opening"),
+  });
+
+  const isSubmitting = createMutation.isPending || updateMutation.isPending;
 
   const handleSave = () => {
     if (!canSave) return;
-    if (isEdit && job) {
-      updateJobOpening(job.id, { ...form });
-      toast.success("Opening updated.");
-    } else {
-      addJobOpening({
-        id: nextJobOpeningId(),
-        postedDate: new Date().toISOString().slice(0, 10),
-        status: "Open",
-        pipeline: {
-          sourced: 0,
-          screening: 0,
-          interview: 0,
-          offer: 0,
-          hired: 0,
-        },
-        ...form,
-      });
-      toast.success("Opening created.");
-    }
-    setOpen(false);
+    if (isEdit) updateMutation.mutate();
+    else createMutation.mutate();
   };
 
   return (
@@ -1563,7 +1633,7 @@ function JobOpeningDialog({
           <DialogDescription>
             {isEdit
               ? "Update the role details."
-              : "New openings start as Open — change the status on the card as hiring progresses."}
+              : "New openings start as Open. All employees are emailed as soon as this is created."}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
@@ -1577,10 +1647,10 @@ function JobOpeningDialog({
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label className="text-xs">Department (Team) *</Label>
+              <Label className="text-xs">Department (Team)</Label>
               <Select
-                value={form.department}
-                onValueChange={(v) => setForm({ ...form, department: v })}
+                value={form.teamId}
+                onValueChange={(v) => setForm({ ...form, teamId: v })}
               >
                 <SelectTrigger>
                   <SelectValue
@@ -1591,7 +1661,7 @@ function JobOpeningDialog({
                 </SelectTrigger>
                 <SelectContent>
                   {teams.map((t) => (
-                    <SelectItem key={t._id} value={t.name}>
+                    <SelectItem key={t._id} value={t._id}>
                       {t.name}
                     </SelectItem>
                   ))}
@@ -1599,10 +1669,10 @@ function JobOpeningDialog({
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs">Location *</Label>
+              <Label className="text-xs">Location</Label>
               <Select
-                value={form.location}
-                onValueChange={(v) => setForm({ ...form, location: v })}
+                value={form.locationId}
+                onValueChange={(v) => setForm({ ...form, locationId: v })}
               >
                 <SelectTrigger>
                   <SelectValue
@@ -1615,7 +1685,7 @@ function JobOpeningDialog({
                 </SelectTrigger>
                 <SelectContent>
                   {locations.map((l) => (
-                    <SelectItem key={l._id} value={l.name}>
+                    <SelectItem key={l._id} value={l._id}>
                       {l.name}
                       {l.city ? ` · ${l.city}` : ""}
                     </SelectItem>
@@ -1629,7 +1699,7 @@ function JobOpeningDialog({
             <Select
               value={form.type}
               onValueChange={(v) =>
-                setForm({ ...form, type: v as JobOpening["type"] })
+                setForm({ ...form, type: v as JobOpeningType })
               }
             >
               <SelectTrigger>
@@ -1660,7 +1730,10 @@ function JobOpeningDialog({
           <Button variant="outline" onClick={() => setOpen(false)}>
             Cancel
           </Button>
-          <Button disabled={!canSave} onClick={handleSave}>
+          <Button disabled={!canSave || isSubmitting} onClick={handleSave}>
+            {isSubmitting ? (
+              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+            ) : null}
             {isEdit ? "Save Changes" : "Create Opening"}
           </Button>
         </DialogFooter>
@@ -1668,7 +1741,6 @@ function JobOpeningDialog({
     </Dialog>
   );
 }
-
 
 function Stat({
   label,

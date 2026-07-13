@@ -12,6 +12,44 @@ export interface Paginated<T> {
   totalPages: number;
 }
 
+export interface HrOverviewDepartment {
+  teamId: string;
+  name: string;
+  head: string | null;
+  headcount: number;
+  managers: number;
+  openRoles: number;
+  avgPerformance: number | null;
+  reviewsCompleted: number;
+  reviewsTotal: number;
+  attendanceRate: number | null;
+}
+
+export interface HrOverviewTotals {
+  headcount: number;
+  departmentCount: number;
+  openRoles: number;
+  avgPerformance: number | null;
+  reviewsCompleted: number;
+  reviewsTotal: number;
+  avgAttendance: number | null;
+}
+
+export interface HrOverviewResponse {
+  departments: HrOverviewDepartment[];
+  totals: HrOverviewTotals;
+  topPerformingDepartment: { name: string; avgPerformance: number } | null;
+}
+
+// ─────────────────────────────────────────────────────────────
+// HR OVERVIEW ENDPOINT API
+// ─────────────────────────────────────────────────────────────
+
+export const fetchHrOverview = async (): Promise<HrOverviewResponse> => {
+  const res = await api.get("/hr/overview");
+  return res.data?.data ?? res.data;
+};
+
 // ─────────────────────────────────────────────────────────────
 // TEAM (DEPARTMENT) — Types & API
 // ─────────────────────────────────────────────────────────────
@@ -135,6 +173,41 @@ export type WorkerCategory = "employee" | "consultant";
 
 export type RoleLevel = "head_of_department" | "manager" | "regular";
 
+export type EducationLevel =
+  | "secondary"
+  | "tvet_diploma"
+  | "bachelors"
+  | "masters"
+  | "phd";
+
+export type OccupationalCategory =
+  | "managers"
+  | "professionals"
+  | "technicians"
+  | "clerical"
+  | "service_sales"
+  | "elementary";
+
+export const EDUCATION_LEVELS: { value: EducationLevel; label: string }[] = [
+  { value: "secondary", label: "Secondary" },
+  { value: "tvet_diploma", label: "TVET / Diploma" },
+  { value: "bachelors", label: "Bachelor's" },
+  { value: "masters", label: "Master's" },
+  { value: "phd", label: "PhD" },
+];
+
+export const OCCUPATIONAL_CATEGORIES: {
+  value: OccupationalCategory;
+  label: string;
+}[] = [
+  { value: "managers", label: "Managers" },
+  { value: "professionals", label: "Professionals" },
+  { value: "technicians", label: "Technicians" },
+  { value: "clerical", label: "Clerical" },
+  { value: "service_sales", label: "Service / Sales" },
+  { value: "elementary", label: "Elementary" },
+];
+
 export interface Employee {
   _id: string;
   tenantId: string;
@@ -189,9 +262,16 @@ export interface Employee {
   references: EmployeeReference[];
   onboardingStep: number; // 0-4
   onboardingCompleted: boolean;
+  suspensionReason?: string | null;
+  suspensionStartDate?: string | null;
+  suspensionEndDate?: string | null;
   allowances: EmployeeAllowanceInput[];
   workerCategory: WorkerCategory;
   roleLevel?: RoleLevel | null;
+  educationLevel?: EducationLevel | null;
+  occupationalCategory?: OccupationalCategory | null;
+  hasDisability?: boolean;
+  disabilityNote?: string | null;
 }
 
 export interface EmployeeStats {
@@ -256,6 +336,13 @@ export interface TerminateEmployeeDto {
   reason: string;
   status: "terminated" | "resigned";
 }
+
+export interface SuspendEmployeeDto {
+  reason: string;
+  endDate: string;
+  contractId?: string;
+}
+
 export interface EmployeeAttendanceRecord {
   _id: string;
   date: string;
@@ -380,6 +467,19 @@ export const terminateEmployee = async (
   dto: TerminateEmployeeDto,
 ): Promise<Employee> => {
   const res = await api.patch(`/hr/employees/${id}/terminate`, dto);
+  return res.data?.data ?? res.data;
+};
+
+export const suspendEmployee = async (
+  id: string,
+  dto: SuspendEmployeeDto,
+): Promise<Employee> => {
+  const res = await api.patch(`/hr/employees/${id}/suspend`, dto);
+  return res.data?.data ?? res.data;
+};
+
+export const reinstateEmployee = async (id: string): Promise<Employee> => {
+  const res = await api.patch(`/hr/employees/${id}/reinstate`, {});
   return res.data?.data ?? res.data;
 };
 
@@ -845,6 +945,10 @@ export interface UpdateMyProfileDto {
   bankAccountNumber?: string;
   nationality?: string;
   nationalId?: string;
+  educationLevel?: EducationLevel;
+  occupationalCategory?: OccupationalCategory;
+  hasDisability?: boolean;
+  disabilityNote?: string;
 }
 
 export const fetchMyProfile = async (): Promise<Employee> => {

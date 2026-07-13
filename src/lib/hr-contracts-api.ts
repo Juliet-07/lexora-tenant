@@ -6,6 +6,8 @@ import { api } from "./api";
 
 export type WorkerCategory = "employee" | "consultant";
 
+export type TemplateCategory = "contract" | "letter";
+
 export interface ContractTemplate {
   _id: string;
   tenantId: string;
@@ -14,6 +16,8 @@ export interface ContractTemplate {
   body: string;
   description: string | null;
   isActive: boolean;
+  category: TemplateCategory;
+  requiresSignature: boolean;
   createdAt: string;
 }
 
@@ -45,6 +49,8 @@ export const createContractTemplate = async (dto: {
   workerCategory: WorkerCategory;
   body: string;
   description?: string;
+  category?: TemplateCategory;
+  requiresSignature?: boolean;
 }): Promise<ContractTemplate> => {
   const res = await api.post("/hr/contracts/templates", dto);
   return res.data?.data ?? res.data;
@@ -57,6 +63,8 @@ export const updateContractTemplate = async (
     body?: string;
     description?: string;
     isActive?: boolean;
+    category?: TemplateCategory;
+    requiresSignature?: boolean;
   },
 ): Promise<ContractTemplate> => {
   const res = await api.patch(`/hr/contracts/templates/${templateId}`, dto);
@@ -78,7 +86,8 @@ export type ContractStatus =
   | "sent"
   | "signed"
   | "countersigned"
-  | "declined";
+  | "declined"
+  | "issued";
 
 export type InteractionType =
   | "sent"
@@ -90,7 +99,8 @@ export type InteractionType =
   | "signed"
   | "countersigned"
   | "signed_copy_sent"
-  | "declined";
+  | "declined"
+  | "issued";
 
 export interface TenantSignatureRecord {
   signedAt: string;
@@ -132,6 +142,7 @@ export interface Contract {
   workerCategory: WorkerCategory;
   renderedBody: string;
   status: ContractStatus;
+  requiresSignature: boolean;
   interactions: ContractInteraction[];
   signature: SignatureRecord | null;
   tenantSignature?: TenantSignatureRecord | null;
@@ -173,6 +184,9 @@ export const generateContractFromCandidate = async (dto: {
 export const generateContractForEmployee = async (dto: {
   employeeId: string;
   templateId: string;
+  reason?: string;
+  effectiveDate?: string;
+  endDate?: string;
 }): Promise<Contract> => {
   const res = await api.post("/hr/contracts/generate-for-employee", dto);
   return res.data?.data ?? res.data;
@@ -229,6 +243,18 @@ export const countersignContract = async (
   },
 ): Promise<Contract> => {
   const res = await api.post(`/hr/contracts/${contractId}/countersign`, dto);
+  return res.data?.data ?? res.data;
+};
+
+export const issueLetter = async (
+  contractId: string,
+  dto: {
+    signerName: string;
+    signatureImageData?: string;
+    stampImageData?: string;
+  },
+): Promise<Contract> => {
+  const res = await api.post(`/hr/contracts/${contractId}/issue`, dto);
   return res.data?.data ?? res.data;
 };
 

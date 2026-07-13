@@ -1,159 +1,40 @@
-// HR Overview — tenant-level organizational summary across departments.
-// Dummy data for now; wire to live HR APIs later.
-
-import { useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import {
   Users,
   Building2,
   TrendingUp,
-  TrendingDown,
   UserPlus,
-  UserMinus,
   CalendarDays,
-  Wallet,
   Award,
-  AlertTriangle,
+  Loader2,
 } from "lucide-react";
+import { fetchHrOverview } from "@/lib/hr-api";
 
-interface DepartmentSummary {
-  name: string;
-  head: string;
-  headcount: number;
-  managers: number;
-  openRoles: number;
-  avgPerformance: number; // 0 - 5
-  attendanceRate: number; // %
-  attritionRate: number; // %
-  payrollMonthly: number; // RWF
-  reviewsCompleted: number;
-  reviewsTotal: number;
-}
-
-const DEPARTMENTS: DepartmentSummary[] = [
-  {
-    name: "Engineering",
-    head: "Adaeze Nwosu",
-    headcount: 42,
-    managers: 5,
-    openRoles: 4,
-    avgPerformance: 4.3,
-    attendanceRate: 96,
-    attritionRate: 6,
-    payrollMonthly: 38_500_000,
-    reviewsCompleted: 38,
-    reviewsTotal: 42,
-  },
-  {
-    name: "Finance",
-    head: "Tunde Bakare",
-    headcount: 18,
-    managers: 2,
-    openRoles: 1,
-    avgPerformance: 4.1,
-    attendanceRate: 98,
-    attritionRate: 3,
-    payrollMonthly: 16_200_000,
-    reviewsCompleted: 17,
-    reviewsTotal: 18,
-  },
-  {
-    name: "Operations",
-    head: "Fatima Diallo",
-    headcount: 27,
-    managers: 3,
-    openRoles: 2,
-    avgPerformance: 3.9,
-    attendanceRate: 94,
-    attritionRate: 8,
-    payrollMonthly: 19_800_000,
-    reviewsCompleted: 21,
-    reviewsTotal: 27,
-  },
-  {
-    name: "Sales & Marketing",
-    head: "Liam O'Connor",
-    headcount: 22,
-    managers: 3,
-    openRoles: 3,
-    avgPerformance: 4.0,
-    attendanceRate: 92,
-    attritionRate: 11,
-    payrollMonthly: 17_400_000,
-    reviewsCompleted: 18,
-    reviewsTotal: 22,
-  },
-  {
-    name: "People & Culture",
-    head: "Chiamaka Eze",
-    headcount: 9,
-    managers: 1,
-    openRoles: 0,
-    avgPerformance: 4.4,
-    attendanceRate: 97,
-    attritionRate: 4,
-    payrollMonthly: 7_300_000,
-    reviewsCompleted: 9,
-    reviewsTotal: 9,
-  },
-  {
-    name: "Customer Support",
-    head: "Priya Sharma",
-    headcount: 15,
-    managers: 2,
-    openRoles: 2,
-    avgPerformance: 3.8,
-    attendanceRate: 93,
-    attritionRate: 12,
-    payrollMonthly: 9_100_000,
-    reviewsCompleted: 11,
-    reviewsTotal: 15,
-  },
-];
-
-const fmtRWF = (n: number) =>
-  new Intl.NumberFormat("en-RW", {
-    style: "currency",
-    currency: "RWF",
-    maximumFractionDigits: 0,
-  }).format(n);
+const perfTone = (score: number) =>
+  score >= 80
+    ? "border-emerald-500/40 text-emerald-600"
+    : score >= 60
+      ? "border-blue-500/40 text-blue-600"
+      : "border-rose-500/40 text-rose-600";
 
 export default function HROverview() {
-  const totals = useMemo(() => {
-    const headcount = DEPARTMENTS.reduce((s, d) => s + d.headcount, 0);
-    const openRoles = DEPARTMENTS.reduce((s, d) => s + d.openRoles, 0);
-    const payroll = DEPARTMENTS.reduce((s, d) => s + d.payrollMonthly, 0);
-    const reviewsDone = DEPARTMENTS.reduce((s, d) => s + d.reviewsCompleted, 0);
-    const reviewsTotal = DEPARTMENTS.reduce((s, d) => s + d.reviewsTotal, 0);
-    const avgPerf =
-      DEPARTMENTS.reduce((s, d) => s + d.avgPerformance * d.headcount, 0) /
-      headcount;
-    const avgAttendance =
-      DEPARTMENTS.reduce((s, d) => s + d.attendanceRate * d.headcount, 0) /
-      headcount;
-    const avgAttrition =
-      DEPARTMENTS.reduce((s, d) => s + d.attritionRate * d.headcount, 0) /
-      headcount;
-    return {
-      headcount,
-      openRoles,
-      payroll,
-      reviewsDone,
-      reviewsTotal,
-      avgPerf,
-      avgAttendance,
-      avgAttrition,
-    };
-  }, []);
+  const { data, isLoading } = useQuery({
+    queryKey: ["hr-overview"],
+    queryFn: fetchHrOverview,
+  });
 
-  const topPerformer = [...DEPARTMENTS].sort(
-    (a, b) => b.avgPerformance - a.avgPerformance,
-  )[0];
-  const highestAttrition = [...DEPARTMENTS].sort(
-    (a, b) => b.attritionRate - a.attritionRate,
-  )[0];
+  if (isLoading || !data) {
+    return (
+      <div className="flex items-center justify-center py-24 gap-2 text-muted-foreground">
+        <Loader2 className="h-5 w-5 animate-spin" />
+        <span className="text-sm">Loading HR overview…</span>
+      </div>
+    );
+  }
+
+  const { departments, totals, topPerformingDepartment } = data;
 
   return (
     <div className="space-y-6">
@@ -161,7 +42,7 @@ export default function HROverview() {
         <h1 className="text-2xl font-bold">HR Overview</h1>
         <p className="text-sm text-muted-foreground">
           Organization-wide pulse across departments — headcount, performance,
-          attendance and payroll.
+          and attendance.
         </p>
       </div>
 
@@ -172,7 +53,7 @@ export default function HROverview() {
           value={totals.headcount}
           icon={Users}
           tone="from-primary to-secondary"
-          sub={`${DEPARTMENTS.length} departments`}
+          sub={`${totals.departmentCount} departments`}
         />
         <Kpi
           label="Open roles"
@@ -183,10 +64,14 @@ export default function HROverview() {
         />
         <Kpi
           label="Avg performance"
-          value={`${totals.avgPerf.toFixed(2)} / 5`}
+          value={
+            totals.avgPerformance != null
+              ? `${totals.avgPerformance} / 100`
+              : "—"
+          }
           icon={Award}
           tone="from-emerald-500 to-teal-500"
-          sub={`${totals.reviewsDone}/${totals.reviewsTotal} reviews done`}
+          sub={`${totals.reviewsCompleted}/${totals.reviewsTotal} ever reviewed`}
         />
       </div>
 
@@ -199,10 +84,12 @@ export default function HROverview() {
             </div>
             <div>
               <p className="text-xs text-muted-foreground uppercase tracking-wide">
-                Avg attendance
+                Attendance today
               </p>
               <p className="text-xl font-bold">
-                {totals.avgAttendance.toFixed(1)}%
+                {totals.avgAttendance != null
+                  ? `${totals.avgAttendance}%`
+                  : "—"}
               </p>
             </div>
           </CardContent>
@@ -216,10 +103,20 @@ export default function HROverview() {
               <p className="text-xs text-muted-foreground uppercase tracking-wide">
                 Top performing dept
               </p>
-              <p className="text-base font-semibold">{topPerformer.name}</p>
-              <p className="text-xs text-muted-foreground">
-                Score {topPerformer.avgPerformance.toFixed(2)} / 5
-              </p>
+              {topPerformingDepartment ? (
+                <>
+                  <p className="text-base font-semibold">
+                    {topPerformingDepartment.name}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Score {topPerformingDepartment.avgPerformance} / 100
+                  </p>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  No completed reviews yet.
+                </p>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -234,39 +131,42 @@ export default function HROverview() {
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/40 text-muted-foreground">
-                <tr>
-                  <th className="text-left px-5 py-2 font-medium">
-                    Department
-                  </th>
-                  <th className="text-left px-5 py-2 font-medium">Head</th>
-                  <th className="text-right px-5 py-2 font-medium">
-                    Headcount
-                  </th>
-                  <th className="text-right px-5 py-2 font-medium">Managers</th>
-                  <th className="text-right px-5 py-2 font-medium">
-                    Open roles
-                  </th>
-                  <th className="text-right px-5 py-2 font-medium">
-                    Avg perf.
-                  </th>
-                  <th className="text-right px-5 py-2 font-medium">
-                    Attendance
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {DEPARTMENTS.map((d) => {
-                  const reviewPct = Math.round(
-                    (d.reviewsCompleted / d.reviewsTotal) * 100,
-                  );
-                  return (
-                    <tr key={d.name} className="border-t">
+          {departments.length === 0 ? (
+            <div className="p-10 text-center text-sm text-muted-foreground">
+              No departments set up yet.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/40 text-muted-foreground">
+                  <tr>
+                    <th className="text-left px-5 py-2 font-medium">
+                      Department
+                    </th>
+                    <th className="text-left px-5 py-2 font-medium">Head</th>
+                    <th className="text-right px-5 py-2 font-medium">
+                      Headcount
+                    </th>
+                    <th className="text-right px-5 py-2 font-medium">
+                      Managers
+                    </th>
+                    <th className="text-right px-5 py-2 font-medium">
+                      Open roles
+                    </th>
+                    <th className="text-right px-5 py-2 font-medium">
+                      Avg perf.
+                    </th>
+                    <th className="text-right px-5 py-2 font-medium">
+                      Attendance today
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {departments.map((d) => (
+                    <tr key={d.teamId} className="border-t">
                       <td className="px-5 py-3 font-medium">{d.name}</td>
                       <td className="px-5 py-3 text-muted-foreground">
-                        {d.head}
+                        {d.head ?? "Unassigned"}
                       </td>
                       <td className="px-5 py-3 text-right">{d.headcount}</td>
                       <td className="px-5 py-3 text-right">{d.managers}</td>
@@ -283,28 +183,35 @@ export default function HROverview() {
                         )}
                       </td>
                       <td className="px-5 py-3 text-right">
-                        <Badge
-                          variant="outline"
-                          className={
-                            d.avgPerformance >= 4.2
-                              ? "border-emerald-500/40 text-emerald-600"
-                              : d.avgPerformance >= 3.8
-                                ? "border-blue-500/40 text-blue-600"
-                                : "border-rose-500/40 text-rose-600"
-                          }
-                        >
-                          {d.avgPerformance.toFixed(1)}
-                        </Badge>
+                        {d.avgPerformance != null ? (
+                          <div className="flex flex-col items-end gap-0.5">
+                            <Badge
+                              variant="outline"
+                              className={perfTone(d.avgPerformance)}
+                            >
+                              {d.avgPerformance}
+                            </Badge>
+                            <span className="text-[10px] text-muted-foreground">
+                              {d.reviewsCompleted}/{d.reviewsTotal} reviewed
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">
+                            No reviews yet
+                          </span>
+                        )}
                       </td>
                       <td className="px-5 py-3 text-right">
-                        {d.attendanceRate}%
+                        {d.attendanceRate != null
+                          ? `${d.attendanceRate}%`
+                          : "—"}
                       </td>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

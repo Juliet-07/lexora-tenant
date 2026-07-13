@@ -311,3 +311,62 @@ export const removeSuccessor = async (
   );
   return res.data?.data ?? res.data;
 };
+
+// ─────────────────────────────────────────────────────────────
+// JOB OPENING — Types & API
+// ─────────────────────────────────────────────────────────────
+
+export type JobOpeningType = "Full-time" | "Part-time" | "Contract";
+export type JobOpeningStatus = "Open" | "Interviewing" | "Filled";
+
+export interface JobOpening {
+  _id: string;
+  title: string;
+  teamId: { _id: string; name: string } | string | null;
+  locationId:
+    | { _id: string; name: string; country?: string; city?: string }
+    | string
+    | null;
+  type: JobOpeningType;
+  status: JobOpeningStatus;
+  description: string | null;
+  postedDate: string;
+  filledAt: string | null;
+  createdAt: string;
+}
+
+export const fetchJobOpenings = async (): Promise<JobOpening[]> => {
+  const res = await api.get("/hr/job-openings");
+  const d = res.data?.data ?? res.data;
+  return Array.isArray(d) ? d : [];
+};
+
+export const createJobOpening = async (dto: {
+  title: string;
+  teamId?: string;
+  locationId?: string;
+  type?: JobOpeningType;
+  description?: string;
+}): Promise<JobOpening> => {
+  const res = await api.post("/hr/job-openings", dto);
+  return res.data?.data ?? res.data;
+};
+
+export const updateJobOpening = async (
+  id: string,
+  dto: Partial<{
+    title: string;
+    teamId: string;
+    locationId: string;
+    type: JobOpeningType;
+    description: string;
+    status: JobOpeningStatus;
+  }>,
+): Promise<JobOpening> => {
+  const res = await api.patch(`/hr/job-openings/${id}`, dto);
+  return res.data?.data ?? res.data;
+};
+
+export const deleteJobOpening = async (id: string): Promise<void> => {
+  await api.delete(`/hr/job-openings/${id}`);
+};

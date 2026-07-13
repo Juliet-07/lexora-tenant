@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -56,15 +56,14 @@ import {
   UserSquare2,
   Circle,
   UserX,
+  Stamp,
 } from "lucide-react";
 import { toast } from "sonner";
-import type {
+import {
   Employee,
   HrTeam,
   HrLocation,
   EmployeeRecordType,
-} from "@/lib/hr-api";
-import {
   fetchDirectReportsOf,
   fetchEmployeeDetail,
   fetchEmployeeOnboardingRecord,
@@ -74,6 +73,8 @@ import {
   terminateEmployee,
   addEmployeeRecord,
   fetchEmployeeRecords,
+  suspendEmployee,
+  reinstateEmployee,
 } from "@/lib/hr-api";
 import { downloadEmployeeReport } from "@/lib/employeeReport";
 import { EmployeeDocumentsPanel } from "./EmployeeDocumentsPanel";
@@ -84,6 +85,13 @@ import {
   resolveDisputeFileUrl,
   isImageFile,
 } from "@/lib/hr-dispute-api";
+import {
+  fetchContractTemplates,
+  generateContractForEmployee,
+  issueLetter,
+} from "@/lib/hr-contracts-api";
+import { DialogDescription } from "@radix-ui/react-dialog";
+import { SignaturePad } from "./SignaturePad";
 
 interface Props {
   employee: Employee | null;
@@ -293,6 +301,7 @@ const managerName = (e: Employee) =>
 export function EmployeeDetailSheet({ employee, onClose }: Props) {
   const queryClient = useQueryClient();
   const [terminateOpen, setTerminateOpen] = useState(false);
+  const [suspendOpen, setSuspendOpen] = useState(false);
   const [terminateForm, setTerminateForm] = useState({
     endDate: new Date().toISOString().slice(0, 10),
     status: "resigned" as "terminated" | "resigned",
@@ -434,6 +443,64 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
       toast.error(e?.response?.data?.message ?? "Failed to add record"),
   });
 
+  const suspendMutation = useMutation({
+    mutationFn: async (form: {
+      reason: string;
+      endDate: string;
+      templateId: string;
+      signerName: string;
+      signatureImageData: string | null;
+      stampImageData: string | null;
+    }) => {
+      const contract = await generateContractForEmployee({
+        employeeId: employee!._id,
+        templateId: form.templateId,
+        reason: form.reason,
+        effectiveDate: new Date().toISOString().slice(0, 10),
+        endDate: form.endDate,
+      });
+      await issueLetter(contract._id, {
+        signerName: form.signerName,
+        signatureImageData: form.signatureImageData ?? undefined,
+        stampImageData: form.stampImageData ?? undefined,
+      });
+      return suspendEmployee(employee!._id, {
+        reason: form.reason,
+        endDate: form.endDate,
+        contractId: contract._id,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["employee-detail", employee!._id],
+      });
+      queryClient.invalidateQueries({ queryKey: ["hr-employees"] });
+      setSuspendOpen(false);
+      toast.success(
+        `${employee!.firstName} ${employee!.lastName} has been suspended. Their login is deactivated until the end date, and the letter has been emailed.`,
+      );
+    },
+    onError: (err: any) =>
+      toast.error(err?.response?.data?.message ?? "Failed to suspend employee"),
+  });
+
+  const reinstateMutation = useMutation({
+    mutationFn: () => reinstateEmployee(employee!._id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["employee-detail", employee!._id],
+      });
+      queryClient.invalidateQueries({ queryKey: ["hr-employees"] });
+      toast.success(
+        `${employee!.firstName} ${employee!.lastName} has been reinstated.`,
+      );
+    },
+    onError: (err: any) =>
+      toast.error(
+        err?.response?.data?.message ?? "Failed to reinstate employee",
+      ),
+  });
+
   if (!employee) return null;
 
   const emp = detail?.employee ?? employee;
@@ -526,7 +593,7 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
               </p>
             </div>
           </div>
-          <div className="mt-4 space-x-3">
+          <div className="mt-4 flex flex-wrap items-center gap-2">
             <Button
               size="sm"
               variant="secondary"
@@ -538,17 +605,6 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
             >
               <Download className="h-4 w-4 mr-2" /> Download Report
             </Button>
-            {emp.employmentStatus !== "terminated" &&
-              emp.employmentStatus !== "resigned" && (
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  className="bg-destructive/20 hover:bg-destructive/30 text-white border-destructive/30"
-                  onClick={() => setTerminateOpen(true)}
-                >
-                  <UserX className="h-4 w-4 mr-2" /> Terminate
-                </Button>
-              )}
             <Button
               variant="secondary"
               size="sm"
@@ -562,6 +618,45 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
               )}
               Resend Welcome Email
             </Button>
+            {emp.employmentStatus !== "terminated" &&
+              emp.employmentStatus !== "resigned" && (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="bg-red-500 hover:bg-destructive/30 text-white border-destructive/30"
+                  onClick={() => setTerminateOpen(true)}
+                >
+                  <UserX className="h-4 w-4 mr-2" /> Terminate
+                </Button>
+              )}
+            {emp.employmentStatus === "suspended" ? (
+              <Button
+                size="sm"
+                variant="secondary"
+                className="bg-white/15 hover:bg-white/25 text-white border-white/20"
+                disabled={reinstateMutation.isPending}
+                onClick={() => reinstateMutation.mutate()}
+              >
+                {reinstateMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : (
+                  <UserX className="h-4 w-4 mr-2" />
+                )}
+                Reinstate
+              </Button>
+            ) : (
+              emp.employmentStatus !== "terminated" &&
+              emp.employmentStatus !== "resigned" && (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="bg-slate-500 hover:bg-gray-300 text-white border-warning/30 items-center"
+                  onClick={() => setSuspendOpen(true)}
+                >
+                  <UserX className="h-4 w-4 mr-2" /> Suspend
+                </Button>
+              )
+            )}
           </div>
         </div>
 
@@ -648,6 +743,25 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
                   />
                 </CardContent>
               </Card>
+
+              {emp.employmentStatus === "suspended" && (
+                <Card className="border-warning/30">
+                  <CardContent className="p-4 space-y-2 text-sm">
+                    <h3 className="text-xs font-medium uppercase tracking-wide text-warning mb-1">
+                      Currently Suspended
+                    </h3>
+                    {emp.suspensionReason && (
+                      <p className="text-xs">{emp.suspensionReason}</p>
+                    )}
+                    {emp.suspensionEndDate && (
+                      <p className="text-xs text-muted-foreground">
+                        Reactivates automatically on{" "}
+                        {fmt(emp.suspensionEndDate)}
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
 
               <Card>
                 <CardContent className="p-4 space-y-2 text-sm">
@@ -1576,6 +1690,14 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
           </DialogContent>
         </Dialog>
 
+        <SuspendEmployeeDialog
+          open={suspendOpen}
+          employee={emp}
+          onClose={() => setSuspendOpen(false)}
+          onSubmit={(form) => suspendMutation.mutate(form)}
+          isSubmitting={suspendMutation.isPending}
+        />
+
         {/* Termination Dialog */}
         <Dialog open={terminateOpen} onOpenChange={setTerminateOpen}>
           <DialogContent>
@@ -1749,6 +1871,200 @@ function MiniStat({
         <Icon className="h-4 w-4 text-muted-foreground" />
       </CardContent>
     </Card>
+  );
+}
+
+function SuspendEmployeeDialog({
+  open,
+  employee,
+  onClose,
+  onSubmit,
+  isSubmitting,
+}: {
+  open: boolean;
+  employee: Employee;
+  onClose: () => void;
+  onSubmit: (form: {
+    reason: string;
+    endDate: string;
+    templateId: string;
+    signerName: string;
+    signatureImageData: string | null;
+    stampImageData: string | null;
+  }) => void;
+  isSubmitting: boolean;
+}) {
+  const [reason, setReason] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [templateId, setTemplateId] = useState("");
+  const [signerName, setSignerName] = useState("");
+  const [signatureImageData, setSignatureImageData] = useState<string | null>(
+    null,
+  );
+  const [stampImageData, setStampImageData] = useState<string | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  const { data: templates = [] } = useQuery({
+    queryKey: ["contract-templates", "employee", "letter"],
+    queryFn: () => fetchContractTemplates("employee"),
+    enabled: open,
+  });
+  const letterTemplates = templates.filter(
+    (t) => t.requiresSignature === false && t.isActive,
+  );
+
+  const reset = () => {
+    setReason("");
+    setEndDate("");
+    setTemplateId("");
+    setSignerName("");
+    setSignatureImageData(null);
+    setStampImageData(null);
+  };
+
+  const handleClose = () => {
+    reset();
+    onClose();
+  };
+
+  const handleStampUpload = (file: File | undefined) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setStampImageData(reader.result as string);
+    reader.readAsDataURL(file);
+  };
+
+  const canSubmit =
+    reason.trim().length >= 10 &&
+    !!endDate &&
+    !!templateId &&
+    !!signerName.trim() &&
+    !isSubmitting;
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && handleClose()}>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>
+            Suspend {employee.firstName} {employee.lastName}
+          </DialogTitle>
+          <DialogDescription>
+            Their login is deactivated immediately and reactivates automatically
+            on the end date. A suspension letter is generated, signed by you,
+            and emailed to them right away.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-3">
+          <div className="space-y-1">
+            <Label>Reason for suspension</Label>
+            <Textarea
+              rows={3}
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="Grounds for this suspension… (min. 10 characters)"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <Label>Suspension ends on</Label>
+            <Input
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              min={new Date().toISOString().slice(0, 10)}
+            />
+          </div>
+
+          <div className="space-y-1">
+            <Label>Suspension letter template</Label>
+            {letterTemplates.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-2">
+                No letter-type templates exist yet. Create one in Contracts →
+                Templates first (category: Letter, no signature required).
+              </p>
+            ) : (
+              <Select value={templateId} onValueChange={setTemplateId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a template…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {letterTemplates.map((t) => (
+                    <SelectItem key={t._id} value={t._id}>
+                      {t.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+
+          <div className="space-y-1">
+            <Label>Your full name</Label>
+            <Input
+              value={signerName}
+              onChange={(e) => setSignerName(e.target.value)}
+              placeholder="Type your name"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <Label>Signature</Label>
+            <SignaturePad
+              canvasRef={canvasRef}
+              onChange={setSignatureImageData}
+            />
+            <p className="text-xs text-muted-foreground">
+              Draw your signature, or leave blank to use your typed name.
+            </p>
+          </div>
+
+          <div className="space-y-1">
+            <Label className="flex items-center gap-1.5">
+              <Stamp className="h-3.5 w-3.5" /> Company stamp (optional)
+            </Label>
+            <Input
+              type="file"
+              accept="image/*"
+              onChange={(e) => handleStampUpload(e.target.files?.[0])}
+            />
+            {stampImageData && (
+              <img
+                src={stampImageData}
+                alt="Stamp preview"
+                className="h-16 object-contain mt-2 border rounded"
+              />
+            )}
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={handleClose}>
+            Cancel
+          </Button>
+          <Button
+            variant="destructive"
+            disabled={!canSubmit}
+            onClick={() =>
+              onSubmit({
+                reason: reason.trim(),
+                endDate,
+                templateId,
+                signerName: signerName.trim(),
+                signatureImageData,
+                stampImageData,
+              })
+            }
+          >
+            {isSubmitting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              "Suspend & Send Letter"
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

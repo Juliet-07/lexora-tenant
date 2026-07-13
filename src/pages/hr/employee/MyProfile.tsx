@@ -42,9 +42,18 @@ import {
   X,
   Loader2,
   Folder,
+  GraduationCapIcon,
 } from "lucide-react";
 import { EmployeeDocumentsPanel } from "@/components/hr/EmployeeDocumentsPanel";
 import { useToast } from "@/hooks/use-toast";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import {
   fetchMyProfile,
   updateMyProfile,
@@ -57,6 +66,10 @@ import {
   type HrTeam,
   type HrLocation,
   type UpdateMyProfileDto,
+  type EducationLevel,
+  type OccupationalCategory,
+  EDUCATION_LEVELS,
+  OCCUPATIONAL_CATEGORIES,
   downloadMyPayslipPdf,
   fetchMyPayrollSummary,
 } from "@/lib/hr-api";
@@ -313,6 +326,10 @@ export default function MyProfile() {
         address: profile.address ?? {},
         emergencyContactName: profile.emergencyContactName ?? undefined,
         emergencyContactPhone: profile.emergencyContactPhone ?? undefined,
+        educationLevel: profile.educationLevel ?? undefined,
+        occupationalCategory: profile.occupationalCategory ?? undefined,
+        hasDisability: profile.hasDisability ?? false,
+        disabilityNote: profile.disabilityNote ?? undefined,
       });
     }
   }, [profile, editingPersonal]);
@@ -578,6 +595,29 @@ export default function MyProfile() {
                     label="Emergency contact phone"
                     value={profile.emergencyContactPhone ?? "—"}
                   />
+                  <Row
+                    icon={GraduationCapIcon}
+                    label="Education level"
+                    value={
+                      EDUCATION_LEVELS.find(
+                        (e) => e.value === profile.educationLevel,
+                      )?.label ?? "Not specified"
+                    }
+                  />
+                  <Row
+                    icon={Briefcase}
+                    label="Occupational category"
+                    value={
+                      OCCUPATIONAL_CATEGORIES.find(
+                        (o) => o.value === profile.occupationalCategory,
+                      )?.label ?? "Not specified"
+                    }
+                  />
+                  <Row
+                    icon={Shield}
+                    label="Disability status"
+                    value={profile.hasDisability ? "Yes" : "No"}
+                  />
                 </>
               ) : (
                 <div className="grid sm:grid-cols-2 gap-3 pt-1">
@@ -681,6 +721,80 @@ export default function MyProfile() {
                         }))
                       }
                     />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Education level</Label>
+                    <Select
+                      value={draft.educationLevel ?? ""}
+                      onValueChange={(v) =>
+                        setDraft((p) => ({
+                          ...p,
+                          educationLevel: v as EducationLevel,
+                        }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {EDUCATION_LEVELS.map((e) => (
+                          <SelectItem key={e.value} value={e.value}>
+                            {e.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Occupational category</Label>
+                    <Select
+                      value={draft.occupationalCategory ?? ""}
+                      onValueChange={(v) =>
+                        setDraft((p) => ({
+                          ...p,
+                          occupationalCategory: v as OccupationalCategory,
+                        }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {OCCUPATIONAL_CATEGORIES.map((o) => (
+                          <SelectItem key={o.value} value={o.value}>
+                            {o.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={draft.hasDisability ?? false}
+                        onChange={(e) =>
+                          setDraft((p) => ({
+                            ...p,
+                            hasDisability: e.target.checked,
+                          }))
+                        }
+                      />
+                      I have a disability
+                    </label>
+                    {draft.hasDisability && (
+                      <Textarea
+                        rows={2}
+                        placeholder="Optional note (kept private, used for reporting only)"
+                        value={draft.disabilityNote ?? ""}
+                        onChange={(e) =>
+                          setDraft((p) => ({
+                            ...p,
+                            disabilityNote: e.target.value,
+                          }))
+                        }
+                      />
+                    )}
                   </div>
                 </div>
               )}
