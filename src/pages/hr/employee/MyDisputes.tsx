@@ -71,6 +71,7 @@ import {
   type GrievanceNature,
   type InjurySeverity,
   type OpenDisputePayload,
+  respondToDisputeAsEmployee,
 } from "@/lib/hr-dispute-api";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
@@ -167,18 +168,24 @@ function humanize(stage: string): string {
 interface DisputeDetailSheetProps {
   dispute: DisputeCase | null;
   canAppeal: boolean;
+  canRespond: boolean;
   onClose: () => void;
   onAppealFiled: () => void;
+  onResponseSent: () => void;
 }
 
 function DisputeDetailSheet({
   dispute,
   canAppeal,
+  canRespond,
   onClose,
   onAppealFiled,
+  onResponseSent,
 }: DisputeDetailSheetProps) {
   const [appealOpen, setAppealOpen] = useState(false);
   const [grounds, setGrounds] = useState("");
+  const [responseOpen, setResponseOpen] = useState(false);
+  const [responseText, setResponseText] = useState("");
 
   const appealMutation = useMutation({
     mutationFn: (caseId: string) =>
@@ -191,6 +198,19 @@ function DisputeDetailSheet({
     },
     onError: (e: any) =>
       toast.error(e?.response?.data?.message ?? "Failed to file appeal"),
+  });
+
+  const respondMutation = useMutation({
+    mutationFn: (caseId: string) =>
+      respondToDisputeAsEmployee(caseId, { response: responseText.trim() }),
+    onSuccess: () => {
+      toast.success("Response sent.");
+      setResponseOpen(false);
+      setResponseText("");
+      onResponseSent();
+    },
+    onError: (e: any) =>
+      toast.error(e?.response?.data?.message ?? "Failed to send response"),
   });
 
   if (!dispute) return null;
@@ -402,13 +422,41 @@ function DisputeDetailSheet({
                     {new Date(d.hearing.scheduledAt).toLocaleString()}
                   </p>
                   <p>
-                    <span className="text-muted-foreground text-xs">
-                      Venue:{" "}
-                    </span>
-                    {d.hearing.venue}
+                    {d.hearing.mode === "online" ? (
+                      <>
+                        <span className="text-muted-foreground text-xs">
+                          Format:{" "}
+                        </span>
+                        Online —{" "}
+                        {d.hearing.meetingPlatform === "google_meet"
+                          ? "Google Meet"
+                          : d.hearing.meetingPlatform === "microsoft_teams"
+                            ? "Microsoft Teams"
+                            : "Zoom"}{" "}
+                        ·{" "}
+                        <a
+                          href={d.hearing.meetingLink ?? "#"}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary hover:underline"
+                        >
+                          Join link
+                        </a>
+                      </>
+                    ) : (
+                      <>
+                        <span className="text-muted-foreground text-xs">
+                          Venue:{" "}
+                        </span>
+                        {d.hearing.venue}
+                      </>
+                    )}
                   </p>
                   {d.hearing.notes && (
                     <p className="whitespace-pre-wrap pt-1">
+                      <span className="text-muted-foreground text-xs">
+                        Note:{" "}
+                      </span>{" "}
                       {d.hearing.notes}
                     </p>
                   )}
@@ -467,12 +515,8 @@ function DisputeDetailSheet({
                   </div>
                   {d.appeal.decision && (
                     <div className="pt-1">
-                      <p className="text-muted-foreground text-xs">
-                        Decision
-                      </p>
-                      <p className="whitespace-pre-wrap">
-                        {d.appeal.decision}
-                      </p>
+                      <p className="text-muted-foreground text-xs">Decision</p>
+                      <p className="whitespace-pre-wrap">{d.appeal.decision}</p>
                     </div>
                   )}
                   {d.appeal.notes && (
@@ -556,6 +600,80 @@ function DisputeDetailSheet({
               </section>
             )}
 
+            {/* Respondent responses */}
+            {d.respondentResponses && d.respondentResponses.length > 0 && (
+              <section className="space-y-1.5">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Response
+                </h3>
+                {d.respondentResponses.map((r, i) => (
+                  <div
+                    key={i}
+                    className="text-sm bg-muted/40 rounded p-3 space-y-1"
+                  >
+                    {r.respondent && (
+                      <p className="text-[11px] text-muted-foreground">
+                        {r.respondent.firstName} {r.respondent.lastName} ·{" "}
+                        {new Date(r.respondedAt).toLocaleString()}
+                      </p>
+                    )}
+                    <p className="whitespace-pre-wrap">{r.text}</p>
+                  </div>
+                ))}
+              </section>
+            )}
+
+            {/* Respond action — only the named respondent, only while open */}
+            {canRespond && d.status !== "closed" && (
+              <section className="border-t pt-4">
+                {!responseOpen ? (
+                  <Button
+                    variant="outline"
+                    onClick={() => setResponseOpen(true)}
+                    className="w-full"
+                  >
+                    Respond to this dispute
+                  </Button>
+                ) : (
+                  <div className="space-y-2">
+                    <Label className="text-xs">Your response *</Label>
+                    <Textarea
+                      rows={4}
+                      value={responseText}
+                      onChange={(e) => setResponseText(e.target.value)}
+                      placeholder="Share your side of what happened…"
+                    />
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setResponseOpen(false);
+                          setResponseText("");
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        size="sm"
+                        disabled={
+                          responseText.trim().length < 10 ||
+                          respondMutation.isPending
+                        }
+                        onClick={() => respondMutation.mutate(d._id)}
+                      >
+                        {respondMutation.isPending ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          "Send response"
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </section>
+            )}
+
             {/* Timeline */}
             {d.stageHistory && d.stageHistory.length > 0 && (
               <section className="space-y-2">
@@ -616,9 +734,7 @@ function DisputeDetailSheet({
                       </Button>
                       <Button
                         size="sm"
-                        disabled={
-                          !grounds.trim() || appealMutation.isPending
-                        }
+                        disabled={!grounds.trim() || appealMutation.isPending}
                         onClick={() => appealMutation.mutate(d._id)}
                       >
                         {appealMutation.isPending ? (
@@ -1466,11 +1582,16 @@ export default function MyDisputes() {
       <DisputeDetailSheet
         dispute={selected}
         canAppeal={!isHoD && tab === "against"}
+        canRespond={!isHoD && tab === "against"}
         onClose={() => setSelected(null)}
         onAppealFiled={() => {
           queryClient.invalidateQueries({ queryKey: ["disputes-against-me"] });
           queryClient.invalidateQueries({ queryKey });
           setSelected(null);
+        }}
+        onResponseSent={() => {
+          queryClient.invalidateQueries({ queryKey: ["disputes-against-me"] });
+          queryClient.invalidateQueries({ queryKey });
         }}
       />
     </div>

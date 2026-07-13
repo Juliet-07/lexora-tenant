@@ -91,11 +91,26 @@ export interface DisputeSupportingDoc {
   uploadedBy: string;
 }
 
+export type HearingMode = "physical" | "online";
+export type MeetingPlatform = "google_meet" | "microsoft_teams" | "zoom";
+
 export interface DisputeHearing {
   scheduledAt: string;
-  venue: string;
+  mode: HearingMode;
+  venue: string | null;
+  meetingPlatform: MeetingPlatform | null;
+  meetingLink: string | null;
   scheduledBy: string;
   notes: string | null;
+}
+
+export interface ScheduleHearingPayload {
+  scheduledAt: string;
+  mode: HearingMode;
+  venue?: string;
+  meetingPlatform?: MeetingPlatform;
+  meetingLink?: string;
+  notes?: string;
 }
 
 export interface DisputeCase {
@@ -147,6 +162,16 @@ export interface DisputeCase {
     hierarchyRole: string;
     department: string | null;
     managerName: string | null;
+  }[];
+  respondentResponses: {
+    text: string;
+    respondedAt: string;
+    respondent: {
+      _id: string;
+      firstName: string;
+      lastName: string;
+      jobTitle: string;
+    } | null;
   }[];
 }
 
@@ -238,7 +263,7 @@ export const investigateDisputeCase = async (
 
 export const scheduleDisputeHearing = async (
   caseId: string,
-  dto: { scheduledAt: string; venue: string; notes?: string },
+  dto: ScheduleHearingPayload,
 ): Promise<DisputeCase> => {
   const res = await api.patch(`/hr/disputes/${caseId}/schedule-hearing`, dto);
   return res.data?.data ?? res.data;
@@ -296,6 +321,14 @@ export const attachDisputeDocument = async (
   return res.data?.data ?? res.data;
 };
 
+export const fetchDisputesForEmployee = async (
+  employeeId: string,
+): Promise<DisputeCase[]> => {
+  const res = await api.get(`/hr/disputes/employee/${employeeId}`);
+  const d = res.data?.data ?? res.data;
+  return Array.isArray(d) ? d : [];
+};
+
 // =================================================================
 // EMPLOYEE API FUNCTIONS
 // =================================================================
@@ -310,6 +343,14 @@ export const fetchDisputesAgainstMe = async (): Promise<DisputeCase[]> => {
   const res = await api.get("/employee/disputes/against-me");
   const d = res.data?.data ?? res.data;
   return Array.isArray(d) ? d : [];
+};
+
+export const respondToDisputeAsEmployee = async (
+  caseId: string,
+  dto: { response: string },
+): Promise<DisputeCase> => {
+  const res = await api.patch(`/employee/disputes/${caseId}/respond`, dto);
+  return res.data?.data ?? res.data;
 };
 
 export const fetchTeamDisputeCases = async (): Promise<DisputeCase[]> => {
@@ -393,7 +434,7 @@ export const investigateDisputeAsManager = async (
 
 export const scheduleDisputeHearingAsManager = async (
   caseId: string,
-  dto: { scheduledAt: string; venue: string; notes?: string },
+  dto: ScheduleHearingPayload,
 ): Promise<DisputeCase> => {
   const res = await api.patch(
     `/employee/disputes/${caseId}/manager/schedule-hearing`,

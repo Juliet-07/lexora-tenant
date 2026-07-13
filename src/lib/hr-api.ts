@@ -296,6 +296,24 @@ export interface EmployeeDetailResponse {
   };
 }
 
+export type EmployeeRecordType =
+  | "note"
+  | "first_warning"
+  | "second_warning"
+  | "final_warning"
+  | "suspension"
+  | "termination";
+
+export interface EmployeeRecord {
+  _id: string;
+  type: EmployeeRecordType;
+  description: string;
+  recordedBy: string;
+  recordedAt: string;
+  emailSentAt: string | null;
+  terminationTriggerError: string | null;
+}
+
 export interface DepartmentTreeReport {
   _id: string;
   firstName: string;
@@ -1597,4 +1615,20 @@ export const fetchMyDepartment = async (): Promise<MyDepartmentResponse> => {
     // fall through to empty
   }
   return { managers: [], totalEmployees: 0 };
+};
+
+export const fetchEmployeeRecords = async (
+  employeeId: string,
+): Promise<EmployeeRecord[]> => {
+  const res = await api.get(`/hr/employees/${employeeId}/records`);
+  const d = res.data?.data ?? res.data;
+  return Array.isArray(d) ? d : [];
+};
+
+export const addEmployeeRecord = async (
+  employeeId: string,
+  dto: { type: EmployeeRecordType; description: string },
+): Promise<EmployeeRecord> => {
+  const res = await api.post(`/hr/employees/${employeeId}/records`, dto);
+  return res.data?.data ?? res.data;
 };

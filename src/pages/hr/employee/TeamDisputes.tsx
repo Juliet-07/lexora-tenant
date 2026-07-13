@@ -7,6 +7,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Sheet,
   SheetContent,
   SheetHeader,
@@ -268,7 +275,10 @@ function ManageCaseSheet({
   const [findings, setFindings] = useState("");
   const [invNote, setInvNote] = useState("");
   const [hearingDate, setHearingDate] = useState("");
+  const [hearingMode, setHearingMode] = useState("physical");
   const [hearingVenue, setHearingVenue] = useState("");
+  const [hearingPlatform, setHearingPlatform] = useState("zoom");
+  const [hearingLink, setHearingLink] = useState("");
   const [hearingNote, setHearingNote] = useState("");
   const [closeReport, setCloseReport] = useState("");
   const [escalateReason, setEscalateReason] = useState("");
@@ -310,12 +320,21 @@ function ManageCaseSheet({
   });
 
   const hearMut = useMutation({
-    mutationFn: (dto: { scheduledAt: string; venue: string; notes?: string }) =>
-      scheduleDisputeHearingAsManager(caseId!, dto),
+    mutationFn: (dto: {
+      scheduledAt: string;
+      mode: "physical" | "online";
+      venue?: string;
+      meetingPlatform?: "google_meet" | "microsoft_teams" | "zoom";
+      meetingLink?: string;
+      notes?: string;
+    }) => scheduleDisputeHearingAsManager(caseId!, dto),
     onSuccess: () => {
-      toast.success("Hearing scheduled.");
+      toast.success("Hearing scheduled. Both parties have been notified.");
       setHearingDate("");
+      setHearingMode("physical");
       setHearingVenue("");
+      setHearingPlatform("google_meet");
+      setHearingLink("");
       setHearingNote("");
       invalidate();
     },
@@ -496,6 +515,26 @@ function ManageCaseSheet({
                   </div>
                 )}
 
+                {/* Respondent response */}
+                {d.respondentResponses && d.respondentResponses.length > 0 && (
+                  <div className="pt-2 border-t space-y-2">
+                    <p className="text-xs font-medium text-muted-foreground">
+                      Response from respondent
+                    </p>
+                    {d.respondentResponses.map((r, i) => (
+                      <div key={i} className="rounded-md bg-muted/40 p-2">
+                        {r.respondent && (
+                          <p className="text-[11px] text-muted-foreground">
+                            {r.respondent.firstName} {r.respondent.lastName} ·{" "}
+                            {new Date(r.respondedAt).toLocaleString()}
+                          </p>
+                        )}
+                        <p className="whitespace-pre-wrap">{r.text}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 {/* Attachments */}
                 {d.supportingDocs && d.supportingDocs.length > 0 && (
                   <div className="pt-2 border-t space-y-2">
@@ -619,56 +658,132 @@ function ManageCaseSheet({
               )}
 
             {/* Schedule hearing */}
-            {canResolveOrEscalate && d.status === "under_investigation" && (
-              <Section title="Schedule hearing">
-                <p className="text-xs text-muted-foreground">
-                  Schedule within 5 working days of closing investigation.
-                </p>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <Label className="text-xs">Date & time *</Label>
-                    <Input
-                      type="datetime-local"
-                      value={hearingDate}
-                      onChange={(e) => setHearingDate(e.target.value)}
-                    />
+            {canResolveOrEscalate &&
+              d.status === "under_investigation" &&
+              d.type !== "incident" && (
+                <Section title="Schedule hearing">
+                  <p className="text-xs text-muted-foreground">
+                    Schedule within 5 working days of closing investigation.
+                    Both the employee who filed and everyone named will be
+                    emailed automatically.
+                  </p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <Label className="text-xs">Date & time *</Label>
+                      <Input
+                        type="datetime-local"
+                        value={hearingDate}
+                        onChange={(e) => setHearingDate(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Format *</Label>
+                      <Select
+                        value={hearingMode}
+                        onValueChange={(v) =>
+                          setHearingMode(v as "physical" | "online")
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="physical">In person</SelectItem>
+                          <SelectItem value="online">Online</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
-                  <div>
-                    <Label className="text-xs">Venue *</Label>
-                    <Input
-                      value={hearingVenue}
-                      onChange={(e) => setHearingVenue(e.target.value)}
-                      placeholder="HR Boardroom"
-                    />
-                  </div>
-                </div>
-                <Textarea
-                  rows={2}
-                  placeholder="Notes (optional)"
-                  value={hearingNote}
-                  onChange={(e) => setHearingNote(e.target.value)}
-                />
-                <Button
-                  size="sm"
-                  disabled={
-                    !hearingDate || !hearingVenue.trim() || hearMut.isPending
-                  }
-                  onClick={() =>
-                    hearMut.mutate({
-                      scheduledAt: new Date(hearingDate).toISOString(),
-                      venue: hearingVenue.trim(),
-                      notes: hearingNote.trim() || undefined,
-                    })
-                  }
-                >
-                  {hearMut.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
+
+                  {hearingMode === "physical" ? (
+                    <div>
+                      <Label className="text-xs">Venue *</Label>
+                      <Input
+                        value={hearingVenue}
+                        onChange={(e) => setHearingVenue(e.target.value)}
+                        placeholder="HR Boardroom"
+                      />
+                    </div>
                   ) : (
-                    "Schedule hearing"
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <Label className="text-xs">Platform *</Label>
+                        <Select
+                          value={hearingPlatform}
+                          onValueChange={(v) =>
+                            setHearingPlatform(
+                              v as "google_meet" | "microsoft_teams" | "zoom",
+                            )
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="google_meet">
+                              Google Meet
+                            </SelectItem>
+                            <SelectItem value="microsoft_teams">
+                              Microsoft Teams
+                            </SelectItem>
+                            <SelectItem value="zoom">Zoom</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label className="text-xs">Meeting link *</Label>
+                        <Input
+                          value={hearingLink}
+                          onChange={(e) => setHearingLink(e.target.value)}
+                          placeholder="https://…"
+                        />
+                      </div>
+                    </div>
                   )}
-                </Button>
-              </Section>
-            )}
+
+                  <Textarea
+                    rows={2}
+                    placeholder="Notes (optional)"
+                    value={hearingNote}
+                    onChange={(e) => setHearingNote(e.target.value)}
+                  />
+                  <Button
+                    size="sm"
+                    disabled={
+                      !hearingDate ||
+                      (hearingMode === "physical"
+                        ? !hearingVenue.trim()
+                        : !hearingLink.trim()) ||
+                      hearMut.isPending
+                    }
+                    onClick={() =>
+                      hearMut.mutate({
+                        scheduledAt: new Date(hearingDate).toISOString(),
+                        mode: hearingMode,
+                        venue:
+                          hearingMode === "physical"
+                            ? hearingVenue.trim()
+                            : undefined,
+                        meetingPlatform:
+                          hearingMode === "online"
+                            ? hearingPlatform
+                            : undefined,
+                        meetingLink:
+                          hearingMode === "online"
+                            ? hearingLink.trim()
+                            : undefined,
+                        notes: hearingNote.trim() || undefined,
+                      })
+                    }
+                  >
+                    {hearMut.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      "Schedule hearing"
+                    )}
+                  </Button>
+                </Section>
+              )}
 
             {/* Resolution — the two outcomes */}
             {canResolveOrEscalate && (
@@ -751,9 +866,29 @@ function ManageCaseSheet({
             {d.hearing && (
               <Section title="Hearing">
                 <p className="text-xs text-muted-foreground">
-                  {new Date(d.hearing.scheduledAt).toLocaleString()} ·{" "}
-                  {d.hearing.venue}
+                  {new Date(d.hearing.scheduledAt).toLocaleString()}
                 </p>
+                {d.hearing.mode === "online" ? (
+                  <p className="text-sm">
+                    Online ·{" "}
+                    {d.hearing.meetingPlatform === "google_meet"
+                      ? "Google Meet"
+                      : d.hearing.meetingPlatform === "microsoft_teams"
+                        ? "Microsoft Teams"
+                        : "Zoom"}{" "}
+                    ·{" "}
+                    <a
+                      href={d.hearing.meetingLink ?? "#"}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary hover:underline"
+                    >
+                      Join link
+                    </a>
+                  </p>
+                ) : (
+                  <p className="text-sm">In person · {d.hearing.venue}</p>
+                )}
                 {d.hearing.notes && (
                   <p className="text-sm">{d.hearing.notes}</p>
                 )}

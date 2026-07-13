@@ -58,7 +58,12 @@ import {
   UserX,
 } from "lucide-react";
 import { toast } from "sonner";
-import type { Employee, HrTeam, HrLocation } from "@/lib/hr-api";
+import type {
+  Employee,
+  HrTeam,
+  HrLocation,
+  EmployeeRecordType,
+} from "@/lib/hr-api";
 import {
   fetchDirectReportsOf,
   fetchEmployeeDetail,
@@ -67,19 +72,18 @@ import {
   fetchEmployeesByHierarchyRole,
   resendWelcomeEmail,
   terminateEmployee,
+  addEmployeeRecord,
+  fetchEmployeeRecords,
 } from "@/lib/hr-api";
 import { downloadEmployeeReport } from "@/lib/employeeReport";
 import { EmployeeDocumentsPanel } from "./EmployeeDocumentsPanel";
 import { fetchEmployeeReviewHistory } from "@/lib/hr-performance-api";
-
-interface Dispute {
-  id: string;
-  type: "Grievance" | "Disciplinary" | "Harassment" | "Performance" | "Other";
-  title: string;
-  filedOn: string;
-  status: "Open" | "Investigating" | "Mediation" | "Resolved" | "Escalated";
-  note?: string;
-}
+import {
+  fetchDisputesForEmployee,
+  openDisputeCase,
+  resolveDisputeFileUrl,
+  isImageFile,
+} from "@/lib/hr-dispute-api";
 
 interface Props {
   employee: Employee | null;
@@ -176,13 +180,51 @@ const LEAVE_STATUS_STYLE: Record<string, string> = {
   cancelled: "bg-muted text-muted-foreground border-border",
 };
 
-const DISPUTE_TONE: Record<Dispute["status"], string> = {
-  Open: "bg-warning/10 text-warning border-warning/20",
-  Investigating: "bg-info/10 text-info border-info/20",
-  Mediation: "bg-primary/10 text-primary border-primary/20",
-  Resolved: "bg-success/10 text-success border-success/20",
-  Escalated: "bg-destructive/10 text-destructive border-destructive/20",
+function DisputeStatusBadge({ status }: { status: string }) {
+  const map: Record<string, string> = {
+    open: "bg-info/10 text-info border-info/20",
+    under_investigation: "bg-warning/10 text-warning border-warning/20",
+    hearing_scheduled: "bg-secondary/10 text-secondary border-secondary/20",
+    outcome_recorded: "bg-primary/10 text-primary border-primary/20",
+    appealed: "bg-destructive/10 text-destructive border-destructive/20",
+    closed: "bg-success/10 text-success border-success/20",
+    escalated_external:
+      "bg-destructive/10 text-destructive border-destructive/20",
+  };
+  return (
+    <Badge
+      variant="outline"
+      className={`text-[10px] capitalize ${map[status] ?? ""}`}
+    >
+      {status.replace(/_/g, " ")}
+    </Badge>
+  );
+}
+
+const RECORD_TYPE_LABELS: Record<string, string> = {
+  note: "Note",
+  first_warning: "First Warning",
+  second_warning: "Second Warning",
+  final_warning: "Final Warning",
+  suspension: "Suspension",
+  termination: "Termination",
 };
+
+function RecordTypeBadge({ type }: { type: string }) {
+  const map: Record<string, string> = {
+    note: "bg-info/10 text-info border-info/20",
+    first_warning: "bg-warning/10 text-warning border-warning/20",
+    second_warning: "bg-warning/10 text-warning border-warning/20",
+    final_warning: "bg-destructive/10 text-destructive border-destructive/20",
+    suspension: "bg-destructive/10 text-destructive border-destructive/20",
+    termination: "bg-destructive/10 text-destructive border-destructive/20",
+  };
+  return (
+    <Badge variant="outline" className={`text-[10px] ${map[type] ?? ""}`}>
+      {RECORD_TYPE_LABELS[type] ?? type}
+    </Badge>
+  );
+}
 
 const fmt = (d: string) =>
   new Date(d).toLocaleDateString("en-GB", {
@@ -249,15 +291,6 @@ const managerName = (e: Employee) =>
       : "Unassigned";
 
 export function EmployeeDetailSheet({ employee, onClose }: Props) {
-  const [disputes, setDisputes] = useState<Dispute[]>([]);
-  const [openDispute, setOpenDispute] = useState(false);
-  const [dForm, setDForm] = useState<
-    Omit<Dispute, "id" | "filedOn" | "status">
-  >({
-    type: "Grievance",
-    title: "",
-    note: "",
-  });
   const queryClient = useQueryClient();
   const [terminateOpen, setTerminateOpen] = useState(false);
   const [terminateForm, setTerminateForm] = useState({
@@ -266,6 +299,11 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
     reason: "",
   });
   const [reassignChoice, setReassignChoice] = useState<string>("");
+  const [addRecordOpen, setAddRecordOpen] = useState(false);
+  const [recordType, setRecordType] = useState<EmployeeRecordType>("note");
+  const [recordDescription, setRecordDescription] = useState("");
+
+  // QUERIES ─────────────────────────────────────────
 
   const { data: detail, isLoading: detailLoading } = useQuery({
     queryKey: ["employee-detail", employee?._id],
@@ -314,6 +352,20 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
       staleTime: 30_000,
     });
 
+  const { data: disputes = [], isLoading: disputesLoading } = useQuery({
+    queryKey: ["employee-disputes", employee?._id],
+    queryFn: () => fetchDisputesForEmployee(employee!._id),
+    enabled: !!employee,
+    staleTime: 10_000,
+  });
+
+  const { data: records = [], isLoading: recordsLoading } = useQuery({
+    queryKey: ["employee-records", employee?._id],
+    queryFn: () => fetchEmployeeRecords(employee!._id),
+    enabled: !!employee,
+    staleTime: 10_000,
+  });
+
   const replacementCandidatesForSameTeam = useMemo(() => {
     if (!employee) return [];
 
@@ -330,6 +382,8 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
       return cTeamId === empTeamId && c._id !== employee._id;
     });
   }, [replacementCandidates, employee]);
+
+  // MUTATIONS ─────────────────────────────────────────
 
   const terminateMutation = useMutation({
     mutationFn: () =>
@@ -361,6 +415,25 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
       toast.error(e?.response?.data?.message ?? "Failed to resend email"),
   });
 
+  const addRecordMutation = useMutation({
+    mutationFn: () =>
+      addEmployeeRecord(employee!._id, {
+        type: recordType,
+        description: recordDescription.trim(),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["employee-records", employee!._id],
+      });
+      setAddRecordOpen(false);
+      setRecordType("note");
+      setRecordDescription("");
+      toast.success("Record added — the employee has been notified by email.");
+    },
+    onError: (e: any) =>
+      toast.error(e?.response?.data?.message ?? "Failed to add record"),
+  });
+
   if (!employee) return null;
 
   const emp = detail?.employee ?? employee;
@@ -369,7 +442,7 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
   const initials =
     `${emp.firstName[0] ?? ""}${emp.lastName[0] ?? ""}`.toUpperCase();
   const d = DUMMY;
-  const openCount = disputes.filter((x) => x.status !== "Resolved").length;
+  const openCount = disputes.filter((x) => x.status !== "closed").length;
 
   const leaveBalances = detail?.leave.balances ?? [];
   const leaveHistory = detail?.leave.history ?? [];
@@ -386,35 +459,6 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
   const onboardingStep = emp.onboardingStep ?? 0;
   const onboardingCompleted = emp.onboardingCompleted ?? false;
   const signatureRecord = onboardingTab?.record ?? null;
-
-  const addDispute = () => {
-    if (!dForm.title) return toast.error("Add a short title.");
-    setDisputes([
-      {
-        id: `DSP-${disputes.length + 1}`,
-        ...dForm,
-        filedOn: new Date().toISOString().slice(0, 10),
-        status: "Open",
-      },
-      ...disputes,
-    ]);
-    setDForm({ type: "Grievance", title: "", note: "" });
-    setOpenDispute(false);
-    toast.success("Dispute logged.");
-  };
-
-  const cycle = (item: Dispute) => {
-    const order: Dispute["status"][] = [
-      "Open",
-      "Investigating",
-      "Mediation",
-      "Resolved",
-    ];
-    const next = order[(order.indexOf(item.status) + 1) % order.length];
-    setDisputes(
-      disputes.map((x) => (x.id === item.id ? { ...x, status: next } : x)),
-    );
-  };
 
   return (
     <Sheet open={!!employee} onOpenChange={(v) => !v && onClose()}>
@@ -1045,56 +1089,136 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
               )}
             </TabsContent>
 
-            <TabsContent value="disputes" className="space-y-3">
-              <div className="flex justify-between items-center">
-                <p className="text-xs text-muted-foreground">
-                  Grievances, disciplinary cases and mediation outcomes.
-                </p>
-                <Button
-                  size="sm"
-                  onClick={() => setOpenDispute(true)}
-                  className="bg-gradient-to-r from-primary to-secondary"
-                >
-                  <Plus className="h-4 w-4 mr-1" /> Log
-                </Button>
-              </div>
-              {disputes.length === 0 ? (
-                <Card>
-                  <CardContent className="p-8 text-center text-sm text-muted-foreground">
-                    No disputes on record.
-                  </CardContent>
-                </Card>
-              ) : (
-                disputes.map((item) => (
-                  <Card key={item.id}>
-                    <CardContent className="p-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <Gavel className="h-4 w-4 text-muted-foreground" />
-                            <p className="text-sm font-medium truncate">
-                              {item.title}
-                            </p>
-                          </div>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            {item.type} · filed {item.filedOn}
-                          </p>
-                          {item.note && (
-                            <p className="text-xs mt-2">{item.note}</p>
-                          )}
-                        </div>
-                        <Badge
-                          variant="outline"
-                          className={`${DISPUTE_TONE[item.status]} cursor-pointer`}
-                          onClick={() => cycle(item)}
-                        >
-                          {item.status}
-                        </Badge>
-                      </div>
+            <TabsContent value="disputes" className="space-y-4">
+              <div>
+                <div className="flex justify-between items-center mb-2">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    HR Records
+                  </p>
+                  <Button
+                    size="sm"
+                    onClick={() => setAddRecordOpen(true)}
+                    className="bg-gradient-to-r from-primary to-secondary"
+                  >
+                    <Plus className="h-4 w-4 mr-1" /> Add record
+                  </Button>
+                </div>
+                {recordsLoading ? (
+                  <LoadingBlock />
+                ) : records.length === 0 ? (
+                  <Card>
+                    <CardContent className="p-6 text-center text-sm text-muted-foreground">
+                      No records on file.
                     </CardContent>
                   </Card>
-                ))
-              )}
+                ) : (
+                  <div className="space-y-2">
+                    {records.map((r) => (
+                      <Card key={r._id}>
+                        <CardContent className="p-3 space-y-1">
+                          <div className="flex items-center justify-between">
+                            <RecordTypeBadge type={r.type} />
+                            <span className="text-[11px] text-muted-foreground">
+                              {new Date(r.recordedAt).toLocaleDateString()}
+                            </span>
+                          </div>
+                          <p className="text-sm">{r.description}</p>
+                          {r.terminationTriggerError && (
+                            <p className="text-[11px] text-destructive">
+                              Termination could not be auto-completed:{" "}
+                              {r.terminationTriggerError} — finish it manually.
+                            </p>
+                          )}
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2">
+                  Dispute Cases
+                </p>
+                <p className="text-xs text-muted-foreground mb-2">
+                  Every case involving {emp.firstName} — filed by them or
+                  against them. Managed from the Disputes page.
+                </p>
+                {disputesLoading ? (
+                  <LoadingBlock />
+                ) : disputes.length === 0 ? (
+                  <Card>
+                    <CardContent className="p-6 text-center text-sm text-muted-foreground">
+                      No disputes on record.
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <div className="space-y-2">
+                    {disputes.map((item) => {
+                      const label = !item.complainantId
+                        ? "Opened by HR"
+                        : item.complainantId === emp._id
+                          ? "Filed by this employee"
+                          : "Filed against this employee";
+                      return (
+                        <Card key={item._id}>
+                          <CardContent className="p-4 space-y-2">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <Gavel className="h-4 w-4 text-muted-foreground" />
+                                  <p className="text-sm font-medium font-mono">
+                                    {item.caseNumber}
+                                  </p>
+                                </div>
+                                <p className="text-xs text-muted-foreground mt-1 capitalize">
+                                  {item.type} · {label} ·{" "}
+                                  {new Date(item.filedAt).toLocaleDateString()}
+                                </p>
+                                <p className="text-xs mt-2 line-clamp-2">
+                                  {item.description}
+                                </p>
+                              </div>
+                              <DisputeStatusBadge status={item.status} />
+                            </div>
+                            {item.supportingDocs?.length > 0 && (
+                              <div className="flex flex-wrap gap-2 pt-1">
+                                {item.supportingDocs.map((doc, i) =>
+                                  isImageFile(doc.name) ? (
+                                    <a
+                                      key={i}
+                                      href={resolveDisputeFileUrl(doc.url)}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                    >
+                                      <img
+                                        src={resolveDisputeFileUrl(doc.url)}
+                                        alt={doc.name}
+                                        className="h-14 w-14 object-cover rounded-md border"
+                                      />
+                                    </a>
+                                  ) : (
+                                    <a
+                                      key={i}
+                                      href={resolveDisputeFileUrl(doc.url)}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="flex items-center gap-1.5 text-xs border rounded-md px-2 py-1 hover:bg-muted"
+                                    >
+                                      <FileText className="h-3.5 w-3.5" />
+                                      {doc.name}
+                                    </a>
+                                  ),
+                                )}
+                              </div>
+                            )}
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </TabsContent>
 
             <TabsContent value="documents" className="space-y-2">
@@ -1386,64 +1510,67 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
           </Tabs>
         </div>
 
-        <Dialog open={openDispute} onOpenChange={setOpenDispute}>
+        <Dialog open={addRecordOpen} onOpenChange={setAddRecordOpen}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Log Dispute</DialogTitle>
+              <DialogTitle>
+                Add a record for {emp.firstName} {emp.lastName}
+              </DialogTitle>
             </DialogHeader>
             <div className="space-y-3">
               <div className="space-y-1">
                 <Label>Type</Label>
                 <Select
-                  value={dForm.type}
-                  onValueChange={(v: any) => setDForm({ ...dForm, type: v })}
+                  value={recordType}
+                  onValueChange={(v) => setRecordType(v as EmployeeRecordType)}
                 >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {[
-                      "Grievance",
-                      "Disciplinary",
-                      "Harassment",
-                      "Performance",
-                      "Other",
-                    ].map((t) => (
-                      <SelectItem key={t} value={t}>
-                        {t}
-                      </SelectItem>
-                    ))}
+                    <SelectItem value="note">Note</SelectItem>
+                    <SelectItem value="first_warning">First Warning</SelectItem>
+                    <SelectItem value="second_warning">
+                      Second Warning
+                    </SelectItem>
+                    <SelectItem value="final_warning">Final Warning</SelectItem>
+                    <SelectItem value="suspension">Suspension</SelectItem>
+                    <SelectItem value="termination">Termination</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-1">
-                <Label>Title</Label>
-                <Input
-                  value={dForm.title}
-                  onChange={(e) =>
-                    setDForm({ ...dForm, title: e.target.value })
-                  }
-                />
-              </div>
-              <div className="space-y-1">
-                <Label>Notes</Label>
+                <Label>Description</Label>
                 <Textarea
-                  rows={3}
-                  value={dForm.note}
-                  onChange={(e) => setDForm({ ...dForm, note: e.target.value })}
+                  rows={4}
+                  placeholder="What happened, and the outcome being recorded… (min. 10 characters)"
+                  value={recordDescription}
+                  onChange={(e) => setRecordDescription(e.target.value)}
                 />
               </div>
               <div className="rounded-md bg-warning/10 border border-warning/20 text-warning text-xs p-2 flex gap-2">
-                <AlertTriangle className="h-4 w-4 shrink-0" /> Visible to HR
-                admins only.
+                <AlertTriangle className="h-4 w-4 shrink-0" />
+                {recordType === "suspension"
+                  ? `${emp.firstName} will receive a suspension letter by email.`
+                  : recordType === "termination"
+                    ? `${emp.firstName}'s employment will be terminated and they will be notified by email.`
+                    : `${emp.firstName} will be notified by email. This does not create a dispute case — it's added directly to their record.`}
               </div>
             </div>
             <DialogFooter>
               <Button
-                onClick={addDispute}
+                onClick={() => addRecordMutation.mutate()}
+                disabled={
+                  recordDescription.trim().length < 10 ||
+                  addRecordMutation.isPending
+                }
                 className="bg-gradient-to-r from-primary to-secondary"
               >
-                Log Dispute
+                {addRecordMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  "Add record"
+                )}
               </Button>
             </DialogFooter>
           </DialogContent>
