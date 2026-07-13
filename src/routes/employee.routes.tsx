@@ -9,6 +9,7 @@ import MyRequisitions from "@/pages/hr/employee/MyRequisitions";
 import MyTeam from "@/pages/hr/employee/MyTeam";
 import MyDepartment from "@/pages/hr/employee/MyDepartment";
 import MyDisputes from "@/pages/hr/employee/MyDisputes";
+import MyLearning from "@/pages/hr/employee/MyLearning";
 import TeamDisputes from "@/pages/hr/employee/TeamDisputes";
 import EmployeeOnboarding from "@/pages/EmployeeOnboarding";
 
@@ -38,6 +39,11 @@ export const employeeRoutes = ({ isAdmin, hierarchyRole }: RouteContext) => {
       key="my-disputes"
       path="/my/disputes"
       element={layout(<MyDisputes />)}
+    />,
+    <Route
+      key="my-learning"
+      path="/my/learning"
+      element={layout(<MyLearning />)}
     />,
 
     // Onboarding is no longer a gate — it's a dedicated page employees
