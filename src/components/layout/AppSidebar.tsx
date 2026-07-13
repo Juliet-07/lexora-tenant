@@ -306,6 +306,7 @@ export function AppSidebar() {
     { title: "Performance", url: "/my/performance", icon: BarChart3 },
     { title: "Payslips", url: "/my/payslips", icon: Wallet },
     { title: "Requisitions", url: "/my/requisitions", icon: ClipboardList },
+    { title: "Learning", url: "/my/learning", icon: GraduationCap },
     { title: "Disputes", url: "/my/disputes", icon: ShieldAlert },
     {
       title: "Team Disputes",
