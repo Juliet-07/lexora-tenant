@@ -524,7 +524,7 @@ function DisputeDetailSheet({
   const [findings, setFindings] = useState("");
   const [findingsNotes, setFindingsNotes] = useState("");
   const [hearingDate, setHearingDate] = useState("");
-  const [hearingMode, setHearingMode] = useState("physical");
+  const [hearingMode, setHearingMode] = useState<"physical" | "online">("physical");
   const [hearingVenue, setHearingVenue] = useState("");
   const [hearingPlatform, setHearingPlatform] = useState("zoom");
   const [hearingLink, setHearingLink] = useState("");
