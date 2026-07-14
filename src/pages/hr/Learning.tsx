@@ -1,9 +1,9 @@
-import { useMemo, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -37,13 +37,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   GraduationCap,
   BookOpen,
   Award,
   Clock,
-  Plus,
   Upload,
   Trash2,
   ClipboardList,
@@ -53,38 +51,61 @@ import {
   Presentation,
   Link as LinkIcon,
   Pencil,
+  Plus,
+  Loader2,
 } from "lucide-react";
-import { certifications, employees } from "@/data/hrMockData";
 import { toast } from "sonner";
 import {
-  useLearning,
-  upsertCourse,
+  fetchCourses,
+  createCourse,
+  updateCourse,
   deleteCourse,
-  newCourseId,
-  readFileAsDataUrl,
-  courseStats,
-  courseLeaderboard,
+  fetchCourseStats,
+  fetchCourseLeaderboard,
   type Course,
   type CourseKind,
   type AssessmentQuestion,
-} from "@/lib/learningStore";
-
-const certTone = (s: string) =>
-  s === "Valid"
-    ? "bg-success/10 text-success border-success/20"
-    : s === "Expiring Soon"
-      ? "bg-warning/10 text-warning border-warning/20"
-      : "bg-destructive/10 text-destructive border-destructive/20";
+} from "@/lib/hr-learning-api";
 
 const kindIcon = (k: CourseKind) =>
   k === "video" ? PlayCircle : k === "pptx" ? Presentation : LinkIcon;
 
 const emptyQuestion = (): AssessmentQuestion => ({
-  id: Math.random().toString(36).slice(2, 8),
+  key: Math.random().toString(36).slice(2, 8),
   prompt: "",
   options: ["", "", "", ""],
   correctIndex: 0,
 });
+
+function Stat({
+  label,
+  value,
+  icon: Icon,
+  tone,
+}: {
+  label: string;
+  value: any;
+  icon: any;
+  tone: string;
+}) {
+  return (
+    <Card>
+      <CardContent className="p-5 flex items-center justify-between">
+        <div>
+          <p className="text-xs text-muted-foreground uppercase tracking-wide">
+            {label}
+          </p>
+          <p className="text-2xl font-bold mt-1">{value}</p>
+        </div>
+        <div
+          className={`h-10 w-10 rounded-lg bg-gradient-to-br ${tone} flex items-center justify-center`}
+        >
+          <Icon className="h-5 w-5 text-white" />
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 function CourseBuilder({
   initial,
@@ -93,6 +114,7 @@ function CourseBuilder({
   initial?: Course;
   onDone: () => void;
 }) {
+  const queryClient = useQueryClient();
   const [title, setTitle] = useState(initial?.title ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
   const [category, setCategory] = useState(initial?.category ?? "Compliance");
@@ -109,77 +131,60 @@ function CourseBuilder({
       ? initial.assessment.questions
       : [emptyQuestion()],
   );
-  const [saving, setSaving] = useState(false);
 
   const canSave =
     title.trim() &&
     (kind === "link"
       ? externalUrl.trim()
-      : file || initial?.asset?.dataUrl || externalUrl.trim()) &&
+      : file || initial?.asset?.url || externalUrl.trim()) &&
     questions.every(
       (q) =>
-        q.prompt.trim() && q.options.every((o) => o.trim()) && q.options.length >= 2,
+        q.prompt.trim() &&
+        q.options.every((o) => o.trim()) &&
+        q.options.length >= 2,
     );
 
   const updateQuestion = (i: number, patch: Partial<AssessmentQuestion>) => {
-    setQuestions((qs) => qs.map((q, idx) => (idx === i ? { ...q, ...patch } : q)));
+    setQuestions((qs) =>
+      qs.map((q, idx) => (idx === i ? { ...q, ...patch } : q)),
+    );
   };
 
-  const handleSave = async () => {
-    if (!canSave) return;
-    setSaving(true);
-    try {
-      let asset = initial?.asset;
-      if (kind === "link") {
-        asset = {
-          fileName: title,
-          mimeType: "text/html",
-          externalUrl: externalUrl.trim(),
-          size: 0,
-        };
-      } else if (file) {
-        if (file.size > 15 * 1024 * 1024) {
-          toast.error(
-            "File exceeds 15MB. Please use a smaller file or paste an external URL.",
-          );
-          setSaving(false);
-          return;
-        }
-        const dataUrl = await readFileAsDataUrl(file);
-        asset = {
-          fileName: file.name,
-          mimeType: file.type || (kind === "video" ? "video/mp4" : "application/vnd.openxmlformats-officedocument.presentationml.presentation"),
-          dataUrl,
-          size: file.size,
-        };
-      } else if (externalUrl.trim()) {
-        asset = {
-          fileName: title,
-          mimeType: kind === "video" ? "video/mp4" : "application/pptx",
-          externalUrl: externalUrl.trim(),
-          size: 0,
-        };
-      }
-
-      const course: Course = {
-        id: initial?.id ?? newCourseId(),
+  const saveMutation = useMutation({
+    mutationFn: () => {
+      const payload = {
         title: title.trim(),
-        description: description.trim(),
+        description: description.trim() || undefined,
         category,
         kind,
         mandatory,
         durationMinutes: duration,
-        asset,
-        createdAt: initial?.createdAt ?? new Date().toISOString(),
-        assessment: { passMark, questions },
+        externalUrl: externalUrl.trim() || undefined,
+        passMark,
+        questions: questions.map((q) => ({
+          key: q.key,
+          prompt: q.prompt,
+          options: q.options,
+          correctIndex: q.correctIndex,
+        })),
+        file,
       };
-      upsertCourse(course);
-      toast.success(initial ? "Course updated" : "Course published");
+      return initial
+        ? updateCourse(initial._id, payload)
+        : createCourse(payload);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["courses"] });
+      toast.success(
+        initial
+          ? "Course updated"
+          : "Course published — all employees notified.",
+      );
       onDone();
-    } finally {
-      setSaving(false);
-    }
-  };
+    },
+    onError: (err: any) =>
+      toast.error(err?.response?.data?.message ?? "Failed to save course"),
+  });
 
   return (
     <div className="space-y-6">
@@ -190,7 +195,10 @@ function CourseBuilder({
         </div>
         <div className="space-y-2">
           <Label>Category</Label>
-          <Input value={category} onChange={(e) => setCategory(e.target.value)} />
+          <Input
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+          />
         </div>
         <div className="space-y-2 md:col-span-2">
           <Label>Description</Label>
@@ -203,11 +211,15 @@ function CourseBuilder({
         <div className="space-y-2">
           <Label>Content type</Label>
           <Select value={kind} onValueChange={(v) => setKind(v as CourseKind)}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="video">Video (MP4/WebM)</SelectItem>
               <SelectItem value="pptx">PowerPoint (PPTX)</SelectItem>
-              <SelectItem value="link">External link (YouTube/embed)</SelectItem>
+              <SelectItem value="link">
+                External link (YouTube/embed)
+              </SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -231,14 +243,19 @@ function CourseBuilder({
           </div>
         ) : (
           <div className="space-y-2 md:col-span-2">
-            <Label>Upload file {initial?.asset?.fileName && `(current: ${initial.asset.fileName})`}</Label>
+            <Label>
+              Upload file{" "}
+              {initial?.asset?.fileName &&
+                `(current: ${initial.asset.fileName})`}
+            </Label>
             <Input
               type="file"
               accept={kind === "video" ? "video/*" : ".pptx,.ppt"}
               onChange={(e) => setFile(e.target.files?.[0] ?? null)}
             />
             <p className="text-xs text-muted-foreground">
-              Max 15MB for uploads. For larger files, paste an external URL below.
+              Max 15MB for uploads. For larger files, paste an external URL
+              below.
             </p>
             <Input
               value={externalUrl}
@@ -264,7 +281,8 @@ function CourseBuilder({
               <ClipboardList className="h-4 w-4" /> Assessment
             </h3>
             <p className="text-xs text-muted-foreground">
-              Multiple choice questions. Employees earn a certificate on passing.
+              Multiple choice questions. Employees earn a certificate on
+              passing.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -281,7 +299,7 @@ function CourseBuilder({
         </div>
 
         {questions.map((q, i) => (
-          <Card key={q.id}>
+          <Card key={q.key}>
             <CardContent className="p-4 space-y-3">
               <div className="flex items-start justify-between gap-2">
                 <div className="flex-1">
@@ -289,7 +307,9 @@ function CourseBuilder({
                   <Textarea
                     rows={2}
                     value={q.prompt}
-                    onChange={(e) => updateQuestion(i, { prompt: e.target.value })}
+                    onChange={(e) =>
+                      updateQuestion(i, { prompt: e.target.value })
+                    }
                   />
                 </div>
                 {questions.length > 1 && (
@@ -309,7 +329,7 @@ function CourseBuilder({
                   <div key={oi} className="flex items-center gap-2">
                     <input
                       type="radio"
-                      name={`correct-${q.id}`}
+                      name={`correct-${q.key}`}
                       checked={q.correctIndex === oi}
                       onChange={() => updateQuestion(i, { correctIndex: oi })}
                       title="Mark correct answer"
@@ -340,8 +360,14 @@ function CourseBuilder({
       </div>
 
       <DialogFooter>
-        <Button disabled={!canSave || saving} onClick={handleSave}>
-          {saving ? "Saving…" : initial ? "Save changes" : "Publish course"}
+        <Button
+          disabled={!canSave || saveMutation.isPending}
+          onClick={() => saveMutation.mutate()}
+        >
+          {saveMutation.isPending ? (
+            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+          ) : null}
+          {initial ? "Save changes" : "Publish course"}
         </Button>
       </DialogFooter>
     </div>
@@ -357,9 +383,19 @@ function LeaderboardSheet({
   open: boolean;
   onOpenChange: (v: boolean) => void;
 }) {
+  const { data: stats } = useQuery({
+    queryKey: ["course-stats", course?._id],
+    queryFn: () => fetchCourseStats(course!._id),
+    enabled: !!course,
+  });
+  const { data: board = [] } = useQuery({
+    queryKey: ["course-leaderboard", course?._id],
+    queryFn: () => fetchCourseLeaderboard(course!._id),
+    enabled: !!course,
+  });
+
   if (!course) return null;
-  const stats = courseStats(course.id);
-  const board = courseLeaderboard(course.id);
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-full sm:max-w-xl overflow-y-auto">
@@ -370,18 +406,31 @@ function LeaderboardSheet({
           </SheetDescription>
         </SheetHeader>
         <div className="grid grid-cols-3 gap-3 mt-4">
-          <Stat label="Enrolled" value={stats.enrolled} icon={Users} tone="from-primary to-secondary" />
-          <Stat label="Completed" value={stats.completed} icon={Award} tone="from-emerald-500 to-teal-500" />
-          <Stat label="Avg score" value={`${stats.avgScore}%`} icon={Trophy} tone="from-amber-500 to-orange-500" />
+          <Stat
+            label="Enrolled"
+            value={stats?.enrolled ?? "—"}
+            icon={Users}
+            tone="from-primary to-secondary"
+          />
+          <Stat
+            label="Completed"
+            value={stats?.completed ?? "—"}
+            icon={Award}
+            tone="from-emerald-500 to-teal-500"
+          />
+          <Stat
+            label="Avg score"
+            value={stats ? `${stats.avgScore}%` : "—"}
+            icon={Trophy}
+            tone="from-amber-500 to-orange-500"
+          />
         </div>
         <div className="mt-6">
           <h3 className="font-semibold flex items-center gap-2 mb-2">
             <Trophy className="h-4 w-4 text-warning" /> Top performers
           </h3>
           {board.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              No completions yet.
-            </p>
+            <p className="text-sm text-muted-foreground">No completions yet.</p>
           ) : (
             <Table>
               <TableHeader>
@@ -395,17 +444,22 @@ function LeaderboardSheet({
               </TableHeader>
               <TableBody>
                 {board.map((e, i) => (
-                  <TableRow key={e.id}>
+                  <TableRow key={e.employeeId}>
                     <TableCell className="font-semibold">{i + 1}</TableCell>
                     <TableCell>{e.employeeName}</TableCell>
                     <TableCell>
-                      <Badge variant="outline" className="bg-success/10 text-success border-success/20">
+                      <Badge
+                        variant="outline"
+                        className="bg-success/10 text-success border-success/20"
+                      >
                         {e.bestScore}%
                       </Badge>
                     </TableCell>
                     <TableCell>{e.attempts}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">
-                      {e.completedAt ? new Date(e.completedAt).toLocaleDateString() : "—"}
+                      {e.completedAt
+                        ? new Date(e.completedAt).toLocaleDateString()
+                        : "—"}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -418,22 +472,108 @@ function LeaderboardSheet({
   );
 }
 
+function CourseCard({
+  course,
+  onEdit,
+  onLeaderboard,
+}: {
+  course: Course;
+  onEdit: () => void;
+  onLeaderboard: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const Icon = kindIcon(course.kind);
+
+  const { data: stats } = useQuery({
+    queryKey: ["course-stats", course._id],
+    queryFn: () => fetchCourseStats(course._id),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteCourse(course._id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["courses"] });
+      toast.success("Course deleted.");
+    },
+    onError: (err: any) =>
+      toast.error(err?.response?.data?.message ?? "Failed to delete course"),
+  });
+
+  return (
+    <Card className="hover:shadow-md transition-shadow">
+      <CardContent className="p-5 space-y-3">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <Icon className="h-4 w-4 text-primary shrink-0" />
+              <h3 className="font-semibold truncate">{course.title}</h3>
+            </div>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {course.category} · {course.durationMinutes} min ·{" "}
+              {course.assessment.questions.length} question
+              {course.assessment.questions.length === 1 ? "" : "s"}
+            </p>
+          </div>
+          {course.mandatory && (
+            <Badge
+              variant="outline"
+              className="bg-warning/10 text-warning border-warning/20"
+            >
+              Mandatory
+            </Badge>
+          )}
+        </div>
+        {course.description && (
+          <p className="text-sm text-muted-foreground line-clamp-2">
+            {course.description}
+          </p>
+        )}
+        <div>
+          <div className="flex justify-between text-xs mb-1">
+            <span className="text-muted-foreground">Completion rate</span>
+            <span className="font-medium">{stats?.completionRate ?? 0}%</span>
+          </div>
+          <Progress value={stats?.completionRate ?? 0} className="h-2" />
+        </div>
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-muted-foreground">
+            {stats?.enrolled ?? 0} enrolled · {stats?.completed ?? 0} completed
+            · avg {stats?.avgScore ?? 0}%
+          </span>
+          <div className="flex items-center gap-1">
+            <Button size="sm" variant="ghost" onClick={onEdit}>
+              <Pencil className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                if (confirm(`Delete course "${course.title}"?`))
+                  deleteMutation.mutate();
+              }}
+              disabled={deleteMutation.isPending}
+            >
+              <Trash2 className="h-3.5 w-3.5 text-destructive" />
+            </Button>
+            <Button size="sm" variant="outline" onClick={onLeaderboard}>
+              <Trophy className="h-3.5 w-3.5 mr-1" /> Leaderboard
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function HRLearning() {
-  const { courses, enrollments } = useLearning();
   const [builderOpen, setBuilderOpen] = useState(false);
   const [editing, setEditing] = useState<Course | null>(null);
   const [selected, setSelected] = useState<Course | null>(null);
 
-  const totalEnrolled = enrollments.length;
-  const totalCompleted = enrollments.filter((e) => e.status === "completed").length;
-  const avgCompletion =
-    courses.length === 0
-      ? 0
-      : Math.round(
-          courses.reduce((s, c) => s + courseStats(c.id).completionRate, 0) /
-            courses.length,
-        );
-  const certExpiring = certifications.filter((c) => c.status !== "Valid").length;
+  const { data: courses = [], isLoading } = useQuery({
+    queryKey: ["courses"],
+    queryFn: fetchCourses,
+  });
 
   const openBuilder = (c?: Course) => {
     setEditing(c ?? null);
@@ -457,136 +597,69 @@ export default function HRLearning() {
           </DialogTrigger>
           <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>{editing ? "Edit course" : "Upload a new course"}</DialogTitle>
+              <DialogTitle>
+                {editing ? "Edit course" : "Upload a new course"}
+              </DialogTitle>
             </DialogHeader>
-            <CourseBuilder initial={editing ?? undefined} onDone={() => setBuilderOpen(false)} />
+            <CourseBuilder
+              initial={editing ?? undefined}
+              onDone={() => setBuilderOpen(false)}
+            />
           </DialogContent>
         </Dialog>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Stat label="Courses" value={courses.length} icon={BookOpen} tone="from-primary to-secondary" />
-        <Stat label="Enrollments" value={totalEnrolled} icon={GraduationCap} tone="from-blue-500 to-cyan-500" />
-        <Stat label="Completions" value={totalCompleted} icon={Award} tone="from-emerald-500 to-teal-500" />
-        <Stat label="Avg completion" value={`${avgCompletion}%`} icon={Clock} tone="from-amber-500 to-orange-500" />
+        <Stat
+          label="Courses"
+          value={courses.length}
+          icon={BookOpen}
+          tone="from-primary to-secondary"
+        />
+        <Stat
+          label="Mandatory"
+          value={courses.filter((c) => c.mandatory).length}
+          icon={GraduationCap}
+          tone="from-blue-500 to-cyan-500"
+        />
+        <Stat
+          label="Optional"
+          value={courses.filter((c) => !c.mandatory).length}
+          icon={Award}
+          tone="from-emerald-500 to-teal-500"
+        />
+        <Stat
+          label="Total questions"
+          value={courses.reduce((s, c) => s + c.assessment.questions.length, 0)}
+          icon={Clock}
+          tone="from-amber-500 to-orange-500"
+        />
       </div>
 
-      <Tabs defaultValue="catalog" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="catalog">Course Catalog</TabsTrigger>
-          <TabsTrigger value="certs">Certifications</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="catalog" className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {courses.length === 0 ? (
-            <Card className="md:col-span-2">
-              <CardContent className="p-10 text-center text-sm text-muted-foreground">
-                No courses yet. Click <strong>Upload course</strong> to publish
-                your first course for employees.
-              </CardContent>
-            </Card>
-          ) : (
-            courses.map((c) => {
-              const s = courseStats(c.id);
-              const Icon = kindIcon(c.kind);
-              return (
-                <Card key={c.id} className="hover:shadow-md transition-shadow">
-                  <CardContent className="p-5 space-y-3">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <Icon className="h-4 w-4 text-primary shrink-0" />
-                          <h3 className="font-semibold truncate">{c.title}</h3>
-                        </div>
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          {c.category} · {c.durationMinutes} min · {c.assessment.questions.length} question{c.assessment.questions.length === 1 ? "" : "s"}
-                        </p>
-                      </div>
-                      {c.mandatory && (
-                        <Badge
-                          variant="outline"
-                          className="bg-warning/10 text-warning border-warning/20"
-                        >
-                          Mandatory
-                        </Badge>
-                      )}
-                    </div>
-                    {c.description && (
-                      <p className="text-sm text-muted-foreground line-clamp-2">
-                        {c.description}
-                      </p>
-                    )}
-                    <div>
-                      <div className="flex justify-between text-xs mb-1">
-                        <span className="text-muted-foreground">
-                          Completion rate
-                        </span>
-                        <span className="font-medium">{s.completionRate}%</span>
-                      </div>
-                      <Progress value={s.completionRate} className="h-2" />
-                    </div>
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-muted-foreground">
-                        {s.enrolled} enrolled · {s.completed} completed · avg{" "}
-                        {s.avgScore}%
-                      </span>
-                      <div className="flex items-center gap-1">
-                        <Button size="sm" variant="ghost" onClick={() => openBuilder(c)}>
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => {
-                            if (confirm(`Delete course "${c.title}"?`)) deleteCourse(c.id);
-                          }}
-                        >
-                          <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                        </Button>
-                        <Button size="sm" variant="outline" onClick={() => setSelected(c)}>
-                          <Trophy className="h-3.5 w-3.5 mr-1" /> Leaderboard
-                        </Button>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })
-          )}
-        </TabsContent>
-
-        <TabsContent value="certs">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Employee certifications</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {certifications.map((c, i) => {
-                const emp = employees.find((e) => e.id === c.employeeId);
-                return (
-                  <div key={i} className="flex items-center justify-between border-b pb-2 last:border-b-0">
-                    <div className="flex items-center gap-3">
-                      <Award className="h-5 w-5 text-primary" />
-                      <div>
-                        <p className="text-sm font-medium">{c.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {emp?.firstName} {emp?.lastName} · {c.issuer} · expires {c.expires}
-                        </p>
-                      </div>
-                    </div>
-                    <Badge variant="outline" className={certTone(c.status)}>
-                      {c.status}
-                    </Badge>
-                  </div>
-                );
-              })}
-              <p className="text-xs text-muted-foreground pt-2">
-                {certExpiring} certification{certExpiring === 1 ? "" : "s"} need action.
-              </p>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+      {isLoading ? (
+        <div className="flex items-center justify-center py-16 gap-2 text-muted-foreground">
+          <Loader2 className="h-5 w-5 animate-spin" />
+          <span className="text-sm">Loading courses…</span>
+        </div>
+      ) : courses.length === 0 ? (
+        <Card>
+          <CardContent className="p-10 text-center text-sm text-muted-foreground">
+            No courses yet. Click <strong>Upload course</strong> to publish your
+            first course for employees.
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {courses.map((c) => (
+            <CourseCard
+              key={c._id}
+              course={c}
+              onEdit={() => openBuilder(c)}
+              onLeaderboard={() => setSelected(c)}
+            />
+          ))}
+        </div>
+      )}
 
       <LeaderboardSheet
         course={selected}
@@ -594,33 +667,5 @@ export default function HRLearning() {
         onOpenChange={(v) => !v && setSelected(null)}
       />
     </div>
-  );
-}
-
-function Stat({
-  label,
-  value,
-  icon: Icon,
-  tone,
-}: {
-  label: string;
-  value: any;
-  icon: any;
-  tone: string;
-}) {
-  return (
-    <Card>
-      <CardContent className="p-5 flex items-center justify-between">
-        <div>
-          <p className="text-xs text-muted-foreground uppercase tracking-wide">
-            {label}
-          </p>
-          <p className="text-2xl font-bold mt-1">{value}</p>
-        </div>
-        <div className={`h-10 w-10 rounded-lg bg-gradient-to-br ${tone} flex items-center justify-center`}>
-          <Icon className="h-5 w-5 text-white" />
-        </div>
-      </CardContent>
-    </Card>
   );
 }
