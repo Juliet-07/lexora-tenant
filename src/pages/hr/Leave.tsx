@@ -35,6 +35,7 @@ import {
   Plus,
   MapPin,
   Settings2,
+  FileText,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -45,6 +46,7 @@ import {
   fetchUncoveredLocations,
   upsertLeavePolicy,
   fetchLocations,
+  resolveLeaveFileUrl,
   type LeaveRequest,
   type LeaveStats,
   type LeavePolicy,
@@ -653,6 +655,26 @@ export default function HRLeave() {
                     </span>
                   </div>
                 )}
+                {reviewTarget.request.documents?.length > 0 && (
+                  <div className="flex justify-between gap-4 items-start">
+                    <span className="text-muted-foreground shrink-0">
+                      Documents
+                    </span>
+                    <div className="flex flex-col items-end gap-1">
+                      {reviewTarget.request.documents.map((doc) => (
+                        <a
+                          key={doc.url}
+                          href={resolveLeaveFileUrl(doc.url)}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                        >
+                          <FileText className="h-3 w-3" /> {doc.name}
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
               <div>
                 <Label>
@@ -856,6 +878,22 @@ function RequestRow({
               {fmt(r.startDate)} → {fmt(r.endDate)} · {r.days}d
               {r.reason ? ` · ${r.reason}` : ""}
             </p>
+            {r.documents?.length > 0 && (
+              <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                {r.documents.map((doc) => (
+                  <a
+                    key={doc.url}
+                    href={resolveLeaveFileUrl(doc.url)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 text-[11px] border rounded-md px-2 py-0.5 bg-muted/40 hover:bg-muted transition-colors"
+                  >
+                    <FileText className="h-3 w-3" />
+                    {doc.name}
+                  </a>
+                ))}
+              </div>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">

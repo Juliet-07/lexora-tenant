@@ -77,6 +77,8 @@ const emptyQuestion = (): AssessmentQuestion => ({
   correctIndex: 0,
 });
 
+const MAX_COURSE_FILE_SIZE_MB = 500;
+
 function Stat({
   label,
   value,
@@ -132,11 +134,15 @@ function CourseBuilder({
       : [emptyQuestion()],
   );
 
+  const fileSizeMb = file ? file.size / (1024 * 1024) : 0;
+  const fileTooLarge = file ? fileSizeMb > MAX_COURSE_FILE_SIZE_MB : false;
+
   const canSave =
     title.trim() &&
     (kind === "link"
       ? externalUrl.trim()
       : file || initial?.asset?.url || externalUrl.trim()) &&
+    !fileTooLarge &&
     questions.every(
       (q) =>
         q.prompt.trim() &&
@@ -253,9 +259,18 @@ function CourseBuilder({
               accept={kind === "video" ? "video/*" : ".pptx,.ppt"}
               onChange={(e) => setFile(e.target.files?.[0] ?? null)}
             />
+            {file && (
+              <p
+                className={`text-xs ${fileTooLarge ? "text-destructive font-medium" : "text-muted-foreground"}`}
+              >
+                {fileSizeMb.toFixed(1)} MB
+                {fileTooLarge &&
+                  ` — exceeds the ${MAX_COURSE_FILE_SIZE_MB}MB limit. Use a smaller file or an external URL instead.`}
+              </p>
+            )}
             <p className="text-xs text-muted-foreground">
-              Max 15MB for uploads. For larger files, paste an external URL
-              below.
+              Max {MAX_COURSE_FILE_SIZE_MB}MB for uploads. For larger videos,
+              paste an external URL below.
             </p>
             <Input
               value={externalUrl}

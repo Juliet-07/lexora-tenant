@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -35,6 +35,9 @@ import {
   XCircle,
   AlertCircle,
   Loader2,
+  Paperclip,
+  FileText,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -42,6 +45,9 @@ import {
   fetchMyLeaveRequests,
   submitLeaveRequest,
   cancelLeaveRequest,
+  uploadLeaveDocument,
+  removeLeaveDocument,
+  resolveLeaveFileUrl,
   type LeaveBalance,
   type LeaveRequest,
 } from "@/lib/hr-api";
@@ -108,6 +114,9 @@ const workingDays = (a: string, b: string) => {
   return count;
 };
 
+const ACCEPTED_DOC_TYPES =
+  "application/pdf,image/jpeg,image/jpg,image/png,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+
 // ─── Component ────────────────────────────────────────────────
 
 export default function MyLeave() {
@@ -119,6 +128,13 @@ export default function MyLeave() {
     to: "",
     reason: "",
   });
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+
+  // Tracks which existing request a hidden file input is currently
+  // targeting, so one shared <input type="file"> can serve every
+  // row in the list instead of rendering one per request.
+  const attachInputRef = useRef<HTMLInputElement>(null);
+  const [attachTargetId, setAttachTargetId] = useState<string | null>(null);
 
   // ── Queries ───────────────────────────────────────────────
   const { data: balanceData, isLoading: balLoading } = useQuery({
@@ -137,20 +153,28 @@ export default function MyLeave() {
     staleTime: 30_000,
   });
 
-  // ── Submit mutation ───────────────────────────────────────
+  // ── Submit mutation — creates the request, then attaches the
+  // chosen file (if any) as a follow-up call, since the upload
+  // endpoint needs a real request ID to attach to. ──────────────
   const submitMutation = useMutation({
-    mutationFn: () =>
-      submitLeaveRequest({
+    mutationFn: async () => {
+      const request = await submitLeaveRequest({
         type: draft.type,
         startDate: draft.from,
         endDate: draft.to,
         reason: draft.reason,
-      }),
+      });
+      if (pendingFile) {
+        await uploadLeaveDocument(request._id, pendingFile);
+      }
+      return request;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["employee-leave-requests"] });
       queryClient.invalidateQueries({ queryKey: ["employee-leave-balance"] });
       setOpen(false);
       setDraft({ type: "annual", from: "", to: "", reason: "" });
+      setPendingFile(null);
       toast.success("Leave request submitted. Your manager will be notified.");
     },
     onError: (err: any) =>
@@ -167,6 +191,37 @@ export default function MyLeave() {
     onError: (err: any) =>
       toast.error(err?.response?.data?.message ?? "Failed to cancel request"),
   });
+
+  // ── Attach / remove document on an existing request ─────────
+  const attachMutation = useMutation({
+    mutationFn: ({ id, file }: { id: string; file: File }) =>
+      uploadLeaveDocument(id, file),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["employee-leave-requests"] });
+      toast.success("Document attached.");
+    },
+    onError: (err: any) =>
+      toast.error(err?.response?.data?.message ?? "Failed to attach document"),
+    onSettled: () => setAttachTargetId(null),
+  });
+
+  const removeDocMutation = useMutation({
+    mutationFn: ({ id, fileUrl }: { id: string; fileUrl: string }) =>
+      removeLeaveDocument(id, fileUrl),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["employee-leave-requests"] });
+      toast.success("Document removed.");
+    },
+    onError: (err: any) =>
+      toast.error(err?.response?.data?.message ?? "Failed to remove document"),
+  });
+
+  const openAttachPicker = (requestId: string) => {
+    setAttachTargetId(requestId);
+    // Reset so selecting the same file twice in a row still fires onChange
+    if (attachInputRef.current) attachInputRef.current.value = "";
+    attachInputRef.current?.click();
+  };
 
   const pending = requests.filter((r) => r.status === "pending");
   const upcoming = requests.filter(
@@ -189,6 +244,22 @@ export default function MyLeave() {
   // ─────────────────────────────────────────────────────────
   return (
     <div className="space-y-6">
+      {/* Hidden shared file input for attaching docs to existing requests */}
+      <input
+        ref={attachInputRef}
+        type="file"
+        accept={ACCEPTED_DOC_TYPES}
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file && attachTargetId) {
+            attachMutation.mutate({ id: attachTargetId, file });
+          } else {
+            setAttachTargetId(null);
+          }
+        }}
+      />
+
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
@@ -298,12 +369,14 @@ export default function MyLeave() {
                   ) : (
                     requests.map((r) => {
                       const Icon = STATUS_ICON[r.status] ?? Clock;
+                      const isAttachingHere =
+                        attachTargetId === r._id && attachMutation.isPending;
                       return (
                         <div
                           key={r._id}
                           className="flex items-start justify-between gap-3 py-3 border-b last:border-b-0"
                         >
-                          <div className="flex items-start gap-3 min-w-0">
+                          <div className="flex items-start gap-3 min-w-0 flex-1">
                             <Icon
                               className={`h-4 w-4 mt-1 shrink-0 ${
                                 r.status === "approved"
@@ -315,7 +388,7 @@ export default function MyLeave() {
                                       : "text-warning"
                               }`}
                             />
-                            <div className="min-w-0">
+                            <div className="min-w-0 flex-1">
                               <p className="text-sm font-medium">
                                 {typeLabel(r.type)} — {r.days} day
                                 {r.days !== 1 ? "s" : ""}
@@ -333,6 +406,53 @@ export default function MyLeave() {
                                   Note: {r.reviewNote}
                                 </p>
                               )}
+
+                              {/* Supporting documents */}
+                              <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                                {r.documents?.map((doc) => (
+                                  <span
+                                    key={doc.url}
+                                    className="inline-flex items-center gap-1 text-[11px] border rounded-md pl-2 pr-1 py-1 bg-muted/40"
+                                  >
+                                    <a
+                                      href={resolveLeaveFileUrl(doc.url)}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="inline-flex items-center gap-1 hover:underline"
+                                    >
+                                      <FileText className="h-3 w-3" />
+                                      {doc.name}
+                                    </a>
+                                    <button
+                                      onClick={() =>
+                                        removeDocMutation.mutate({
+                                          id: r._id,
+                                          fileUrl: doc.url,
+                                        })
+                                      }
+                                      disabled={removeDocMutation.isPending}
+                                      className="text-muted-foreground hover:text-destructive"
+                                      title="Remove"
+                                    >
+                                      <X className="h-3 w-3" />
+                                    </button>
+                                  </span>
+                                ))}
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-6 text-[11px] px-2"
+                                  disabled={isAttachingHere}
+                                  onClick={() => openAttachPicker(r._id)}
+                                >
+                                  {isAttachingHere ? (
+                                    <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                  ) : (
+                                    <Paperclip className="h-3 w-3 mr-1" />
+                                  )}
+                                  Attach document
+                                </Button>
+                              </div>
                             </div>
                           </div>
                           <div className="flex flex-col items-end gap-2 shrink-0">
@@ -457,7 +577,10 @@ export default function MyLeave() {
         open={open}
         onOpenChange={(v) => {
           setOpen(v);
-          if (!v) setDraft({ type: "annual", from: "", to: "", reason: "" });
+          if (!v) {
+            setDraft({ type: "annual", from: "", to: "", reason: "" });
+            setPendingFile(null);
+          }
         }}
       >
         <DialogContent className="max-w-md">
@@ -556,6 +679,25 @@ export default function MyLeave() {
                   setDraft((d) => ({ ...d, reason: e.target.value }))
                 }
               />
+            </div>
+
+            <div>
+              <Label>Supporting document (optional)</Label>
+              <p className="text-xs text-muted-foreground mb-1.5">
+                E.g. a medical report for sick leave. PDF, Word, or image, up to
+                15MB.
+              </p>
+              <Input
+                type="file"
+                accept={ACCEPTED_DOC_TYPES}
+                onChange={(e) => setPendingFile(e.target.files?.[0] ?? null)}
+              />
+              {pendingFile && (
+                <p className="text-xs text-muted-foreground mt-1.5 flex items-center gap-1">
+                  <Paperclip className="h-3 w-3" /> {pendingFile.name} (
+                  {(pendingFile.size / (1024 * 1024)).toFixed(1)} MB)
+                </p>
+              )}
             </div>
           </div>
 

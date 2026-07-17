@@ -1251,8 +1251,10 @@ export default function HRPayroll() {
                     ],
                     ["Status", openLoan.status.replace("_", " ")],
                     [
-                      "Started",
-                      new Date(openLoan.startDate).toLocaleDateString(),
+                      "Deduction period",
+                      openLoan.endDate
+                        ? `${new Date(openLoan.startDate).toLocaleDateString()} → ${new Date(openLoan.endDate).toLocaleDateString()}`
+                        : new Date(openLoan.startDate).toLocaleDateString(),
                     ],
                   ].map(([k, v]) => (
                     <div key={k} className="flex justify-between p-3 text-sm">
@@ -1853,12 +1855,45 @@ function DecideLoanDialog({
     decision: "approved" | "rejected";
     monthlyInstallment?: number;
     rejectionReason?: string;
+    startDate?: string;
+    endDate?: string;
   }) => void;
   deciding: boolean;
 }) {
   const [installment, setInstallment] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
   const [rejectionReason, setRejectionReason] = useState("");
   const emp = typeof loan.employeeId === "object" ? loan.employeeId : null;
+
+  // Suggests principal ÷ number of months between the two picked
+  // dates — a prefill, not a rule. The tenant can still overwrite it.
+  const monthsBetween = (from: string, to: string): number => {
+    if (!from || !to) return 0;
+    const a = new Date(from);
+    const b = new Date(to);
+    return Math.max(
+      1,
+      (b.getFullYear() - a.getFullYear()) * 12 +
+        (b.getMonth() - a.getMonth()) +
+        1,
+    );
+  };
+
+  const applySuggestedInstallment = (from: string, to: string) => {
+    const months = monthsBetween(from, to);
+    if (months > 0) {
+      setInstallment((loan.principalAmount / months).toFixed(2));
+    }
+  };
+
+  const canApprove =
+    !!installment &&
+    Number(installment) > 0 &&
+    !!startDate &&
+    !!endDate &&
+    new Date(endDate) > new Date(startDate) &&
+    !deciding;
 
   return (
     <Dialog open onOpenChange={onClose}>
@@ -1887,6 +1922,36 @@ function DecideLoanDialog({
             )}
           </div>
 
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label>Deduction starts (required to approve)</Label>
+              <Input
+                type="date"
+                value={startDate}
+                onChange={(e) => {
+                  setStartDate(e.target.value);
+                  if (e.target.value && endDate) {
+                    applySuggestedInstallment(e.target.value, endDate);
+                  }
+                }}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>Deduction ends (required to approve)</Label>
+              <Input
+                type="date"
+                min={startDate || undefined}
+                value={endDate}
+                onChange={(e) => {
+                  setEndDate(e.target.value);
+                  if (startDate && e.target.value) {
+                    applySuggestedInstallment(startDate, e.target.value);
+                  }
+                }}
+              />
+            </div>
+          </div>
+
           <div className="space-y-1">
             <Label>Monthly installment (required to approve)</Label>
             <Input
@@ -1895,6 +1960,13 @@ function DecideLoanDialog({
               value={installment}
               onChange={(e) => setInstallment(e.target.value)}
             />
+            {startDate && endDate && (
+              <p className="text-xs text-muted-foreground">
+                Suggested from {monthsBetween(startDate, endDate)} month
+                {monthsBetween(startDate, endDate) !== 1 ? "s" : ""} — feel free
+                to adjust.
+              </p>
+            )}
           </div>
 
           <div className="space-y-1">
@@ -1917,11 +1989,13 @@ function DecideLoanDialog({
             <ThumbsDown className="h-3.5 w-3.5 mr-1.5" /> Reject
           </Button>
           <Button
-            disabled={deciding || !installment || Number(installment) <= 0}
+            disabled={!canApprove}
             onClick={() =>
               onDecide({
                 decision: "approved",
                 monthlyInstallment: Number(installment),
+                startDate,
+                endDate,
               })
             }
           >

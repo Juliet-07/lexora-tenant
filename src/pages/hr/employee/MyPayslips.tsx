@@ -296,26 +296,34 @@ export default function MyPayslips() {
                     )}
 
                     {(l.status === "active" || l.status === "paid_off") && (
-                      <div className="grid grid-cols-3 gap-3 text-xs">
-                        <div>
-                          <p className="text-muted-foreground">Principal</p>
-                          <p className="font-mono text-sm">
-                            {currency(l.principalAmount, l.currency)}
-                          </p>
+                      <>
+                        <div className="grid grid-cols-3 gap-3 text-xs">
+                          <div>
+                            <p className="text-muted-foreground">Principal</p>
+                            <p className="font-mono text-sm">
+                              {currency(l.principalAmount, l.currency)}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-muted-foreground">Outstanding</p>
+                            <p className="font-mono text-sm">
+                              {currency(l.outstandingBalance, l.currency)}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-muted-foreground">Installment</p>
+                            <p className="text-sm">
+                              {currency(l.monthlyInstallment, l.currency)}/mo
+                            </p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-muted-foreground">Outstanding</p>
-                          <p className="font-mono text-sm">
-                            {currency(l.outstandingBalance, l.currency)}
+                        {l.endDate && (
+                          <p className="text-xs text-muted-foreground mt-2">
+                            Deductions run {fmtDate(l.startDate)} →{" "}
+                            {fmtDate(l.endDate)}
                           </p>
-                        </div>
-                        <div>
-                          <p className="text-muted-foreground">Installment</p>
-                          <p className="text-sm">
-                            {currency(l.monthlyInstallment, l.currency)}/mo
-                          </p>
-                        </div>
-                      </div>
+                        )}
+                      </>
                     )}
                   </div>
                 ))

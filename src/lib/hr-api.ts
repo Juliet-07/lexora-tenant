@@ -536,6 +536,14 @@ export interface LeaveBalance {
   carryOver?: boolean;
 }
 
+export interface LeaveDocument {
+  name: string;
+  url: string;
+  mimeType: string;
+  size: number;
+  uploadedAt: string;
+}
+
 export interface LeaveRequest {
   _id: string;
   employeeId: {
@@ -554,6 +562,7 @@ export interface LeaveRequest {
   reviewNote: string | null;
   reviewedAt: string | null;
   createdAt: string;
+  documents: LeaveDocument[];
 }
 
 export interface LeaveStats {
@@ -672,6 +681,34 @@ export const submitLeaveRequest = async (dto: {
 
 export const cancelLeaveRequest = async (id: string): Promise<void> => {
   await api.patch(`/employee/leave/${id}/cancel`, {});
+};
+
+const HR_API_BASE = (api.defaults as any)?.baseURL ?? "/api";
+export const resolveLeaveFileUrl = (url: string): string => {
+  if (!url) return url;
+  if (url.startsWith("http")) return url;
+  const origin = new URL(HR_API_BASE).origin;
+  return `${origin}${url}`;
+};
+
+export const uploadLeaveDocument = async (
+  requestId: string,
+  file: File,
+): Promise<LeaveRequest> => {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await api.post(`/employee/leave/${requestId}/documents`, form);
+  return res.data?.data ?? res.data;
+};
+
+export const removeLeaveDocument = async (
+  requestId: string,
+  fileUrl: string,
+): Promise<LeaveRequest> => {
+  const res = await api.delete(`/employee/leave/${requestId}/documents`, {
+    data: { fileUrl },
+  });
+  return res.data?.data ?? res.data;
 };
 
 // ── Attendance — Types ────────────────────────────────────────
@@ -1165,6 +1202,7 @@ export interface EmployeeLoan {
   outstandingBalance: number;
   status: LoanStatus;
   startDate: string;
+  endDate: string | null;
   note: string | null;
   createdBy: "employee" | "tenant";
   requestedReason: string | null;
@@ -1210,6 +1248,8 @@ export const decideLoanRequest = async (
     decision: "approved" | "rejected";
     monthlyInstallment?: number;
     rejectionReason?: string;
+    startDate?: string;
+    endDate?: string;
   },
 ): Promise<EmployeeLoan> => {
   const res = await api.patch(`/hr/payroll/loans/${loanId}/decide`, dto);
