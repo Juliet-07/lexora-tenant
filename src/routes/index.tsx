@@ -6,6 +6,7 @@ import { coreRoutes } from "./core.routes";
 import { amlRoutes } from "./aml.routes";
 import { hrRoutes } from "./hr.routes";
 import { crmRoutes } from "./crm.routes";
+import { grcRoutes } from "./grc.routes";
 import { employeeRoutes } from "./employee.routes";
 import SignContractPage from "@/pages/SigninContractPage";
 
@@ -46,6 +47,7 @@ export function AppRoutes() {
       {amlRoutes(ctx)}
       {hrRoutes(ctx)}
       {crmRoutes(ctx)}
+      {grcRoutes(ctx)}
       {employeeRoutes(ctx)}
       <Route path="*" element={<NotFound />} />
     </Routes>

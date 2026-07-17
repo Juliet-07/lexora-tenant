@@ -42,7 +42,7 @@ export const coreRoutes = ({ isAdmin }: RouteContext) => {
       path="/settings"
       element={layout(isAdmin ? <Settings /> : <MySettings />)}
     />,
-    <Route key="grc" path="/grc/*" element={layout(<ModulePlaceholder />)} />,
+    
   ];
 
   if (isAdmin) {
