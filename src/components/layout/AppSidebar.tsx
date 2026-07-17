@@ -116,49 +116,17 @@ const NAV_BY_MODULE: Record<
   // ── GRC ────────────────────────────────────────────────────
   grc: [
     { title: "Dashboard", url: "/", icon: LayoutDashboard },
-    { title: "Clients", url: "/clients", icon: Users, adminOnly: true },
-    {
-      title: "Risk Register",
-      url: "/grc/risks",
-      icon: AlertTriangle,
-      adminOnly: true,
-    },
-    {
-      title: "Controls Library",
-      url: "/grc/controls",
-      icon: ListChecks,
-      adminOnly: true,
-    },
-    {
-      title: "Policies",
-      url: "/grc/policies",
-      icon: BookOpen,
-      adminOnly: true,
-    },
-    {
-      title: "Incidents",
-      url: "/grc/incidents",
-      icon: FileWarning,
-      adminOnly: true,
-    },
-    {
-      title: "Audit Support",
-      url: "/grc/audits",
-      icon: FileText,
-      adminOnly: true,
-    },
-    {
-      title: "Third-Party Risk",
-      url: "/grc/vendors",
-      icon: Briefcase,
-      adminOnly: true,
-    },
-    {
-      title: "BCP / DR",
-      url: "/grc/bcp",
-      icon: ShieldAlert,
-      adminOnly: true,
-    },
+    { title: "GRC Overview", url: "/grc/overview", icon: BarChart3, adminOnly: true },
+    { title: "Risk Appetite", url: "/grc/appetite", icon: TrendingUp, adminOnly: true },
+    { title: "Risk Register", url: "/grc/risks", icon: AlertTriangle, adminOnly: true },
+    { title: "Controls Library", url: "/grc/controls", icon: ListChecks, adminOnly: true },
+    { title: "Treatment Plans", url: "/grc/treatment", icon: ClipboardCheck, adminOnly: true },
+    { title: "Incidents", url: "/grc/incidents", icon: FileWarning, adminOnly: true },
+    { title: "Compliance", url: "/grc/compliance", icon: ShieldCheck, adminOnly: true },
+    { title: "Policies", url: "/grc/policies", icon: BookOpen, adminOnly: true },
+    { title: "Audits", url: "/grc/audits", icon: FileText, adminOnly: true },
+    { title: "Third-Party Risk", url: "/grc/vendors", icon: Briefcase, adminOnly: true },
+    { title: "BCP / DR", url: "/grc/bcp", icon: ShieldAlert, adminOnly: true },
   ],
 
   // ── CRM & Project Management ──────────────────────────────
