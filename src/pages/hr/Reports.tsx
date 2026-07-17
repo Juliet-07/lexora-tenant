@@ -41,7 +41,7 @@ export default function HRReports() {
         <h1 className="text-2xl font-bold">HR Reports</h1>
         <p className="text-sm text-muted-foreground">
           Real, live reporting across payroll, disputes, employee records,
-          requisitions, performance, and MIFOTRA workplace demographics.
+          requisitions, performance, and workplace demographics.
         </p>
       </div>
 
