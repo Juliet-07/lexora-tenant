@@ -60,7 +60,7 @@ export default function GrcOverview() {
             Executive view of governance, risk and compliance posture.
           </p>
         </div>
-        <Card className="min-w-[220px]">
+        <Card className="min-w-[220px] hidden">
           <CardContent className="p-4">
             <div className="text-xs text-muted-foreground">GRC Health Score</div>
             <div className="text-4xl font-bold mt-1">{health}<span className="text-lg text-muted-foreground">/100</span></div>
