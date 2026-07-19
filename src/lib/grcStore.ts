@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 // widgets (dashboard, appetite vs. actual) can aggregate easily.
 // ─────────────────────────────────────────────────────────────
 
-const KEY = "grc_store_v1";
+const KEY = "grc_store_v2";
 const EVT = "grc_store_changed";
 
 export type RiskCategory =
