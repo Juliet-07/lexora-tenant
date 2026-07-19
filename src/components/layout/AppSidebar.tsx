@@ -73,10 +73,16 @@ import { useModule } from "@/contexts/ModuleContext";
 //   hr_pm     → "hr_pm"     (was "hr" — mismatch fixed)
 // ─────────────────────────────────────────────────────────────
 
-const NAV_BY_MODULE: Record<
-  string,
-  { title: string; url: string; icon: any; adminOnly?: boolean }[]
-> = {
+type NavChild = { title: string; url: string; adminOnly?: boolean };
+type NavItem = {
+  title: string;
+  url?: string;
+  icon: any;
+  adminOnly?: boolean;
+  children?: NavChild[];
+};
+
+const NAV_BY_MODULE: Record<string, NavItem[]> = {
   // ── AML / KYC ──────────────────────────────────────────────
   kyc_aml: [
     { title: "Dashboard", url: "/", icon: LayoutDashboard },
