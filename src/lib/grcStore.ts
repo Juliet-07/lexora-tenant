@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 // widgets (dashboard, appetite vs. actual) can aggregate easily.
 // ─────────────────────────────────────────────────────────────
 
-const KEY = "grc_store_v1";
+const KEY = "grc_store_v2";
 const EVT = "grc_store_changed";
 
 export type RiskCategory =
@@ -513,10 +513,51 @@ function seed(): GrcState {
         id: "reg_1",
         title: "New data-portability requirement",
         regulationType: "Data Protection",
-        summary: "Amendment introduces 30-day portability response window.",
+        summary:
+          "Amendment introduces a 30-day portability response window for controllers. Data subjects can now request structured export of their personal data in a common, machine-readable format. In-scope controllers must adjust internal SLAs, update privacy notices, and confirm technical export paths for every production data store.",
         impact: "Medium",
         affectedObligationIds: ["obl_1"],
         loggedAt: now(),
+      },
+      {
+        id: "reg_2",
+        title: "BNR directive on operational-risk reporting",
+        regulationType: "BNR",
+        summary:
+          "The central bank has published Directive 04/2026 requiring quarterly submission of operational-risk incidents above a materiality threshold. Reporting templates and severity taxonomy must align with the new schema effective next quarter.",
+        impact: "High",
+        affectedObligationIds: [],
+        loggedAt: new Date(Date.now() - 3 * 86400000).toISOString(),
+      },
+      {
+        id: "reg_3",
+        title: "Labour Law — parental leave extension",
+        regulationType: "Labour Law",
+        summary:
+          "Maternity leave extended from 12 to 14 weeks; new 4-week paid paternity leave introduced. HR policies, payroll accruals, and employment contract templates must be updated before the effective date.",
+        impact: "Medium",
+        affectedObligationIds: [],
+        loggedAt: new Date(Date.now() - 10 * 86400000).toISOString(),
+      },
+      {
+        id: "reg_4",
+        title: "AML — beneficial-ownership threshold lowered",
+        regulationType: "AML",
+        summary:
+          "The beneficial-ownership disclosure threshold has been lowered from 25% to 10% for reporting entities in the financial sector. Existing customer files require re-screening and updated ownership charts within 180 days.",
+        impact: "High",
+        affectedObligationIds: [],
+        loggedAt: new Date(Date.now() - 21 * 86400000).toISOString(),
+      },
+      {
+        id: "reg_5",
+        title: "Tax Law — quarterly VAT filing format change",
+        regulationType: "Tax Law",
+        summary:
+          "Revenue authority migrates quarterly VAT filings to the new XML-based schema. Legacy CSV uploads will be rejected from the next filing cycle onward.",
+        impact: "Low",
+        affectedObligationIds: ["obl_2"],
+        loggedAt: new Date(Date.now() - 35 * 86400000).toISOString(),
       },
     ],
     policies: [

@@ -31,8 +31,12 @@ import {
   FolderOpen,
   Globe,
   Gavel,
+  ChevronDown,
+  Landmark,
+  Cog,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
+import { useLocation } from "react-router-dom";
 import {
   Sidebar,
   SidebarContent,
@@ -42,9 +46,17 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
   SidebarFooter,
   useSidebar,
 } from "@/components/ui/sidebar";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { useAuth } from "@/contexts/AuthContext";
 import { useModule } from "@/contexts/ModuleContext";
 
@@ -61,10 +73,16 @@ import { useModule } from "@/contexts/ModuleContext";
 //   hr_pm     → "hr_pm"     (was "hr" — mismatch fixed)
 // ─────────────────────────────────────────────────────────────
 
-const NAV_BY_MODULE: Record<
-  string,
-  { title: string; url: string; icon: any; adminOnly?: boolean }[]
-> = {
+type NavChild = { title: string; url: string; adminOnly?: boolean };
+type NavItem = {
+  title: string;
+  url?: string;
+  icon: any;
+  adminOnly?: boolean;
+  children?: NavChild[];
+};
+
+const NAV_BY_MODULE: Record<string, NavItem[]> = {
   // ── AML / KYC ──────────────────────────────────────────────
   kyc_aml: [
     { title: "Dashboard", url: "/", icon: LayoutDashboard },
@@ -117,15 +135,42 @@ const NAV_BY_MODULE: Record<
   grc: [
     { title: "Dashboard", url: "/", icon: LayoutDashboard },
     { title: "GRC Overview", url: "/grc/overview", icon: BarChart3, adminOnly: true },
-    { title: "Risk Appetite", url: "/grc/appetite", icon: TrendingUp, adminOnly: true },
-    { title: "Risk Register", url: "/grc/risks", icon: AlertTriangle, adminOnly: true },
-    { title: "Controls Library", url: "/grc/controls", icon: ListChecks, adminOnly: true },
-    { title: "Treatment Plans", url: "/grc/treatment", icon: ClipboardCheck, adminOnly: true },
-    { title: "Incidents", url: "/grc/incidents", icon: FileWarning, adminOnly: true },
+    {
+      title: "Governance",
+      icon: Landmark,
+      adminOnly: true,
+      children: [
+        { title: "Meetings", url: "/grc/governance/meetings" },
+        { title: "Committees", url: "/grc/governance/committees" },
+        { title: "Board Management", url: "/grc/governance/board" },
+        { title: "Governance Codes", url: "/grc/governance/codes" },
+      ],
+    },
+    {
+      title: "Risk",
+      icon: AlertTriangle,
+      adminOnly: true,
+      children: [
+        { title: "Risk Register", url: "/grc/risk/register" },
+        { title: "Risk Appetite", url: "/grc/risk/appetite" },
+        { title: "Heatmap", url: "/grc/risk/heatmap" },
+        { title: "Treatment Plans", url: "/grc/risk/treatment" },
+        { title: "Control Library", url: "/grc/risk/controls" },
+      ],
+    },
     { title: "Compliance", url: "/grc/compliance", icon: ShieldCheck, adminOnly: true },
-    { title: "Policies", url: "/grc/policies", icon: BookOpen, adminOnly: true },
-    { title: "Audits", url: "/grc/audits", icon: FileText, adminOnly: true },
-    { title: "Third-Party Risk", url: "/grc/vendors", icon: Briefcase, adminOnly: true },
+    {
+      title: "Operations",
+      icon: Cog,
+      adminOnly: true,
+      children: [
+        { title: "Incidents", url: "/grc/operations/incidents" },
+        { title: "Policies", url: "/grc/operations/policies" },
+        { title: "Audits", url: "/grc/operations/audits" },
+        { title: "Reporting", url: "/grc/operations/reporting" },
+      ],
+    },
+    { title: "Third-Party", url: "/grc/vendors", icon: Briefcase, adminOnly: true },
     { title: "BCP / DR", url: "/grc/bcp", icon: ShieldAlert, adminOnly: true },
   ],
 
@@ -252,6 +297,7 @@ NAV_BY_MODULE["hr"] = NAV_BY_MODULE["hr_pm"];
 
 export function AppSidebar() {
   const { state } = useSidebar();
+  const { pathname } = useLocation();
   const collapsed = state === "collapsed";
   const { isAdmin, logout, user } = useAuth();
   const { currentModule, isLoadingDashboard } = useModule();
@@ -445,21 +491,63 @@ export function AppSidebar() {
           )}
           <SidebarGroupContent>
             <SidebarMenu>
-              {navItems.map((item) => (
-                <SidebarMenuItem key={item.title + item.url}>
-                  <SidebarMenuButton asChild>
-                    <NavLink
-                      to={item.url}
-                      end={item.url === "/"}
-                      className="hover:bg-sidebar-accent/50 text-sidebar-foreground"
-                      activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
-                    >
-                      <item.icon className="mr-2 h-4 w-4" />
-                      {!collapsed && <span>{item.title}</span>}
-                    </NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
+              {navItems.map((item) => {
+                if (item.children && item.children.length > 0) {
+                  const kids = item.children.filter((c) => !c.adminOnly || isAdmin);
+                  const isBranchActive = kids.some((c) => pathname.startsWith(c.url));
+                  return (
+                    <Collapsible key={item.title} defaultOpen={isBranchActive} className="group/collapsible">
+                      <SidebarMenuItem>
+                        <CollapsibleTrigger asChild>
+                          <SidebarMenuButton className="hover:bg-sidebar-accent/50 text-sidebar-foreground">
+                            <item.icon className="mr-2 h-4 w-4" />
+                            {!collapsed && (
+                              <>
+                                <span className="flex-1 text-left">{item.title}</span>
+                                <ChevronDown className="h-4 w-4 transition-transform group-data-[state=open]/collapsible:rotate-180" />
+                              </>
+                            )}
+                          </SidebarMenuButton>
+                        </CollapsibleTrigger>
+                        {!collapsed && (
+                          <CollapsibleContent>
+                            <SidebarMenuSub>
+                              {kids.map((c) => (
+                                <SidebarMenuSubItem key={c.url}>
+                                  <SidebarMenuSubButton asChild>
+                                    <NavLink
+                                      to={c.url}
+                                      className="hover:bg-sidebar-accent/50 text-sidebar-foreground"
+                                      activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                                    >
+                                      <span>{c.title}</span>
+                                    </NavLink>
+                                  </SidebarMenuSubButton>
+                                </SidebarMenuSubItem>
+                              ))}
+                            </SidebarMenuSub>
+                          </CollapsibleContent>
+                        )}
+                      </SidebarMenuItem>
+                    </Collapsible>
+                  );
+                }
+                return (
+                  <SidebarMenuItem key={item.title + item.url}>
+                    <SidebarMenuButton asChild>
+                      <NavLink
+                        to={item.url!}
+                        end={item.url === "/"}
+                        className="hover:bg-sidebar-accent/50 text-sidebar-foreground"
+                        activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                      >
+                        <item.icon className="mr-2 h-4 w-4" />
+                        {!collapsed && <span>{item.title}</span>}
+                      </NavLink>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
