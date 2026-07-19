@@ -297,6 +297,7 @@ NAV_BY_MODULE["hr"] = NAV_BY_MODULE["hr_pm"];
 
 export function AppSidebar() {
   const { state } = useSidebar();
+  const { pathname } = useLocation();
   const collapsed = state === "collapsed";
   const { isAdmin, logout, user } = useAuth();
   const { currentModule, isLoadingDashboard } = useModule();
