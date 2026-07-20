@@ -18,7 +18,7 @@ import { MyProjectsList, MyProjectDetail } from "@/pages/MyProjects";
  * project views are open to team members; everything billing / pipeline
  * / contract related is admin-only.
  */
-export const crmRoutes = ({ isAdmin }: RouteContext) => {
+export const crmRoutes = ({ isAdmin, accessibleModules }: RouteContext) => {
   const routes: JSX.Element[] = [
     // Project management — accessible to both, with role-specific views
     <Route
@@ -31,23 +31,61 @@ export const crmRoutes = ({ isAdmin }: RouteContext) => {
       path="/crm/projects/:id"
       element={layout(isAdmin ? <ProjectDetail /> : <MyProjectDetail />)}
     />,
-    <Route key="crm-time" path="/crm/time" element={layout(<TimeTracking />)} />,
+    <Route
+      key="crm-time"
+      path="/crm/time"
+      element={layout(<TimeTracking />)}
+    />,
   ];
 
-  if (isAdmin) {
+  if (isAdmin && accessibleModules?.includes("crm")) {
     routes.push(
-      <Route key="crm-pipeline" path="/crm/pipeline" element={layout(<Pipeline />)} />,
-      <Route key="crm-contacts" path="/crm/contacts" element={layout(<Contacts />)} />,
-      <Route key="crm-resources" path="/crm/resources" element={layout(<Resources />)} />,
-      <Route key="crm-invoicing" path="/crm/invoicing" element={layout(<Invoicing />)} />,
-      <Route key="crm-contracts" path="/crm/contracts" element={layout(<Contracts />)} />,
-      <Route key="crm-documents" path="/crm/documents" element={<Navigate to="/crm/contracts" replace />} />,
-      <Route key="crm-portal" path="/crm/portal" element={layout(<ClientPortal />)} />,
+      <Route
+        key="crm-pipeline"
+        path="/crm/pipeline"
+        element={layout(<Pipeline />)}
+      />,
+      <Route
+        key="crm-contacts"
+        path="/crm/contacts"
+        element={layout(<Contacts />)}
+      />,
+      <Route
+        key="crm-resources"
+        path="/crm/resources"
+        element={layout(<Resources />)}
+      />,
+      <Route
+        key="crm-invoicing"
+        path="/crm/invoicing"
+        element={layout(<Invoicing />)}
+      />,
+      <Route
+        key="crm-contracts"
+        path="/crm/contracts"
+        element={layout(<Contracts />)}
+      />,
+      <Route
+        key="crm-documents"
+        path="/crm/documents"
+        element={<Navigate to="/crm/contracts" replace />}
+      />,
+      <Route
+        key="crm-portal"
+        path="/crm/portal"
+        element={layout(<ClientPortal />)}
+      />,
       <Route key="billing" path="/billing" element={layout(<Billing />)} />,
     );
   }
 
-  routes.push(<Route key="crm-fallback" path="/crm/*" element={layout(<ModulePlaceholder />)} />);
+  routes.push(
+    <Route
+      key="crm-fallback"
+      path="/crm/*"
+      element={layout(<ModulePlaceholder />)}
+    />,
+  );
 
   return routes;
 };

@@ -232,12 +232,13 @@ export interface Employee {
   emergencyContactPhone: string | null;
   employeeNumber: string;
   jobTitle: string;
-  hierarchyRole: "regular" | "manager" | "head_of_department";
+  hierarchyRole: "regular" | "manager" | "head_of_department" | "owner";
   reportsToManagerId:
     | string
     | { _id: string; firstName: string; lastName: string }
     | null;
   reportsToTenantId: string | null;
+  roles?: string[];
   employmentType: EmploymentType;
   employmentStatus: EmploymentStatus;
   startDate: string;
@@ -329,6 +330,7 @@ export interface CreateEmployeeDto {
   roleLevel?: RoleLevel;
   hierarchyRole: string;
   reportsToManagerId?: string | null;
+  staffRoles: string[];
 }
 
 export interface TerminateEmployeeDto {
@@ -409,7 +411,7 @@ export interface DepartmentTreeReport {
   teamId?: { _id: string; name: string } | string | null;
   employmentStatus?: EmploymentStatus;
   probationEndDate?: string | null;
-  hierarchyRole?: "regular" | "manager" | "head_of_department";
+  hierarchyRole?: "regular" | "manager" | "head_of_department" | "owner";
 }
 
 export interface DepartmentTreeManager extends DepartmentTreeReport {
@@ -461,6 +463,44 @@ export const updateEmployee = async (
   const res = await api.patch(`/hr/employees/${id}`, dto);
   return res.data?.data ?? res.data;
 };
+
+export const updateEmployeeStaffRoles = async (
+  employeeId: string,
+  staffRoles: string[],
+): Promise<{ employeeId: string; staffRoles: string[] }> => {
+  const res = await api.patch(`/hr/employees/${employeeId}/staff-roles`, {
+    staffRoles,
+  });
+  return res.data?.data ?? res.data;
+};
+
+export const STAFF_ROLES: {
+  value: string;
+  label: string;
+  description: string;
+}[] = [
+  {
+    value: "risk_officer",
+    label: "Risk Officer",
+    description: "GRC module access",
+  },
+  {
+    value: "grc_compliance_officer",
+    label: "GRC Compliance Officer",
+    description: "GRC module access",
+  },
+  {
+    value: "aml_compliance_officer",
+    label: "AML Compliance Officer",
+    description: "AML/KYC module access",
+  },
+  { value: "hr_manager", label: "HR Manager", description: "HR module access" },
+  {
+    value: "crm_manager",
+    label: "CRM Manager",
+    description: "CRM module access",
+  },
+];
 
 export const terminateEmployee = async (
   id: string,

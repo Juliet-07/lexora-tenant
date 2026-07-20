@@ -72,6 +72,8 @@ import {
   fetchEmployeesByHierarchyRole,
   promoteManagerToHeadOfDepartment,
   fetchDirectReportsOf,
+  STAFF_ROLES,
+  updateEmployeeStaffRoles,
 } from "@/lib/hr-api";
 import { EmployeeDetailSheet } from "@/components/hr/EmployeeDetailSheet";
 import OnboardingDocumentsTab from "./OnboardingDocuments";
@@ -145,6 +147,9 @@ export default function HREmployees() {
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(
     null,
   );
+  const [editAccessTarget, setEditAccessTarget] = useState<Employee | null>(
+    null,
+  );
 
   // Forms
   const EMPTY_EMP: CreateEmployeeDto = {
@@ -164,6 +169,7 @@ export default function HREmployees() {
     allowances: [],
     reportsToManagerId: undefined,
     hierarchyRole: "regular",
+    staffRoles: [],
   };
   const [empForm, setEmpForm] = useState<CreateEmployeeDto>(EMPTY_EMP);
   const [teamForm, setTeamForm] = useState({
@@ -511,9 +517,40 @@ export default function HREmployees() {
                                 emp.employmentStatus}
                             </Badge>
                           </div>
-                          <p className="text-sm text-muted-foreground truncate">
-                            {emp.jobTitle}
-                          </p>
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-sm text-muted-foreground truncate">
+                              {emp.jobTitle}
+                            </p>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 px-2 text-xs shrink-0"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditAccessTarget(emp);
+                              }}
+                            >
+                              <Pencil className="h-3 w-3 mr-1" /> Access
+                            </Button>
+                          </div>
+                          {emp.roles && emp.roles.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1.5">
+                              {emp.roles.map((roleValue) => {
+                                const role = STAFF_ROLES.find(
+                                  (r) => r.value === roleValue,
+                                );
+                                return (
+                                  <Badge
+                                    key={roleValue}
+                                    variant="outline"
+                                    className="text-[10px] bg-primary/5 text-primary border-primary/20"
+                                  >
+                                    {role?.label ?? roleValue}
+                                  </Badge>
+                                );
+                              })}
+                            </div>
+                          )}
                           <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
                             {teamName && (
                               <span className="inline-flex items-center gap-1">
@@ -1114,6 +1151,43 @@ export default function HREmployees() {
                 }
               />
             </div>
+            <div className="space-y-1.5">
+              <Label>Platform access (optional)</Label>
+              <p className="text-xs text-muted-foreground">
+                Grant this employee access to specific modules beyond their own
+                self-service dashboard.
+              </p>
+              <div className="space-y-2 border rounded-md p-3">
+                {STAFF_ROLES.map((r) => (
+                  <label
+                    key={r.value}
+                    className="flex items-start gap-2 text-sm"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={empForm.staffRoles?.includes(r.value) ?? false}
+                      onChange={(e) => {
+                        const current = empForm.staffRoles ?? [];
+                        setEmpForm({
+                          ...empForm,
+                          staffRoles: e.target.checked
+                            ? [...current, r.value]
+                            : current.filter((v) => v !== r.value),
+                        });
+                      }}
+                    />
+                    <span>
+                      <span className="font-medium">{r.label}</span>
+                      <span className="text-muted-foreground">
+                        {" "}
+                        — {r.description}
+                      </span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
             <div className="space-y-1 col-span-2">
               <div className="flex items-center justify-between">
                 <Label>Allowances (optional)</Label>
@@ -1432,6 +1506,13 @@ export default function HREmployees() {
         employee={selectedEmployee}
         onClose={() => setSelectedEmployee(null)}
       />
+
+      {editAccessTarget && (
+        <EditAccessDialog
+          employee={editAccessTarget}
+          onClose={() => setEditAccessTarget(null)}
+        />
+      )}
     </div>
   );
 }
@@ -1581,6 +1662,75 @@ function ReplaceHodDialog({
             ) : (
               "Confirm Promotion"
             )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function EditAccessDialog({
+  employee,
+  onClose,
+}: {
+  employee: Employee;
+  onClose: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const [selected, setSelected] = useState<string[]>(employee.roles ?? []);
+
+  const mutation = useMutation({
+    mutationFn: () => updateEmployeeStaffRoles(employee._id, selected),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["hr-employees"] });
+      toast.success("Access updated.");
+      onClose();
+    },
+    onError: (err: any) =>
+      toast.error(err?.response?.data?.message ?? "Failed to update access"),
+  });
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>
+            Edit access — {employee.firstName} {employee.lastName}
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-2 border rounded-md p-3">
+          {STAFF_ROLES.map((r) => (
+            <label key={r.value} className="flex items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={selected.includes(r.value)}
+                onChange={(e) =>
+                  setSelected((cur) =>
+                    e.target.checked
+                      ? [...cur, r.value]
+                      : cur.filter((v) => v !== r.value),
+                  )
+                }
+              />
+              <span>
+                <span className="font-medium">{r.label}</span>
+                <span className="text-muted-foreground">
+                  {" "}
+                  — {r.description}
+                </span>
+              </span>
+            </label>
+          ))}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            disabled={mutation.isPending}
+            onClick={() => mutation.mutate()}
+          >
+            Save
           </Button>
         </DialogFooter>
       </DialogContent>

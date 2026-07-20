@@ -120,6 +120,8 @@ const FALLBACK_VISUALS = {
   scope: "Platform module",
 };
 
+const moduleIdKey = (userId: string) => `activeModuleId:${userId}`;
+
 function toModuleDefinition(key: string, dbName?: string): ModuleDefinition {
   const visuals = MODULE_VISUALS[key] ?? FALLBACK_VISUALS;
   return {
@@ -162,14 +164,23 @@ export function ModuleProvider({ children }: { children: ReactNode }) {
       setDashboardData(data);
       setSubscription(data.subscription ?? null);
 
-      // Build modules from whatever keys the DB returns — no filtering
-      const activeKeys: string[] = data.subscription?.activeModules ?? [];
+      const subscribedKeys: string[] = data.subscription?.activeModules ?? [];
+      const grantedKeys: string[] = user.accessibleModules ?? [];
+      const activeKeys = subscribedKeys.filter((key) =>
+        grantedKeys.includes(key),
+      );
       const built = activeKeys.map((key) => toModuleDefinition(key));
 
       setModules(built);
 
-      if (!currentModuleId && built.length > 0) {
-        setCurrentModuleId(built[0].id);
+      const persisted = localStorage.getItem(moduleIdKey(user.id));
+      const restored =
+        persisted && built.some((m) => m.id === persisted)
+          ? persisted
+          : (built[0]?.id ?? null);
+      if (restored) {
+        setCurrentModuleId(restored);
+        localStorage.setItem(moduleIdKey(user.id), restored);
       }
     } catch (err) {
       console.error("Failed to fetch dashboard:", err);
@@ -190,7 +201,10 @@ export function ModuleProvider({ children }: { children: ReactNode }) {
   }, [user]);
 
   const setModule = (id: string) => {
-    if (modules.some((m) => m.id === id)) setCurrentModuleId(id);
+    if (modules.some((m) => m.id === id)) {
+      setCurrentModuleId(id);
+      if (user) localStorage.setItem(moduleIdKey(user.id), id);
+    }
   };
 
   return (

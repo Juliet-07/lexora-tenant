@@ -11,6 +11,7 @@ import {
   OnboardingReminder,
   OnboardingProgressPill,
 } from "@/components/onboarding/OnboardingReminder";
+import { ViewSwitcher } from "./ViewSwitcher";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -38,6 +39,7 @@ export function AppLayout({ children }: AppLayoutProps) {
               </div>
             </div>
             <div className="flex items-center gap-3">
+              <ViewSwitcher />
               {!isAdmin && <OnboardingProgressPill />}
               <Badge variant="outline" className="text-xs">
                 {isAdmin

@@ -39,7 +39,11 @@ export function AppRoutes() {
 
   if (!user) return <Login />;
 
-  const ctx = { isAdmin, hierarchyRole: user?.hierarchyRole ?? null };
+  const ctx = {
+    isAdmin,
+    hierarchyRole: user?.hierarchyRole ?? null,
+    accessibleModules: user?.accessibleModules ?? [],
+  };
 
   return (
     <Routes>

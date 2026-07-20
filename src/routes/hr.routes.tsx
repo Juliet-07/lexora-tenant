@@ -16,29 +16,83 @@ import HROverview from "@/pages/hr/Overview";
 import HRProbation from "@/pages/hr/Probation";
 
 /** HR & People Management — most admin-gated, attendance/leave/learning open. */
-export const hrRoutes = ({ isAdmin }: RouteContext) => {
+export const hrRoutes = ({ isAdmin, accessibleModules }: RouteContext) => {
   const routes: JSX.Element[] = [
-    <Route key="attendance" path="/hr/attendance" element={layout(<HRAttendance />)} />,
+    <Route
+      key="attendance"
+      path="/hr/attendance"
+      element={layout(<HRAttendance />)}
+    />,
     <Route key="leave" path="/hr/leave" element={layout(<HRLeave />)} />,
-    <Route key="learning" path="/hr/learning" element={layout(<HRLearning />)} />,
+    <Route
+      key="learning"
+      path="/hr/learning"
+      element={layout(<HRLearning />)}
+    />,
   ];
 
-  if (isAdmin) {
+  if (isAdmin && accessibleModules?.includes("hr_pm")) {
     routes.push(
-      <Route key="overview" path="/hr/overview" element={layout(<HROverview />)} />,
-      <Route key="employees" path="/hr/employees" element={layout(<HREmployees />)} />,
-      <Route key="probation" path="/hr/probation" element={layout(<HRProbation />)} />,
-      <Route key="recruitment" path="/hr/recruitment" element={layout(<HRRecruitment />)} />,
-      <Route key="performance" path="/hr/performance" element={layout(<HRPerformance />)} />,
-      <Route key="payroll" path="/hr/payroll" element={layout(<HRPayroll />)} />,
-      <Route key="requisitions" path="/hr/requisitions" element={layout(<HRRequisitions />)} />,
-      <Route key="contracts" path="/hr/contracts" element={layout(<HRContracts />)} />,
-      <Route key="disputes" path="/hr/disputes" element={layout(<HRDisputes />)} />,
-      <Route key="reports" path="/hr/reports" element={layout(<HRReports />)} />,
+      <Route
+        key="overview"
+        path="/hr/overview"
+        element={layout(<HROverview />)}
+      />,
+      <Route
+        key="employees"
+        path="/hr/employees"
+        element={layout(<HREmployees />)}
+      />,
+      <Route
+        key="probation"
+        path="/hr/probation"
+        element={layout(<HRProbation />)}
+      />,
+      <Route
+        key="recruitment"
+        path="/hr/recruitment"
+        element={layout(<HRRecruitment />)}
+      />,
+      <Route
+        key="performance"
+        path="/hr/performance"
+        element={layout(<HRPerformance />)}
+      />,
+      <Route
+        key="payroll"
+        path="/hr/payroll"
+        element={layout(<HRPayroll />)}
+      />,
+      <Route
+        key="requisitions"
+        path="/hr/requisitions"
+        element={layout(<HRRequisitions />)}
+      />,
+      <Route
+        key="contracts"
+        path="/hr/contracts"
+        element={layout(<HRContracts />)}
+      />,
+      <Route
+        key="disputes"
+        path="/hr/disputes"
+        element={layout(<HRDisputes />)}
+      />,
+      <Route
+        key="reports"
+        path="/hr/reports"
+        element={layout(<HRReports />)}
+      />,
     );
   }
 
-  routes.push(<Route key="hr-fallback" path="/hr/*" element={layout(<ModulePlaceholder />)} />);
+  routes.push(
+    <Route
+      key="hr-fallback"
+      path="/hr/*"
+      element={layout(<ModulePlaceholder />)}
+    />,
+  );
 
   return routes;
 };
