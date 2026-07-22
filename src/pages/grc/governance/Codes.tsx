@@ -61,10 +61,22 @@ function NewCodeDialog({ open, onOpenChange }: any) {
   const [f, setF] = useState<Omit<GovernanceCode, "id" | "documents" | "updatedAt" | "version" | "status">>({
     title: "", category: "Code of Conduct", body: "",
   });
+  const [docs, setDocs] = useState<{ name: string; uploadedAt: string }[]>([]);
+  const onFiles = (files: FileList | null) => {
+    if (!files) return;
+    const added = Array.from(files).map((file) => ({
+      name: `${file.name} (${Math.round(file.size / 1024)} KB)`,
+      uploadedAt: new Date().toISOString(),
+    }));
+    setDocs((d) => [...d, ...added]);
+  };
   const submit = () => {
     if (!f.title) return toast({ title: "Title required", variant: "destructive" });
-    mutateGov((s) => ({ ...s, codes: [{ id: gid("gc"), documents: [], updatedAt: new Date().toISOString(), version: 1, status: "Draft", ...f }, ...s.codes] }));
-    toast({ title: "Code created" }); onOpenChange(false);
+    mutateGov((s) => ({ ...s, codes: [{ id: gid("gc"), documents: docs, updatedAt: new Date().toISOString(), version: 1, status: "Draft", ...f }, ...s.codes] }));
+    toast({ title: "Code created" });
+    setF({ title: "", category: "Code of Conduct", body: "" });
+    setDocs([]);
+    onOpenChange(false);
   };
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -78,6 +90,24 @@ function NewCodeDialog({ open, onOpenChange }: any) {
             </Select>
           </div>
           <div><Label>Body</Label><Textarea rows={5} value={f.body} onChange={(e) => setF({ ...f, body: e.target.value })} /></div>
+          <div>
+            <Label>Supporting documents</Label>
+            <label className="mt-1 flex items-center gap-2 border border-dashed rounded-md px-3 py-3 cursor-pointer hover:bg-muted/50">
+              <Upload className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm text-muted-foreground">Attach PDF, DOCX or other files</span>
+              <input type="file" multiple className="hidden" onChange={(e) => { onFiles(e.target.files); e.currentTarget.value = ""; }} />
+            </label>
+            {docs.length > 0 && (
+              <div className="mt-2 space-y-1">
+                {docs.map((d, i) => (
+                  <div key={i} className="flex justify-between items-center text-xs border rounded px-2 py-1">
+                    <span>{d.name}</span>
+                    <button onClick={() => setDocs(docs.filter((_, x) => x !== i))}><Trash2 className="h-3 w-3 text-muted-foreground" /></button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
         <DialogFooter><Button onClick={submit}>Create</Button></DialogFooter>
       </DialogContent>
