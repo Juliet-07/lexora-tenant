@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 // governance codes. Separate from grcStore to keep concerns tight.
 // ─────────────────────────────────────────────────────────────
 
-const KEY = "grc_gov_store_v1";
+const KEY = "grc_gov_store_v2";
 const EVT = "grc_gov_store_changed";
 
 export interface MeetingAttendee {
@@ -26,13 +26,20 @@ export interface AgendaItem {
   minutes?: number;
 }
 
+export type MeetingMode = "Physical" | "Online";
+export type MeetingPlatform = "Zoom" | "Google Meet" | "Microsoft Teams";
+
 export interface Meeting {
   id: string;
   title: string;
   type: "Board" | "Committee" | "Executive" | "Ad-hoc";
   committeeId?: string;
   date: string; // ISO
-  location: string;
+  mode: MeetingMode;
+  venue?: string; // when Physical
+  meetingLink?: string; // when Online
+  platform?: MeetingPlatform; // when Online
+  location: string; // legacy summary string (kept for display)
   chair: string;
   attendees: MeetingAttendee[];
   agenda: AgendaItem[];
@@ -177,6 +184,8 @@ function seed(): GovState {
       title: "Q4 Board Meeting",
       type: "Board",
       date: days(21),
+      mode: "Physical",
+      venue: "Head Office Boardroom",
       location: "Head Office Boardroom",
       chair: "Dr. E. Rwigema",
       attendees: [
