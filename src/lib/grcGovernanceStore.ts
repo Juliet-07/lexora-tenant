@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 // governance codes. Separate from grcStore to keep concerns tight.
 // ─────────────────────────────────────────────────────────────
 
-const KEY = "grc_gov_store_v1";
+const KEY = "grc_gov_store_v2";
 const EVT = "grc_gov_store_changed";
 
 export interface MeetingAttendee {
