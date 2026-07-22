@@ -36,8 +36,11 @@ import {
   Mail,
   Loader2,
   FileCheck,
+  ClipboardCheck,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { useAttendance, saveAttendance } from "@/lib/grcGovernanceLocal";
+
 import {
   fetchMeetings,
   createMeeting,
@@ -558,6 +561,11 @@ function MeetingSheet({
             </div>
           </section>
 
+          {/* Attendance registration — only meaningful once the meeting is held */}
+          <AttendanceSection meeting={meeting} />
+
+
+
           {/* Agenda */}
           <section className="border-t pt-4 space-y-2">
             <div className="font-medium text-sm">Agenda</div>
@@ -795,3 +803,196 @@ function MeetingSheet({
     </Sheet>
   );
 }
+
+function AttendanceSection({ meeting }: { meeting: Meeting }) {
+  const attendance = useAttendance(meeting._id);
+  const [editing, setEditing] = useState(false);
+  const [allAttended, setAllAttended] = useState<"yes" | "no" | "">(
+    attendance?.allAttended == null
+      ? ""
+      : attendance.allAttended
+        ? "yes"
+        : "no",
+  );
+  const [present, setPresent] = useState<number[]>(
+    attendance?.presentIndices ?? [],
+  );
+
+  const startEditing = () => {
+    setAllAttended(
+      attendance?.allAttended == null
+        ? ""
+        : attendance.allAttended
+          ? "yes"
+          : "no",
+    );
+    setPresent(attendance?.presentIndices ?? []);
+    setEditing(true);
+  };
+
+  const toggle = (i: number) =>
+    setPresent((p) =>
+      p.includes(i) ? p.filter((x) => x !== i) : [...p, i],
+    );
+
+  const save = () => {
+    if (!allAttended) {
+      toast({
+        title: "Select whether all parties attended",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (allAttended === "no" && present.length === 0) {
+      toast({
+        title: "Select who attended",
+        variant: "destructive",
+      });
+      return;
+    }
+    saveAttendance(meeting._id, {
+      allAttended: allAttended === "yes",
+      presentIndices: present,
+    });
+    setEditing(false);
+    toast({ title: "Attendance recorded" });
+  };
+
+  const recorded = attendance?.recordedAt != null;
+  const presentNames =
+    attendance?.allAttended === false
+      ? attendance.presentIndices
+          .map((i) => meeting.attendees[i]?.name)
+          .filter(Boolean)
+      : [];
+  const absentees =
+    attendance?.allAttended === false
+      ? meeting.attendees
+          .map((a, i) => ({ a, i }))
+          .filter(({ i }) => !attendance.presentIndices.includes(i))
+          .map(({ a }) => a.name)
+      : [];
+
+  return (
+    <section className="border-t pt-4 space-y-2">
+      <div className="font-medium text-sm flex items-center gap-2">
+        <ClipboardCheck className="h-4 w-4" />
+        Attendance register
+        {recorded && !editing && (
+          <Badge variant="outline" className="ml-auto text-[10px]">
+            Recorded {new Date(attendance!.recordedAt!).toLocaleDateString()}
+          </Badge>
+        )}
+      </div>
+
+      {!editing && recorded && (
+        <div className="text-xs space-y-1 border rounded p-2 bg-muted/30">
+          {attendance!.allAttended ? (
+            <div className="text-emerald-700">
+              All {meeting.attendees.length} attendees were present.
+            </div>
+          ) : (
+            <>
+              <div>
+                <span className="text-muted-foreground">Present ({presentNames.length}):</span>{" "}
+                {presentNames.join(", ") || "—"}
+              </div>
+              <div>
+                <span className="text-muted-foreground">Absent ({absentees.length}):</span>{" "}
+                {absentees.join(", ") || "—"}
+              </div>
+            </>
+          )}
+          <div className="pt-1">
+            <Button size="sm" variant="outline" onClick={startEditing}>
+              Update
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {!editing && !recorded && (
+        <div className="space-y-2">
+          <p className="text-xs text-muted-foreground">
+            Did all invited attendees attend the meeting?
+          </p>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={startEditing}
+            disabled={meeting.attendees.length === 0}
+          >
+            Register attendance
+          </Button>
+          {meeting.attendees.length === 0 && (
+            <p className="text-[11px] text-muted-foreground">
+              Add attendees above before registering attendance.
+            </p>
+          )}
+        </div>
+      )}
+
+      {editing && (
+        <div className="space-y-3 border rounded p-3 bg-muted/30">
+          <div>
+            <Label className="text-xs">Did all parties attend?</Label>
+            <Select
+              value={allAttended}
+              onValueChange={(v) => setAllAttended(v as "yes" | "no")}
+            >
+              <SelectTrigger className="mt-1">
+                <SelectValue placeholder="Select…" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="yes">Yes — all attended</SelectItem>
+                <SelectItem value="no">No — partial attendance</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {allAttended === "no" && (
+            <div>
+              <Label className="text-xs">Select who attended</Label>
+              <div className="mt-1 space-y-1 max-h-56 overflow-y-auto">
+                {meeting.attendees.map((a, i) => (
+                  <label
+                    key={i}
+                    className="flex items-center gap-2 text-xs border rounded px-2 py-1 cursor-pointer hover:bg-background"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={present.includes(i)}
+                      onChange={() => toggle(i)}
+                    />
+                    <span className="flex-1 truncate">
+                      {a.name}{" "}
+                      <span className="text-muted-foreground">{a.email}</span>
+                    </span>
+                    {a.role && (
+                      <Badge variant="outline" className="text-[10px]">
+                        {a.role}
+                      </Badge>
+                    )}
+                  </label>
+                ))}
+              </div>
+              <div className="text-[11px] text-muted-foreground mt-1">
+                {present.length} of {meeting.attendees.length} selected
+              </div>
+            </div>
+          )}
+
+          <div className="flex justify-end gap-2">
+            <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>
+              Cancel
+            </Button>
+            <Button size="sm" onClick={save}>
+              Save attendance
+            </Button>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+

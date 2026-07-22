@@ -40,6 +40,10 @@ import {
   GraduationCap,
   ArrowRightLeft,
   Loader2,
+  Award,
+  Trash2,
+  CheckCircle2,
+  XCircle,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import {
@@ -51,6 +55,14 @@ import {
   type BoardMember,
   type BoardMemberRole,
 } from "@/lib/grc/governance-api";
+import {
+  useSkills,
+  addSkill,
+  removeSkill,
+  type BoardSkill,
+  type SkillLevel,
+} from "@/lib/grcGovernanceLocal";
+
 
 const ROLES: BoardMemberRole[] = [
   "Chair",
@@ -516,8 +528,189 @@ function DirectorSheet({
               </Button>
             </div>
           </section>
+
+          <SkillsMatrixSection memberId={member._id} role={member.role} />
         </div>
       </SheetContent>
     </Sheet>
   );
 }
+
+const SKILL_CATEGORIES: BoardSkill["category"][] = [
+  "Finance",
+  "Legal",
+  "Risk",
+  "Strategy",
+  "Technology",
+  "Governance",
+  "Industry",
+  "Other",
+];
+const SKILL_LEVELS: SkillLevel[] = ["Basic", "Intermediate", "Expert"];
+
+function SkillsMatrixSection({
+  memberId,
+  role,
+}: {
+  memberId: string;
+  role: BoardMemberRole;
+}) {
+  const skills = useSkills(memberId);
+  const [f, setF] = useState<{
+    name: string;
+    category: BoardSkill["category"];
+    level: SkillLevel;
+    yearsExperience: number;
+    qualified: boolean;
+    notes: string;
+  }>({
+    name: "",
+    category: "Finance",
+    level: "Intermediate",
+    yearsExperience: 1,
+    qualified: true,
+    notes: "",
+  });
+
+  const qualifiedCount = skills.filter((s) => s.qualified).length;
+
+  const submit = () => {
+    if (!f.name.trim()) {
+      toast({ title: "Credential name required", variant: "destructive" });
+      return;
+    }
+    addSkill(memberId, { ...f, name: f.name.trim(), notes: f.notes.trim() });
+    setF({
+      name: "",
+      category: "Finance",
+      level: "Intermediate",
+      yearsExperience: 1,
+      qualified: true,
+      notes: "",
+    });
+    toast({ title: "Credential added" });
+  };
+
+  return (
+    <section className="border-t pt-3">
+      <div className="font-medium text-sm mb-2 flex items-center gap-2">
+        <Award className="h-4 w-4" />
+        Skills matrix
+        <Badge variant="outline" className="ml-auto text-[10px]">
+          {qualifiedCount}/{skills.length} qualifying for {role}
+        </Badge>
+      </div>
+
+      <div className="space-y-1 mb-3">
+        {skills.map((s) => (
+          <div
+            key={s.id}
+            className="border rounded px-2 py-1.5 flex items-start justify-between gap-2"
+          >
+            <div className="min-w-0 flex-1">
+              <div className="text-xs font-medium flex items-center gap-1">
+                {s.qualified ? (
+                  <CheckCircle2 className="h-3 w-3 text-emerald-600 shrink-0" />
+                ) : (
+                  <XCircle className="h-3 w-3 text-rose-600 shrink-0" />
+                )}
+                <span className="truncate">{s.name}</span>
+              </div>
+              <div className="text-[11px] text-muted-foreground flex gap-2 flex-wrap mt-0.5">
+                <span>{s.category}</span>
+                <span>·</span>
+                <span>{s.level}</span>
+                <span>·</span>
+                <span>{s.yearsExperience} yr(s)</span>
+              </div>
+              {s.notes && (
+                <div className="text-[11px] text-muted-foreground mt-0.5">
+                  {s.notes}
+                </div>
+              )}
+            </div>
+            <button onClick={() => removeSkill(memberId, s.id)}>
+              <Trash2 className="h-3 w-3 text-muted-foreground" />
+            </button>
+          </div>
+        ))}
+        {skills.length === 0 && (
+          <div className="text-xs text-muted-foreground">
+            No credentials recorded.
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-2 border rounded p-2 bg-muted/30">
+        <Input
+          placeholder="Credential (e.g. MBA Finance, CPA, LLB)"
+          value={f.name}
+          onChange={(e) => setF({ ...f, name: e.target.value })}
+        />
+        <div className="grid grid-cols-3 gap-2">
+          <Select
+            value={f.category}
+            onValueChange={(v) =>
+              setF({ ...f, category: v as BoardSkill["category"] })
+            }
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {SKILL_CATEGORIES.map((c) => (
+                <SelectItem key={c} value={c}>
+                  {c}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select
+            value={f.level}
+            onValueChange={(v) => setF({ ...f, level: v as SkillLevel })}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {SKILL_LEVELS.map((l) => (
+                <SelectItem key={l} value={l}>
+                  {l}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Input
+            type="number"
+            min={0}
+            placeholder="Years"
+            value={f.yearsExperience}
+            onChange={(e) =>
+              setF({ ...f, yearsExperience: Number(e.target.value) })
+            }
+          />
+        </div>
+        <Textarea
+          rows={2}
+          placeholder="Notes (institution, year, remarks)…"
+          value={f.notes}
+          onChange={(e) => setF({ ...f, notes: e.target.value })}
+        />
+        <div className="flex items-center justify-between">
+          <label className="text-xs flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={f.qualified}
+              onChange={(e) => setF({ ...f, qualified: e.target.checked })}
+            />
+            Qualifies for {role} position
+          </label>
+          <Button size="sm" variant="outline" onClick={submit}>
+            Add credential
+          </Button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
