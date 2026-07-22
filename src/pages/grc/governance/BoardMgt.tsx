@@ -40,6 +40,10 @@ import {
   GraduationCap,
   ArrowRightLeft,
   Loader2,
+  Award,
+  Trash2,
+  CheckCircle2,
+  XCircle,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import {
@@ -51,6 +55,14 @@ import {
   type BoardMember,
   type BoardMemberRole,
 } from "@/lib/grc/governance-api";
+import {
+  useSkills,
+  addSkill,
+  removeSkill,
+  type BoardSkill,
+  type SkillLevel,
+} from "@/lib/grcGovernanceLocal";
+
 
 const ROLES: BoardMemberRole[] = [
   "Chair",
