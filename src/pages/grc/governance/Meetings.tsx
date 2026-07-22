@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/select";
 import { Plus, Send, Paperclip, Trash2, CalendarClock, Users2, Mail } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
-import { useGov, mutateGov, gid, Meeting, AgendaItem, MeetingAttendee, BoardPackDoc } from "@/lib/grcGovernanceStore";
+import { useGov, mutateGov, gid, Meeting, AgendaItem, MeetingAttendee, BoardPackDoc, MeetingMode, MeetingPlatform } from "@/lib/grcGovernanceStore";
 
 export default function GrcMeetings() {
   const s = useGov();
@@ -67,13 +67,32 @@ export default function GrcMeetings() {
 }
 
 function NewMeetingDialog({ open, onOpenChange }: any) {
+  const s = useGov();
+  const boardChair = s.boardMembers.find((b) => b.role === "Chair")?.name ?? "";
+
   const [f, setF] = useState<Omit<Meeting, "id" | "status" | "attendees" | "agenda" | "boardPack">>({
     title: "", type: "Board", date: new Date().toISOString().slice(0, 16),
-    location: "", chair: "", notes: "",
+    mode: "Physical", venue: "", meetingLink: "", platform: undefined,
+    location: "", chair: boardChair, notes: "", committeeId: undefined,
   });
+
+  // Auto-populate chair based on type + committee
+  const setType = (v: Meeting["type"]) => {
+    let chair = "";
+    if (v === "Board") chair = boardChair;
+    setF((prev) => ({ ...prev, type: v, chair, committeeId: undefined }));
+  };
+  const setCommittee = (id: string) => {
+    const c = s.committees.find((x) => x.id === id);
+    setF((prev) => ({ ...prev, committeeId: id, chair: c?.chair ?? "" }));
+  };
+
   const submit = () => {
     if (!f.title) return toast({ title: "Title required", variant: "destructive" });
-    mutateGov((s) => ({ ...s, meetings: [{ id: gid("mt"), status: "Draft", attendees: [], agenda: [], boardPack: [], ...f }, ...s.meetings] }));
+    if (f.mode === "Physical" && !f.venue) return toast({ title: "Venue required", variant: "destructive" });
+    if (f.mode === "Online" && (!f.meetingLink || !f.platform)) return toast({ title: "Platform & meeting link required", variant: "destructive" });
+    const location = f.mode === "Physical" ? (f.venue ?? "") : `${f.platform} — ${f.meetingLink}`;
+    mutateGov((st) => ({ ...st, meetings: [{ id: gid("mt"), status: "Draft", attendees: [], agenda: [], boardPack: [], ...f, location }, ...st.meetings] }));
     toast({ title: "Meeting created" }); onOpenChange(false);
   };
   return (
@@ -84,15 +103,48 @@ function NewMeetingDialog({ open, onOpenChange }: any) {
           <div><Label>Title</Label><Input value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} /></div>
           <div className="grid grid-cols-2 gap-2">
             <div><Label>Type</Label>
-              <Select value={f.type} onValueChange={(v) => setF({ ...f, type: v as any })}><SelectTrigger><SelectValue /></SelectTrigger>
+              <Select value={f.type} onValueChange={(v) => setType(v as any)}><SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>{["Board", "Committee", "Executive", "Ad-hoc"].map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div><Label>Date & time</Label><Input type="datetime-local" value={f.date.slice(0, 16)} onChange={(e) => setF({ ...f, date: new Date(e.target.value).toISOString() })} /></div>
           </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div><Label>Location</Label><Input value={f.location} onChange={(e) => setF({ ...f, location: e.target.value })} /></div>
-            <div><Label>Chair</Label><Input value={f.chair} onChange={(e) => setF({ ...f, chair: e.target.value })} /></div>
+          {f.type === "Committee" && (
+            <div><Label>Committee</Label>
+              <Select value={f.committeeId ?? ""} onValueChange={setCommittee}>
+                <SelectTrigger><SelectValue placeholder="Select committee" /></SelectTrigger>
+                <SelectContent>{s.committees.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+          )}
+          <div><Label>Meeting mode</Label>
+            <Select value={f.mode} onValueChange={(v) => setF({ ...f, mode: v as MeetingMode })}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Physical">Physical</SelectItem>
+                <SelectItem value="Online">Online</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          {f.mode === "Physical" ? (
+            <div><Label>Venue</Label><Input placeholder="e.g. Head Office Boardroom" value={f.venue ?? ""} onChange={(e) => setF({ ...f, venue: e.target.value })} /></div>
+          ) : (
+            <div className="grid grid-cols-2 gap-2">
+              <div><Label>Platform</Label>
+                <Select value={f.platform ?? ""} onValueChange={(v) => setF({ ...f, platform: v as MeetingPlatform })}>
+                  <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Zoom">Zoom</SelectItem>
+                    <SelectItem value="Google Meet">Google Meet</SelectItem>
+                    <SelectItem value="Microsoft Teams">Microsoft Teams</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div><Label>Meeting link</Label><Input placeholder="https://…" value={f.meetingLink ?? ""} onChange={(e) => setF({ ...f, meetingLink: e.target.value })} /></div>
+            </div>
+          )}
+          <div><Label>Chair {(f.type === "Board" || f.type === "Committee") && <span className="text-xs text-muted-foreground">(auto-filled)</span>}</Label>
+            <Input value={f.chair} onChange={(e) => setF({ ...f, chair: e.target.value })} />
           </div>
           <div><Label>Notes to attendees</Label><Textarea rows={2} value={f.notes} onChange={(e) => setF({ ...f, notes: e.target.value })} /></div>
         </div>
@@ -127,7 +179,7 @@ function MeetingSheet({ meeting, onClose }: { meeting: Meeting | null; onClose: 
             <Badge variant="outline">{meeting.status}</Badge>
             <Badge variant="outline">{new Date(meeting.date).toLocaleString()}</Badge>
           </div>
-          <div className="text-sm"><span className="text-muted-foreground">Chair:</span> {meeting.chair} · <span className="text-muted-foreground">Location:</span> {meeting.location}</div>
+          <div className="text-sm"><span className="text-muted-foreground">Chair:</span> {meeting.chair} · <span className="text-muted-foreground">{meeting.mode === "Online" ? "Online" : "Venue"}:</span> {meeting.mode === "Online" ? <a href={meeting.meetingLink} target="_blank" rel="noreferrer" className="text-primary underline">{meeting.platform} link</a> : meeting.venue || meeting.location}</div>
 
           <section className="border-t pt-4 space-y-2">
             <div className="font-medium text-sm flex items-center gap-2"><Users2 className="h-4 w-4" />Attendees ({meeting.attendees.length})</div>
