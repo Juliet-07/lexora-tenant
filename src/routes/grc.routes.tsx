@@ -2,14 +2,14 @@ import { Route } from "react-router-dom";
 import { layout, RouteContext } from "./_helpers";
 import { ModulePlaceholder } from "@/components/layout/ModulePlaceholder";
 import GrcOverview from "@/pages/grc/Overview";
-import GrcAppetite from "@/pages/grc/Appetite";
-import GrcRisks from "@/pages/grc/Risks";
-import GrcControls from "@/pages/grc/Controls";
-import GrcTreatment from "@/pages/grc/Treatment";
-import GrcIncidents from "@/pages/grc/Incidents";
+import GrcAppetite from "@/pages/grc/risks/Appetite";
+import GrcRisks from "@/pages/grc/risks/Risks";
+import GrcControls from "@/pages/grc/risks/Controls";
+import GrcTreatment from "@/pages/grc/risks/Treatment";
+import GrcIncidents from "@/pages/grc/operations/Incidents";
 import GrcCompliance from "@/pages/grc/Compliance";
-import GrcPolicies from "@/pages/grc/Policies";
-import GrcAudits from "@/pages/grc/Audits";
+import GrcPolicies from "@/pages/grc/operations/Policies";
+import GrcAudits from "@/pages/grc/operations/Audits";
 import GrcVendors from "@/pages/grc/Vendors";
 import GrcBcp from "@/pages/grc/Bcp";
 import GrcMeetings from "@/pages/grc/governance/Meetings";
@@ -62,11 +62,6 @@ export const grcRoutes = ({ isAdmin, accessibleModules }: RouteContext) => {
         key="grc-risk-appetite"
         path="/grc/risk/appetite"
         element={layout(<GrcAppetite />)}
-      />,
-      <Route
-        key="grc-risk-heatmap"
-        path="/grc/risk/heatmap"
-        element={layout(<GrcOverview />)}
       />,
       <Route
         key="grc-risk-treatment"

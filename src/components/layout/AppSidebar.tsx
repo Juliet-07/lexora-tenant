@@ -134,15 +134,20 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
   // ── GRC ────────────────────────────────────────────────────
   grc: [
     { title: "Dashboard", url: "/", icon: LayoutDashboard },
-    { title: "GRC Overview", url: "/grc/overview", icon: BarChart3, adminOnly: true },
+    {
+      title: "GRC Overview",
+      url: "/grc/overview",
+      icon: BarChart3,
+      adminOnly: true,
+    },
     {
       title: "Governance",
       icon: Landmark,
       adminOnly: true,
       children: [
-        { title: "Meetings", url: "/grc/governance/meetings" },
-        { title: "Committees", url: "/grc/governance/committees" },
         { title: "Board Management", url: "/grc/governance/board" },
+        { title: "Committees", url: "/grc/governance/committees" },
+        { title: "Meetings", url: "/grc/governance/meetings" },
         { title: "Governance Codes", url: "/grc/governance/codes" },
       ],
     },
@@ -153,12 +158,16 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
       children: [
         { title: "Risk Register", url: "/grc/risk/register" },
         { title: "Risk Appetite", url: "/grc/risk/appetite" },
-        { title: "Heatmap", url: "/grc/risk/heatmap" },
         { title: "Treatment Plans", url: "/grc/risk/treatment" },
         { title: "Control Library", url: "/grc/risk/controls" },
       ],
     },
-    { title: "Compliance", url: "/grc/compliance", icon: ShieldCheck, adminOnly: true },
+    {
+      title: "Compliance",
+      url: "/grc/compliance",
+      icon: ShieldCheck,
+      adminOnly: true,
+    },
     {
       title: "Operations",
       icon: Cog,
@@ -170,7 +179,12 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
         { title: "Reporting", url: "/grc/operations/reporting" },
       ],
     },
-    { title: "Third-Party", url: "/grc/vendors", icon: Briefcase, adminOnly: true },
+    {
+      title: "Third-Party",
+      url: "/grc/vendors",
+      icon: Briefcase,
+      adminOnly: true,
+    },
     { title: "BCP / DR", url: "/grc/bcp", icon: ShieldAlert, adminOnly: true },
   ],
 
@@ -493,17 +507,27 @@ export function AppSidebar() {
             <SidebarMenu>
               {navItems.map((item) => {
                 if (item.children && item.children.length > 0) {
-                  const kids = item.children.filter((c) => !c.adminOnly || isAdmin);
-                  const isBranchActive = kids.some((c) => pathname.startsWith(c.url));
+                  const kids = item.children.filter(
+                    (c) => !c.adminOnly || isAdmin,
+                  );
+                  const isBranchActive = kids.some((c) =>
+                    pathname.startsWith(c.url),
+                  );
                   return (
-                    <Collapsible key={item.title} defaultOpen={isBranchActive} className="group/collapsible">
+                    <Collapsible
+                      key={item.title}
+                      defaultOpen={isBranchActive}
+                      className="group/collapsible"
+                    >
                       <SidebarMenuItem>
                         <CollapsibleTrigger asChild>
                           <SidebarMenuButton className="hover:bg-sidebar-accent/50 text-sidebar-foreground">
                             <item.icon className="mr-2 h-4 w-4" />
                             {!collapsed && (
                               <>
-                                <span className="flex-1 text-left">{item.title}</span>
+                                <span className="flex-1 text-left">
+                                  {item.title}
+                                </span>
                                 <ChevronDown className="h-4 w-4 transition-transform group-data-[state=open]/collapsible:rotate-180" />
                               </>
                             )}

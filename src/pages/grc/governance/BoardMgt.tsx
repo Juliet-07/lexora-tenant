@@ -109,7 +109,6 @@ function NewDirectorDialog({ open, onOpenChange }: any) {
             <div><Label>Term ends</Label><Input type="date" value={f.termEnds} onChange={(e) => setF({ ...f, termEnds: e.target.value })} /></div>
           </div>
           <div><Label>Bio</Label><Textarea rows={2} value={f.bio} onChange={(e) => setF({ ...f, bio: e.target.value })} /></div>
-          <div><Label>Succession note</Label><Textarea rows={2} value={f.successorNote} onChange={(e) => setF({ ...f, successorNote: e.target.value })} /></div>
         </div>
         <DialogFooter><Button onClick={submit}>Save</Button></DialogFooter>
       </DialogContent>

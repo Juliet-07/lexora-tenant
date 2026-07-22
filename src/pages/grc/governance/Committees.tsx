@@ -70,7 +70,6 @@ function NewCommitteeDialog({ open, onOpenChange }: any) {
         <DialogHeader><DialogTitle>New committee</DialogTitle></DialogHeader>
         <div className="space-y-3">
           <div><Label>Name</Label><Input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></div>
-          <div><Label>Chair</Label><Input value={f.chair} onChange={(e) => setF({ ...f, chair: e.target.value })} /></div>
           <div><Label>Purpose</Label><Textarea rows={3} value={f.purpose} onChange={(e) => setF({ ...f, purpose: e.target.value })} /></div>
         </div>
         <DialogFooter><Button onClick={submit}>Create</Button></DialogFooter>
