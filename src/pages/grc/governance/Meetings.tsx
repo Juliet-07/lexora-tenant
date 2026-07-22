@@ -561,6 +561,11 @@ function MeetingSheet({
             </div>
           </section>
 
+          {/* Attendance registration — only meaningful once the meeting is held */}
+          <AttendanceSection meeting={meeting} />
+
+
+
           {/* Agenda */}
           <section className="border-t pt-4 space-y-2">
             <div className="font-medium text-sm">Agenda</div>
