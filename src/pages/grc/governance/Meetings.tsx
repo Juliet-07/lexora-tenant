@@ -36,8 +36,11 @@ import {
   Mail,
   Loader2,
   FileCheck,
+  ClipboardCheck,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { useAttendance, saveAttendance } from "@/lib/grcGovernanceLocal";
+
 import {
   fetchMeetings,
   createMeeting,
