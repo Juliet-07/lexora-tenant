@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,22 +7,80 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
-  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  Sheet, SheetContent, SheetHeader, SheetTitle,
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
 } from "@/components/ui/sheet";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from "@/components/ui/select";
-import { Plus, Send, Paperclip, Trash2, CalendarClock, Users2, Mail } from "lucide-react";
+import {
+  Plus,
+  Send,
+  Paperclip,
+  Trash2,
+  CalendarClock,
+  Users2,
+  Mail,
+  Loader2,
+  FileCheck,
+} from "lucide-react";
 import { toast } from "@/hooks/use-toast";
-import { useGov, mutateGov, gid, Meeting, AgendaItem, MeetingAttendee, BoardPackDoc, MeetingMode, MeetingPlatform } from "@/lib/grcGovernanceStore";
+import {
+  fetchMeetings,
+  createMeeting,
+  addAttendee,
+  removeAttendee,
+  addAgendaItem,
+  removeAgendaItem,
+  addBoardPackDoc,
+  removeBoardPackDoc,
+  updateMeetingNotes,
+  updateMeetingMinutes,
+  markMeetingHeld,
+  dispatchMeeting,
+  sendMeetingMinutes,
+  fetchBoardMembers,
+  fetchCommittees,
+  resolveGrcFileUrl,
+  type Meeting,
+  type MeetingAudienceType,
+  type MeetingMode,
+  type MeetingPlatform,
+} from "@/lib/grc/governance-api";
 
 export default function GrcMeetings() {
-  const s = useGov();
   const [newOpen, setNewOpen] = useState(false);
   const [selected, setSelected] = useState<Meeting | null>(null);
+
+  const { data: meetings = [], isLoading } = useQuery({
+    queryKey: ["grc-meetings"],
+    queryFn: fetchMeetings,
+  });
+  const selectedLive = selected
+    ? (meetings.find((m) => m._id === selected._id) ?? selected)
+    : null;
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-24 gap-2 text-muted-foreground">
+        <Loader2 className="h-5 w-5 animate-spin" />
+        <span className="text-sm">Loading meetings…</span>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -29,97 +88,195 @@ export default function GrcMeetings() {
         <div>
           <h1 className="text-2xl font-bold">Meetings</h1>
           <p className="text-sm text-muted-foreground">
-            Create board & committee meetings, assemble the board pack, and dispatch invites.
+            Create board & committee meetings, assemble the board pack, and
+            dispatch invites.
           </p>
         </div>
-        <Button onClick={() => setNewOpen(true)}><Plus className="h-4 w-4 mr-1" />New meeting</Button>
+        <Button onClick={() => setNewOpen(true)}>
+          <Plus className="h-4 w-4 mr-1" />
+          New meeting
+        </Button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {s.meetings.map((m) => (
-          <Card key={m.id} className="cursor-pointer hover:shadow-md transition" onClick={() => setSelected(m)}>
+        {meetings.map((m) => (
+          <Card
+            key={m._id}
+            className="cursor-pointer hover:shadow-md transition"
+            onClick={() => setSelected(m)}
+          >
             <CardContent className="p-4 space-y-2">
               <div className="flex justify-between items-start">
                 <div>
                   <div className="font-semibold">{m.title}</div>
-                  <div className="text-xs text-muted-foreground flex items-center gap-1"><CalendarClock className="h-3 w-3" />{new Date(m.date).toLocaleString()}</div>
+                  <div className="text-xs text-muted-foreground flex items-center gap-1">
+                    <CalendarClock className="h-3 w-3" />
+                    {new Date(m.date).toLocaleString()}
+                  </div>
                 </div>
                 <Badge variant="outline">{m.status}</Badge>
               </div>
               <div className="text-xs text-muted-foreground">{m.location}</div>
               <div className="flex gap-2 text-xs flex-wrap">
                 <Badge variant="secondary">{m.type}</Badge>
-                <Badge variant="outline"><Users2 className="h-3 w-3 mr-1" />{m.attendees.length}</Badge>
-                <Badge variant="outline"><Paperclip className="h-3 w-3 mr-1" />{m.boardPack.length}</Badge>
+                <Badge variant="outline">
+                  <Users2 className="h-3 w-3 mr-1" />
+                  {m.attendees.length}
+                </Badge>
+                <Badge variant="outline">
+                  <Paperclip className="h-3 w-3 mr-1" />
+                  {m.boardPack.length}
+                </Badge>
               </div>
             </CardContent>
           </Card>
         ))}
-        {s.meetings.length === 0 && (
-          <div className="text-sm text-muted-foreground col-span-full text-center py-12">No meetings yet.</div>
+        {meetings.length === 0 && (
+          <div className="text-sm text-muted-foreground col-span-full text-center py-12">
+            No meetings yet.
+          </div>
         )}
       </div>
 
       <NewMeetingDialog open={newOpen} onOpenChange={setNewOpen} />
-      <MeetingSheet meeting={selected} onClose={() => setSelected(null)} />
+      <MeetingSheet meeting={selectedLive} onClose={() => setSelected(null)} />
     </div>
   );
 }
 
 function NewMeetingDialog({ open, onOpenChange }: any) {
-  const s = useGov();
-  const boardChair = s.boardMembers.find((b) => b.role === "Chair")?.name ?? "";
+  const queryClient = useQueryClient();
+  const { data: boardMembers = [] } = useQuery({
+    queryKey: ["grc-board-members"],
+    queryFn: fetchBoardMembers,
+    enabled: open,
+  });
+  const { data: committees = [] } = useQuery({
+    queryKey: ["grc-committees"],
+    queryFn: fetchCommittees,
+    enabled: open,
+  });
+  const boardChair = boardMembers.find((b) => b.role === "Chair")?.name ?? "";
 
-  const [f, setF] = useState<Omit<Meeting, "id" | "status" | "attendees" | "agenda" | "boardPack">>({
-    title: "", type: "Board", date: new Date().toISOString().slice(0, 16),
-    mode: "Physical", venue: "", meetingLink: "", platform: undefined,
-    location: "", chair: boardChair, notes: "", committeeId: undefined,
+  const [f, setF] = useState({
+    title: "",
+    type: "Board" as MeetingAudienceType,
+    date: new Date().toISOString().slice(0, 16),
+    mode: "Physical" as MeetingMode,
+    venue: "",
+    meetingLink: "",
+    platform: undefined as MeetingPlatform | undefined,
+    chair: "",
+    notes: "",
+    committeeId: undefined as string | undefined,
   });
 
-  // Auto-populate chair based on type + committee
-  const setType = (v: Meeting["type"]) => {
+  const setType = (v: MeetingAudienceType) => {
     let chair = "";
     if (v === "Board") chair = boardChair;
     setF((prev) => ({ ...prev, type: v, chair, committeeId: undefined }));
   };
   const setCommittee = (id: string) => {
-    const c = s.committees.find((x) => x.id === id);
+    const c = committees.find((x) => x._id === id);
     setF((prev) => ({ ...prev, committeeId: id, chair: c?.chair ?? "" }));
   };
 
+  const mutation = useMutation({
+    mutationFn: () => createMeeting(f),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["grc-meetings"] });
+      toast({ title: "Meeting created" });
+      onOpenChange(false);
+    },
+    onError: (err: any) =>
+      toast({
+        title: "Failed to create meeting",
+        description: err?.response?.data?.message,
+        variant: "destructive",
+      }),
+  });
+
   const submit = () => {
-    if (!f.title) return toast({ title: "Title required", variant: "destructive" });
-    if (f.mode === "Physical" && !f.venue) return toast({ title: "Venue required", variant: "destructive" });
-    if (f.mode === "Online" && (!f.meetingLink || !f.platform)) return toast({ title: "Platform & meeting link required", variant: "destructive" });
-    const location = f.mode === "Physical" ? (f.venue ?? "") : `${f.platform} — ${f.meetingLink}`;
-    mutateGov((st) => ({ ...st, meetings: [{ id: gid("mt"), status: "Draft", attendees: [], agenda: [], boardPack: [], ...f, location }, ...st.meetings] }));
-    toast({ title: "Meeting created" }); onOpenChange(false);
+    if (!f.title)
+      return toast({ title: "Title required", variant: "destructive" });
+    if (f.mode === "Physical" && !f.venue)
+      return toast({ title: "Venue required", variant: "destructive" });
+    if (f.mode === "Online" && (!f.meetingLink || !f.platform))
+      return toast({
+        title: "Platform & meeting link required",
+        variant: "destructive",
+      });
+    mutation.mutate();
   };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
-        <DialogHeader><DialogTitle>New meeting</DialogTitle></DialogHeader>
+        <DialogHeader>
+          <DialogTitle>New meeting</DialogTitle>
+        </DialogHeader>
         <div className="space-y-3">
-          <div><Label>Title</Label><Input value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} /></div>
+          <div>
+            <Label>Title</Label>
+            <Input
+              value={f.title}
+              onChange={(e) => setF({ ...f, title: e.target.value })}
+            />
+          </div>
           <div className="grid grid-cols-2 gap-2">
-            <div><Label>Type</Label>
-              <Select value={f.type} onValueChange={(v) => setType(v as any)}><SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>{["Board", "Committee", "Executive", "Ad-hoc"].map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+            <div>
+              <Label>Type</Label>
+              <Select
+                value={f.type}
+                onValueChange={(v) => setType(v as MeetingAudienceType)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {["Board", "Committee", "Executive", "Ad-hoc"].map((c) => (
+                    <SelectItem key={c} value={c}>
+                      {c}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
               </Select>
             </div>
-            <div><Label>Date & time</Label><Input type="datetime-local" value={f.date.slice(0, 16)} onChange={(e) => setF({ ...f, date: new Date(e.target.value).toISOString() })} /></div>
+            <div>
+              <Label>Date & time</Label>
+              <Input
+                type="datetime-local"
+                value={f.date}
+                onChange={(e) => setF({ ...f, date: e.target.value })}
+              />
+            </div>
           </div>
           {f.type === "Committee" && (
-            <div><Label>Committee</Label>
+            <div>
+              <Label>Committee</Label>
               <Select value={f.committeeId ?? ""} onValueChange={setCommittee}>
-                <SelectTrigger><SelectValue placeholder="Select committee" /></SelectTrigger>
-                <SelectContent>{s.committees.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select committee" />
+                </SelectTrigger>
+                <SelectContent>
+                  {committees.map((c) => (
+                    <SelectItem key={c._id} value={c._id}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
               </Select>
             </div>
           )}
-          <div><Label>Meeting mode</Label>
-            <Select value={f.mode} onValueChange={(v) => setF({ ...f, mode: v as MeetingMode })}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+          <div>
+            <Label>Meeting mode</Label>
+            <Select
+              value={f.mode}
+              onValueChange={(v) => setF({ ...f, mode: v as MeetingMode })}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="Physical">Physical</SelectItem>
                 <SelectItem value="Online">Online</SelectItem>
@@ -127,135 +284,512 @@ function NewMeetingDialog({ open, onOpenChange }: any) {
             </Select>
           </div>
           {f.mode === "Physical" ? (
-            <div><Label>Venue</Label><Input placeholder="e.g. Head Office Boardroom" value={f.venue ?? ""} onChange={(e) => setF({ ...f, venue: e.target.value })} /></div>
+            <div>
+              <Label>Venue</Label>
+              <Input
+                placeholder="e.g. Head Office Boardroom"
+                value={f.venue}
+                onChange={(e) => setF({ ...f, venue: e.target.value })}
+              />
+            </div>
           ) : (
             <div className="grid grid-cols-2 gap-2">
-              <div><Label>Platform</Label>
-                <Select value={f.platform ?? ""} onValueChange={(v) => setF({ ...f, platform: v as MeetingPlatform })}>
-                  <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+              <div>
+                <Label>Platform</Label>
+                <Select
+                  value={f.platform ?? ""}
+                  onValueChange={(v) =>
+                    setF({ ...f, platform: v as MeetingPlatform })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select" />
+                  </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="Zoom">Zoom</SelectItem>
                     <SelectItem value="Google Meet">Google Meet</SelectItem>
-                    <SelectItem value="Microsoft Teams">Microsoft Teams</SelectItem>
+                    <SelectItem value="Microsoft Teams">
+                      Microsoft Teams
+                    </SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-              <div><Label>Meeting link</Label><Input placeholder="https://…" value={f.meetingLink ?? ""} onChange={(e) => setF({ ...f, meetingLink: e.target.value })} /></div>
+              <div>
+                <Label>Meeting link</Label>
+                <Input
+                  placeholder="https://…"
+                  value={f.meetingLink}
+                  onChange={(e) => setF({ ...f, meetingLink: e.target.value })}
+                />
+              </div>
             </div>
           )}
-          <div><Label>Chair {(f.type === "Board" || f.type === "Committee") && <span className="text-xs text-muted-foreground">(auto-filled)</span>}</Label>
-            <Input value={f.chair} onChange={(e) => setF({ ...f, chair: e.target.value })} />
+          <div>
+            <Label>
+              Chair{" "}
+              {(f.type === "Board" || f.type === "Committee") && (
+                <span className="text-xs text-muted-foreground">
+                  (auto-filled)
+                </span>
+              )}
+            </Label>
+            <Input
+              value={f.chair}
+              onChange={(e) => setF({ ...f, chair: e.target.value })}
+            />
           </div>
-          <div><Label>Notes to attendees</Label><Textarea rows={2} value={f.notes} onChange={(e) => setF({ ...f, notes: e.target.value })} /></div>
+          <div>
+            <Label>Notes to attendees</Label>
+            <Textarea
+              rows={2}
+              value={f.notes}
+              onChange={(e) => setF({ ...f, notes: e.target.value })}
+            />
+          </div>
         </div>
-        <DialogFooter><Button onClick={submit}>Create</Button></DialogFooter>
+        <DialogFooter>
+          <Button onClick={submit} disabled={mutation.isPending}>
+            {mutation.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+            ) : null}
+            Create
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 }
 
-function MeetingSheet({ meeting, onClose }: { meeting: Meeting | null; onClose: () => void }) {
-  const [att, setAtt] = useState<MeetingAttendee>({ name: "", email: "", role: "" });
-  const [ag, setAg] = useState<AgendaItem>({ title: "", presenter: "", minutes: 10 });
-  const [doc, setDoc] = useState<BoardPackDoc>({ name: "", uploadedAt: "" });
+function MeetingSheet({
+  meeting,
+  onClose,
+}: {
+  meeting: Meeting | null;
+  onClose: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const [att, setAtt] = useState({ name: "", email: "", role: "" });
+  const [ag, setAg] = useState({
+    title: "",
+    presenter: "",
+    durationMinutes: 10,
+  });
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [notes, setNotes] = useState(meeting?.notes ?? "");
+  const [minutes, setMinutes] = useState(meeting?.minutes ?? "");
+
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: ["grc-meetings"] });
+  const onErr = (title: string) => (err: any) =>
+    toast({
+      title,
+      description: err?.response?.data?.message,
+      variant: "destructive",
+    });
+
+  const addAttMut = useMutation({
+    mutationFn: () => addAttendee(meeting!._id, att),
+    onSuccess: () => {
+      invalidate();
+      setAtt({ name: "", email: "", role: "" });
+    },
+    onError: onErr("Failed to add attendee"),
+  });
+  const rmAttMut = useMutation({
+    mutationFn: (i: number) => removeAttendee(meeting!._id, i),
+    onSuccess: invalidate,
+    onError: onErr("Failed to remove attendee"),
+  });
+  const addAgMut = useMutation({
+    mutationFn: () => addAgendaItem(meeting!._id, ag),
+    onSuccess: () => {
+      invalidate();
+      setAg({ title: "", presenter: "", durationMinutes: 10 });
+    },
+    onError: onErr("Failed to add agenda item"),
+  });
+  const rmAgMut = useMutation({
+    mutationFn: (i: number) => removeAgendaItem(meeting!._id, i),
+    onSuccess: invalidate,
+    onError: onErr("Failed to remove agenda item"),
+  });
+  const addDocMut = useMutation({
+    mutationFn: () => addBoardPackDoc(meeting!._id, pendingFile!),
+    onSuccess: () => {
+      invalidate();
+      setPendingFile(null);
+    },
+    onError: onErr("Failed to upload document"),
+  });
+  const rmDocMut = useMutation({
+    mutationFn: (i: number) => removeBoardPackDoc(meeting!._id, i),
+    onSuccess: invalidate,
+    onError: onErr("Failed to remove document"),
+  });
+  const notesMut = useMutation({
+    mutationFn: () => updateMeetingNotes(meeting!._id, notes),
+    onSuccess: () => {
+      invalidate();
+      toast({ title: "Notes saved" });
+    },
+    onError: onErr("Failed to save notes"),
+  });
+  const dispatchMut = useMutation({
+    mutationFn: () => dispatchMeeting(meeting!._id),
+    onSuccess: () => {
+      invalidate();
+      toast({
+        title: "Meeting pack dispatched",
+        description: `Sent to ${meeting!.attendees.length} recipient(s).`,
+      });
+    },
+    onError: onErr("Failed to dispatch"),
+  });
+  const heldMut = useMutation({
+    mutationFn: () => markMeetingHeld(meeting!._id),
+    onSuccess: invalidate,
+    onError: onErr("Failed to mark meeting as done"),
+  });
+  const minutesMut = useMutation({
+    mutationFn: () => updateMeetingMinutes(meeting!._id, minutes),
+    onSuccess: () => {
+      invalidate();
+      toast({ title: "Minutes saved" });
+    },
+    onError: onErr("Failed to save minutes"),
+  });
+  const sendMinutesMut = useMutation({
+    mutationFn: () => sendMeetingMinutes(meeting!._id),
+    onSuccess: () => {
+      invalidate();
+      toast({ title: "Minutes sent to all attendees" });
+    },
+    onError: onErr("Failed to send minutes"),
+  });
 
   if (!meeting) return null;
-  const patch = (p: Partial<Meeting>) =>
-    mutateGov((s) => ({ ...s, meetings: s.meetings.map((m) => m.id === meeting.id ? { ...m, ...p } : m) }));
-
-  const send = () => {
-    if (meeting.attendees.length === 0) return toast({ title: "Add attendees first", variant: "destructive" });
-    patch({ status: "Sent", sentAt: new Date().toISOString() });
-    toast({ title: "Meeting pack dispatched", description: `Sent to ${meeting.attendees.length} recipient(s).` });
-  };
 
   return (
     <Sheet open onOpenChange={(o) => !o && onClose()}>
       <SheetContent className="w-full sm:max-w-2xl overflow-y-auto">
-        <SheetHeader><SheetTitle>{meeting.title}</SheetTitle></SheetHeader>
+        <SheetHeader>
+          <SheetTitle>{meeting.title}</SheetTitle>
+        </SheetHeader>
         <div className="mt-4 space-y-5">
           <div className="flex flex-wrap gap-2">
             <Badge variant="outline">{meeting.type}</Badge>
             <Badge variant="outline">{meeting.status}</Badge>
-            <Badge variant="outline">{new Date(meeting.date).toLocaleString()}</Badge>
+            <Badge variant="outline">
+              {new Date(meeting.date).toLocaleString()}
+            </Badge>
           </div>
-          <div className="text-sm"><span className="text-muted-foreground">Chair:</span> {meeting.chair} · <span className="text-muted-foreground">{meeting.mode === "Online" ? "Online" : "Venue"}:</span> {meeting.mode === "Online" ? <a href={meeting.meetingLink} target="_blank" rel="noreferrer" className="text-primary underline">{meeting.platform} link</a> : meeting.venue || meeting.location}</div>
+          <div className="text-sm">
+            <span className="text-muted-foreground">Chair:</span>{" "}
+            {meeting.chair} ·{" "}
+            <span className="text-muted-foreground">
+              {meeting.mode === "Online" ? "Online" : "Venue"}:
+            </span>{" "}
+            {meeting.mode === "Online" ? (
+              <a
+                href={meeting.meetingLink ?? undefined}
+                target="_blank"
+                rel="noreferrer"
+                className="text-primary underline"
+              >
+                {meeting.platform} link
+              </a>
+            ) : (
+              meeting.venue || meeting.location
+            )}
+          </div>
 
+          {/* Attendees */}
           <section className="border-t pt-4 space-y-2">
-            <div className="font-medium text-sm flex items-center gap-2"><Users2 className="h-4 w-4" />Attendees ({meeting.attendees.length})</div>
+            <div className="font-medium text-sm flex items-center gap-2">
+              <Users2 className="h-4 w-4" />
+              Attendees ({meeting.attendees.length})
+            </div>
             <div className="space-y-1">
               {meeting.attendees.map((a, i) => (
-                <div key={i} className="flex justify-between text-xs border rounded px-2 py-1">
-                  <span>{a.name} <span className="text-muted-foreground">{a.email}</span></span>
-                  <button onClick={() => patch({ attendees: meeting.attendees.filter((_, x) => x !== i) })}><Trash2 className="h-3 w-3 text-muted-foreground" /></button>
+                <div
+                  key={i}
+                  className="flex justify-between text-xs border rounded px-2 py-1"
+                >
+                  <span>
+                    {a.name}{" "}
+                    <span className="text-muted-foreground">{a.email}</span>
+                  </span>
+                  <button onClick={() => rmAttMut.mutate(i)}>
+                    <Trash2 className="h-3 w-3 text-muted-foreground" />
+                  </button>
                 </div>
               ))}
             </div>
             <div className="grid grid-cols-3 gap-2">
-              <Input placeholder="Name" value={att.name} onChange={(e) => setAtt({ ...att, name: e.target.value })} />
-              <Input placeholder="Email" value={att.email} onChange={(e) => setAtt({ ...att, email: e.target.value })} />
+              <Input
+                placeholder="Name"
+                value={att.name}
+                onChange={(e) => setAtt({ ...att, name: e.target.value })}
+              />
+              <Input
+                placeholder="Email"
+                value={att.email}
+                onChange={(e) => setAtt({ ...att, email: e.target.value })}
+              />
               <div className="flex gap-1">
-                <Input placeholder="Role" value={att.role} onChange={(e) => setAtt({ ...att, role: e.target.value })} />
-                <Button size="sm" variant="outline" onClick={() => { if (!att.name || !att.email) return; patch({ attendees: [...meeting.attendees, att] }); setAtt({ name: "", email: "", role: "" }); }}>Add</Button>
+                <Input
+                  placeholder="Role"
+                  value={att.role}
+                  onChange={(e) => setAtt({ ...att, role: e.target.value })}
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={!att.name || !att.email || addAttMut.isPending}
+                  onClick={() => addAttMut.mutate()}
+                >
+                  {addAttMut.isPending ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    "Add"
+                  )}
+                </Button>
               </div>
             </div>
           </section>
 
+          {/* Agenda */}
           <section className="border-t pt-4 space-y-2">
             <div className="font-medium text-sm">Agenda</div>
             <div className="space-y-1">
               {meeting.agenda.map((a, i) => (
-                <div key={i} className="flex justify-between text-xs border rounded px-2 py-1">
-                  <span>{i + 1}. {a.title} <span className="text-muted-foreground">{a.presenter && `— ${a.presenter}`}</span></span>
+                <div
+                  key={i}
+                  className="flex justify-between text-xs border rounded px-2 py-1"
+                >
+                  <span>
+                    {i + 1}. {a.title}{" "}
+                    <span className="text-muted-foreground">
+                      {a.presenter && `— ${a.presenter}`}
+                    </span>
+                  </span>
                   <div className="flex items-center gap-2">
-                    <span className="text-muted-foreground">{a.minutes}m</span>
-                    <button onClick={() => patch({ agenda: meeting.agenda.filter((_, x) => x !== i) })}><Trash2 className="h-3 w-3 text-muted-foreground" /></button>
+                    <span className="text-muted-foreground">
+                      {a.durationMinutes}m
+                    </span>
+                    <button onClick={() => rmAgMut.mutate(i)}>
+                      <Trash2 className="h-3 w-3 text-muted-foreground" />
+                    </button>
                   </div>
                 </div>
               ))}
             </div>
             <div className="grid grid-cols-6 gap-2">
-              <Input className="col-span-3" placeholder="Item title" value={ag.title} onChange={(e) => setAg({ ...ag, title: e.target.value })} />
-              <Input className="col-span-2" placeholder="Presenter" value={ag.presenter} onChange={(e) => setAg({ ...ag, presenter: e.target.value })} />
-              <div className="flex gap-1">
-                <Input type="number" placeholder="min" value={ag.minutes} onChange={(e) => setAg({ ...ag, minutes: Number(e.target.value) })} />
-              </div>
+              <Input
+                className="col-span-3"
+                placeholder="Item title"
+                value={ag.title}
+                onChange={(e) => setAg({ ...ag, title: e.target.value })}
+              />
+              <Input
+                className="col-span-2"
+                placeholder="Presenter"
+                value={ag.presenter}
+                onChange={(e) => setAg({ ...ag, presenter: e.target.value })}
+              />
+              <Input
+                type="number"
+                placeholder="min"
+                value={ag.durationMinutes}
+                onChange={(e) =>
+                  setAg({ ...ag, durationMinutes: Number(e.target.value) })
+                }
+              />
             </div>
-            <Button size="sm" variant="outline" onClick={() => { if (!ag.title) return; patch({ agenda: [...meeting.agenda, ag] }); setAg({ title: "", presenter: "", minutes: 10 }); }}>Add agenda item</Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!ag.title || addAgMut.isPending}
+              onClick={() => addAgMut.mutate()}
+            >
+              Add agenda item
+            </Button>
           </section>
 
+          {/* Board pack — real file upload */}
           <section className="border-t pt-4 space-y-2">
-            <div className="font-medium text-sm flex items-center gap-2"><Paperclip className="h-4 w-4" />Board pack</div>
+            <div className="font-medium text-sm flex items-center gap-2">
+              <Paperclip className="h-4 w-4" />
+              Board pack
+            </div>
             <div className="space-y-1">
               {meeting.boardPack.map((d, i) => (
-                <div key={i} className="flex justify-between text-xs border rounded px-2 py-1">
-                  <span>{d.name}</span>
-                  <button onClick={() => patch({ boardPack: meeting.boardPack.filter((_, x) => x !== i) })}><Trash2 className="h-3 w-3 text-muted-foreground" /></button>
+                <div
+                  key={i}
+                  className="flex justify-between text-xs border rounded px-2 py-1 items-center"
+                >
+                  {d.fileUrl ? (
+                    <a
+                      href={resolveGrcFileUrl(d.fileUrl)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-primary underline"
+                    >
+                      {d.name}
+                    </a>
+                  ) : (
+                    <span>{d.name}</span>
+                  )}
+                  <button onClick={() => rmDocMut.mutate(i)}>
+                    <Trash2 className="h-3 w-3 text-muted-foreground" />
+                  </button>
                 </div>
               ))}
+              {meeting.boardPack.length === 0 && (
+                <div className="text-xs text-muted-foreground">
+                  No documents yet.
+                </div>
+              )}
             </div>
             <div className="flex gap-2">
-              <Input placeholder="Document name (e.g. CEO_Report.pdf)" value={doc.name} onChange={(e) => setDoc({ ...doc, name: e.target.value })} />
-              <Button size="sm" variant="outline" onClick={() => { if (!doc.name) return; patch({ boardPack: [...meeting.boardPack, { name: doc.name, uploadedAt: new Date().toISOString() }] }); setDoc({ name: "", uploadedAt: "" }); }}>Attach</Button>
-            </div>
-          </section>
-
-          <section className="border-t pt-4 space-y-2">
-            <div className="font-medium text-sm">Notes / cover message</div>
-            <Textarea rows={3} value={meeting.notes} onChange={(e) => patch({ notes: e.target.value })} />
-          </section>
-
-          <section className="border-t pt-4 space-y-2">
-            <div className="font-medium text-sm">Minutes</div>
-            <Textarea rows={4} value={meeting.minutes ?? ""} placeholder="Add minutes after the meeting…" onChange={(e) => patch({ minutes: e.target.value })} />
-            <div className="flex justify-end gap-2">
-              {meeting.status !== "Held" && <Button variant="outline" onClick={() => patch({ status: "Held" })}>Mark held</Button>}
-              <Button onClick={send} disabled={meeting.status === "Sent" || meeting.status === "Held"}>
-                <Send className="h-4 w-4 mr-1" />{meeting.status === "Sent" ? "Dispatched" : "Send meeting pack"}
+              <Input
+                type="file"
+                onChange={(e) => setPendingFile(e.target.files?.[0] ?? null)}
+              />
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={!pendingFile || addDocMut.isPending}
+                onClick={() => addDocMut.mutate()}
+              >
+                {addDocMut.isPending ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  "Upload"
+                )}
               </Button>
             </div>
-            {meeting.sentAt && <div className="text-xs text-muted-foreground flex items-center gap-1"><Mail className="h-3 w-3" />Dispatched {new Date(meeting.sentAt).toLocaleString()}</div>}
           </section>
+
+          {/* Notes / cover message */}
+          <section className="border-t pt-4 space-y-2">
+            <div className="font-medium text-sm">Notes / cover message</div>
+            <Textarea
+              rows={3}
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+            />
+            <div className="flex justify-end">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => notesMut.mutate()}
+                disabled={notesMut.isPending}
+              >
+                Save notes
+              </Button>
+            </div>
+          </section>
+
+          {/* Step 1: dispatch the pre-meeting pack */}
+          <section className="border-t pt-4 space-y-2">
+            <div className="font-medium text-sm">Send meeting pack</div>
+            <p className="text-xs text-muted-foreground">
+              Sends the notes, agenda, and board pack to all attendees ahead of
+              the meeting.
+            </p>
+            <Button
+              onClick={() => dispatchMut.mutate()}
+              disabled={
+                meeting.status === "Sent" ||
+                meeting.status === "Held" ||
+                dispatchMut.isPending
+              }
+            >
+              <Send className="h-4 w-4 mr-1" />
+              {meeting.status === "Sent" || meeting.status === "Held"
+                ? "Dispatched"
+                : "Send meeting pack"}
+            </Button>
+            {meeting.sentAt && (
+              <div className="text-xs text-muted-foreground flex items-center gap-1">
+                <Mail className="h-3 w-3" />
+                Dispatched {new Date(meeting.sentAt).toLocaleString()}
+              </div>
+            )}
+          </section>
+
+          {/* Step 2: mark the meeting as done, separate from step 1 */}
+          {meeting.status !== "Held" && (
+            <section className="border-t pt-4 space-y-2">
+              <div className="font-medium text-sm">Mark meeting as done</div>
+              <p className="text-xs text-muted-foreground">
+                Once the meeting has taken place, mark it done to unlock minutes
+                distribution.
+              </p>
+              <Button
+                variant="outline"
+                onClick={() => heldMut.mutate()}
+                disabled={heldMut.isPending}
+              >
+                {heldMut.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : null}
+                Mark as done
+              </Button>
+            </section>
+          )}
+
+          {/* Minutes — always writable */}
+          <section className="border-t pt-4 space-y-2">
+            <div className="font-medium text-sm">Minutes</div>
+            <Textarea
+              rows={4}
+              value={minutes}
+              placeholder="Write the minutes here…"
+              onChange={(e) => setMinutes(e.target.value)}
+            />
+            <div className="flex justify-end">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => minutesMut.mutate()}
+                disabled={minutesMut.isPending}
+              >
+                Save minutes
+              </Button>
+            </div>
+          </section>
+
+          {/* Step 3: a genuinely separate flow, only once the meeting is done */}
+          {meeting.status === "Held" && (
+            <section className="border-t pt-4 space-y-2">
+              <div className="font-medium text-sm flex items-center gap-2">
+                <FileCheck className="h-4 w-4" />
+                Distribute minutes
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Send the finalized minutes to every attendee.
+              </p>
+              <Button
+                onClick={() => sendMinutesMut.mutate()}
+                disabled={
+                  sendMinutesMut.isPending ||
+                  !minutes.trim() ||
+                  !!meeting.minutesSentAt
+                }
+              >
+                <Send className="h-4 w-4 mr-1" />
+                {meeting.minutesSentAt ? "Minutes sent" : "Send minutes"}
+              </Button>
+              {meeting.minutesSentAt && (
+                <div className="text-xs text-muted-foreground flex items-center gap-1">
+                  <Mail className="h-3 w-3" />
+                  Sent {new Date(meeting.minutesSentAt).toLocaleString()}
+                </div>
+              )}
+            </section>
+          )}
         </div>
       </SheetContent>
     </Sheet>
