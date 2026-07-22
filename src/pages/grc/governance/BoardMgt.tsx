@@ -117,11 +117,15 @@ function NewDirectorDialog({ open, onOpenChange }: any) {
 }
 
 function DirectorSheet({ member, onClose }: { member: BoardMember | null; onClose: () => void }) {
+  const s = useGov();
   const [conflict, setConflict] = useState("");
   const [training, setTraining] = useState("");
   if (!member) return null;
   const patch = (p: Partial<BoardMember>) =>
-    mutateGov((s) => ({ ...s, boardMembers: s.boardMembers.map((m) => m.id === member.id ? { ...m, ...p } : m) }));
+    mutateGov((st) => ({ ...st, boardMembers: st.boardMembers.map((m) => m.id === member.id ? { ...m, ...p } : m) }));
+
+  const otherDirectors = s.boardMembers.filter((m) => m.id !== member.id);
+  const currentSuccessor = otherDirectors.find((d) => d.name === member.successorNote);
 
   return (
     <Sheet open onOpenChange={(o) => !o && onClose()}>
@@ -134,7 +138,28 @@ function DirectorSheet({ member, onClose }: { member: BoardMember | null; onClos
             <Badge variant="outline">Term ends {member.termEnds}</Badge>
           </div>
           <div><div className="text-xs text-muted-foreground">Bio</div><div className="text-sm">{member.bio || "—"}</div></div>
-          <div><div className="text-xs text-muted-foreground">Succession plan</div><div className="text-sm">{member.successorNote || "—"}</div></div>
+
+          <section className="border-t pt-3">
+            <div className="font-medium text-sm mb-2 flex items-center gap-2"><ArrowRightLeft className="h-4 w-4" />Succession plan</div>
+            <Select
+              value={member.successorNote ?? "__none__"}
+              onValueChange={(v) => patch({ successorNote: v === "__none__" ? "" : v })}
+            >
+              <SelectTrigger><SelectValue placeholder="Select a successor from the board" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">— No successor identified —</SelectItem>
+                {otherDirectors.map((d) => (
+                  <SelectItem key={d.id} value={d.name}>{d.name} · {d.role}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {currentSuccessor && (
+              <div className="text-xs text-muted-foreground mt-2">Successor: <span className="text-foreground font-medium">{currentSuccessor.name}</span> ({currentSuccessor.role}) — term ends {currentSuccessor.termEnds}.</div>
+            )}
+            {!currentSuccessor && member.successorNote && (
+              <div className="text-xs text-muted-foreground mt-2">{member.successorNote}</div>
+            )}
+          </section>
 
           <section className="border-t pt-3">
             <div className="font-medium text-sm mb-2 flex items-center gap-2"><ShieldAlert className="h-4 w-4" />Conflict-of-interest disclosures</div>

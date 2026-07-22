@@ -86,10 +86,19 @@ function NewCodeDialog({ open, onOpenChange }: any) {
 }
 
 function CodeSheet({ code, onClose }: { code: GovernanceCode | null; onClose: () => void }) {
-  const [doc, setDoc] = useState("");
   if (!code) return null;
   const patch = (p: Partial<GovernanceCode>) =>
     mutateGov((s) => ({ ...s, codes: s.codes.map((c) => c.id === code.id ? { ...c, ...p, updatedAt: new Date().toISOString() } : c) }));
+
+  const onFiles = (files: FileList | null) => {
+    if (!files) return;
+    const added = Array.from(files).map((f) => ({
+      name: `${f.name} (${Math.round(f.size / 1024)} KB)`,
+      uploadedAt: new Date().toISOString(),
+    }));
+    patch({ documents: [...code.documents, ...added] });
+    toast({ title: `${added.length} document(s) attached` });
+  };
 
   return (
     <Sheet open onOpenChange={(o) => !o && onClose()}>
@@ -106,19 +115,24 @@ function CodeSheet({ code, onClose }: { code: GovernanceCode | null; onClose: ()
             <Textarea rows={10} value={code.body} onChange={(e) => patch({ body: e.target.value })} />
           </div>
           <section className="border-t pt-3">
-            <div className="font-medium text-sm mb-2">Documents</div>
-            <div className="space-y-1 mb-2">
+            <div className="font-medium text-sm mb-2 flex items-center gap-2"><Upload className="h-4 w-4" />Attached documents</div>
+            <div className="space-y-1 mb-3">
               {code.documents.map((d, i) => (
-                <div key={i} className="flex justify-between text-xs border rounded px-2 py-1">
+                <div key={i} className="flex justify-between items-center text-xs border rounded px-2 py-1">
                   <span>{d.name}</span>
-                  <button onClick={() => patch({ documents: code.documents.filter((_, x) => x !== i) })}><Trash2 className="h-3 w-3 text-muted-foreground" /></button>
+                  <div className="flex items-center gap-2">
+                    <span className="text-muted-foreground">{new Date(d.uploadedAt).toLocaleDateString()}</span>
+                    <button onClick={() => patch({ documents: code.documents.filter((_, x) => x !== i) })}><Trash2 className="h-3 w-3 text-muted-foreground" /></button>
+                  </div>
                 </div>
               ))}
+              {code.documents.length === 0 && <div className="text-xs text-muted-foreground">No documents attached.</div>}
             </div>
-            <div className="flex gap-2">
-              <Input placeholder="Document name (e.g. Charter_v2.pdf)" value={doc} onChange={(e) => setDoc(e.target.value)} />
-              <Button size="sm" variant="outline" onClick={() => { if (!doc) return; patch({ documents: [...code.documents, { name: doc, uploadedAt: new Date().toISOString() }] }); setDoc(""); }}><Upload className="h-4 w-4 mr-1" />Add</Button>
-            </div>
+            <label className="flex items-center gap-2 border border-dashed rounded-md px-3 py-4 cursor-pointer hover:bg-muted/50">
+              <Upload className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm text-muted-foreground">Click to attach PDF, DOCX or other supporting documents</span>
+              <input type="file" multiple className="hidden" onChange={(e) => { onFiles(e.target.files); e.currentTarget.value = ""; }} />
+            </label>
           </section>
           <div className="flex justify-end gap-2 border-t pt-3">
             {code.status === "Draft"
