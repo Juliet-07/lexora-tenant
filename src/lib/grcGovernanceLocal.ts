@@ -6,6 +6,8 @@ import { useEffect, useState } from "react";
 
 const SKILLS_KEY = "grc_gov_skills_v1";
 const ATTEND_KEY = "grc_gov_attendance_v1";
+const SHARE_KEY = "grc_gov_meeting_share_v1";
+const ACK_KEY = "grc_gov_meeting_ack_v1";
 const EVT = "grc_gov_local_changed";
 
 export type SkillLevel = "Basic" | "Intermediate" | "Expert";
