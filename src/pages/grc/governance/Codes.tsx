@@ -126,7 +126,38 @@ export default function GrcCodes() {
                   <BookOpen className="h-4 w-4 text-primary" />
                   <span className="font-semibold">{c.title}</span>
                 </div>
-                <Badge variant="outline">{c.status}</Badge>
+                <div className="flex items-center gap-1">
+                  <Badge variant="outline">{c.status}</Badge>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <button
+                        onClick={(e) => e.stopPropagation()}
+                        className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-destructive"
+                        title="Delete code"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent onClick={(e) => e.stopPropagation()}>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Delete this code?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          “{c.title}” and all its attached documents will be
+                          permanently removed. This cannot be undone.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={() => deleteMut.mutate(c._id)}
+                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                          Delete
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </div>
               </div>
               <div className="text-xs text-muted-foreground">
                 {c.category} · v{c.version}
