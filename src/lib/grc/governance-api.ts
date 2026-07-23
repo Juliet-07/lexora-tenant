@@ -412,3 +412,7 @@ export const startNewCodeVersion = async (
   const res = await api.post(`/grc/governance/codes/${id}/new-version`, {});
   return res.data?.data ?? res.data;
 };
+
+export const deleteGovernanceCode = async (id: string): Promise<void> => {
+  await api.delete(`/grc/governance/codes/${id}`);
+};

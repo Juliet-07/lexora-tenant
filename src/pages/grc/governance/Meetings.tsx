@@ -37,9 +37,16 @@ import {
   Loader2,
   FileCheck,
   ClipboardCheck,
+  Link2,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
-import { useAttendance, saveAttendance } from "@/lib/grcGovernanceLocal";
+import {
+  useAttendance,
+  saveAttendance,
+  shareMeetingSnapshot,
+  useMeetingAcks,
+} from "@/lib/grcGovernanceLocal";
+import { RichTextEditor } from "@/components/RichTextEditor";
 
 import {
   fetchMeetings,
@@ -380,6 +387,7 @@ function MeetingSheet({
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [notes, setNotes] = useState(meeting?.notes ?? "");
   const [minutes, setMinutes] = useState(meeting?.minutes ?? "");
+  const acks = useMeetingAcks(meeting?._id);
 
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: ["grc-meetings"] });
@@ -516,15 +524,59 @@ function MeetingSheet({
               {meeting.attendees.map((a, i) => (
                 <div
                   key={i}
-                  className="flex justify-between text-xs border rounded px-2 py-1"
+                  className="flex justify-between items-center text-xs border rounded px-2 py-1 gap-2"
                 >
-                  <span>
+                  <span className="truncate">
                     {a.name}{" "}
                     <span className="text-muted-foreground">{a.email}</span>
                   </span>
-                  <button onClick={() => rmAttMut.mutate(i)}>
-                    <Trash2 className="h-3 w-3 text-muted-foreground" />
-                  </button>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      title="Copy acknowledgement link"
+                      onClick={() => {
+                        shareMeetingSnapshot({
+                          meetingId: meeting._id,
+                          title: meeting.title,
+                          type: meeting.type,
+                          date: meeting.date,
+                          mode: meeting.mode,
+                          venue: meeting.venue,
+                          meetingLink: meeting.meetingLink,
+                          platform: meeting.platform,
+                          chair: meeting.chair,
+                          notes: meeting.notes,
+                          attendees: meeting.attendees.map((x) => ({
+                            name: x.name,
+                            email: x.email,
+                            role: x.role,
+                          })),
+                          agenda: meeting.agenda.map((x) => ({
+                            title: x.title,
+                            presenter: x.presenter,
+                            durationMinutes: x.durationMinutes,
+                          })),
+                          boardPack: meeting.boardPack.map((x) => ({
+                            name: x.name,
+                            fileUrl: x.fileUrl,
+                            mimeType: x.mimeType,
+                          })),
+                          sharedAt: new Date().toISOString(),
+                        });
+                        const url = `${window.location.origin}/meeting-ack/${meeting._id}?email=${encodeURIComponent(a.email)}&name=${encodeURIComponent(a.name)}`;
+                        navigator.clipboard.writeText(url).then(() =>
+                          toast({
+                            title: "Acknowledgement link copied",
+                            description: url,
+                          }),
+                        );
+                      }}
+                    >
+                      <Link2 className="h-3 w-3 text-muted-foreground hover:text-primary" />
+                    </button>
+                    <button onClick={() => rmAttMut.mutate(i)}>
+                      <Trash2 className="h-3 w-3 text-muted-foreground" />
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -743,14 +795,49 @@ function MeetingSheet({
             </section>
           )}
 
+          {/* Acknowledgements from external attendees */}
+          <section className="border-t pt-4 space-y-2">
+            <div className="font-medium text-sm flex items-center gap-2">
+              <ClipboardCheck className="h-4 w-4" />
+              Board pack acknowledgements ({acks.length})
+            </div>
+            {acks.length === 0 ? (
+              <p className="text-xs text-muted-foreground">
+                No acknowledgements yet. Copy the link icon next to each
+                attendee to send them a personalised acknowledgement page.
+              </p>
+            ) : (
+              <div className="space-y-1">
+                {acks.map((a) => (
+                  <div
+                    key={a.attendeeEmail}
+                    className="flex justify-between items-center text-xs border rounded px-2 py-1"
+                  >
+                    <span>
+                      <span className="font-medium">{a.attendeeName}</span>{" "}
+                      <span className="text-muted-foreground">
+                        {a.attendeeEmail}
+                      </span>
+                    </span>
+                    <span className="text-muted-foreground">
+                      {a.documents.length} doc
+                      {a.documents.length !== 1 ? "s" : ""} ·{" "}
+                      {new Date(a.confirmedAt).toLocaleString()}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
           {/* Minutes — always writable */}
           <section className="border-t pt-4 space-y-2">
             <div className="font-medium text-sm">Minutes</div>
-            <Textarea
-              rows={4}
+            <RichTextEditor
               value={minutes}
+              onChange={setMinutes}
               placeholder="Write the minutes here…"
-              onChange={(e) => setMinutes(e.target.value)}
+              minHeight={180}
             />
             <div className="flex justify-end">
               <Button
