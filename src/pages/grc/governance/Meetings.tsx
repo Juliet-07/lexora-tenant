@@ -795,6 +795,41 @@ function MeetingSheet({
             </section>
           )}
 
+          {/* Acknowledgements from external attendees */}
+          <section className="border-t pt-4 space-y-2">
+            <div className="font-medium text-sm flex items-center gap-2">
+              <ClipboardCheck className="h-4 w-4" />
+              Board pack acknowledgements ({acks.length})
+            </div>
+            {acks.length === 0 ? (
+              <p className="text-xs text-muted-foreground">
+                No acknowledgements yet. Copy the link icon next to each
+                attendee to send them a personalised acknowledgement page.
+              </p>
+            ) : (
+              <div className="space-y-1">
+                {acks.map((a) => (
+                  <div
+                    key={a.attendeeEmail}
+                    className="flex justify-between items-center text-xs border rounded px-2 py-1"
+                  >
+                    <span>
+                      <span className="font-medium">{a.attendeeName}</span>{" "}
+                      <span className="text-muted-foreground">
+                        {a.attendeeEmail}
+                      </span>
+                    </span>
+                    <span className="text-muted-foreground">
+                      {a.documents.length} doc
+                      {a.documents.length !== 1 ? "s" : ""} ·{" "}
+                      {new Date(a.confirmedAt).toLocaleString()}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
           {/* Minutes — always writable */}
           <section className="border-t pt-4 space-y-2">
             <div className="font-medium text-sm">Minutes</div>
