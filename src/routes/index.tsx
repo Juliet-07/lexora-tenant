@@ -9,17 +9,17 @@ import { crmRoutes } from "./crm.routes";
 import { grcRoutes } from "./grc.routes";
 import { employeeRoutes } from "./employee.routes";
 import SignContractPage from "@/pages/SigninContractPage";
+import MeetingAckPage from "@/pages/grc/governance/MeetingAck";
 
 /**
  * Top-level router. Module-specific routes live in their own files so
  * App.tsx stays a thin entry point.
- *
- * Employee onboarding is no longer a hard gate — employees land on their
- * dashboard normally. A reminder popup + header progress indicator
- * (see OnboardingReminder) nudge them to /onboarding when incomplete.
  */
 
-const PUBLIC_ROUTE_PATTERNS = [/^\/sign-contract\/[^/]+$/];
+const PUBLIC_ROUTE_PATTERNS = [
+  /^\/sign-contract\/[^/]+$/,
+  /^\/meeting-ack\/[^/]+$/,
+];
 
 export function AppRoutes() {
   const { user, isAdmin } = useAuth();
@@ -33,6 +33,7 @@ export function AppRoutes() {
     return (
       <Routes>
         <Route path="/sign-contract/:token" element={<SignContractPage />} />
+        <Route path="/meeting-ack/:meetingId" element={<MeetingAckPage />} />
       </Routes>
     );
   }
