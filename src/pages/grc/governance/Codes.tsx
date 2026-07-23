@@ -140,19 +140,6 @@ export default function GrcCodes() {
 
 function NewCodeDialog({ open, onOpenChange }: any) {
   const queryClient = useQueryClient();
-  const deleteMut = useMutation({
-    mutationFn: (id: string) => deleteGovernanceCode(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["grc-codes"] });
-      toast({ title: "Code deleted" });
-    },
-    onError: (err: any) =>
-      toast({
-        title: "Failed to delete",
-        description: err?.response?.data?.message,
-        variant: "destructive",
-      }),
-  });
   const [f, setF] = useState<{
     title: string;
     category: GovernanceCodeCategory;
