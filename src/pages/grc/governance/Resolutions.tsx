@@ -538,14 +538,14 @@ function CreateResolutionDialog({
             <div>
               <Label>Linked meeting (optional)</Label>
               <Select
-                value={linkedMeetingId}
-                onValueChange={setLinkedMeetingId}
+                value={linkedMeetingId || "__none__"}
+                onValueChange={(v) => setLinkedMeetingId(v === "__none__" ? "" : v)}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="None" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">None</SelectItem>
+                  <SelectItem value="__none__">None</SelectItem>
                   {gov.meetings.map((m) => (
                     <SelectItem key={m.id} value={m.id}>
                       {m.title} — {new Date(m.date).toLocaleDateString()}
