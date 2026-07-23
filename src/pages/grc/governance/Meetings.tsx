@@ -797,11 +797,11 @@ function MeetingSheet({
           {/* Minutes — always writable */}
           <section className="border-t pt-4 space-y-2">
             <div className="font-medium text-sm">Minutes</div>
-            <Textarea
-              rows={4}
+            <RichTextEditor
               value={minutes}
+              onChange={setMinutes}
               placeholder="Write the minutes here…"
-              onChange={(e) => setMinutes(e.target.value)}
+              minHeight={180}
             />
             <div className="flex justify-end">
               <Button
