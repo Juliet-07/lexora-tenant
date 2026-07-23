@@ -63,7 +63,7 @@ export type MeetingAudienceType =
   | "Ad-hoc";
 export type MeetingMode = "Physical" | "Online";
 export type MeetingPlatform = "Zoom" | "Google Meet" | "Microsoft Teams";
-export type MeetingStatus = "Draft" | "Sent" | "Held";
+export type MeetingStatus = "Draft" | "Sent" | "Held" | "Postponed";
 
 export interface MeetingAttendee {
   name: string;
@@ -111,6 +111,46 @@ export interface Meeting {
   sentAt: string | null;
   minutes: string | null;
   minutesSentAt: string | null;
+  postponementReason: string | null;
+  postponedAt: string | null;
+  attendanceAllPresent: boolean | null;
+  attendancePresentIndices: number[];
+  attendanceRecordedAt: string | null;
+  acknowledgments: {
+    attendeeName: string;
+    attendeeEmail: string;
+    agendaConfirmed: boolean;
+    documents: {
+      name: string;
+      fileUrl: string | null;
+      ackedAt: string;
+      method: string;
+    }[];
+    confirmedAt: string;
+    signature: string;
+  }[];
+  ackTokens: unknown[];
+}
+
+export interface AckSnapshot {
+  title: string;
+  type: string;
+  date: string;
+  mode: string;
+  venue: string | null;
+  platform: string | null;
+  chair: string;
+  notes: string;
+  attendeeCount: number;
+  agenda: MeetingAgendaItem[];
+  boardPack: {
+    name: string;
+    fileUrl: string | null;
+    mimeType: string | null;
+  }[];
+  prefillName: string;
+  prefillEmail: string;
+  alreadyAcknowledged: boolean;
 }
 
 export type GovernanceCodeCategory =
@@ -138,6 +178,26 @@ export interface GovernanceCode {
   version: number;
   status: GovernanceCodeStatus;
   updatedAt: string;
+}
+
+export type SkillCategory =
+  | "Finance"
+  | "Legal"
+  | "Risk"
+  | "Strategy"
+  | "Technology"
+  | "Governance"
+  | "Industry"
+  | "Other";
+export type SkillLevel = "Basic" | "Intermediate" | "Expert";
+
+export interface BoardSkill {
+  name: string;
+  category: SkillCategory;
+  level: SkillLevel;
+  yearsExperience: number;
+  qualified: boolean;
+  notes: string;
 }
 
 export const fetchBoardMembers = async (): Promise<BoardMember[]> => {
@@ -334,6 +394,24 @@ export const updateMeetingNotes = async (
   return res.data?.data ?? res.data;
 };
 
+export const fetchAckSnapshot = async (token: string): Promise<AckSnapshot> => {
+  const res = await api.get(`/grc/governance/meetings/ack/${token}`);
+  return res.data?.data ?? res.data;
+};
+
+export const submitAck = async (
+  token: string,
+  dto: {
+    name: string;
+    signature: string;
+    agendaConfirmed: boolean;
+    documents: { name: string; fileUrl?: string; method: string }[];
+  },
+): Promise<{ success: boolean }> => {
+  const res = await api.post(`/grc/governance/meetings/ack/${token}`, dto);
+  return res.data?.data ?? res.data;
+};
+
 export const updateMeetingMinutes = async (
   id: string,
   minutes: string,
@@ -355,6 +433,21 @@ export const dispatchMeeting = async (id: string): Promise<Meeting> => {
 
 export const sendMeetingMinutes = async (id: string): Promise<Meeting> => {
   const res = await api.post(`/grc/governance/meetings/${id}/send-minutes`, {});
+  return res.data?.data ?? res.data;
+};
+
+export const postponeMeeting = async (
+  id: string,
+  reason: string,
+): Promise<Meeting> => {
+  const res = await api.post(`/grc/governance/meetings/${id}/postpone`, {
+    reason,
+  });
+  return res.data?.data ?? res.data;
+};
+
+export const resumeMeeting = async (id: string): Promise<Meeting> => {
+  const res = await api.post(`/grc/governance/meetings/${id}/resume`, {});
   return res.data?.data ?? res.data;
 };
 
@@ -415,4 +508,43 @@ export const startNewCodeVersion = async (
 
 export const deleteGovernanceCode = async (id: string): Promise<void> => {
   await api.delete(`/grc/governance/codes/${id}`);
+};
+
+export const addSkill = async (
+  id: string,
+  dto: {
+    name: string;
+    category: SkillCategory;
+    level: SkillLevel;
+    yearsExperience?: number;
+    qualified?: boolean;
+    notes?: string;
+  },
+): Promise<BoardMember> => {
+  const res = await api.post(`/grc/governance/board-members/${id}/skills`, dto);
+  return res.data?.data ?? res.data;
+};
+
+export const removeSkill = async (
+  id: string,
+  index: number,
+): Promise<BoardMember> => {
+  const res = await api.delete(
+    `/grc/governance/board-members/${id}/skills/${index}`,
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const recordAttendance = async (
+  id: string,
+  allAttended: boolean,
+  presentIndices?: number[],
+  absenceNotes?: { index: number; note: string }[],
+): Promise<Meeting> => {
+  const res = await api.patch(`/grc/governance/meetings/${id}/attendance`, {
+    allAttended,
+    presentIndices,
+    absenceNotes,
+  });
+  return res.data?.data ?? res.data;
 };

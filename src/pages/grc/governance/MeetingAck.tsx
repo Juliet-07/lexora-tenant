@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useParams, useSearchParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Document, Page, pdfjs } from "react-pdf";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
@@ -20,23 +21,34 @@ import {
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import {
-  getSharedMeeting,
-  saveMeetingAck,
-  type SharedMeetingSnapshot,
-  type SharedMeetingDoc,
-  type DocAck,
-} from "@/lib/grcGovernanceLocal";
-import { resolveGrcFileUrl } from "@/lib/grc/governance-api";
+  fetchAckSnapshot,
+  submitAck,
+  resolveGrcFileUrl,
+  type AckSnapshot,
+} from "@/lib/grc/governance-api";
 
-pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-  "pdfjs-dist/build/pdf.worker.min.mjs",
-  import.meta.url,
-).toString();
+pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+
+type SharedMeetingDoc = {
+  name: string;
+  fileUrl: string | null;
+  mimeType: string | null;
+};
+type DocAck = {
+  name: string;
+  fileUrl?: string | null;
+  ackedAt: string;
+  method: string;
+};
 
 function isPdf(d: SharedMeetingDoc) {
   const url = d.fileUrl?.toLowerCase() ?? "";
   const mt = d.mimeType?.toLowerCase() ?? "";
-  return mt.includes("pdf") || url.endsWith(".pdf") || d.name.toLowerCase().endsWith(".pdf");
+  return (
+    mt.includes("pdf") ||
+    url.endsWith(".pdf") ||
+    d.name.toLowerCase().endsWith(".pdf")
+  );
 }
 function isImage(d: SharedMeetingDoc) {
   const url = d.fileUrl?.toLowerCase() ?? "";
@@ -50,33 +62,93 @@ function isImage(d: SharedMeetingDoc) {
 }
 
 export default function MeetingAckPage() {
-  const { meetingId } = useParams<{ meetingId: string }>();
-  const [search] = useSearchParams();
-  const emailParam = search.get("email") ?? "";
-  const nameParam = search.get("name") ?? "";
+  const { token } = useParams<{ token: string }>();
 
-  const snap = useMemo<SharedMeetingSnapshot | null>(
-    () => (meetingId ? getSharedMeeting(meetingId) : null),
-    [meetingId],
-  );
+  const {
+    data: snap,
+    isLoading,
+    isError,
+  } = useQuery({
+    queryKey: ["meeting-ack", token],
+    queryFn: () => fetchAckSnapshot(token!),
+    enabled: !!token,
+    retry: false,
+  });
 
-  const [name, setName] = useState(nameParam);
-  const [email, setEmail] = useState(emailParam);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
   const [signature, setSignature] = useState("");
   const [agendaConfirmed, setAgendaConfirmed] = useState(false);
   const [docAcks, setDocAcks] = useState<Record<number, DocAck>>({});
   const [submitted, setSubmitted] = useState(false);
 
-  if (!snap) {
+  useEffect(() => {
+    if (snap) {
+      setName(snap.prefillName);
+      setEmail(snap.prefillEmail);
+    }
+  }, [snap]);
+
+  const submitMutation = useMutation({
+    mutationFn: () =>
+      submitAck(token!, {
+        name: name.trim(),
+        signature: signature.trim(),
+        agendaConfirmed,
+        documents: Object.values(docAcks).map((d) => ({
+          name: d.name,
+          fileUrl: d.fileUrl ?? undefined,
+          method: d.method,
+        })),
+      }),
+    onSuccess: () => {
+      setSubmitted(true);
+      toast({ title: "Receipt recorded", description: "Thank you." });
+    },
+    onError: (err: any) =>
+      toast({
+        title: "Failed to submit",
+        description: err?.response?.data?.message,
+        variant: "destructive",
+      }),
+  });
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-muted/30 flex items-center justify-center p-6">
+        <p className="text-sm text-muted-foreground">Loading…</p>
+      </div>
+    );
+  }
+
+  if (isError || !snap) {
     return (
       <div className="min-h-screen bg-muted/30 flex items-center justify-center p-6">
         <Card className="max-w-md">
           <CardContent className="p-6 text-center space-y-2">
-            <div className="text-lg font-semibold">Acknowledgement link invalid</div>
+            <div className="text-lg font-semibold">
+              Acknowledgement link invalid
+            </div>
             <p className="text-sm text-muted-foreground">
-              This acknowledgement link could not be found on this device. Please
-              open the original link sent to your email from the same browser it
-              was shared to, or contact the meeting organiser.
+              This link is no longer valid. Please contact the meeting organiser
+              for a new one.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (snap.alreadyAcknowledged && !submitted) {
+    return (
+      <div className="min-h-screen bg-muted/30 flex items-center justify-center p-6">
+        <Card className="max-w-md">
+          <CardContent className="p-8 text-center space-y-3">
+            <CheckCircle2 className="h-12 w-12 text-emerald-600 mx-auto" />
+            <div className="text-lg font-semibold">Already acknowledged</div>
+            <p className="text-sm text-muted-foreground">
+              Our records show this board pack for "{snap.title}" has already
+              been acknowledged.
             </p>
           </CardContent>
         </Card>
@@ -94,17 +166,7 @@ export default function MeetingAckPage() {
 
   const submit = () => {
     if (!canSubmit) return;
-    saveMeetingAck({
-      meetingId: snap.meetingId,
-      attendeeName: name.trim(),
-      attendeeEmail: email.trim(),
-      agendaConfirmed,
-      documents: Object.values(docAcks),
-      confirmedAt: new Date().toISOString(),
-      signature: signature.trim(),
-    });
-    setSubmitted(true);
-    toast({ title: "Receipt recorded", description: "Thank you." });
+    submitMutation.mutate();
   };
 
   if (submitted) {
@@ -113,7 +175,9 @@ export default function MeetingAckPage() {
         <Card className="max-w-md">
           <CardContent className="p-8 text-center space-y-3">
             <CheckCircle2 className="h-12 w-12 text-emerald-600 mx-auto" />
-            <div className="text-lg font-semibold">Acknowledgement recorded</div>
+            <div className="text-lg font-semibold">
+              Acknowledgement recorded
+            </div>
             <p className="text-sm text-muted-foreground">
               Thank you, {name}. The organiser has been notified that you
               received and reviewed the board pack for “{snap.title}”.
@@ -152,7 +216,7 @@ export default function MeetingAckPage() {
               </Badge>
               <Badge variant="outline" className="gap-1">
                 <Users2 className="h-3 w-3" />
-                {snap.attendees.length} attendees
+                {snap.attendeeCount} attendees
               </Badge>
             </div>
             <div className="text-sm">
@@ -174,7 +238,10 @@ export default function MeetingAckPage() {
                 <li key={i}>
                   {a.title}
                   {a.presenter && (
-                    <span className="text-muted-foreground"> — {a.presenter}</span>
+                    <span className="text-muted-foreground">
+                      {" "}
+                      — {a.presenter}
+                    </span>
                   )}
                   {a.durationMinutes ? (
                     <span className="text-xs text-muted-foreground">
@@ -185,7 +252,9 @@ export default function MeetingAckPage() {
                 </li>
               ))}
               {snap.agenda.length === 0 && (
-                <li className="list-none text-muted-foreground">No agenda items.</li>
+                <li className="list-none text-muted-foreground">
+                  No agenda items.
+                </li>
               )}
             </ol>
             <label className="flex items-center gap-2 text-sm pt-2 border-t">
@@ -245,8 +314,14 @@ export default function MeetingAckPage() {
                 className="font-serif italic"
               />
             </div>
-            <Button className="w-full" disabled={!canSubmit} onClick={submit}>
-              Confirm receipt & review
+            <Button
+              className="w-full"
+              disabled={!canSubmit || submitMutation.isPending}
+              onClick={submit}
+            >
+              {submitMutation.isPending
+                ? "Submitting…"
+                : "Confirm receipt & review"}
             </Button>
             {!canSubmit && (
               <p className="text-xs text-muted-foreground text-center">
@@ -362,6 +437,8 @@ function DocumentAckBlock({
   );
 }
 
+const PDF_LOAD_OPTIONS = { disableRange: true, disableStream: true };
+
 function PdfViewer({
   url,
   onScrolledToEnd,
@@ -410,6 +487,7 @@ function PdfViewer({
       >
         <Document
           file={url}
+          options={PDF_LOAD_OPTIONS}
           onLoadSuccess={(pdf) => setNumPages(pdf.numPages)}
           loading={
             <div className="p-6 text-center text-sm text-muted-foreground">
@@ -483,7 +561,11 @@ function ImageAckBlock({
         className="max-h-72 w-auto mx-auto border rounded bg-white"
       />
       <div className="flex justify-center">
-        <Button size="sm" variant={acked ? "outline" : "default"} onClick={download}>
+        <Button
+          size="sm"
+          variant={acked ? "outline" : "default"}
+          onClick={download}
+        >
           <Download className="h-4 w-4 mr-1" />
           {acked ? "Downloaded" : "Download image to confirm review"}
         </Button>

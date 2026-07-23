@@ -33,7 +33,7 @@ export function AppRoutes() {
     return (
       <Routes>
         <Route path="/sign-contract/:token" element={<SignContractPage />} />
-        <Route path="/meeting-ack/:meetingId" element={<MeetingAckPage />} />
+        <Route path="/meeting-ack/:token" element={<MeetingAckPage />} />
       </Routes>
     );
   }

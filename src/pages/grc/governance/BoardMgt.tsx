@@ -52,16 +52,13 @@ import {
   recordConflict,
   logTraining,
   setSuccessor,
-  type BoardMember,
-  type BoardMemberRole,
-} from "@/lib/grc/governance-api";
-import {
-  useSkills,
   addSkill,
   removeSkill,
-  type BoardSkill,
-  type SkillLevel,
-} from "@/lib/grcGovernanceLocal";
+  type BoardMember,
+  type BoardMemberRole,
+  BoardSkill,
+} from "@/lib/grc/governance-api";
+import { SkillLevel } from "@/lib/grcGovernanceLocal";
 
 const ROLES: BoardMemberRole[] = [
   "Chair",
@@ -440,7 +437,11 @@ function DirectorSheet({
             </Select>
           </div>
 
-          <SkillsMatrixSection memberId={member._id} role={member.role} />
+          <SkillsMatrixSection
+            memberId={member._id}
+            role={member.role}
+            skills={member.skills}
+          />
 
           <section className="border-t pt-3">
             <div className="font-medium text-sm mb-2 flex items-center gap-2">
@@ -550,11 +551,30 @@ const SKILL_LEVELS: SkillLevel[] = ["Basic", "Intermediate", "Expert"];
 function SkillsMatrixSection({
   memberId,
   role,
+  skills: skillsProp,
 }: {
   memberId: string;
   role: BoardMemberRole;
+  skills: BoardSkill[];
 }) {
-  const skills = useSkills(memberId);
+  const skills = skillsProp ?? [];
+  const queryClient = useQueryClient();
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: ["grc-board-members"] });
+  const addMut = useMutation({
+    mutationFn: (dto: Parameters<typeof addSkill>[1]) =>
+      addSkill(memberId, dto),
+    onSuccess: invalidate,
+    onError: () =>
+      toast({ title: "Failed to add credential", variant: "destructive" }),
+  });
+  const removeMut = useMutation({
+    mutationFn: (index: number) => removeSkill(memberId, index),
+    onSuccess: invalidate,
+    onError: () =>
+      toast({ title: "Failed to remove credential", variant: "destructive" }),
+  });
+
   const [f, setF] = useState<{
     name: string;
     category: BoardSkill["category"];
@@ -578,7 +598,7 @@ function SkillsMatrixSection({
       toast({ title: "Credential name required", variant: "destructive" });
       return;
     }
-    addSkill(memberId, { ...f, name: f.name.trim(), notes: f.notes.trim() });
+    addMut.mutate({ ...f, name: f.name.trim(), notes: f.notes.trim() });
     setF({
       name: "",
       category: "Finance",
@@ -628,7 +648,7 @@ function SkillsMatrixSection({
                 </div>
               )}
             </div>
-            <button onClick={() => removeSkill(memberId, s.id)}>
+            <button onClick={() => removeMut.mutate(i)}>
               <Trash2 className="h-3 w-3 text-muted-foreground" />
             </button>
           </div>

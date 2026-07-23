@@ -12,6 +12,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogTrigger,
 } from "@/components/ui/dialog";
 import {
   Sheet,
@@ -40,14 +41,7 @@ import {
   Link2,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
-import {
-  useAttendance,
-  saveAttendance,
-  shareMeetingSnapshot,
-  useMeetingAcks,
-} from "@/lib/grcGovernanceLocal";
 import { RichTextEditor } from "@/components/RichTextEditor";
-
 import {
   fetchMeetings,
   createMeeting,
@@ -65,10 +59,13 @@ import {
   fetchBoardMembers,
   fetchCommittees,
   resolveGrcFileUrl,
+  recordAttendance,
   type Meeting,
   type MeetingAudienceType,
   type MeetingMode,
   type MeetingPlatform,
+  postponeMeeting,
+  resumeMeeting,
 } from "@/lib/grc/governance-api";
 
 export default function GrcMeetings() {
@@ -387,7 +384,8 @@ function MeetingSheet({
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [notes, setNotes] = useState(meeting?.notes ?? "");
   const [minutes, setMinutes] = useState(meeting?.minutes ?? "");
-  const acks = useMeetingAcks(meeting?._id);
+  const [postponeOpen, setPostponeOpen] = useState(false);
+  const [postponeReason, setPostponeReason] = useState("");
 
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: ["grc-meetings"] });
@@ -461,6 +459,24 @@ function MeetingSheet({
     onSuccess: invalidate,
     onError: onErr("Failed to mark meeting as done"),
   });
+  const postponeMut = useMutation({
+    mutationFn: (reason: string) => postponeMeeting(meeting!._id, reason),
+    onSuccess: () => {
+      invalidate();
+      setPostponeOpen(false);
+      setPostponeReason("");
+      toast({ title: "Meeting postponed" });
+    },
+    onError: onErr("Failed to postpone meeting"),
+  });
+  const resumeMut = useMutation({
+    mutationFn: () => resumeMeeting(meeting!._id),
+    onSuccess: () => {
+      invalidate();
+      toast({ title: "Meeting resumed" });
+    },
+    onError: onErr("Failed to resume meeting"),
+  });
   const minutesMut = useMutation({
     mutationFn: () => updateMeetingMinutes(meeting!._id, minutes),
     onSuccess: () => {
@@ -487,13 +503,81 @@ function MeetingSheet({
           <SheetTitle>{meeting.title}</SheetTitle>
         </SheetHeader>
         <div className="mt-4 space-y-5">
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 items-center">
             <Badge variant="outline">{meeting.type}</Badge>
-            <Badge variant="outline">{meeting.status}</Badge>
+            <Badge
+              variant="outline"
+              className={
+                meeting.status === "Postponed"
+                  ? "bg-amber-50 text-amber-700 border-amber-300"
+                  : ""
+              }
+            >
+              {meeting.status}
+            </Badge>
             <Badge variant="outline">
               {new Date(meeting.date).toLocaleString()}
             </Badge>
+            {meeting.status !== "Postponed" && meeting.status !== "Held" && (
+              <Dialog open={postponeOpen} onOpenChange={setPostponeOpen}>
+                <DialogTrigger asChild>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-6 text-xs ml-auto"
+                  >
+                    Postpone
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Postpone this meeting</DialogTitle>
+                  </DialogHeader>
+                  <Textarea
+                    rows={3}
+                    placeholder="Reason for postponement…"
+                    value={postponeReason}
+                    onChange={(e) => setPostponeReason(e.target.value)}
+                  />
+                  <DialogFooter>
+                    <Button
+                      variant="destructive"
+                      disabled={!postponeReason.trim() || postponeMut.isPending}
+                      onClick={() => postponeMut.mutate(postponeReason)}
+                    >
+                      {postponeMut.isPending ? (
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      ) : null}
+                      Confirm postponement
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            )}
           </div>
+
+          {meeting.status === "Postponed" && (
+            <div className="rounded-md border border-amber-300 bg-amber-50 p-3 space-y-2">
+              <p className="text-sm text-amber-800">
+                <span className="font-medium">Postponed</span>
+                {meeting.postponedAt &&
+                  ` on ${new Date(meeting.postponedAt).toLocaleDateString()}`}
+                {meeting.postponementReason &&
+                  `: ${meeting.postponementReason}`}
+              </p>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => resumeMut.mutate()}
+                disabled={resumeMut.isPending}
+              >
+                {resumeMut.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : null}
+                Resume meeting
+              </Button>
+            </div>
+          )}
           <div className="text-sm">
             <span className="text-muted-foreground">Chair:</span>{" "}
             {meeting.chair} ·{" "}
@@ -531,48 +615,6 @@ function MeetingSheet({
                     <span className="text-muted-foreground">{a.email}</span>
                   </span>
                   <div className="flex items-center gap-1 shrink-0">
-                    <button
-                      title="Copy acknowledgement link"
-                      onClick={() => {
-                        shareMeetingSnapshot({
-                          meetingId: meeting._id,
-                          title: meeting.title,
-                          type: meeting.type,
-                          date: meeting.date,
-                          mode: meeting.mode,
-                          venue: meeting.venue,
-                          meetingLink: meeting.meetingLink,
-                          platform: meeting.platform,
-                          chair: meeting.chair,
-                          notes: meeting.notes,
-                          attendees: meeting.attendees.map((x) => ({
-                            name: x.name,
-                            email: x.email,
-                            role: x.role,
-                          })),
-                          agenda: meeting.agenda.map((x) => ({
-                            title: x.title,
-                            presenter: x.presenter,
-                            durationMinutes: x.durationMinutes,
-                          })),
-                          boardPack: meeting.boardPack.map((x) => ({
-                            name: x.name,
-                            fileUrl: x.fileUrl,
-                            mimeType: x.mimeType,
-                          })),
-                          sharedAt: new Date().toISOString(),
-                        });
-                        const url = `${window.location.origin}/meeting-ack/${meeting._id}?email=${encodeURIComponent(a.email)}&name=${encodeURIComponent(a.name)}`;
-                        navigator.clipboard.writeText(url).then(() =>
-                          toast({
-                            title: "Acknowledgement link copied",
-                            description: url,
-                          }),
-                        );
-                      }}
-                    >
-                      <Link2 className="h-3 w-3 text-muted-foreground hover:text-primary" />
-                    </button>
                     <button onClick={() => rmAttMut.mutate(i)}>
                       <Trash2 className="h-3 w-3 text-muted-foreground" />
                     </button>
@@ -747,35 +789,37 @@ function MeetingSheet({
           </section>
 
           {/* Step 1: dispatch the pre-meeting pack */}
-          <section className="border-t pt-4 space-y-2">
-            <div className="font-medium text-sm">Send meeting pack</div>
-            <p className="text-xs text-muted-foreground">
-              Sends the notes, agenda, and board pack to all attendees ahead of
-              the meeting.
-            </p>
-            <Button
-              onClick={() => dispatchMut.mutate()}
-              disabled={
-                meeting.status === "Sent" ||
-                meeting.status === "Held" ||
-                dispatchMut.isPending
-              }
-            >
-              <Send className="h-4 w-4 mr-1" />
-              {meeting.status === "Sent" || meeting.status === "Held"
-                ? "Dispatched"
-                : "Send meeting pack"}
-            </Button>
-            {meeting.sentAt && (
-              <div className="text-xs text-muted-foreground flex items-center gap-1">
-                <Mail className="h-3 w-3" />
-                Dispatched {new Date(meeting.sentAt).toLocaleString()}
-              </div>
-            )}
-          </section>
+          {meeting.status !== "Postponed" && (
+            <section className="border-t pt-4 space-y-2">
+              <div className="font-medium text-sm">Send meeting pack</div>
+              <p className="text-xs text-muted-foreground">
+                Sends the notes, agenda, and board pack to all attendees ahead
+                of the meeting.
+              </p>
+              <Button
+                onClick={() => dispatchMut.mutate()}
+                disabled={
+                  meeting.status === "Sent" ||
+                  meeting.status === "Held" ||
+                  dispatchMut.isPending
+                }
+              >
+                <Send className="h-4 w-4 mr-1" />
+                {meeting.status === "Sent" || meeting.status === "Held"
+                  ? "Dispatched"
+                  : "Send meeting pack"}
+              </Button>
+              {meeting.sentAt && (
+                <div className="text-xs text-muted-foreground flex items-center gap-1">
+                  <Mail className="h-3 w-3" />
+                  Dispatched {new Date(meeting.sentAt).toLocaleString()}
+                </div>
+              )}
+            </section>
+          )}
 
           {/* Step 2: mark the meeting as done, separate from step 1 */}
-          {meeting.status !== "Held" && (
+          {meeting.status !== "Held" && meeting.status !== "Postponed" && (
             <section className="border-t pt-4 space-y-2">
               <div className="font-medium text-sm">Mark meeting as done</div>
               <p className="text-xs text-muted-foreground">
@@ -799,16 +843,18 @@ function MeetingSheet({
           <section className="border-t pt-4 space-y-2">
             <div className="font-medium text-sm flex items-center gap-2">
               <ClipboardCheck className="h-4 w-4" />
-              Board pack acknowledgements ({acks.length})
+              Board pack acknowledgements (
+              {(meeting.acknowledgments ?? []).length})
             </div>
-            {acks.length === 0 ? (
+            {(meeting.acknowledgments ?? []).length === 0 ? (
               <p className="text-xs text-muted-foreground">
-                No acknowledgements yet. Copy the link icon next to each
-                attendee to send them a personalised acknowledgement page.
+                No acknowledgements yet — attendees receive their personal
+                acknowledgement link automatically when you send the meeting
+                pack.
               </p>
             ) : (
               <div className="space-y-1">
-                {acks.map((a) => (
+                {(meeting.acknowledgments ?? []).map((a) => (
                   <div
                     key={a.attendeeEmail}
                     className="flex justify-between items-center text-xs border rounded px-2 py-1"
@@ -890,7 +936,25 @@ function MeetingSheet({
 }
 
 function AttendanceSection({ meeting }: { meeting: Meeting }) {
-  const attendance = useAttendance(meeting._id);
+  const queryClient = useQueryClient();
+  const attendance = meeting.attendanceRecordedAt
+    ? {
+        allAttended: meeting.attendanceAllPresent!,
+        presentIndices: meeting.attendancePresentIndices,
+        recordedAt: meeting.attendanceRecordedAt,
+      }
+    : null;
+  const attendanceMut = useMutation({
+    mutationFn: (v: { allAttended: boolean; presentIndices: number[] }) =>
+      recordAttendance(meeting._id, v.allAttended, v.presentIndices),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["grc-meetings"] });
+      setEditing(false);
+      toast({ title: "Attendance recorded" });
+    },
+    onError: () =>
+      toast({ title: "Failed to record attendance", variant: "destructive" }),
+  });
   const [editing, setEditing] = useState(false);
   const [allAttended, setAllAttended] = useState<"yes" | "no" | "">(
     attendance?.allAttended == null
@@ -902,6 +966,7 @@ function AttendanceSection({ meeting }: { meeting: Meeting }) {
   const [present, setPresent] = useState<number[]>(
     attendance?.presentIndices ?? [],
   );
+  const [absenceNotes, setAbsenceNotes] = useState<Record<number, string>>({});
 
   const startEditing = () => {
     setAllAttended(
@@ -927,18 +992,17 @@ function AttendanceSection({ meeting }: { meeting: Meeting }) {
       return;
     }
     if (allAttended === "no" && present.length === 0) {
-      toast({
-        title: "Select who attended",
-        variant: "destructive",
-      });
+      toast({ title: "Select who attended", variant: "destructive" });
       return;
     }
-    saveAttendance(meeting._id, {
+    const notes = Object.entries(absenceNotes)
+      .map(([index, note]) => ({ index: Number(index), note: note.trim() }))
+      .filter((n) => n.note);
+    attendanceMut.mutate({
       allAttended: allAttended === "yes",
       presentIndices: present,
+      absenceNotes: allAttended === "no" ? notes : undefined,
     });
-    setEditing(false);
-    toast({ title: "Attendance recorded" });
   };
 
   const recorded = attendance?.recordedAt != null;
@@ -1042,25 +1106,37 @@ function AttendanceSection({ meeting }: { meeting: Meeting }) {
               <Label className="text-xs">Select who attended</Label>
               <div className="mt-1 space-y-1 max-h-56 overflow-y-auto">
                 {meeting.attendees.map((a, i) => (
-                  <label
-                    key={i}
-                    className="flex items-center gap-2 text-xs border rounded px-2 py-1 cursor-pointer hover:bg-background"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={present.includes(i)}
-                      onChange={() => toggle(i)}
-                    />
-                    <span className="flex-1 truncate">
-                      {a.name}{" "}
-                      <span className="text-muted-foreground">{a.email}</span>
-                    </span>
-                    {a.role && (
-                      <Badge variant="outline" className="text-[10px]">
-                        {a.role}
-                      </Badge>
+                  <div key={i} className="border rounded px-2 py-1">
+                    <label className="flex items-center gap-2 text-xs cursor-pointer hover:bg-background">
+                      <input
+                        type="checkbox"
+                        checked={present.includes(i)}
+                        onChange={() => toggle(i)}
+                      />
+                      <span className="flex-1 truncate">
+                        {a.name}{" "}
+                        <span className="text-muted-foreground">{a.email}</span>
+                      </span>
+                      {a.role && (
+                        <Badge variant="outline" className="text-[10px]">
+                          {a.role}
+                        </Badge>
+                      )}
+                    </label>
+                    {!present.includes(i) && (
+                      <Input
+                        className="h-6 text-[11px] mt-1"
+                        placeholder="Reason (optional) — e.g. Apologies submitted"
+                        value={absenceNotes[i] ?? ""}
+                        onChange={(e) =>
+                          setAbsenceNotes((prev) => ({
+                            ...prev,
+                            [i]: e.target.value,
+                          }))
+                        }
+                      />
                     )}
-                  </label>
+                  </div>
                 ))}
               </div>
               <div className="text-[11px] text-muted-foreground mt-1">
