@@ -37,9 +37,16 @@ import {
   Loader2,
   FileCheck,
   ClipboardCheck,
+  Link2,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
-import { useAttendance, saveAttendance } from "@/lib/grcGovernanceLocal";
+import {
+  useAttendance,
+  saveAttendance,
+  shareMeetingSnapshot,
+  useMeetingAcks,
+} from "@/lib/grcGovernanceLocal";
+import { RichTextEditor } from "@/components/RichTextEditor";
 
 import {
   fetchMeetings,
