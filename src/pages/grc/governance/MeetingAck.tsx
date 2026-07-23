@@ -139,6 +139,22 @@ export default function MeetingAckPage() {
     );
   }
 
+  if (snap.expired && !submitted) {
+    return (
+      <div className="min-h-screen bg-muted/30 flex items-center justify-center p-6">
+        <Card className="max-w-md">
+          <CardContent className="p-8 text-center space-y-3">
+            <div className="text-lg font-semibold">Link expired</div>
+            <p className="text-sm text-muted-foreground">
+              This acknowledgement link for "{snap.title}" has expired. Please
+              contact the meeting organiser for a new one.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   if (snap.alreadyAcknowledged && !submitted) {
     return (
       <div className="min-h-screen bg-muted/30 flex items-center justify-center p-6">

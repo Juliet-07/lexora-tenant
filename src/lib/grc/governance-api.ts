@@ -134,6 +134,7 @@ export interface Meeting {
 }
 
 export interface AckSnapshot {
+  expired: boolean;
   title: string;
   type: string;
   date: string;
