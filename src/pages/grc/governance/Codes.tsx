@@ -36,10 +36,22 @@ import {
   removeCodeDocument,
   publishCode,
   startNewCodeVersion,
+  deleteGovernanceCode,
   resolveGrcFileUrl,
   type GovernanceCode,
   type GovernanceCodeCategory,
 } from "@/lib/grc/governance-api";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 const CATS: GovernanceCodeCategory[] = [
   "Code of Conduct",
