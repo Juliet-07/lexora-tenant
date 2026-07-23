@@ -16,6 +16,7 @@ import GrcMeetings from "@/pages/grc/governance/Meetings";
 import GrcCommittees from "@/pages/grc/governance/Committees";
 import GrcBoardMgt from "@/pages/grc/governance/BoardMgt";
 import GrcCodes from "@/pages/grc/governance/Codes";
+import GrcResolutions from "@/pages/grc/governance/Resolutions";
 import GrcReporting from "@/pages/grc/operations/Reporting";
 
 /** GRC — Governance, Risk & Compliance. Tenant-admin only for now. */
@@ -50,6 +51,11 @@ export const grcRoutes = ({ isAdmin, accessibleModules }: RouteContext) => {
         key="grc-gov-codes"
         path="/grc/governance/codes"
         element={layout(<GrcCodes />)}
+      />,
+      <Route
+        key="grc-gov-resolutions"
+        path="/grc/governance/resolutions"
+        element={layout(<GrcResolutions />)}
       />,
 
       // Risk
