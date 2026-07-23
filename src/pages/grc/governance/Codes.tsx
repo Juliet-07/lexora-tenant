@@ -64,6 +64,7 @@ const CATS: GovernanceCodeCategory[] = [
 export default function GrcCodes() {
   const [newOpen, setNewOpen] = useState(false);
   const [selected, setSelected] = useState<GovernanceCode | null>(null);
+  const queryClient = useQueryClient();
 
   const { data: codes = [], isLoading } = useQuery({
     queryKey: ["grc-codes"],
@@ -72,6 +73,21 @@ export default function GrcCodes() {
   const selectedLive = selected
     ? (codes.find((c) => c._id === selected._id) ?? selected)
     : null;
+
+  const deleteMut = useMutation({
+    mutationFn: (id: string) => deleteGovernanceCode(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["grc-codes"] });
+      toast({ title: "Code deleted" });
+      setSelected(null);
+    },
+    onError: (err: any) =>
+      toast({
+        title: "Failed to delete",
+        description: err?.response?.data?.message,
+        variant: "destructive",
+      }),
+  });
 
   if (isLoading) {
     return (
