@@ -523,15 +523,59 @@ function MeetingSheet({
               {meeting.attendees.map((a, i) => (
                 <div
                   key={i}
-                  className="flex justify-between text-xs border rounded px-2 py-1"
+                  className="flex justify-between items-center text-xs border rounded px-2 py-1 gap-2"
                 >
-                  <span>
+                  <span className="truncate">
                     {a.name}{" "}
                     <span className="text-muted-foreground">{a.email}</span>
                   </span>
-                  <button onClick={() => rmAttMut.mutate(i)}>
-                    <Trash2 className="h-3 w-3 text-muted-foreground" />
-                  </button>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      title="Copy acknowledgement link"
+                      onClick={() => {
+                        shareMeetingSnapshot({
+                          meetingId: meeting._id,
+                          title: meeting.title,
+                          type: meeting.type,
+                          date: meeting.date,
+                          mode: meeting.mode,
+                          venue: meeting.venue,
+                          meetingLink: meeting.meetingLink,
+                          platform: meeting.platform,
+                          chair: meeting.chair,
+                          notes: meeting.notes,
+                          attendees: meeting.attendees.map((x) => ({
+                            name: x.name,
+                            email: x.email,
+                            role: x.role,
+                          })),
+                          agenda: meeting.agenda.map((x) => ({
+                            title: x.title,
+                            presenter: x.presenter,
+                            durationMinutes: x.durationMinutes,
+                          })),
+                          boardPack: meeting.boardPack.map((x) => ({
+                            name: x.name,
+                            fileUrl: x.fileUrl,
+                            mimeType: x.mimeType,
+                          })),
+                          sharedAt: new Date().toISOString(),
+                        });
+                        const url = `${window.location.origin}/meeting-ack/${meeting._id}?email=${encodeURIComponent(a.email)}&name=${encodeURIComponent(a.name)}`;
+                        navigator.clipboard.writeText(url).then(() =>
+                          toast({
+                            title: "Acknowledgement link copied",
+                            description: url,
+                          }),
+                        );
+                      }}
+                    >
+                      <Link2 className="h-3 w-3 text-muted-foreground hover:text-primary" />
+                    </button>
+                    <button onClick={() => rmAttMut.mutate(i)}>
+                      <Trash2 className="h-3 w-3 text-muted-foreground" />
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
