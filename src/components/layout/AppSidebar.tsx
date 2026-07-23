@@ -149,6 +149,7 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
         { title: "Committees", url: "/grc/governance/committees" },
         { title: "Meetings", url: "/grc/governance/meetings" },
         { title: "Governance Codes", url: "/grc/governance/codes" },
+        { title: "Resolutions", url: "/grc/governance/resolutions" },
       ],
     },
     {

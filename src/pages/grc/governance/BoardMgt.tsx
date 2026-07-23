@@ -621,9 +621,9 @@ function SkillsMatrixSection({
       </div>
 
       <div className="space-y-1 mb-3">
-        {skills.map((s) => (
+        {skills.map((s, i) => (
           <div
-            key={s.id}
+            key={`${s.name}-${i}`}
             className="border rounded px-2 py-1.5 flex items-start justify-between gap-2"
           >
             <div className="min-w-0 flex-1">

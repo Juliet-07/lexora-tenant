@@ -945,8 +945,17 @@ function AttendanceSection({ meeting }: { meeting: Meeting }) {
       }
     : null;
   const attendanceMut = useMutation({
-    mutationFn: (v: { allAttended: boolean; presentIndices: number[] }) =>
-      recordAttendance(meeting._id, v.allAttended, v.presentIndices),
+    mutationFn: (v: {
+      allAttended: boolean;
+      presentIndices: number[];
+      absenceNotes?: { index: number; note: string }[];
+    }) =>
+      recordAttendance(
+        meeting._id,
+        v.allAttended,
+        v.presentIndices,
+        v.absenceNotes,
+      ),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["grc-meetings"] });
       setEditing(false);
