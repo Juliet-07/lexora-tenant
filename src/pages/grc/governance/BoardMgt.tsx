@@ -63,7 +63,6 @@ import {
   type SkillLevel,
 } from "@/lib/grcGovernanceLocal";
 
-
 const ROLES: BoardMemberRole[] = [
   "Chair",
   "Vice-Chair",
@@ -441,6 +440,8 @@ function DirectorSheet({
             </Select>
           </div>
 
+          <SkillsMatrixSection memberId={member._id} role={member.role} />
+
           <section className="border-t pt-3">
             <div className="font-medium text-sm mb-2 flex items-center gap-2">
               <ShieldAlert className="h-4 w-4" />
@@ -528,8 +529,6 @@ function DirectorSheet({
               </Button>
             </div>
           </section>
-
-          <SkillsMatrixSection memberId={member._id} role={member.role} />
         </div>
       </SheetContent>
     </Sheet>
@@ -713,4 +712,3 @@ function SkillsMatrixSection({
     </section>
   );
 }
-

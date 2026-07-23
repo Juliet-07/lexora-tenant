@@ -561,11 +561,6 @@ function MeetingSheet({
             </div>
           </section>
 
-          {/* Attendance registration — only meaningful once the meeting is held */}
-          <AttendanceSection meeting={meeting} />
-
-
-
           {/* Agenda */}
           <section className="border-t pt-4 space-y-2">
             <div className="font-medium text-sm">Agenda</div>
@@ -798,6 +793,9 @@ function MeetingSheet({
               )}
             </section>
           )}
+
+          {/* Attendance registration — only meaningful once the meeting is held */}
+          <AttendanceSection meeting={meeting} />
         </div>
       </SheetContent>
     </Sheet>
@@ -831,9 +829,7 @@ function AttendanceSection({ meeting }: { meeting: Meeting }) {
   };
 
   const toggle = (i: number) =>
-    setPresent((p) =>
-      p.includes(i) ? p.filter((x) => x !== i) : [...p, i],
-    );
+    setPresent((p) => (p.includes(i) ? p.filter((x) => x !== i) : [...p, i]));
 
   const save = () => {
     if (!allAttended) {
@@ -894,11 +890,15 @@ function AttendanceSection({ meeting }: { meeting: Meeting }) {
           ) : (
             <>
               <div>
-                <span className="text-muted-foreground">Present ({presentNames.length}):</span>{" "}
+                <span className="text-muted-foreground">
+                  Present ({presentNames.length}):
+                </span>{" "}
                 {presentNames.join(", ") || "—"}
               </div>
               <div>
-                <span className="text-muted-foreground">Absent ({absentees.length}):</span>{" "}
+                <span className="text-muted-foreground">
+                  Absent ({absentees.length}):
+                </span>{" "}
                 {absentees.join(", ") || "—"}
               </div>
             </>
@@ -995,4 +995,3 @@ function AttendanceSection({ meeting }: { meeting: Meeting }) {
     </section>
   );
 }
-

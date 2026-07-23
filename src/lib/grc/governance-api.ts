@@ -113,6 +113,33 @@ export interface Meeting {
   minutesSentAt: string | null;
 }
 
+export type GovernanceCodeCategory =
+  | "Code of Conduct"
+  | "Governance Charter"
+  | "Board Charter"
+  | "Ethics"
+  | "Other";
+export type GovernanceCodeStatus = "Draft" | "Published";
+
+export interface CodeAttachment {
+  name: string;
+  fileUrl: string | null;
+  mimeType: string | null;
+  size: number;
+  uploadedAt: string;
+}
+
+export interface GovernanceCode {
+  _id: string;
+  title: string;
+  category: GovernanceCodeCategory;
+  body: string;
+  documents: CodeAttachment[];
+  version: number;
+  status: GovernanceCodeStatus;
+  updatedAt: string;
+}
+
 export const fetchBoardMembers = async (): Promise<BoardMember[]> => {
   const res = await api.get("/grc/governance/board-members");
   const d = res.data?.data ?? res.data;
@@ -328,5 +355,60 @@ export const dispatchMeeting = async (id: string): Promise<Meeting> => {
 
 export const sendMeetingMinutes = async (id: string): Promise<Meeting> => {
   const res = await api.post(`/grc/governance/meetings/${id}/send-minutes`, {});
+  return res.data?.data ?? res.data;
+};
+
+export const fetchGovernanceCodes = async (): Promise<GovernanceCode[]> => {
+  const res = await api.get("/grc/governance/codes");
+  const d = res.data?.data ?? res.data;
+  return Array.isArray(d) ? d : [];
+};
+
+export const createGovernanceCode = async (dto: {
+  title: string;
+  category: GovernanceCodeCategory;
+  body?: string;
+}): Promise<GovernanceCode> => {
+  const res = await api.post("/grc/governance/codes", dto);
+  return res.data?.data ?? res.data;
+};
+
+export const updateCodeBody = async (
+  id: string,
+  body: string,
+): Promise<GovernanceCode> => {
+  const res = await api.patch(`/grc/governance/codes/${id}/body`, { body });
+  return res.data?.data ?? res.data;
+};
+
+export const addCodeDocument = async (
+  id: string,
+  file: File,
+): Promise<GovernanceCode> => {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await api.post(`/grc/governance/codes/${id}/documents`, form);
+  return res.data?.data ?? res.data;
+};
+
+export const removeCodeDocument = async (
+  id: string,
+  index: number,
+): Promise<GovernanceCode> => {
+  const res = await api.delete(
+    `/grc/governance/codes/${id}/documents/${index}`,
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const publishCode = async (id: string): Promise<GovernanceCode> => {
+  const res = await api.post(`/grc/governance/codes/${id}/publish`, {});
+  return res.data?.data ?? res.data;
+};
+
+export const startNewCodeVersion = async (
+  id: string,
+): Promise<GovernanceCode> => {
+  const res = await api.post(`/grc/governance/codes/${id}/new-version`, {});
   return res.data?.data ?? res.data;
 };
