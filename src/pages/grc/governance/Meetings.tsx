@@ -387,6 +387,7 @@ function MeetingSheet({
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [notes, setNotes] = useState(meeting?.notes ?? "");
   const [minutes, setMinutes] = useState(meeting?.minutes ?? "");
+  const acks = useMeetingAcks(meeting?._id);
 
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: ["grc-meetings"] });
