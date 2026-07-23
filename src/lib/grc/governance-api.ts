@@ -29,6 +29,7 @@ export interface BoardMember {
   conflicts: ConflictDisclosure[];
   training: TrainingRecord[];
   isActive: boolean;
+  skills?: BoardSkill[];
 }
 
 export type CommitteeMemberRole = "Chair" | "Secretary" | "Member";
