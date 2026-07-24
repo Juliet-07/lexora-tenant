@@ -505,12 +505,38 @@ function MeetingSheet({
     onError: onErr("Failed to save minutes"),
   });
   const sendMinutesMut = useMutation({
-    mutationFn: () => sendMeetingMinutes(meeting!._id),
+    mutationFn: async () => {
+      // Snapshot minutes for the public review page before dispatching
+      shareMinutesSnapshot({
+        meetingId: meeting!._id,
+        title: meeting!.title,
+        type: meeting!.type,
+        date: meeting!.date,
+        chair: meeting!.chair,
+        minutesHtml: minutes,
+        attendees: meeting!.attendees.map((a) => ({
+          name: a.name,
+          email: a.email,
+          role: a.role,
+        })),
+        sharedAt: new Date().toISOString(),
+      });
+      return sendMeetingMinutes(meeting!._id);
+    },
     onSuccess: () => {
       invalidate();
       toast({ title: "Minutes sent to all attendees" });
     },
     onError: onErr("Failed to send minutes"),
+  });
+  const deleteMut = useMutation({
+    mutationFn: () => deleteMeeting(meeting!._id),
+    onSuccess: () => {
+      invalidate();
+      toast({ title: "Meeting deleted" });
+      onClose();
+    },
+    onError: onErr("Failed to delete meeting"),
   });
 
   if (!meeting) return null;
