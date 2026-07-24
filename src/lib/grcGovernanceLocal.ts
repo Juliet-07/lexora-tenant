@@ -8,6 +8,8 @@ const SKILLS_KEY = "grc_gov_skills_v1";
 const ATTEND_KEY = "grc_gov_attendance_v1";
 const SHARE_KEY = "grc_gov_meeting_share_v1";
 const ACK_KEY = "grc_gov_meeting_ack_v1";
+const MIN_SHARE_KEY = "grc_gov_minutes_share_v1";
+const MIN_REVIEW_KEY = "grc_gov_minutes_review_v1";
 const EVT = "grc_gov_local_changed";
 
 export type SkillLevel = "Basic" | "Intermediate" | "Expert";
@@ -250,5 +252,76 @@ export function useMeetingAcks(meetingId: string | null | undefined) {
     };
   }, []);
   if (!meetingId) return [];
+  return map[meetingId] ?? [];
+}
+
+// ── Minutes review (public sign-off + comments) ───────────────
+export interface SharedMinutesSnapshot {
+  meetingId: string;
+  title: string;
+  type: string;
+  date: string;
+  chair: string;
+  minutesHtml: string;
+  attendees: SharedMeetingAttendee[];
+  sharedAt: string;
+}
+
+export type MinutesReviewDecision = "approved" | "changes-requested";
+
+export interface MinutesReview {
+  meetingId: string;
+  reviewerEmail: string;
+  reviewerName: string;
+  decision: MinutesReviewDecision;
+  comment: string;
+  submittedAt: string;
+}
+
+type MinShareMap = Record<string, SharedMinutesSnapshot>;
+type MinReviewMap = Record<string, MinutesReview[]>;
+
+export function shareMinutesSnapshot(snap: SharedMinutesSnapshot) {
+  const map = readJSON<MinShareMap>(MIN_SHARE_KEY, {});
+  map[snap.meetingId] = snap;
+  writeJSON(MIN_SHARE_KEY, map);
+}
+
+export function getSharedMinutes(meetingId: string): SharedMinutesSnapshot | null {
+  const map = readJSON<MinShareMap>(MIN_SHARE_KEY, {});
+  return map[meetingId] ?? null;
+}
+
+export function encodeMinutesToken(meetingId: string, email: string): string {
+  return btoa(unescape(encodeURIComponent(JSON.stringify({ m: meetingId, e: email }))));
+}
+export function decodeMinutesToken(token: string): { m: string; e: string } | null {
+  try {
+    return JSON.parse(decodeURIComponent(escape(atob(token))));
+  } catch {
+    return null;
+  }
+}
+
+export function saveMinutesReview(review: MinutesReview) {
+  const map = readJSON<MinReviewMap>(MIN_REVIEW_KEY, {});
+  const list = map[review.meetingId] ?? [];
+  const filtered = list.filter((r) => r.reviewerEmail !== review.reviewerEmail);
+  map[review.meetingId] = [...filtered, review];
+  writeJSON(MIN_REVIEW_KEY, map);
+}
+
+export function useMinutesReviews(meetingId: string | null | undefined) {
+  const [map, setMap] = useState<MinReviewMap>(() => readJSON<MinReviewMap>(MIN_REVIEW_KEY, {}));
+  useEffect(() => {
+    const h = () => setMap(readJSON<MinReviewMap>(MIN_REVIEW_KEY, {}));
+    window.addEventListener(EVT, h);
+    window.addEventListener("storage", h);
+    return () => {
+      window.removeEventListener(EVT, h);
+      window.removeEventListener("storage", h);
+    };
+  }, []);
+  if (!meetingId) return [] as MinutesReview[];
   return map[meetingId] ?? [];
 }

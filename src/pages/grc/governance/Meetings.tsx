@@ -39,9 +39,22 @@ import {
   FileCheck,
   ClipboardCheck,
   Link2,
+  MessageSquare,
+  CheckCircle2,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { RichTextEditor } from "@/components/RichTextEditor";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import {
   fetchMeetings,
   createMeeting,
@@ -66,7 +79,13 @@ import {
   type MeetingPlatform,
   postponeMeeting,
   resumeMeeting,
+  deleteMeeting,
 } from "@/lib/grc/governance-api";
+import {
+  shareMinutesSnapshot,
+  encodeMinutesToken,
+  useMinutesReviews,
+} from "@/lib/grcGovernanceLocal";
 
 export default function GrcMeetings() {
   const [newOpen, setNewOpen] = useState(false);
@@ -486,12 +505,38 @@ function MeetingSheet({
     onError: onErr("Failed to save minutes"),
   });
   const sendMinutesMut = useMutation({
-    mutationFn: () => sendMeetingMinutes(meeting!._id),
+    mutationFn: async () => {
+      // Snapshot minutes for the public review page before dispatching
+      shareMinutesSnapshot({
+        meetingId: meeting!._id,
+        title: meeting!.title,
+        type: meeting!.type,
+        date: meeting!.date,
+        chair: meeting!.chair,
+        minutesHtml: minutes,
+        attendees: meeting!.attendees.map((a) => ({
+          name: a.name,
+          email: a.email,
+          role: a.role,
+        })),
+        sharedAt: new Date().toISOString(),
+      });
+      return sendMeetingMinutes(meeting!._id);
+    },
     onSuccess: () => {
       invalidate();
       toast({ title: "Minutes sent to all attendees" });
     },
     onError: onErr("Failed to send minutes"),
+  });
+  const deleteMut = useMutation({
+    mutationFn: () => deleteMeeting(meeting!._id),
+    onSuccess: () => {
+      invalidate();
+      toast({ title: "Meeting deleted" });
+      onClose();
+    },
+    onError: onErr("Failed to delete meeting"),
   });
 
   if (!meeting) return null;
@@ -499,8 +544,43 @@ function MeetingSheet({
   return (
     <Sheet open onOpenChange={(o) => !o && onClose()}>
       <SheetContent className="w-full sm:max-w-2xl overflow-y-auto">
-        <SheetHeader>
-          <SheetTitle>{meeting.title}</SheetTitle>
+        <SheetHeader className="flex-row items-start justify-between gap-2 space-y-0">
+          <SheetTitle className="flex-1">{meeting.title}</SheetTitle>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="text-destructive hover:text-destructive hover:bg-destructive/10"
+              >
+                <Trash2 className="h-4 w-4 mr-1" />
+                Delete
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete this meeting?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This permanently removes "{meeting.title}", its agenda,
+                  attendees, board pack, minutes, and any acknowledgements. This
+                  action cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  onClick={() => deleteMut.mutate()}
+                  disabled={deleteMut.isPending}
+                >
+                  {deleteMut.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  ) : null}
+                  Delete meeting
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </SheetHeader>
         <div className="mt-4 space-y-5">
           <div className="flex flex-wrap gap-2 items-center">
@@ -924,6 +1004,9 @@ function MeetingSheet({
                   Sent {new Date(meeting.minutesSentAt).toLocaleString()}
                 </div>
               )}
+              {meeting.minutesSentAt && (
+                <MinutesReviewsSection meeting={meeting} />
+              )}
             </section>
           )}
 
@@ -1165,5 +1248,100 @@ function AttendanceSection({ meeting }: { meeting: Meeting }) {
         </div>
       )}
     </section>
+  );
+}
+
+function MinutesReviewsSection({ meeting }: { meeting: Meeting }) {
+  const reviews = useMinutesReviews(meeting._id);
+  const byEmail = new Map(reviews.map((r) => [r.reviewerEmail.toLowerCase(), r]));
+  const origin =
+    typeof window !== "undefined" ? window.location.origin : "";
+
+  const copyLink = (email: string) => {
+    const token = encodeMinutesToken(meeting._id, email);
+    const url = `${origin}/minutes-review/${token}`;
+    navigator.clipboard.writeText(url).then(
+      () => toast({ title: "Review link copied", description: url }),
+      () => toast({ title: "Copy failed", variant: "destructive" }),
+    );
+  };
+
+  const approved = reviews.filter((r) => r.decision === "approved").length;
+  const changes = reviews.filter((r) => r.decision === "changes-requested").length;
+
+  return (
+    <div className="mt-4 border-t pt-3 space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-sm font-medium flex items-center gap-2">
+          <MessageSquare className="h-4 w-4 text-primary" />
+          Minutes review status
+        </div>
+        <div className="flex gap-2 text-xs">
+          <Badge variant="outline" className="gap-1 text-emerald-700 border-emerald-300 bg-emerald-50">
+            <CheckCircle2 className="h-3 w-3" /> {approved} approved
+          </Badge>
+          <Badge variant="outline" className="gap-1 text-amber-700 border-amber-300 bg-amber-50">
+            <MessageSquare className="h-3 w-3" /> {changes} changes
+          </Badge>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        {meeting.attendees.map((a) => {
+          const r = byEmail.get(a.email.toLowerCase());
+          return (
+            <div
+              key={a.email}
+              className="border rounded-md p-2.5 bg-muted/20 space-y-1.5"
+            >
+              <div className="flex items-center gap-2">
+                <div className="text-sm font-medium flex-1 truncate">
+                  {a.name}
+                  <span className="ml-1 text-xs text-muted-foreground">
+                    ({a.email})
+                  </span>
+                </div>
+                {r ? (
+                  r.decision === "approved" ? (
+                    <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100 gap-1">
+                      <CheckCircle2 className="h-3 w-3" /> Approved
+                    </Badge>
+                  ) : (
+                    <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100 gap-1">
+                      <MessageSquare className="h-3 w-3" /> Changes requested
+                    </Badge>
+                  )
+                ) : (
+                  <Badge variant="outline">Awaiting</Badge>
+                )}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => copyLink(a.email)}
+                  title="Copy review link"
+                >
+                  <Link2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+              {r?.comment && (
+                <p className="text-xs text-muted-foreground border-l-2 pl-2 whitespace-pre-wrap">
+                  {r.comment}
+                </p>
+              )}
+              {r && (
+                <div className="text-[11px] text-muted-foreground">
+                  {new Date(r.submittedAt).toLocaleString()}
+                </div>
+              )}
+            </div>
+          );
+        })}
+        {meeting.attendees.length === 0 && (
+          <p className="text-xs text-muted-foreground">
+            No attendees to send review links to.
+          </p>
+        )}
+      </div>
+    </div>
   );
 }

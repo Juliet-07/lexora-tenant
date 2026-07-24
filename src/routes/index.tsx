@@ -10,6 +10,7 @@ import { grcRoutes } from "./grc.routes";
 import { employeeRoutes } from "./employee.routes";
 import SignContractPage from "@/pages/SigninContractPage";
 import MeetingAckPage from "@/pages/grc/governance/MeetingAck";
+import MinutesReviewPage from "@/pages/grc/governance/MinutesReview";
 
 /**
  * Top-level router. Module-specific routes live in their own files so
@@ -19,6 +20,7 @@ import MeetingAckPage from "@/pages/grc/governance/MeetingAck";
 const PUBLIC_ROUTE_PATTERNS = [
   /^\/sign-contract\/[^/]+$/,
   /^\/meeting-ack\/[^/]+$/,
+  /^\/minutes-review\/[^/]+$/,
 ];
 
 export function AppRoutes() {
@@ -34,6 +36,7 @@ export function AppRoutes() {
       <Routes>
         <Route path="/sign-contract/:token" element={<SignContractPage />} />
         <Route path="/meeting-ack/:token" element={<MeetingAckPage />} />
+        <Route path="/minutes-review/:token" element={<MinutesReviewPage />} />
       </Routes>
     );
   }
