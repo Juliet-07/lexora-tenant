@@ -1250,3 +1250,98 @@ function AttendanceSection({ meeting }: { meeting: Meeting }) {
     </section>
   );
 }
+
+function MinutesReviewsSection({ meeting }: { meeting: Meeting }) {
+  const reviews = useMinutesReviews(meeting._id);
+  const byEmail = new Map(reviews.map((r) => [r.reviewerEmail.toLowerCase(), r]));
+  const origin =
+    typeof window !== "undefined" ? window.location.origin : "";
+
+  const copyLink = (email: string) => {
+    const token = encodeMinutesToken(meeting._id, email);
+    const url = `${origin}/minutes-review/${token}`;
+    navigator.clipboard.writeText(url).then(
+      () => toast({ title: "Review link copied", description: url }),
+      () => toast({ title: "Copy failed", variant: "destructive" }),
+    );
+  };
+
+  const approved = reviews.filter((r) => r.decision === "approved").length;
+  const changes = reviews.filter((r) => r.decision === "changes-requested").length;
+
+  return (
+    <div className="mt-4 border-t pt-3 space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-sm font-medium flex items-center gap-2">
+          <MessageSquare className="h-4 w-4 text-primary" />
+          Minutes review status
+        </div>
+        <div className="flex gap-2 text-xs">
+          <Badge variant="outline" className="gap-1 text-emerald-700 border-emerald-300 bg-emerald-50">
+            <CheckCircle2 className="h-3 w-3" /> {approved} approved
+          </Badge>
+          <Badge variant="outline" className="gap-1 text-amber-700 border-amber-300 bg-amber-50">
+            <MessageSquare className="h-3 w-3" /> {changes} changes
+          </Badge>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        {meeting.attendees.map((a) => {
+          const r = byEmail.get(a.email.toLowerCase());
+          return (
+            <div
+              key={a.email}
+              className="border rounded-md p-2.5 bg-muted/20 space-y-1.5"
+            >
+              <div className="flex items-center gap-2">
+                <div className="text-sm font-medium flex-1 truncate">
+                  {a.name}
+                  <span className="ml-1 text-xs text-muted-foreground">
+                    ({a.email})
+                  </span>
+                </div>
+                {r ? (
+                  r.decision === "approved" ? (
+                    <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100 gap-1">
+                      <CheckCircle2 className="h-3 w-3" /> Approved
+                    </Badge>
+                  ) : (
+                    <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100 gap-1">
+                      <MessageSquare className="h-3 w-3" /> Changes requested
+                    </Badge>
+                  )
+                ) : (
+                  <Badge variant="outline">Awaiting</Badge>
+                )}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => copyLink(a.email)}
+                  title="Copy review link"
+                >
+                  <Link2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+              {r?.comment && (
+                <p className="text-xs text-muted-foreground border-l-2 pl-2 whitespace-pre-wrap">
+                  {r.comment}
+                </p>
+              )}
+              {r && (
+                <div className="text-[11px] text-muted-foreground">
+                  {new Date(r.submittedAt).toLocaleString()}
+                </div>
+              )}
+            </div>
+          );
+        })}
+        {meeting.attendees.length === 0 && (
+          <p className="text-xs text-muted-foreground">
+            No attendees to send review links to.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
