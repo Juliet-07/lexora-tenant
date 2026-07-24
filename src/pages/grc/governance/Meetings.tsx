@@ -39,9 +39,22 @@ import {
   FileCheck,
   ClipboardCheck,
   Link2,
+  MessageSquare,
+  CheckCircle2,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { RichTextEditor } from "@/components/RichTextEditor";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import {
   fetchMeetings,
   createMeeting,
@@ -66,7 +79,13 @@ import {
   type MeetingPlatform,
   postponeMeeting,
   resumeMeeting,
+  deleteMeeting,
 } from "@/lib/grc/governance-api";
+import {
+  shareMinutesSnapshot,
+  encodeMinutesToken,
+  useMinutesReviews,
+} from "@/lib/grcGovernanceLocal";
 
 export default function GrcMeetings() {
   const [newOpen, setNewOpen] = useState(false);
