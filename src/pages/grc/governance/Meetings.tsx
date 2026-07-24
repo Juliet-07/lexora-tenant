@@ -544,8 +544,43 @@ function MeetingSheet({
   return (
     <Sheet open onOpenChange={(o) => !o && onClose()}>
       <SheetContent className="w-full sm:max-w-2xl overflow-y-auto">
-        <SheetHeader>
-          <SheetTitle>{meeting.title}</SheetTitle>
+        <SheetHeader className="flex-row items-start justify-between gap-2 space-y-0">
+          <SheetTitle className="flex-1">{meeting.title}</SheetTitle>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="text-destructive hover:text-destructive hover:bg-destructive/10"
+              >
+                <Trash2 className="h-4 w-4 mr-1" />
+                Delete
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete this meeting?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This permanently removes "{meeting.title}", its agenda,
+                  attendees, board pack, minutes, and any acknowledgements. This
+                  action cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  onClick={() => deleteMut.mutate()}
+                  disabled={deleteMut.isPending}
+                >
+                  {deleteMut.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  ) : null}
+                  Delete meeting
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </SheetHeader>
         <div className="mt-4 space-y-5">
           <div className="flex flex-wrap gap-2 items-center">
