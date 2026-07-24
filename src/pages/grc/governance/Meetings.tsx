@@ -1004,6 +1004,9 @@ function MeetingSheet({
                   Sent {new Date(meeting.minutesSentAt).toLocaleString()}
                 </div>
               )}
+              {meeting.minutesSentAt && (
+                <MinutesReviewsSection meeting={meeting} />
+              )}
             </section>
           )}
 
