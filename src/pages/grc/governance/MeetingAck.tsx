@@ -205,45 +205,48 @@ export default function MeetingAckPage() {
   }
 
   return (
-    <div className="min-h-screen bg-muted/30 py-6 px-4">
-      <div className="max-w-3xl mx-auto space-y-4">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold">Board Pack Acknowledgement</h1>
-          <p className="text-sm text-muted-foreground">
-            Please confirm you have received the meeting materials and reviewed
-            them.
-          </p>
-        </div>
-
-        <Card>
-          <CardContent className="p-4 space-y-2">
-            <div className="font-semibold">{snap.title}</div>
-            <div className="flex flex-wrap gap-2">
-              <Badge variant="outline">{snap.type}</Badge>
-              <Badge variant="outline" className="gap-1">
+    <div className="min-h-screen bg-gradient-to-b from-muted/40 via-background to-muted/30 py-8 px-4">
+      <div className="max-w-3xl mx-auto space-y-5">
+        <Card className="overflow-hidden border-0 shadow-lg">
+          <div className="bg-gradient-to-br from-primary via-primary to-secondary text-primary-foreground p-6 sm:p-8">
+            <div className="text-xs uppercase tracking-widest opacity-90">
+              Board pack acknowledgement
+            </div>
+            <h1 className="mt-2 text-2xl sm:text-3xl font-bold leading-tight">
+              {snap.title}
+            </h1>
+            <p className="mt-2 text-sm opacity-90">
+              Please confirm you have received the meeting materials and
+              reviewed them.
+            </p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Badge className="bg-white/20 hover:bg-white/25 border-0 text-white">
+                {snap.type}
+              </Badge>
+              <Badge className="bg-white/20 hover:bg-white/25 border-0 text-white gap-1">
                 <CalendarClock className="h-3 w-3" />
                 {new Date(snap.date).toLocaleString()}
               </Badge>
-              <Badge variant="outline" className="gap-1">
+              <Badge className="bg-white/20 hover:bg-white/25 border-0 text-white gap-1">
                 <MapPin className="h-3 w-3" />
                 {snap.mode === "Online"
                   ? `${snap.platform ?? "Online"}`
                   : snap.venue || "Physical"}
               </Badge>
-              <Badge variant="outline" className="gap-1">
+              <Badge className="bg-white/20 hover:bg-white/25 border-0 text-white gap-1">
                 <Users2 className="h-3 w-3" />
                 {snap.attendeeCount} attendees
               </Badge>
             </div>
-            <div className="text-sm">
-              <span className="text-muted-foreground">Chair:</span> {snap.chair}
+            <div className="mt-3 text-sm opacity-90">
+              <span className="opacity-75">Chair:</span> {snap.chair}
             </div>
             {snap.notes && (
-              <p className="text-sm text-muted-foreground border-l-2 pl-2">
+              <p className="mt-3 text-sm bg-white/10 rounded-md p-3 border-l-2 border-white/40">
                 {snap.notes}
               </p>
             )}
-          </CardContent>
+          </div>
         </Card>
 
         <Card>
