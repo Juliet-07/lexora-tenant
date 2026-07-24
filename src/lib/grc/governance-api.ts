@@ -453,6 +453,10 @@ export const resumeMeeting = async (id: string): Promise<Meeting> => {
   return res.data?.data ?? res.data;
 };
 
+export const deleteMeeting = async (id: string): Promise<void> => {
+  await api.delete(`/grc/governance/meetings/${id}`);
+};
+
 export const fetchGovernanceCodes = async (): Promise<GovernanceCode[]> => {
   const res = await api.get("/grc/governance/codes");
   const d = res.data?.data ?? res.data;
