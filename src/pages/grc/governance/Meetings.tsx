@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -406,6 +406,11 @@ function MeetingSheet({
   const [postponeOpen, setPostponeOpen] = useState(false);
   const [postponeReason, setPostponeReason] = useState("");
 
+  useEffect(() => {
+    setMinutes(meeting?.minutes ?? "");
+    setNotes(meeting?.notes ?? "");
+  }, [meeting?._id]);
+
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: ["grc-meetings"] });
   const onErr = (title: string) => (err: any) =>
@@ -505,24 +510,7 @@ function MeetingSheet({
     onError: onErr("Failed to save minutes"),
   });
   const sendMinutesMut = useMutation({
-    mutationFn: async () => {
-      // Snapshot minutes for the public review page before dispatching
-      shareMinutesSnapshot({
-        meetingId: meeting!._id,
-        title: meeting!.title,
-        type: meeting!.type,
-        date: meeting!.date,
-        chair: meeting!.chair,
-        minutesHtml: minutes,
-        attendees: meeting!.attendees.map((a) => ({
-          name: a.name,
-          email: a.email,
-          role: a.role,
-        })),
-        sharedAt: new Date().toISOString(),
-      });
-      return sendMeetingMinutes(meeting!._id);
-    },
+    mutationFn: () => sendMeetingMinutes(meeting!._id),
     onSuccess: () => {
       invalidate();
       toast({ title: "Minutes sent to all attendees" });
@@ -540,6 +528,17 @@ function MeetingSheet({
   });
 
   if (!meeting) return null;
+
+  const minutesReviews = meeting.minutesReviews ?? [];
+  const allAttendeesApproved =
+    meeting.attendees.length > 0 &&
+    meeting.attendees.every((a) =>
+      minutesReviews.some(
+        (r) =>
+          r.attendeeEmail.toLowerCase() === a.email.toLowerCase() &&
+          r.decision === "approved",
+      ),
+    );
 
   return (
     <Sheet open onOpenChange={(o) => !o && onClose()}>
@@ -898,27 +897,6 @@ function MeetingSheet({
             </section>
           )}
 
-          {/* Step 2: mark the meeting as done, separate from step 1 */}
-          {meeting.status !== "Held" && meeting.status !== "Postponed" && (
-            <section className="border-t pt-4 space-y-2">
-              <div className="font-medium text-sm">Mark meeting as done</div>
-              <p className="text-xs text-muted-foreground">
-                Once the meeting has taken place, mark it done to unlock minutes
-                distribution.
-              </p>
-              <Button
-                variant="outline"
-                onClick={() => heldMut.mutate()}
-                disabled={heldMut.isPending}
-              >
-                {heldMut.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                ) : null}
-                Mark as done
-              </Button>
-            </section>
-          )}
-
           {/* Acknowledgements from external attendees */}
           <section className="border-t pt-4 space-y-2">
             <div className="font-medium text-sm flex items-center gap-2">
@@ -956,62 +934,103 @@ function MeetingSheet({
             )}
           </section>
 
-          {/* Minutes — always writable */}
-          <section className="border-t pt-4 space-y-2">
-            <div className="font-medium text-sm">Minutes</div>
-            <RichTextEditor
-              value={minutes}
-              onChange={setMinutes}
-              placeholder="Write the minutes here…"
-              minHeight={180}
-            />
-            <div className="flex justify-end">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => minutesMut.mutate()}
-                disabled={minutesMut.isPending}
-              >
-                Save minutes
-              </Button>
-            </div>
-          </section>
-
-          {/* Step 3: a genuinely separate flow, only once the meeting is done */}
-          {meeting.status === "Held" && (
+          {/* Step 2: mark the meeting as done, separate from step 1 */}
+          {meeting.status !== "Held" && meeting.status !== "Postponed" && (
             <section className="border-t pt-4 space-y-2">
-              <div className="font-medium text-sm flex items-center gap-2">
-                <FileCheck className="h-4 w-4" />
-                Distribute minutes
-              </div>
+              <div className="font-medium text-sm">Mark meeting as done</div>
               <p className="text-xs text-muted-foreground">
-                Send the finalized minutes to every attendee.
+                Once the meeting has taken place, mark it done to unlock minutes
+                distribution.
               </p>
               <Button
-                onClick={() => sendMinutesMut.mutate()}
-                disabled={
-                  sendMinutesMut.isPending ||
-                  !minutes.trim() ||
-                  !!meeting.minutesSentAt
-                }
+                variant="outline"
+                onClick={() => heldMut.mutate()}
+                disabled={heldMut.isPending}
               >
-                <Send className="h-4 w-4 mr-1" />
-                {meeting.minutesSentAt ? "Minutes sent" : "Send minutes"}
+                {heldMut.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : null}
+                Mark as done
               </Button>
-              {meeting.minutesSentAt && (
-                <div className="text-xs text-muted-foreground flex items-center gap-1">
-                  <Mail className="h-3 w-3" />
-                  Sent {new Date(meeting.minutesSentAt).toLocaleString()}
-                </div>
-              )}
-              {meeting.minutesSentAt && (
-                <MinutesReviewsSection meeting={meeting} />
-              )}
             </section>
           )}
 
           {/* Attendance registration — only meaningful once the meeting is held */}
           <AttendanceSection meeting={meeting} />
+
+          {allAttendeesApproved ? (
+            /* Fully approved — nothing left to edit or send, so the
+               editor is replaced entirely rather than shown empty/
+               disabled, which would just invite confusion. */
+            <section className="border-t pt-4 space-y-3">
+              <div className="rounded-md border border-emerald-300 bg-emerald-50 p-4 flex items-start gap-3">
+                <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-medium text-emerald-800">
+                    Minutes fully approved
+                  </p>
+                  <p className="text-xs text-emerald-700 mt-0.5">
+                    All {meeting.attendees.length} attendee
+                    {meeting.attendees.length === 1 ? "" : "s"} have approved
+                    these minutes. No further changes are needed.
+                  </p>
+                </div>
+              </div>
+              <MinutesReviewsSection meeting={meeting} />
+            </section>
+          ) : (
+            <>
+              {/* Minutes — always writable */}
+              <section className="border-t pt-4 space-y-2">
+                <div className="font-medium text-sm">Minutes</div>
+                <RichTextEditor
+                  value={minutes}
+                  onChange={setMinutes}
+                  placeholder="Write the minutes here…"
+                  minHeight={180}
+                />
+                <div className="flex justify-end">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => minutesMut.mutate()}
+                    disabled={minutesMut.isPending}
+                  >
+                    Save minutes
+                  </Button>
+                </div>
+              </section>
+
+              {/* Step 3: a genuinely separate flow, only once the meeting is done */}
+              {meeting.status === "Held" && (
+                <section className="border-t pt-4 space-y-2">
+                  <div className="font-medium text-sm flex items-center gap-2">
+                    <FileCheck className="h-4 w-4" />
+                    Distribute minutes
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Send the finalized minutes to every attendee.
+                  </p>
+                  <Button
+                    onClick={() => sendMinutesMut.mutate()}
+                    disabled={sendMinutesMut.isPending || !minutes.trim()}
+                  >
+                    <Send className="h-4 w-4 mr-1" />
+                    {meeting.minutesSentAt ? "Resend minutes" : "Send minutes"}
+                  </Button>
+                  {meeting.minutesSentAt && (
+                    <div className="text-xs text-muted-foreground flex items-center gap-1">
+                      <Mail className="h-3 w-3" />
+                      Sent {new Date(meeting.minutesSentAt).toLocaleString()}
+                    </div>
+                  )}
+                  {meeting.minutesSentAt && (
+                    <MinutesReviewsSection meeting={meeting} />
+                  )}
+                </section>
+              )}
+            </>
+          )}
         </div>
       </SheetContent>
     </Sheet>
@@ -1147,7 +1166,12 @@ function AttendanceSection({ meeting }: { meeting: Meeting }) {
             </>
           )}
           <div className="pt-1">
-            <Button size="sm" variant="outline" onClick={startEditing}>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={startEditing}
+              disabled={meeting.status !== "Held"}
+            >
               Update
             </Button>
           </div>
@@ -1163,13 +1187,20 @@ function AttendanceSection({ meeting }: { meeting: Meeting }) {
             size="sm"
             variant="outline"
             onClick={startEditing}
-            disabled={meeting.attendees.length === 0}
+            disabled={
+              meeting.attendees.length === 0 || meeting.status !== "Held"
+            }
           >
             Register attendance
           </Button>
           {meeting.attendees.length === 0 && (
             <p className="text-[11px] text-muted-foreground">
               Add attendees above before registering attendance.
+            </p>
+          )}
+          {meeting.attendees.length > 0 && meeting.status !== "Held" && (
+            <p className="text-[11px] text-muted-foreground">
+              Mark the meeting as done before registering attendance.
             </p>
           )}
         </div>
@@ -1252,22 +1283,16 @@ function AttendanceSection({ meeting }: { meeting: Meeting }) {
 }
 
 function MinutesReviewsSection({ meeting }: { meeting: Meeting }) {
-  const reviews = useMinutesReviews(meeting._id);
-  const byEmail = new Map(reviews.map((r) => [r.reviewerEmail.toLowerCase(), r]));
-  const origin =
-    typeof window !== "undefined" ? window.location.origin : "";
-
-  const copyLink = (email: string) => {
-    const token = encodeMinutesToken(meeting._id, email);
-    const url = `${origin}/minutes-review/${token}`;
-    navigator.clipboard.writeText(url).then(
-      () => toast({ title: "Review link copied", description: url }),
-      () => toast({ title: "Copy failed", variant: "destructive" }),
-    );
-  };
-
-  const approved = reviews.filter((r) => r.decision === "approved").length;
-  const changes = reviews.filter((r) => r.decision === "changes-requested").length;
+  const minutesReviews = meeting.minutesReviews ?? [];
+  const byEmail = new Map(
+    minutesReviews.map((r) => [r.attendeeEmail.toLowerCase(), r]),
+  );
+  const approved = minutesReviews.filter(
+    (r) => r.decision === "approved",
+  ).length;
+  const changes = minutesReviews.filter(
+    (r) => r.decision === "changes-requested",
+  ).length;
 
   return (
     <div className="mt-4 border-t pt-3 space-y-3">
@@ -1277,15 +1302,20 @@ function MinutesReviewsSection({ meeting }: { meeting: Meeting }) {
           Minutes review status
         </div>
         <div className="flex gap-2 text-xs">
-          <Badge variant="outline" className="gap-1 text-emerald-700 border-emerald-300 bg-emerald-50">
+          <Badge
+            variant="outline"
+            className="gap-1 text-emerald-700 border-emerald-300 bg-emerald-50"
+          >
             <CheckCircle2 className="h-3 w-3" /> {approved} approved
           </Badge>
-          <Badge variant="outline" className="gap-1 text-amber-700 border-amber-300 bg-amber-50">
+          <Badge
+            variant="outline"
+            className="gap-1 text-amber-700 border-amber-300 bg-amber-50"
+          >
             <MessageSquare className="h-3 w-3" /> {changes} changes
           </Badge>
         </div>
       </div>
-
       <div className="space-y-2">
         {meeting.attendees.map((a) => {
           const r = byEmail.get(a.email.toLowerCase());
@@ -1314,14 +1344,6 @@ function MinutesReviewsSection({ meeting }: { meeting: Meeting }) {
                 ) : (
                   <Badge variant="outline">Awaiting</Badge>
                 )}
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => copyLink(a.email)}
-                  title="Copy review link"
-                >
-                  <Link2 className="h-3.5 w-3.5" />
-                </Button>
               </div>
               {r?.comment && (
                 <p className="text-xs text-muted-foreground border-l-2 pl-2 whitespace-pre-wrap">

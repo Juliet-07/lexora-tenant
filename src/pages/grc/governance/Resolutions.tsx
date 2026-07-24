@@ -1,28 +1,10 @@
-import { useMemo, useState } from "react";
-import {
-  useResolutions,
-  mutate as mutateRes,
-  nextReference,
-  tallyBoard,
-  tallyWritten,
-  computeOutcome,
-  resUid,
-  type Resolution,
-  type ResolutionType,
-  type BoardVote,
-  type BoardVoteRow,
-  type WrittenRow,
-  type WrittenStatus,
-  type ShareholderSubType,
-  type Proxy,
-} from "@/lib/grcResolutionsStore";
-import { useGov } from "@/lib/grcGovernanceStore";
+import { useEffect, useMemo, useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
@@ -31,6 +13,17 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import {
   Sheet,
   SheetContent,
@@ -52,7 +45,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Gavel,
   Plus,
@@ -66,6 +58,27 @@ import {
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { RichTextEditor } from "@/components/RichTextEditor";
+import {
+  fetchResolutions,
+  fetchNextReference,
+  createResolution,
+  setBoardVote,
+  closeBoardVote,
+  setWrittenStatus,
+  recordWrittenResponse,
+  closeWritten,
+  addProxy,
+  saveShareholderPoll,
+  closeShareholder,
+  tallyRows,
+  fetchBoardMembers,
+  fetchMeetings,
+  type Resolution,
+  type ResolutionType,
+  type BoardVote as BoardVoteT,
+  type WrittenStatus,
+  type ShareholderSubType,
+} from "@/lib/grc/governance-api";
 
 const TYPE_COLORS: Record<ResolutionType, string> = {
   Board: "bg-blue-100 text-blue-700 border-blue-200",
@@ -105,8 +118,10 @@ function outcomePill(o: Resolution["outcome"]) {
 }
 
 export default function GrcResolutions() {
-  const list = useResolutions();
-  const gov = useGov();
+  const { data: list = [], isLoading } = useQuery({
+    queryKey: ["grc-resolutions"],
+    queryFn: fetchResolutions,
+  });
   const [open, setOpen] = useState(false);
   const [current, setCurrent] = useState<Resolution | null>(null);
   const [filterType, setFilterType] = useState<"all" | ResolutionType>("all");
@@ -145,6 +160,17 @@ export default function GrcResolutions() {
   }, [list]);
 
   const openDetail = (r: Resolution) => setCurrent(r);
+  const currentLive = current
+    ? (list.find((r) => r._id === current._id) ?? current)
+    : null;
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-24 text-sm text-muted-foreground">
+        Loading resolutions…
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -156,8 +182,8 @@ export default function GrcResolutions() {
           </h1>
           <p className="text-sm text-muted-foreground max-w-2xl">
             Board, Written and Shareholder resolutions — one register, three
-            voting mechanisms. All resolutions become read-only once the
-            outcome is locked.
+            voting mechanisms. All resolutions become read-only once the outcome
+            is locked.
           </p>
         </div>
         <Button onClick={() => setOpen(true)}>
@@ -168,7 +194,11 @@ export default function GrcResolutions() {
 
       <div className="grid gap-3 sm:grid-cols-4">
         <StatCard label="Total" value={stats.total} tone="slate" />
-        <StatCard label="Open / circulating" value={stats.open} tone="emerald" />
+        <StatCard
+          label="Open / circulating"
+          value={stats.open}
+          tone="emerald"
+        />
         <StatCard label="Passed" value={stats.passed} tone="blue" />
         <StatCard label="Failed" value={stats.failed} tone="rose" />
       </div>
@@ -187,9 +217,7 @@ export default function GrcResolutions() {
             </div>
             <Select
               value={filterType}
-              onValueChange={(v) =>
-                setFilterType(v as typeof filterType)
-              }
+              onValueChange={(v) => setFilterType(v as typeof filterType)}
             >
               <SelectTrigger className="w-[160px]">
                 <SelectValue />
@@ -203,9 +231,7 @@ export default function GrcResolutions() {
             </Select>
             <Select
               value={filterOutcome}
-              onValueChange={(v) =>
-                setFilterOutcome(v as typeof filterOutcome)
-              }
+              onValueChange={(v) => setFilterOutcome(v as typeof filterOutcome)}
             >
               <SelectTrigger className="w-[160px]">
                 <SelectValue />
@@ -217,7 +243,11 @@ export default function GrcResolutions() {
                 <SelectItem value="Failed">Failed</SelectItem>
               </SelectContent>
             </Select>
-            <Button variant="outline" size="sm" onClick={() => exportCsv(filtered)}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => exportCsv(filtered)}
+            >
               <Download className="h-4 w-4 mr-1" /> Export
             </Button>
           </div>
@@ -238,7 +268,7 @@ export default function GrcResolutions() {
               <TableBody>
                 {filtered.map((r) => (
                   <TableRow
-                    key={r.id}
+                    key={r._id}
                     className="cursor-pointer hover:bg-muted/40"
                     onClick={() => openDetail(r)}
                   >
@@ -256,7 +286,7 @@ export default function GrcResolutions() {
                     <TableCell>{statusPill(r)}</TableCell>
                     <TableCell>{outcomePill(r.outcome)}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">
-                      {r.effectiveDate}
+                      {new Date(r.effectiveDate).toLocaleDateString()}
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground">
                       {summariseTally(r)}
@@ -288,11 +318,9 @@ export default function GrcResolutions() {
         }}
       />
 
-      {current && (
+      {currentLive && (
         <ResolutionSheet
-          resolution={
-            list.find((r) => r.id === current.id) ?? current
-          }
+          resolution={currentLive}
           onClose={() => setCurrent(null)}
         />
       )}
@@ -335,12 +363,12 @@ function StatCard({
 }
 
 function summariseTally(r: Resolution) {
-  if (r.type === "Board" && r.boardVotes) {
-    const t = tallyBoard(r.boardVotes);
+  if (r.type === "Board") {
+    const t = tallyRows(r.boardVotes);
     return `${t.approve}✓ / ${t.oppose}✗ / ${t.abstain}∙`;
   }
-  if (r.type === "Written" && r.writtenRows) {
-    const t = tallyWritten(r.writtenRows);
+  if (r.type === "Written") {
+    const t = tallyRows(r.writtenRows);
     return `${t.approve}✓ / ${t.oppose}✗ / ${t.abstain}∙`;
   }
   if (r.type === "Shareholder") {
@@ -388,10 +416,19 @@ function CreateResolutionDialog({
   onOpenChange: (v: boolean) => void;
   onCreated: (r: Resolution) => void;
 }) {
-  const list = useResolutions();
-  const gov = useGov();
+  const { data: boardMembers = [] } = useQuery({
+    queryKey: ["grc-board-members"],
+    queryFn: fetchBoardMembers,
+    enabled: open,
+  });
+  const { data: meetings = [] } = useQuery({
+    queryKey: ["grc-meetings"],
+    queryFn: fetchMeetings,
+    enabled: open,
+  });
+
   const [type, setType] = useState<ResolutionType>("Board");
-  const [reference, setReference] = useState(nextReference(list));
+  const [reference, setReference] = useState("");
   const [subject, setSubject] = useState("");
   const [fullText, setFullText] = useState("");
   const [linkedMeetingId, setLinkedMeetingId] = useState<string>("");
@@ -405,9 +442,18 @@ function CreateResolutionDialog({
     new Date(Date.now() + 5 * 86400000).toISOString().slice(0, 16),
   );
 
+  // Fetch a real suggested reference the moment the dialog opens —
+  // the tenant can still freely overwrite it before submitting.
+  useEffect(() => {
+    if (open) {
+      fetchNextReference()
+        .then(setReference)
+        .catch(() => setReference(""));
+    }
+  }, [open]);
+
   const reset = () => {
     setType("Board");
-    setReference(nextReference(list));
     setSubject("");
     setFullText("");
     setLinkedMeetingId("");
@@ -416,75 +462,43 @@ function CreateResolutionDialog({
     setSubType("Ordinary");
   };
 
+  const mutation = useMutation({
+    mutationFn: () =>
+      createResolution({
+        reference: reference.trim() || undefined,
+        type,
+        subject: subject.trim(),
+        fullText,
+        linkedMeetingId: linkedMeetingId || undefined,
+        effectiveDate,
+        proposer: type === "Board" ? proposer || undefined : undefined,
+        seconder: type === "Board" ? seconder || undefined : undefined,
+        deadline:
+          type === "Written" ? new Date(deadline).toISOString() : undefined,
+        subType: type === "Shareholder" ? subType : undefined,
+      }),
+    onSuccess: (r) => {
+      toast({ title: "Resolution created" });
+      reset();
+      onCreated(r);
+    },
+    onError: (err: any) =>
+      toast({
+        title: "Failed to create resolution",
+        description: err?.response?.data?.message,
+        variant: "destructive",
+      }),
+  });
+
   const submit = () => {
     if (!subject.trim() || !fullText.trim()) {
-      toast({ title: "Subject and full text required", variant: "destructive" });
+      toast({
+        title: "Subject and full text required",
+        variant: "destructive",
+      });
       return;
     }
-    const now = new Date().toISOString();
-    const directors = gov.boardMembers;
-    const base: Resolution = {
-      id: resUid("res"),
-      reference,
-      type,
-      subject: subject.trim(),
-      fullText,
-      linkedMeetingId: linkedMeetingId || null,
-      effectiveDate,
-      status: "Draft",
-      outcome: null,
-      createdAt: now,
-    };
-    let r: Resolution = base;
-    if (type === "Board") {
-      r = {
-        ...base,
-        proposer,
-        seconder,
-        boardVotes: directors.map<BoardVoteRow>((d) => ({
-          directorId: d.id,
-          directorName: d.name,
-          recused: d.conflicts.length > 0, // system-driven from declarations
-          vote: null,
-        })),
-      };
-    } else if (type === "Written") {
-      r = {
-        ...base,
-        deadline: new Date(deadline).toISOString(),
-        majorityRule: "Simple",
-        writtenRows: directors.map<WrittenRow>((d) => ({
-          directorId: d.id,
-          directorName: d.name,
-          recused: d.conflicts.length > 0,
-          status: "Not sent",
-          response: null,
-        })),
-        notifications: [
-          {
-            id: resUid("ev"),
-            at: now,
-            kind: "System",
-            message: "Resolution drafted — awaiting circulation.",
-          },
-        ],
-      };
-    } else {
-      r = {
-        ...base,
-        subType,
-        quorumRequired: 50,
-        quorumPresent: 0,
-        proxies: [],
-        pollFor: 0,
-        pollAgainst: 0,
-        pollAbstain: 0,
-      };
-    }
-    mutateRes((l) => [r, ...l]);
-    toast({ title: "Resolution created" });
-    reset();
-    onCreated(r);
+    mutation.mutate();
   };
 
   return (
@@ -523,12 +537,19 @@ function CreateResolutionDialog({
 
           <div>
             <Label>Subject / title</Label>
-            <Input value={subject} onChange={(e) => setSubject(e.target.value)} />
+            <Input
+              value={subject}
+              onChange={(e) => setSubject(e.target.value)}
+            />
           </div>
 
           <div>
             <Label>Full resolution text</Label>
-            <RichTextEditor value={fullText} onChange={setFullText} minHeight={160} />
+            <RichTextEditor
+              value={fullText}
+              onChange={setFullText}
+              minHeight={160}
+            />
             <p className="text-[11px] text-muted-foreground mt-1">
               Locked once voting or circulation opens.
             </p>
@@ -539,15 +560,17 @@ function CreateResolutionDialog({
               <Label>Linked meeting (optional)</Label>
               <Select
                 value={linkedMeetingId || "__none__"}
-                onValueChange={(v) => setLinkedMeetingId(v === "__none__" ? "" : v)}
+                onValueChange={(v) =>
+                  setLinkedMeetingId(v === "__none__" ? "" : v)
+                }
               >
                 <SelectTrigger>
                   <SelectValue placeholder="None" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__none__">None</SelectItem>
-                  {gov.meetings.map((m) => (
-                    <SelectItem key={m.id} value={m.id}>
+                  {meetings.map((m) => (
+                    <SelectItem key={m._id} value={m._id}>
                       {m.title} — {new Date(m.date).toLocaleDateString()}
                     </SelectItem>
                   ))}
@@ -573,8 +596,8 @@ function CreateResolutionDialog({
                     <SelectValue placeholder="Select director" />
                   </SelectTrigger>
                   <SelectContent>
-                    {gov.boardMembers.map((d) => (
-                      <SelectItem key={d.id} value={d.name}>
+                    {boardMembers.map((d) => (
+                      <SelectItem key={d._id} value={d.name}>
                         {d.name}
                       </SelectItem>
                     ))}
@@ -588,8 +611,8 @@ function CreateResolutionDialog({
                     <SelectValue placeholder="Select director" />
                   </SelectTrigger>
                   <SelectContent>
-                    {gov.boardMembers.map((d) => (
-                      <SelectItem key={d.id} value={d.name}>
+                    {boardMembers.map((d) => (
+                      <SelectItem key={d._id} value={d.name}>
                         {d.name}
                       </SelectItem>
                     ))}
@@ -633,7 +656,9 @@ function CreateResolutionDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={submit}>Create</Button>
+          <Button onClick={submit} disabled={mutation.isPending}>
+            {mutation.isPending ? "Creating…" : "Create"}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -668,7 +693,8 @@ function ResolutionSheet({
           <div>
             <div className="text-lg font-semibold">{resolution.subject}</div>
             <div className="text-xs text-muted-foreground">
-              Effective {resolution.effectiveDate}
+              Effective{" "}
+              {new Date(resolution.effectiveDate).toLocaleDateString()}
               {resolution.proposer && ` · Proposed by ${resolution.proposer}`}
               {resolution.seconder && ` · Seconded by ${resolution.seconder}`}
             </div>
@@ -734,45 +760,39 @@ function BoardVotingPanel({
   resolution: Resolution;
   readOnly: boolean;
 }) {
+  const queryClient = useQueryClient();
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: ["grc-resolutions"] });
   const rows = resolution.boardVotes ?? [];
-  const tally = tallyBoard(rows);
+  const tally = tallyRows(rows);
   const canClose =
-    resolution.status !== "Closed" &&
-    tally.total > 0 &&
-    tally.awaiting === 0;
+    resolution.status !== "Closed" && tally.total > 0 && tally.awaiting === 0;
 
-  const setVote = (idx: number, vote: BoardVote) => {
-    if (readOnly) return;
-    mutateRes((list) =>
-      list.map((r) => {
-        if (r.id !== resolution.id) return r;
-        const next = [...(r.boardVotes ?? [])];
-        next[idx] = { ...next[idx], vote };
-        return {
-          ...r,
-          boardVotes: next,
-          status: r.status === "Draft" ? "Voting open" : r.status,
-        };
+  const voteMut = useMutation({
+    mutationFn: (v: { rowIndex: number; vote: BoardVoteT }) =>
+      setBoardVote(resolution._id, v.rowIndex, v.vote),
+    onSuccess: invalidate,
+    onError: (err: any) =>
+      toast({
+        title: "Failed to record vote",
+        description: err?.response?.data?.message,
+        variant: "destructive",
       }),
-    );
-  };
+  });
 
-  const closeVote = () => {
-    const outcome = computeOutcome(tally.approve, tally.total, "Simple");
-    mutateRes((list) =>
-      list.map((r) =>
-        r.id === resolution.id
-          ? {
-              ...r,
-              status: "Closed",
-              outcome,
-              closedAt: new Date().toISOString(),
-            }
-          : r,
-      ),
-    );
-    toast({ title: `Vote closed — ${outcome}` });
-  };
+  const closeMut = useMutation({
+    mutationFn: () => closeBoardVote(resolution._id),
+    onSuccess: (r) => {
+      invalidate();
+      toast({ title: `Vote closed — ${r.outcome}` });
+    },
+    onError: (err: any) =>
+      toast({
+        title: "Failed to close vote",
+        description: err?.response?.data?.message,
+        variant: "destructive",
+      }),
+  });
 
   return (
     <div className="space-y-3">
@@ -788,7 +808,7 @@ function BoardVotingPanel({
           </TableHeader>
           <TableBody>
             {rows.map((row, i) => (
-              <TableRow key={row.directorId}>
+              <TableRow key={i}>
                 <TableCell className="font-medium">
                   {row.directorName}
                 </TableCell>
@@ -813,14 +833,16 @@ function BoardVotingPanel({
                     </span>
                   ) : (
                     <div className="flex justify-end gap-1">
-                      {(["Approve", "Oppose", "Abstain"] as BoardVote[]).map(
+                      {(["Approve", "Oppose", "Abstain"] as BoardVoteT[]).map(
                         (v) => (
                           <Button
                             key={v}
                             size="sm"
                             variant={row.vote === v ? "default" : "outline"}
-                            disabled={readOnly}
-                            onClick={() => setVote(i, v)}
+                            disabled={readOnly || voteMut.isPending}
+                            onClick={() =>
+                              voteMut.mutate({ rowIndex: i, vote: v })
+                            }
                           >
                             {v}
                           </Button>
@@ -836,10 +858,29 @@ function BoardVotingPanel({
       </div>
       {!readOnly && (
         <div className="flex justify-end">
-          <Button disabled={!canClose} onClick={closeVote}>
-            <Lock className="h-4 w-4 mr-1" />
-            Close vote and record outcome
-          </Button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button disabled={!canClose}>
+                <Lock className="h-4 w-4 mr-1" />
+                Close vote and record outcome
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Close this vote?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This locks the resolution permanently and records the outcome.
+                  This cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={() => closeMut.mutate()}>
+                  Close vote
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       )}
     </div>
@@ -861,10 +902,22 @@ function TallyRow({
   );
   return (
     <div className="grid grid-cols-4 gap-2">
-      {cell("Approve", t.approve, "bg-emerald-50 border-emerald-200 text-emerald-800")}
+      {cell(
+        "Approve",
+        t.approve,
+        "bg-emerald-50 border-emerald-200 text-emerald-800",
+      )}
       {cell("Oppose", t.oppose, "bg-rose-50 border-rose-200 text-rose-800")}
-      {cell("Abstain", t.abstain, "bg-slate-50 border-slate-200 text-slate-800")}
-      {cell("Awaiting", t.awaiting, "bg-amber-50 border-amber-200 text-amber-800")}
+      {cell(
+        "Abstain",
+        t.abstain,
+        "bg-slate-50 border-slate-200 text-slate-800",
+      )}
+      {cell(
+        "Awaiting",
+        t.awaiting,
+        "bg-amber-50 border-amber-200 text-amber-800",
+      )}
     </div>
   );
 }
@@ -878,102 +931,54 @@ function WrittenPanel({
   resolution: Resolution;
   readOnly: boolean;
 }) {
+  const queryClient = useQueryClient();
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: ["grc-resolutions"] });
   const rows = resolution.writtenRows ?? [];
-  const t = tallyWritten(rows);
+  const t = tallyRows(rows);
   const remainingMs = resolution.deadline
     ? new Date(resolution.deadline).getTime() - Date.now()
     : 0;
   const warn = remainingMs > 0 && remainingMs < 2 * 86400000;
   const passed = remainingMs <= 0;
 
-  const setStatus = (idx: number, status: WrittenStatus) => {
-    mutateRes((list) =>
-      list.map((r) => {
-        if (r.id !== resolution.id) return r;
-        const next = [...(r.writtenRows ?? [])];
-        next[idx] = { ...next[idx], status };
-        return {
-          ...r,
-          writtenRows: next,
-          status: r.status === "Draft" ? "Circulating" : r.status,
-          notifications: [
-            ...(r.notifications ?? []),
-            {
-              id: resUid("ev"),
-              at: new Date().toISOString(),
-              kind: status === "Reminded" ? "Reminder" : "Sent",
-              message: `${status} — ${next[idx].directorName}`,
-            },
-          ],
-        };
+  const statusMut = useMutation({
+    mutationFn: (v: { rowIndex: number; status: "Sent" | "Reminded" }) =>
+      setWrittenStatus(resolution._id, v.rowIndex, v.status),
+    onSuccess: invalidate,
+    onError: (err: any) =>
+      toast({
+        title: "Failed to update status",
+        description: err?.response?.data?.message,
+        variant: "destructive",
       }),
-    );
-  };
+  });
 
-  const recordResponse = (
-    idx: number,
-    response: BoardVote,
-    manual = false,
-  ) => {
-    mutateRes((list) =>
-      list.map((r) => {
-        if (r.id !== resolution.id) return r;
-        const next = [...(r.writtenRows ?? [])];
-        next[idx] = {
-          ...next[idx],
-          response,
-          status: "Responded",
-          respondedAt: new Date().toISOString(),
-          manualEntry: manual,
-        };
-        return {
-          ...r,
-          writtenRows: next,
-          notifications: [
-            ...(r.notifications ?? []),
-            {
-              id: resUid("ev"),
-              at: new Date().toISOString(),
-              kind: "Response",
-              message: `${next[idx].directorName} responded: ${response}${
-                manual ? " (logged manually)" : ""
-              }`,
-            },
-          ],
-        };
+  const responseMut = useMutation({
+    mutationFn: (v: { rowIndex: number; response: BoardVoteT }) =>
+      recordWrittenResponse(resolution._id, v.rowIndex, v.response),
+    onSuccess: invalidate,
+    onError: (err: any) =>
+      toast({
+        title: "Failed to log response",
+        description: err?.response?.data?.message,
+        variant: "destructive",
       }),
-    );
-  };
+  });
 
-  const closeAndRecord = (forced = false) => {
-    const outcome = computeOutcome(t.approve, t.total, "Simple");
-    mutateRes((list) =>
-      list.map((r) =>
-        r.id === resolution.id
-          ? {
-              ...r,
-              status: "Closed",
-              outcome,
-              closedAt: new Date().toISOString(),
-              forceClosedBy: forced ? "Admin" : undefined,
-              forceClosedAt: forced ? new Date().toISOString() : undefined,
-              notifications: [
-                ...(r.notifications ?? []),
-                {
-                  id: resUid("ev"),
-                  at: new Date().toISOString(),
-                  kind: "System",
-                  message: forced
-                    ? "Force-closed by Admin"
-                    : "Circulation closed",
-                },
-              ],
-            }
-          : r,
-      ),
-    );
-    toast({ title: `Circulation closed — ${outcome}` });
-  };
+  const closeMut = useMutation({
+    mutationFn: (forced: boolean) => closeWritten(resolution._id, forced),
+    onSuccess: (r) => {
+      invalidate();
+      toast({ title: `Circulation closed — ${r.outcome}` });
+    },
+    onError: (err: any) =>
+      toast({
+        title: "Failed to close",
+        description: err?.response?.data?.message,
+        variant: "destructive",
+      }),
+  });
 
   return (
     <div className="space-y-3">
@@ -987,9 +992,7 @@ function WrittenPanel({
           </div>
         </div>
         <div
-          className={`rounded-md border p-2 ${
-            warn ? "bg-amber-50 border-amber-200" : ""
-          }`}
+          className={`rounded-md border p-2 ${warn ? "bg-amber-50 border-amber-200" : ""}`}
         >
           <div className="text-[11px] text-muted-foreground flex items-center gap-1">
             <Clock className="h-3 w-3" /> Time remaining
@@ -1020,7 +1023,7 @@ function WrittenPanel({
           </TableHeader>
           <TableBody>
             {rows.map((row, i) => (
-              <TableRow key={row.directorId}>
+              <TableRow key={i}>
                 <TableCell className="font-medium">
                   {row.directorName}
                   {row.recused && (
@@ -1055,7 +1058,10 @@ function WrittenPanel({
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => setStatus(i, "Sent")}
+                          disabled={statusMut.isPending}
+                          onClick={() =>
+                            statusMut.mutate({ rowIndex: i, status: "Sent" })
+                          }
                         >
                           <Send className="h-3 w-3 mr-1" /> Send
                         </Button>
@@ -1064,13 +1070,21 @@ function WrittenPanel({
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => setStatus(i, "Reminded")}
+                          disabled={statusMut.isPending}
+                          onClick={() =>
+                            statusMut.mutate({
+                              rowIndex: i,
+                              status: "Reminded",
+                            })
+                          }
                         >
                           Remind
                         </Button>
                       )}
                       <ManualResponseButton
-                        onPick={(v) => recordResponse(i, v, true)}
+                        onPick={(v) =>
+                          responseMut.mutate({ rowIndex: i, response: v })
+                        }
                       />
                     </div>
                   )}
@@ -1089,8 +1103,8 @@ function WrittenPanel({
       <div>
         <div className="text-xs font-medium mb-1">Notification log</div>
         <div className="border rounded-md p-2 max-h-40 overflow-y-auto space-y-1">
-          {(resolution.notifications ?? []).map((e) => (
-            <div key={e.id} className="text-[11px] flex gap-2">
+          {(resolution.notifications ?? []).map((e, i) => (
+            <div key={i} className="text-[11px] flex gap-2">
               <span className="text-muted-foreground">
                 {new Date(e.at).toLocaleString()}
               </span>
@@ -1101,23 +1115,60 @@ function WrittenPanel({
             </div>
           ))}
           {(resolution.notifications ?? []).length === 0 && (
-            <div className="text-[11px] text-muted-foreground">No events yet.</div>
+            <div className="text-[11px] text-muted-foreground">
+              No events yet.
+            </div>
           )}
         </div>
       </div>
 
       {!readOnly && (
         <div className="flex justify-end gap-2">
-          <Button variant="outline" onClick={() => closeAndRecord(true)}>
-            Force close
-          </Button>
-          <Button
-            disabled={t.total > 0 && t.awaiting > 0 && !passed}
-            onClick={() => closeAndRecord(false)}
-          >
-            <Lock className="h-4 w-4 mr-1" />
-            Close and record outcome
-          </Button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="outline">Force close</Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>
+                  Force close this circulation?
+                </AlertDialogTitle>
+                <AlertDialogDescription>
+                  This overrides outstanding responses and locks the resolution
+                  permanently. This cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={() => closeMut.mutate(true)}>
+                  Force close
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button disabled={t.total > 0 && t.awaiting > 0 && !passed}>
+                <Lock className="h-4 w-4 mr-1" />
+                Close and record outcome
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Close this circulation?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This locks the resolution permanently and records the outcome.
+                  This cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={() => closeMut.mutate(false)}>
+                  Close
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       )}
     </div>
@@ -1138,11 +1189,7 @@ function StatusPill({ status }: { status: WrittenStatus }) {
   );
 }
 
-function ManualResponseButton({
-  onPick,
-}: {
-  onPick: (v: BoardVote) => void;
-}) {
+function ManualResponseButton({ onPick }: { onPick: (v: BoardVoteT) => void }) {
   const [open, setOpen] = useState(false);
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -1159,7 +1206,7 @@ function ManualResponseButton({
           Use for directors who responded via email or signed PDF.
         </p>
         <div className="flex gap-2 mt-2">
-          {(["Approve", "Oppose", "Abstain"] as BoardVote[]).map((v) => (
+          {(["Approve", "Oppose", "Abstain"] as BoardVoteT[]).map((v) => (
             <Button
               key={v}
               variant="outline"
@@ -1195,6 +1242,10 @@ function ShareholderPanel({
   resolution: Resolution;
   readOnly: boolean;
 }) {
+  const queryClient = useQueryClient();
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: ["grc-resolutions"] });
+
   const [proxyName, setProxyName] = useState("");
   const [representing, setRepresenting] = useState("");
   const [shares, setShares] = useState<number>(100);
@@ -1209,72 +1260,73 @@ function ShareholderPanel({
     resolution.quorumPresent ?? 0,
   );
 
-  const quorumMet =
-    (quorumPresent ?? 0) >= (resolution.quorumRequired ?? 50);
+  useEffect(() => {
+    setPollFor(resolution.pollFor ?? 0);
+    setPollAgainst(resolution.pollAgainst ?? 0);
+    setPollAbstain(resolution.pollAbstain ?? 0);
+    setQuorumPresent(resolution.quorumPresent ?? 0);
+  }, [resolution._id]);
 
-  const addProxy = () => {
+  const quorumMet = (quorumPresent ?? 0) >= (resolution.quorumRequired ?? 50);
+
+  const proxyMut = useMutation({
+    mutationFn: () =>
+      addProxy(resolution._id, {
+        proxyName: proxyName.trim(),
+        representing: representing.trim(),
+        shares,
+      }),
+    onSuccess: () => {
+      invalidate();
+      setProxyName("");
+      setRepresenting("");
+      setShares(100);
+    },
+    onError: (err: any) =>
+      toast({
+        title: "Failed to add proxy",
+        description: err?.response?.data?.message,
+        variant: "destructive",
+      }),
+  });
+
+  const pollMut = useMutation({
+    mutationFn: () =>
+      saveShareholderPoll(resolution._id, {
+        pollFor,
+        pollAgainst,
+        pollAbstain,
+        quorumPresent,
+      }),
+    onSuccess: () => {
+      invalidate();
+      toast({ title: "Poll saved" });
+    },
+    onError: (err: any) =>
+      toast({
+        title: "Failed to save poll",
+        description: err?.response?.data?.message,
+        variant: "destructive",
+      }),
+  });
+
+  const closeMut = useMutation({
+    mutationFn: () => closeShareholder(resolution._id),
+    onSuccess: (r) => {
+      invalidate();
+      toast({ title: `Poll closed — ${r.outcome}` });
+    },
+    onError: (err: any) =>
+      toast({
+        title: "Failed to close poll",
+        description: err?.response?.data?.message,
+        variant: "destructive",
+      }),
+  });
+
+  const addProxyHandler = () => {
     if (!proxyName.trim() || !representing.trim()) return;
-    const p: Proxy = {
-      id: resUid("px"),
-      proxyName: proxyName.trim(),
-      representing: representing.trim(),
-      shares,
-      vote: null,
-    };
-    mutateRes((list) =>
-      list.map((r) =>
-        r.id === resolution.id
-          ? { ...r, proxies: [...(r.proxies ?? []), p] }
-          : r,
-      ),
-    );
-    setProxyName("");
-    setRepresenting("");
-    setShares(100);
-  };
-
-  const savePoll = () => {
-    mutateRes((list) =>
-      list.map((r) =>
-        r.id === resolution.id
-          ? {
-              ...r,
-              status: r.status === "Draft" ? "Voting open" : r.status,
-              pollFor,
-              pollAgainst,
-              pollAbstain,
-              quorumPresent,
-            }
-          : r,
-      ),
-    );
-    toast({ title: "Poll saved" });
-  };
-
-  const close = () => {
-    const total = pollFor + pollAgainst + pollAbstain;
-    const outcome = computeOutcome(
-      pollFor,
-      total,
-      resolution.subType === "Special" ? "Special" : "Simple",
-    );
-    mutateRes((list) =>
-      list.map((r) =>
-        r.id === resolution.id
-          ? {
-              ...r,
-              status: "Closed",
-              outcome,
-              closedAt: new Date().toISOString(),
-              pollFor,
-              pollAgainst,
-              pollAbstain,
-              quorumPresent,
-            }
-          : r,
-      ),
-    );
-    toast({ title: `Poll closed — ${outcome}` });
+    proxyMut.mutate();
   };
 
   return (
@@ -1288,7 +1340,9 @@ function ShareholderPanel({
           </div>
         </div>
         <div className="rounded-md border p-2">
-          <div className="text-[11px] text-muted-foreground">Quorum required</div>
+          <div className="text-[11px] text-muted-foreground">
+            Quorum required
+          </div>
           <div className="text-sm font-medium">
             {resolution.quorumRequired}%
           </div>
@@ -1300,7 +1354,9 @@ function ShareholderPanel({
               : "bg-amber-50 border-amber-200"
           }`}
         >
-          <div className="text-[11px] text-muted-foreground">Present / represented</div>
+          <div className="text-[11px] text-muted-foreground">
+            Present / represented
+          </div>
           <div className="text-sm font-medium">
             {quorumPresent}% — {quorumMet ? "Quorum met" : "Waiting"}
           </div>
@@ -1357,8 +1413,8 @@ function ShareholderPanel({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {(resolution.proxies ?? []).map((p) => (
-                <TableRow key={p.id}>
+              {(resolution.proxies ?? []).map((p, i) => (
+                <TableRow key={i}>
                   <TableCell>{p.proxyName}</TableCell>
                   <TableCell>{p.representing}</TableCell>
                   <TableCell className="text-right">{p.shares}</TableCell>
@@ -1367,7 +1423,10 @@ function ShareholderPanel({
               ))}
               {(resolution.proxies ?? []).length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center text-xs text-muted-foreground py-3">
+                  <TableCell
+                    colSpan={4}
+                    className="text-center text-xs text-muted-foreground py-3"
+                  >
                     No proxies recorded.
                   </TableCell>
                 </TableRow>
@@ -1393,7 +1452,12 @@ function ShareholderPanel({
               value={shares}
               onChange={(e) => setShares(Number(e.target.value))}
             />
-            <Button variant="outline" size="sm" onClick={addProxy}>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={proxyMut.isPending}
+              onClick={addProxyHandler}
+            >
               Add proxy
             </Button>
           </div>
@@ -1402,13 +1466,36 @@ function ShareholderPanel({
 
       {!readOnly && (
         <div className="flex justify-end gap-2">
-          <Button variant="outline" onClick={savePoll}>
+          <Button
+            variant="outline"
+            disabled={pollMut.isPending}
+            onClick={() => pollMut.mutate()}
+          >
             Save poll
           </Button>
-          <Button disabled={!quorumMet} onClick={close}>
-            <Lock className="h-4 w-4 mr-1" />
-            Close and record outcome
-          </Button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button disabled={!quorumMet}>
+                <Lock className="h-4 w-4 mr-1" />
+                Close and record outcome
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Close this poll?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This locks the resolution permanently and records the outcome.
+                  This cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={() => closeMut.mutate()}>
+                  Close
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       )}
     </div>

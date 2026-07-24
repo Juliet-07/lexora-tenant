@@ -131,6 +131,25 @@ export interface Meeting {
     signature: string;
   }[];
   ackTokens: unknown[];
+  minutesPdfUrl: string | null;
+  minutesReviews: {
+    attendeeEmail: string;
+    attendeeName: string;
+    decision: string;
+    comment: string;
+    submittedAt: string;
+  }[];
+}
+
+export interface MinutesReviewSnapshot {
+  title: string;
+  type: string;
+  date: string;
+  chair: string;
+  pdfUrl: string | null;
+  prefillName: string;
+  alreadyApproved: boolean;
+  approvedAt: string | null;
 }
 
 export interface AckSnapshot {
@@ -200,6 +219,75 @@ export interface BoardSkill {
   yearsExperience: number;
   qualified: boolean;
   notes: string;
+}
+
+export type ResolutionType = "Board" | "Written" | "Shareholder";
+export type ResolutionStatus =
+  | "Draft"
+  | "Voting open"
+  | "Circulating"
+  | "Closed";
+export type BoardVote = "Approve" | "Oppose" | "Abstain";
+export type WrittenStatus = "Not sent" | "Sent" | "Reminded" | "Responded";
+export type ShareholderSubType = "Ordinary" | "Special";
+
+export interface BoardVoteRow {
+  directorId: string | null;
+  directorName: string;
+  directorEmail: string;
+  recused: boolean;
+  vote: BoardVote | null;
+}
+export interface WrittenRow {
+  directorId: string | null;
+  directorName: string;
+  directorEmail: string;
+  recused: boolean;
+  status: WrittenStatus;
+  response: BoardVote | null;
+  respondedAt: string | null;
+  manualEntry: boolean;
+}
+export interface NotificationEvent {
+  at: string;
+  kind: string;
+  message: string;
+}
+export interface ProxyRecord {
+  proxyName: string;
+  representing: string;
+  shares: number;
+  vote: BoardVote | null;
+}
+
+export interface Resolution {
+  _id: string;
+  reference: string;
+  type: ResolutionType;
+  subject: string;
+  fullText: string;
+  linkedMeetingId: string | null;
+  effectiveDate: string;
+  status: ResolutionStatus;
+  outcome: "Passed" | "Failed" | null;
+  closedAt: string | null;
+  proposer: string | null;
+  seconder: string | null;
+  boardVotes: BoardVoteRow[];
+  deadline: string | null;
+  majorityRule: string;
+  writtenRows: WrittenRow[];
+  notifications: NotificationEvent[];
+  forceClosedBy: string | null;
+  forceClosedAt: string | null;
+  subType: ShareholderSubType | null;
+  quorumRequired: number;
+  quorumPresent: number;
+  proxies: ProxyRecord[];
+  pollFor: number;
+  pollAgainst: number;
+  pollAbstain: number;
+  createdAt: string;
 }
 
 export const fetchBoardMembers = async (): Promise<BoardMember[]> => {
@@ -552,5 +640,154 @@ export const recordAttendance = async (
     presentIndices,
     absenceNotes,
   });
+  return res.data?.data ?? res.data;
+};
+
+export const fetchMinutesReviewSnapshot = async (
+  token: string,
+): Promise<MinutesReviewSnapshot> => {
+  const res = await api.get(`/grc/governance/meetings/minutes-review/${token}`);
+  return res.data?.data ?? res.data;
+};
+
+export const submitMinutesReview = async (
+  token: string,
+  dto: {
+    name: string;
+    decision: "approved" | "changes-requested";
+    comment?: string;
+  },
+): Promise<{ success: boolean }> => {
+  const res = await api.post(
+    `/grc/governance/meetings/minutes-review/${token}`,
+    dto,
+  );
+  return res.data?.data ?? res.data;
+};
+
+export function tallyRows(
+  rows: {
+    recused: boolean;
+    vote?: BoardVote | null;
+    response?: BoardVote | null;
+  }[],
+) {
+  const eligible = rows.filter((r) => !r.recused);
+  const value = (r: any) => r.vote ?? r.response ?? null;
+  return {
+    approve: eligible.filter((r) => value(r) === "Approve").length,
+    oppose: eligible.filter((r) => value(r) === "Oppose").length,
+    abstain: eligible.filter((r) => value(r) === "Abstain").length,
+    awaiting: eligible.filter((r) => value(r) === null).length,
+    total: eligible.length,
+  };
+}
+
+export const fetchNextReference = async (): Promise<string> => {
+  const res = await api.get("/grc/governance/resolutions/next-reference");
+  return (res.data?.data ?? res.data).reference;
+};
+
+export const fetchResolutions = async (): Promise<Resolution[]> => {
+  const res = await api.get("/grc/governance/resolutions");
+  const d = res.data?.data ?? res.data;
+  return Array.isArray(d) ? d : [];
+};
+
+export const createResolution = async (dto: {
+  reference?: string;
+  type: ResolutionType;
+  subject: string;
+  fullText: string;
+  linkedMeetingId?: string;
+  effectiveDate: string;
+  proposer?: string;
+  seconder?: string;
+  deadline?: string;
+  subType?: ShareholderSubType;
+}): Promise<Resolution> => {
+  const res = await api.post("/grc/governance/resolutions", dto);
+  return res.data?.data ?? res.data;
+};
+
+export const setBoardVote = async (
+  id: string,
+  rowIndex: number,
+  vote: BoardVote,
+): Promise<Resolution> => {
+  const res = await api.patch(`/grc/governance/resolutions/${id}/board-vote`, {
+    rowIndex,
+    vote,
+  });
+  return res.data?.data ?? res.data;
+};
+export const closeBoardVote = async (id: string): Promise<Resolution> => {
+  const res = await api.post(
+    `/grc/governance/resolutions/${id}/board-vote/close`,
+    {},
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const setWrittenStatus = async (
+  id: string,
+  rowIndex: number,
+  status: "Sent" | "Reminded",
+): Promise<Resolution> => {
+  const res = await api.patch(
+    `/grc/governance/resolutions/${id}/written-status`,
+    { rowIndex, status },
+  );
+  return res.data?.data ?? res.data;
+};
+export const recordWrittenResponse = async (
+  id: string,
+  rowIndex: number,
+  response: BoardVote,
+): Promise<Resolution> => {
+  const res = await api.patch(
+    `/grc/governance/resolutions/${id}/written-response`,
+    { rowIndex, response },
+  );
+  return res.data?.data ?? res.data;
+};
+export const closeWritten = async (
+  id: string,
+  forced = false,
+): Promise<Resolution> => {
+  const res = await api.post(
+    `/grc/governance/resolutions/${id}/written/close`,
+    { forced },
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const addProxy = async (
+  id: string,
+  dto: { proxyName: string; representing: string; shares: number },
+): Promise<Resolution> => {
+  const res = await api.post(`/grc/governance/resolutions/${id}/proxies`, dto);
+  return res.data?.data ?? res.data;
+};
+export const saveShareholderPoll = async (
+  id: string,
+  dto: {
+    pollFor: number;
+    pollAgainst: number;
+    pollAbstain: number;
+    quorumPresent: number;
+  },
+): Promise<Resolution> => {
+  const res = await api.patch(
+    `/grc/governance/resolutions/${id}/shareholder-poll`,
+    dto,
+  );
+  return res.data?.data ?? res.data;
+};
+export const closeShareholder = async (id: string): Promise<Resolution> => {
+  const res = await api.post(
+    `/grc/governance/resolutions/${id}/shareholder/close`,
+    {},
+  );
   return res.data?.data ?? res.data;
 };
