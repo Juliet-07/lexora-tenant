@@ -390,7 +390,7 @@ function ContractTab({ deal, clauses }: any) {
   const vars = deal.contract.variables as Record<string, string>;
   const varList = Object.keys(vars);
   const bodyText = deal.contract.sections.map((s: any) => s.body).join(" ");
-  const usedVars = Array.from(new Set((bodyText.match(/\[([A-Z_]+)\]/g) || []).map((v: string) => v.slice(1, -1))));
+  const usedVars = Array.from(new Set((bodyText.match(/\[([A-Z_]+)\]/g) || []).map((v: string) => v.slice(1, -1)))) as string[];
   const unfilled = usedVars.filter((v) => !vars[v]);
 
   function addClause(cl: any) {
