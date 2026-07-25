@@ -467,7 +467,7 @@ function ContractTab({ deal, clauses }: any) {
           <div className="pt-2 border-t text-xs space-y-1">
             <div className="font-semibold">Playbook checks</div>
             <div className="flex items-start gap-1"><CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 mt-0.5" />Governing law present</div>
-            {deal.value > 10_000_000 && <div className="flex items-start gap-1 text-amber-700"><AlertTriangleIcon />Board approval clause required (value > $10m)</div>}
+            {deal.value > 10_000_000 && <div className="flex items-start gap-1 text-amber-700"><AlertTriangleIcon />Board approval clause required (value {'>'} $10m)</div>}
           </div>
         </CardContent>
       </Card>
