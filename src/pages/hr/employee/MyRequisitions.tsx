@@ -48,7 +48,7 @@ import {
   createRequisition,
   type Requisition,
   type RequisitionPriority,
-} from "@/lib/hr-requisition-api";
+} from "@/lib/hr/hr-requisition-api";
 
 const TYPE_ICON: Record<string, any> = {
   hiring: UserPlus,

@@ -53,7 +53,7 @@ import {
   Gauge,
 } from "lucide-react";
 import { toast } from "sonner";
-import { fetchLocations, fetchEmployees, fetchTeams } from "@/lib/hr-api";
+import { fetchLocations, fetchEmployees, fetchTeams } from "@/lib/hr/hr-api";
 import {
   fetchAllReviewCycles,
   fetchReviewCycleDetail,
@@ -65,7 +65,7 @@ import {
   type PerformanceReview,
   retrySkippedEmployees,
   deleteCycle,
-} from "@/lib/hr-performance-api";
+} from "@/lib/hr/hr-performance-api";
 import { ManagerReviewSheet } from "@/components/hr/ManagerReviewSheet";
 import { KpiTemplatesPanel } from "@/components/hr/KpiTemplatePanel";
 import { PerformanceFrameworksPanel } from "@/components/hr/PerformanceFrameworksPanel";

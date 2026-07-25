@@ -30,7 +30,7 @@ import {
   displayName,
   prettyLabel,
   toneFor,
-} from "@/lib/clients-api";
+} from "@/lib/client/clients-api";
 import { api } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 

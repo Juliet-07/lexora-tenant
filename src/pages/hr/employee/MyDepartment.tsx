@@ -4,7 +4,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Loader2, Eye, AlertTriangle, ClipboardCheck } from "lucide-react";
-import { fetchDepartmentTree, type DepartmentTreeManager } from "@/lib/hr-api";
+import { fetchDepartmentTree, type DepartmentTreeManager } from "@/lib/hr/hr-api";
 import { ManagerProbationSheet } from "@/components/hr/ManagerProbationSheet";
 
 export default function MyDepartment() {

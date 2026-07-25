@@ -56,8 +56,8 @@ import {
   downloadStrXml,
   type Str,
   type StrStats,
-} from "@/lib/kyc-api";
-import { prettyLabel } from "@/lib/clients-api";
+} from "@/lib/kyc/kyc-api";
+import { prettyLabel } from "@/lib/client/clients-api";
 import { ClientSelect } from "@/components/ClientDropdown";
 
 // ─────────────────────────────────────────────────────────────

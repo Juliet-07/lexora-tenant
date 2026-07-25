@@ -52,7 +52,7 @@ import {
   type DisputeCase,
   isImageFile,
   resolveDisputeFileUrl,
-} from "@/lib/hr-dispute-api";
+} from "@/lib/hr/hr-dispute-api";
 
 // ── helpers ────────────────────────────────────────────────
 

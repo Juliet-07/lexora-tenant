@@ -61,7 +61,7 @@ import {
   type ClientPipelineStage,
   type ClientBoardCard,
   type ClientType,
-} from "@/lib/crm-pipeline-api";
+} from "@/lib/crm/crm-pipeline-api";
 
 // ─── Static config ──────────────────────────────────────────────
 

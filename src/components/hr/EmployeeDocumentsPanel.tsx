@@ -26,9 +26,9 @@ import {
   fetchMyDocuments,
   uploadMyDocument,
   deleteMyDocument,
+  toAbsoluteFileUrl,
   type EmployeeDocumentFile,
-} from "@/lib/hr-employee-documents-api";
-import { toAbsoluteFileUrl } from "@/lib/hr-employee-documents-api";
+} from "@/lib/hr/hr-employee-documents-api";
 
 const fmt = (d: string) =>
   new Date(d).toLocaleDateString("en-GB", {

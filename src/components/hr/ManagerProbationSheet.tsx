@@ -41,7 +41,7 @@ import {
   startProbationMonth3,
   startProbationMonth3AsTenant,
   type ProbationStage,
-} from "@/lib/hr-probation-api";
+} from "@/lib/hr/hr-probation-api";
 import {
   fetchReviewForReviewer,
   updateReviewManagerSection,
@@ -50,7 +50,7 @@ import {
   updateManagerReviewSection,
   completeReview,
   type PerformanceReview,
-} from "@/lib/hr-performance-api";
+} from "@/lib/hr/hr-performance-api";
 import { ManagerReviewSheet } from "./ManagerReviewSheet";
 
 const STAGE_LABELS: Record<string, string> = {
@@ -506,7 +506,7 @@ function Month3Card({
   employeeId: string;
   onSaved: () => void;
   startFn: (employeeId: string) => Promise<{ _id: string }>;
-  reviewFetchFn: (reviewId: string) => Promise<import("@/lib/hr-performance-api").ScoredReviewResponse>;
+  reviewFetchFn: (reviewId: string) => Promise<import("@/lib/hr/hr-performance-api").ScoredReviewResponse>;
   reviewSaveFn: (reviewId: string, dto: any) => Promise<any>;
   reviewCompleteFn: (reviewId: string) => Promise<any>;
 }) {

@@ -7,7 +7,7 @@ import { ManagerReviewSheet } from "@/components/hr/ManagerReviewSheet";
 import {
   fetchPendingHodReviews,
   type PerformanceReview,
-} from "@/lib/hr-performance-api";
+} from "@/lib/hr/hr-performance-api";
 
 const STATUS_TONE: Record<string, string> = {
   employee_in_progress: "bg-muted text-muted-foreground",

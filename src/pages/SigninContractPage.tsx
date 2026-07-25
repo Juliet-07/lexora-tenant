@@ -29,7 +29,7 @@ import {
   submitContractComment,
   signContract,
   declineContract,
-} from "@/lib/hr-contracts-api";
+} from "@/lib/hr/hr-contracts-api";
 
 // ─────────────────────────────────────────────────────────────
 // Public, unauthenticated page — reached via the signing-link

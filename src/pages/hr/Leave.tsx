@@ -51,7 +51,7 @@ import {
   type LeaveStats,
   type LeavePolicy,
   type HrLocation,
-} from "@/lib/hr-api";
+} from "@/lib/hr/hr-api";
 
 // ─── Constants ────────────────────────────────────────────────
 

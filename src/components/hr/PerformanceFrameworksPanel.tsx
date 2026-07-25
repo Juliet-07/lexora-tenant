@@ -12,7 +12,7 @@ import {
   fetchValuesFramework,
   updateValuesFramework,
   type FrameworkItem,
-} from "@/lib/hr-performance-api";
+} from "@/lib/hr/hr-performance-api";
 
 export function PerformanceFrameworksPanel() {
   return (

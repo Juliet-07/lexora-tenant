@@ -38,7 +38,7 @@ import {
   resolveLearningFileUrl,
   type EmployeeCourse,
   type CourseKind,
-} from "@/lib/hr-learning-api";
+} from "@/lib/hr/hr-learning-api";
 
 const kindIcon = (k: CourseKind) =>
   k === "video" ? PlayCircle : k === "pptx" ? Presentation : LinkIcon;

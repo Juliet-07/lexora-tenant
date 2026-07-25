@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Loader2, Star, Search, TrendingUp, Users } from "lucide-react";
-import { fetchDepartmentReviewHistory } from "@/lib/hr-performance-api";
+import { fetchDepartmentReviewHistory } from "@/lib/hr/hr-performance-api";
 
 const RATING_BAND_TONE: Record<string, string> = {
   Outstanding: "bg-success/10 text-success border-success/20",

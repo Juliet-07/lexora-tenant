@@ -65,7 +65,7 @@ import {
   type Course,
   type CourseKind,
   type AssessmentQuestion,
-} from "@/lib/hr-learning-api";
+} from "@/lib/hr/hr-learning-api";
 
 const kindIcon = (k: CourseKind) =>
   k === "video" ? PlayCircle : k === "pptx" ? Presentation : LinkIcon;

@@ -100,7 +100,7 @@ import {
   fetchPayslipTemplate,
   updatePayslipTemplate,
   uploadPayslipLogo,
-} from "@/lib/hr-api";
+} from "@/lib/hr/hr-api";
 
 const CURRENCIES = [
   "RWF",

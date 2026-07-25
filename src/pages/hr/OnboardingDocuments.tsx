@@ -31,7 +31,7 @@ import {
   deleteOnboardingDocument,
   type OnboardingDocument,
   type OnboardingDocType,
-} from "@/lib/hr-api";
+} from "@/lib/hr/hr-api";
 
 const KIND_ICON: Record<OnboardingDocType, any> = {
   text: FileText,

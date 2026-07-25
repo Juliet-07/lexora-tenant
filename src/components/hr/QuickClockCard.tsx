@@ -11,7 +11,7 @@ import {
   endBreak,
   clockOut,
   type AttendanceRecord,
-} from "@/lib/hr-api";
+} from "@/lib/hr/hr-api";
 
 const fmtTime = (d: string) =>
   new Date(d).toLocaleTimeString("en-GB", {

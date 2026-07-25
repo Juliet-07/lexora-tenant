@@ -36,7 +36,7 @@ import {
   completeMyOnboarding,
   type OnboardingDocument,
   type EmployeeCertificate,
-} from "@/lib/hr-api";
+} from "@/lib/hr/hr-api";
 import { useAuth } from "@/contexts/AuthContext";
 
 interface PersonalForm {

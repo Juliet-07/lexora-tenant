@@ -32,7 +32,7 @@ import {
   fetchRequisitionsReport,
   fetchPerformanceReport,
   type DemographicRow,
-} from "@/lib/hr-reports-api";
+} from "@/lib/hr/hr-reports-api";
 
 export default function HRReports() {
   return (

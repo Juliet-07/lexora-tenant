@@ -6,7 +6,7 @@ import GrcAppetite from "@/pages/grc/risk/Appetite";
 import GrcRisks from "@/pages/grc/risk/Risks";
 import GrcControls from "@/pages/grc/risk/Controls";
 import GrcTreatment from "@/pages/grc/risk/Treatment";
-import GrcIncidents from "@/pages/grc/operations/Incidents";
+import GrcIncidents from "@/pages/grc/risk/Incidents";
 import GrcCompliance from "@/pages/grc/Compliance";
 import GrcPolicies from "@/pages/grc/operations/Policies";
 import GrcAudits from "@/pages/grc/operations/Audits";

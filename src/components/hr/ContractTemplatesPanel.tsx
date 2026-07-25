@@ -32,7 +32,7 @@ import {
   deleteContractTemplate,
   type ContractTemplate,
   type WorkerCategory,
-} from "@/lib/hr-contracts-api";
+} from "@/lib/hr/hr-contracts-api";
 
 export function ContractTemplatesPanel() {
   return (

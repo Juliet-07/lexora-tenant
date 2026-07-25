@@ -9,7 +9,7 @@ import {
   completeReviewAsManager,
   type PerformanceReview,
   fetchReviewForReviewer,
-} from "@/lib/hr-performance-api";
+} from "@/lib/hr/hr-performance-api";
 import { ManagerReviewSheet } from "./ManagerReviewSheet";
 import { ReviewedByMeHistoryTable } from "./ReviewedByMeHistoryTable";
 

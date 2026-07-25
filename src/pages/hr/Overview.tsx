@@ -10,7 +10,7 @@ import {
   Award,
   Loader2,
 } from "lucide-react";
-import { fetchHrOverview } from "@/lib/hr-api";
+import { fetchHrOverview } from "@/lib/hr/hr-api";
 
 const perfTone = (score: number) =>
   score >= 80

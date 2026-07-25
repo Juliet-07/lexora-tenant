@@ -50,7 +50,7 @@ import {
   prettyLabel,
   toneFor,
   reactivateClient,
-} from "@/lib/clients-api";
+} from "@/lib/client/clients-api";
 
 export default function Clients() {
   const { toast } = useToast();

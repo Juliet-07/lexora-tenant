@@ -12,7 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { CheckCircle2, Sparkles } from "lucide-react";
-import { fetchMyOnboardingStatus } from "@/lib/hr-api";
+import { fetchMyOnboardingStatus } from "@/lib/hr/hr-api";
 import { useAuth } from "@/contexts/AuthContext";
 
 const SESSION_DISMISS_KEY = "onboarding-reminder-dismissed";

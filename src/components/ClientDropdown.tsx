@@ -7,7 +7,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { fetchClients, type ApiClient } from "@/lib/clients-api";
+import { fetchClients, type ApiClient } from "@/lib/client/clients-api";
 
 // ─────────────────────────────────────────────────────────────
 // HELPERS

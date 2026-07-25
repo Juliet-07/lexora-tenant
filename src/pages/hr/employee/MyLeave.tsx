@@ -50,7 +50,7 @@ import {
   resolveLeaveFileUrl,
   type LeaveBalance,
   type LeaveRequest,
-} from "@/lib/hr-api";
+} from "@/lib/hr/hr-api";
 
 // ─── Constants ────────────────────────────────────────────────
 

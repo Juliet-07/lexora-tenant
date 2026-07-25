@@ -54,8 +54,8 @@ import {
   reviewTransaction,
   fetchBehavioralProfile,
   type Transaction,
-} from "@/lib/kyc-api";
-import { prettyLabel, toneFor } from "@/lib/clients-api";
+} from "@/lib/kyc/kyc-api";
+import { prettyLabel, toneFor } from "@/lib/client/clients-api";
 import { ClientSelect } from "@/components/ClientDropdown";
 
 // ─────────────────────────────────────────────────────────────

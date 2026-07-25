@@ -9,7 +9,7 @@ import {
   ClipboardCheck,
   AlertTriangle,
 } from "lucide-react";
-import { fetchMyDirectReports, type DirectReport } from "@/lib/hr-api";
+import { fetchMyDirectReports, type DirectReport } from "@/lib/hr/hr-api";
 import { ManagerProbationSheet } from "@/components/hr/ManagerProbationSheet";
 
 const initials = (first: string, last: string) =>

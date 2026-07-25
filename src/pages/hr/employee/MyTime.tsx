@@ -32,7 +32,7 @@ import {
   clockOut,
   type AttendanceRecord,
   type AttendanceStats,
-} from "@/lib/hr-api";
+} from "@/lib/hr/hr-api";
 
 // ─── Helpers ──────────────────────────────────────────────────
 

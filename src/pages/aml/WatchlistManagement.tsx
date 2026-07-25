@@ -58,8 +58,8 @@ import {
   type WatchlistEntry,
   type WatchlistStats,
   type AdHocScreenResult,
-} from "@/lib/kyc-api";
-import { prettyLabel } from "@/lib/clients-api";
+} from "@/lib/kyc/kyc-api";
+import { prettyLabel } from "@/lib/client/clients-api";
 
 // ─────────────────────────────────────────────────────────────
 // HELPERS

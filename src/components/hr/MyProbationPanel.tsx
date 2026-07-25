@@ -41,7 +41,7 @@ import {
   Sparkles,
   ClipboardList,
 } from "lucide-react";
-import { fetchMyProbation, type ProbationStage } from "@/lib/hr-probation-api";
+import { fetchMyProbation, type ProbationStage } from "@/lib/hr/hr-probation-api";
 
 const STAGE_LABELS: Record<string, string> = {
   month_1: "Month 1 check-in",

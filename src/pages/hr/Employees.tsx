@@ -74,7 +74,7 @@ import {
   fetchDirectReportsOf,
   STAFF_ROLES,
   updateEmployeeStaffRoles,
-} from "@/lib/hr-api";
+} from "@/lib/hr/hr-api";
 import { EmployeeDetailSheet } from "@/components/hr/EmployeeDetailSheet";
 import OnboardingDocumentsTab from "./OnboardingDocuments";
 

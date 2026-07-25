@@ -69,9 +69,9 @@ import {
   type WorkerCategory,
   downloadContractPdf,
   generateContractForEmployee,
-} from "@/lib/hr-contracts-api";
+} from "@/lib/hr/hr-contracts-api";
 import { ContractTemplatesPanel } from "@/components/hr/ContractTemplatesPanel";
-import { fetchEmployees } from "@/lib/hr-api";
+import { fetchEmployees } from "@/lib/hr/hr-api";
 import {
   Popover,
   PopoverContent,

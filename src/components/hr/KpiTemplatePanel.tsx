@@ -21,7 +21,7 @@ import {
   deleteKpiTemplate,
   type KpiTemplate,
   type KpiDefinition,
-} from "@/lib/hr-performance-api";
+} from "@/lib/hr/hr-performance-api";
 
 export function KpiTemplatesPanel() {
   const queryClient = useQueryClient();

@@ -86,8 +86,8 @@ import {
   type RiskRule,
   type RiskScenario,
   type RiskClient,
-} from "@/lib/kyc-api";
-import { prettyLabel, toneFor } from "@/lib/clients-api";
+} from "@/lib/kyc/kyc-api";
+import { prettyLabel, toneFor } from "@/lib/client/clients-api";
 
 // ─────────────────────────────────────────────────────────────
 // CONSTANTS

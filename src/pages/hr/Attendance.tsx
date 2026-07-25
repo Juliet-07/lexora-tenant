@@ -21,7 +21,7 @@ import {
   MapPin,
 } from "lucide-react";
 import { api } from "@/lib/api";
-import { fetchTeams, type HrTeam } from "@/lib/hr-api";
+import { fetchTeams, type HrTeam } from "@/lib/hr/hr-api";
 import {
   LineChart,
   Line,

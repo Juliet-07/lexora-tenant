@@ -72,7 +72,7 @@ import {
   type InjurySeverity,
   type OpenDisputePayload,
   respondToDisputeAsEmployee,
-} from "@/lib/hr-dispute-api";
+} from "@/lib/hr/hr-dispute-api";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Sheet,

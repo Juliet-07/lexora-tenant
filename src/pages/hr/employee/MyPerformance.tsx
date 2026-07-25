@@ -53,8 +53,8 @@ import {
   submitMyReview,
   type PerformanceReview,
   type ScoredReviewResponse,
-} from "@/lib/hr-performance-api";
-import { fetchMyProbation } from "@/lib/hr-probation-api";
+} from "@/lib/hr/hr-performance-api";
+import { fetchMyProbation } from "@/lib/hr/hr-probation-api";
 
 
 const STATUS_TONE: Record<string, string> = {

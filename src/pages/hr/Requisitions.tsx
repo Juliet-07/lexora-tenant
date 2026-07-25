@@ -42,7 +42,7 @@ import {
   fulfillRequisition,
   type Requisition,
   type RequisitionStatus,
-} from "@/lib/hr-requisition-api";
+} from "@/lib/hr/hr-requisition-api";
 
 // ─── Helpers ──────────────────────────────────────────────────
 

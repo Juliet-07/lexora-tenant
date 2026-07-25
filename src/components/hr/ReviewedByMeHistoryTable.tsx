@@ -10,7 +10,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Loader2, History } from "lucide-react";
-import { fetchReviewedHistoryForManager } from "@/lib/hr-performance-api";
+import { fetchReviewedHistoryForManager } from "@/lib/hr/hr-performance-api";
 
 export function ReviewedByMeHistoryTable() {
   const { data = [], isLoading } = useQuery({

@@ -41,7 +41,7 @@ import {
   requestLoan,
   type MyPayslipSummary,
   type EmployeeLoan,
-} from "@/lib/hr-api";
+} from "@/lib/hr/hr-api";
 
 const currency = (n: number, code = "RWF") => {
   try {

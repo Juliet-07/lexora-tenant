@@ -72,8 +72,8 @@ import {
   OCCUPATIONAL_CATEGORIES,
   downloadMyPayslipPdf,
   fetchMyPayrollSummary,
-} from "@/lib/hr-api";
-import { fetchMyPerformanceSummary } from "@/lib/hr-performance-api";
+} from "@/lib/hr/hr-api";
+import { fetchMyPerformanceSummary } from "@/lib/hr/hr-performance-api";
 
 // ─── Dummy data — for modules with no backend yet ──────────────
 

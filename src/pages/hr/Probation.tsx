@@ -63,11 +63,11 @@ import {
   type ProbationListItem,
   type ProbationStage,
   type ProbationOutcome,
-} from "@/lib/hr-probation-api";
+} from "@/lib/hr/hr-probation-api";
 import {
   fetchEmployeesByHierarchyRole,
   type Employee,
-} from "@/lib/hr-api";
+} from "@/lib/hr/hr-api";
 import {
   ManagerProbationSheet,
   ProbationRunnerPanel,

@@ -62,9 +62,9 @@ import {
   bulkDismissAlerts,
   type ComplianceAlert,
   type AlertStats,
-} from "@/lib/kyc-api";
+} from "@/lib/kyc/kyc-api";
 import { ClientSelect } from "@/components/ClientDropdown";
-import { prettyLabel, toneFor } from "@/lib/clients-api";
+import { prettyLabel, toneFor } from "@/lib/client/clients-api";
 
 // ─────────────────────────────────────────────────────────────
 // HELPERS

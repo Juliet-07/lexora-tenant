@@ -75,21 +75,21 @@ import {
   fetchEmployeeRecords,
   suspendEmployee,
   reinstateEmployee,
-} from "@/lib/hr-api";
-import { downloadEmployeeReport } from "@/lib/employeeReport";
+} from "@/lib/hr/hr-api";
+import { downloadEmployeeReport } from "@/lib/hr/employeeReport";
 import { EmployeeDocumentsPanel } from "./EmployeeDocumentsPanel";
-import { fetchEmployeeReviewHistory } from "@/lib/hr-performance-api";
+import { fetchEmployeeReviewHistory } from "@/lib/hr/hr-performance-api";
 import {
   fetchDisputesForEmployee,
   openDisputeCase,
   resolveDisputeFileUrl,
   isImageFile,
-} from "@/lib/hr-dispute-api";
+} from "@/lib/hr/hr-dispute-api";
 import {
   fetchContractTemplates,
   generateContractForEmployee,
   issueLetter,
-} from "@/lib/hr-contracts-api";
+} from "@/lib/hr/hr-contracts-api";
 import { DialogDescription } from "@radix-ui/react-dialog";
 import { SignaturePad } from "./SignaturePad";
 

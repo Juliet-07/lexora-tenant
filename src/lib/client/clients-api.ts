@@ -1,4 +1,4 @@
-import { api } from "./api";
+import { api } from "../api";
 
 export interface ApiClient {
   _id: string;

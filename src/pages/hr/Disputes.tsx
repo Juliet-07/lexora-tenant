@@ -75,8 +75,8 @@ import {
   type GrievanceNature,
   type InjurySeverity,
   type OpenDisputePayload,
-} from "@/lib/hr-dispute-api";
-import { fetchEmployees } from "@/lib/hr-api";
+} from "@/lib/hr/hr-dispute-api";
+import { fetchEmployees } from "@/lib/hr/hr-api";
 
 // ── helpers ──────────────────────────────────────────────────────
 const fmtDate = (d?: string | null) =>

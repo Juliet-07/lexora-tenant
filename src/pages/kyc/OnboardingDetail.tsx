@@ -43,7 +43,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { api } from "@/lib/api";
-import { prettyLabel, toneFor } from "@/lib/clients-api";
+import { prettyLabel, toneFor } from "@/lib/client/clients-api";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { IndividualFormView } from "./IndividualFormView";

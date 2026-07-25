@@ -62,7 +62,7 @@ import {
   fetchTeams,
   fetchLocations,
   type Employee,
-} from "@/lib/hr-api";
+} from "@/lib/hr/hr-api";
 import {
   fetchAllCandidates,
   fetchCandidateStageCounts,
@@ -89,11 +89,11 @@ import {
   type WorkerCategory,
   type OffboardingRecord,
   type SuccessionPlan,
-} from "@/lib/hr-recruitment-api";
+} from "@/lib/hr/hr-recruitment-api";
 import {
   fetchContractTemplates,
   generateContractFromCandidate,
-} from "@/lib/hr-contracts-api";
+} from "@/lib/hr/hr-contracts-api";
 
 // ─── Helpers ──────────────────────────────────────────────────
 

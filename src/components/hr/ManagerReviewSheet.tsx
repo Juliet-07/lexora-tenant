@@ -38,7 +38,7 @@ import {
   fetchReviewForReviewer,
   type PerformanceReview,
   ScoredReviewResponse,
-} from "@/lib/hr-performance-api";
+} from "@/lib/hr/hr-performance-api";
 
 const RATING_BAND_TONE: Record<string, string> = {
   Outstanding: "bg-success/10 text-success border-success/20",
