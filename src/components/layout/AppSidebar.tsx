@@ -173,6 +173,13 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
       children: [
         { title: "Risk Register", url: "/grc/risk/register" },
         { title: "Risk Appetite", url: "/grc/risk/appetite" },
+        { title: "Incidents", url: "/grc/risk/incidents" },
+        {
+          title: "Third-Party",
+          url: "/grc/risk/vendors",
+          adminOnly: true,
+        },
+        { title: "BCP / DR", url: "/grc/risk/bcp", adminOnly: true },
         { title: "Treatment Plans", url: "/grc/risk/treatment" },
         { title: "Control Library", url: "/grc/risk/controls" },
       ],
@@ -188,19 +195,11 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
       icon: Cog,
       adminOnly: true,
       children: [
-        { title: "Incidents", url: "/grc/operations/incidents" },
         { title: "Policies", url: "/grc/operations/policies" },
         { title: "Audits", url: "/grc/operations/audits" },
         { title: "Reporting", url: "/grc/operations/reporting" },
       ],
     },
-    {
-      title: "Third-Party",
-      url: "/grc/vendors",
-      icon: Briefcase,
-      adminOnly: true,
-    },
-    { title: "BCP / DR", url: "/grc/bcp", icon: ShieldAlert, adminOnly: true },
   ],
 
   // ── CRM & Project Management ──────────────────────────────

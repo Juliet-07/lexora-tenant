@@ -10,8 +10,8 @@ import GrcIncidents from "@/pages/grc/operations/Incidents";
 import GrcCompliance from "@/pages/grc/Compliance";
 import GrcPolicies from "@/pages/grc/operations/Policies";
 import GrcAudits from "@/pages/grc/operations/Audits";
-import GrcVendors from "@/pages/grc/Vendors";
-import GrcBcp from "@/pages/grc/Bcp";
+import GrcVendors from "@/pages/grc/risk/Vendors";
+import GrcBcp from "@/pages/grc/risk/Bcp";
 import GrcMeetings from "@/pages/grc/governance/Meetings";
 import GrcCommittees from "@/pages/grc/governance/Committees";
 import GrcBoardMgt from "@/pages/grc/governance/BoardMgt";
@@ -37,11 +37,31 @@ export const grcRoutes = ({ isAdmin, accessibleModules }: RouteContext) => {
       />,
 
       // Deals & Transactions
-      <Route key="grc-deals-pipeline" path="/grc/deals/pipeline" element={layout(<DealPipeline />)} />,
-      <Route key="grc-deals-clauses" path="/grc/deals/clauses" element={layout(<ClauseLibrary />)} />,
-      <Route key="grc-deals-precedents" path="/grc/deals/precedents" element={layout(<PrecedentTemplates />)} />,
-      <Route key="grc-deals-legal" path="/grc/deals/legal" element={layout(<LegalKnowledge />)} />,
-      <Route key="grc-deals-detail" path="/grc/deals/:id" element={layout(<DealDetail />)} />,
+      <Route
+        key="grc-deals-pipeline"
+        path="/grc/deals/pipeline"
+        element={layout(<DealPipeline />)}
+      />,
+      <Route
+        key="grc-deals-clauses"
+        path="/grc/deals/clauses"
+        element={layout(<ClauseLibrary />)}
+      />,
+      <Route
+        key="grc-deals-precedents"
+        path="/grc/deals/precedents"
+        element={layout(<PrecedentTemplates />)}
+      />,
+      <Route
+        key="grc-deals-legal"
+        path="/grc/deals/legal"
+        element={layout(<LegalKnowledge />)}
+      />,
+      <Route
+        key="grc-deals-detail"
+        path="/grc/deals/:id"
+        element={layout(<DealDetail />)}
+      />,
 
       // Governance
       <Route
@@ -82,6 +102,17 @@ export const grcRoutes = ({ isAdmin, accessibleModules }: RouteContext) => {
         element={layout(<GrcAppetite />)}
       />,
       <Route
+        key="grc-risk-incidents"
+        path="/grc/risk/incidents"
+        element={layout(<GrcIncidents />)}
+      />,
+      <Route
+        key="grc-vendors"
+        path="/grc/risk/vendors"
+        element={layout(<GrcVendors />)}
+      />,
+      <Route key="grc-bcp" path="/grc/risk/bcp" element={layout(<GrcBcp />)} />,
+      <Route
         key="grc-risk-treatment"
         path="/grc/risk/treatment"
         element={layout(<GrcTreatment />)}
@@ -101,11 +132,6 @@ export const grcRoutes = ({ isAdmin, accessibleModules }: RouteContext) => {
 
       // Operations
       <Route
-        key="grc-ops-incidents"
-        path="/grc/operations/incidents"
-        element={layout(<GrcIncidents />)}
-      />,
-      <Route
         key="grc-ops-policies"
         path="/grc/operations/policies"
         element={layout(<GrcPolicies />)}
@@ -120,14 +146,6 @@ export const grcRoutes = ({ isAdmin, accessibleModules }: RouteContext) => {
         path="/grc/operations/reporting"
         element={layout(<GrcReporting />)}
       />,
-
-      // Third-party & BCP
-      <Route
-        key="grc-vendors"
-        path="/grc/vendors"
-        element={layout(<GrcVendors />)}
-      />,
-      <Route key="grc-bcp" path="/grc/bcp" element={layout(<GrcBcp />)} />,
 
       // Legacy aliases (keep prior deep links working)
       <Route

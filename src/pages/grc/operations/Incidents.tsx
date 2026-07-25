@@ -43,7 +43,7 @@ export default function GrcIncidents() {
             Security breaches, outages, compliance violations. HR personnel matters live in Disputes.
           </p>
         </div>
-        <Button onClick={() => setNewOpen(true)}><Plus className="h-4 w-4 mr-1" />Report incident</Button>
+        <Button onClick={() => setNewOpen(true)}><Plus className="h-4 w-4 mr-1" />Log an incident</Button>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -95,7 +95,7 @@ function NewIncidentDialog({ open, onOpenChange }: any) {
       <DialogContent>
         <DialogHeader><DialogTitle>Report an incident</DialogTitle></DialogHeader>
         <div className="space-y-3">
-          <div><Label>Your name</Label><Input value={f.reportedBy} onChange={(e) => setF({ ...f, reportedBy: e.target.value })} /></div>
+          {/* <div><Label>Your name</Label><Input value={f.reportedBy} onChange={(e) => setF({ ...f, reportedBy: e.target.value })} /></div> */}
           <div><Label>Title</Label><Input value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} /></div>
           <div><Label>Description</Label><Textarea rows={3} value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} /></div>
           <div className="grid grid-cols-2 gap-2">
