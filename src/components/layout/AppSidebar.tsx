@@ -173,6 +173,8 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
       children: [
         { title: "Risk Register", url: "/grc/risk/register" },
         { title: "Risk Appetite", url: "/grc/risk/appetite" },
+        { title: "Control Library", url: "/grc/risk/controls" },
+        { title: "Treatment Plans", url: "/grc/risk/treatment" },
         { title: "Incidents", url: "/grc/risk/incidents" },
         {
           title: "Third-Party",
@@ -180,8 +182,6 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
           adminOnly: true,
         },
         { title: "BCP / DR", url: "/grc/risk/bcp", adminOnly: true },
-        { title: "Treatment Plans", url: "/grc/risk/treatment" },
-        { title: "Control Library", url: "/grc/risk/controls" },
       ],
     },
     {
