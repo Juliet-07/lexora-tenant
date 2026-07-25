@@ -184,8 +184,8 @@ function OverviewTab({ deal }: { deal: any }) {
 
 // ─────────────────────────── Term Sheet ───────────────────────────
 function TermSheetTab({ deal }: { deal: any }) {
-  const [t, setT] = useState(deal.termSheet);
-  const fields: [string, keyof typeof t][] = [
+  const [t, setT] = useState<any>(deal.termSheet);
+  const fields: [string, string][] = [
     ["Parties", "parties"],
     ["Structure", "structure"],
     ["Consideration", "consideration"],
