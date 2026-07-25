@@ -144,6 +144,17 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
       adminOnly: true,
     },
     {
+      title: "Deals & Transactions",
+      icon: Handshake,
+      adminOnly: true,
+      children: [
+        { title: "Deal Pipeline", url: "/grc/deals/pipeline" },
+        { title: "Clause Library", url: "/grc/deals/clauses" },
+        { title: "Precedent Templates", url: "/grc/deals/precedents" },
+        { title: "Legal Knowledge Base", url: "/grc/deals/legal" },
+      ],
+    },
+    {
       title: "Governance",
       icon: Landmark,
       adminOnly: true,
@@ -153,17 +164,6 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
         { title: "Meetings", url: "/grc/governance/meetings" },
         { title: "Governance Codes", url: "/grc/governance/codes" },
         { title: "Resolutions", url: "/grc/governance/resolutions" },
-      ],
-    },
-    {
-      title: "Deals & Transactions",
-      icon: Handshake,
-      adminOnly: true,
-      children: [
-        { title: "Deal Pipeline", url: "/grc/deals/pipeline" },
-        { title: "Clause Library", url: "/grc/deals/clauses" },
-        { title: "Precedent Templates", url: "/grc/deals/precedents" },
-        { title: "Legal Knowledge Base", url: "/grc/deals/legal" },
       ],
     },
     {
