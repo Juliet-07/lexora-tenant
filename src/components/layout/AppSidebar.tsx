@@ -34,6 +34,9 @@ import {
   ChevronDown,
   Landmark,
   Cog,
+  Handshake,
+  Scale,
+  FileStack,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
@@ -150,6 +153,17 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
         { title: "Meetings", url: "/grc/governance/meetings" },
         { title: "Governance Codes", url: "/grc/governance/codes" },
         { title: "Resolutions", url: "/grc/governance/resolutions" },
+      ],
+    },
+    {
+      title: "Deals & Transactions",
+      icon: Handshake,
+      adminOnly: true,
+      children: [
+        { title: "Deal Pipeline", url: "/grc/deals/pipeline" },
+        { title: "Clause Library", url: "/grc/deals/clauses" },
+        { title: "Precedent Templates", url: "/grc/deals/precedents" },
+        { title: "Legal Knowledge Base", url: "/grc/deals/legal" },
       ],
     },
     {

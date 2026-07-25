@@ -18,6 +18,11 @@ import GrcBoardMgt from "@/pages/grc/governance/BoardMgt";
 import GrcCodes from "@/pages/grc/governance/Codes";
 import GrcResolutions from "@/pages/grc/governance/Resolutions";
 import GrcReporting from "@/pages/grc/operations/Reporting";
+import DealPipeline from "@/pages/grc/deals/Pipeline";
+import DealDetail from "@/pages/grc/deals/DealDetail";
+import ClauseLibrary from "@/pages/grc/deals/ClauseLibrary";
+import PrecedentTemplates from "@/pages/grc/deals/PrecedentTemplates";
+import LegalKnowledge from "@/pages/grc/deals/LegalKnowledge";
 
 /** GRC — Governance, Risk & Compliance. Tenant-admin only for now. */
 export const grcRoutes = ({ isAdmin, accessibleModules }: RouteContext) => {
@@ -30,6 +35,13 @@ export const grcRoutes = ({ isAdmin, accessibleModules }: RouteContext) => {
         path="/grc/overview"
         element={layout(<GrcOverview />)}
       />,
+
+      // Deals & Transactions
+      <Route key="grc-deals-pipeline" path="/grc/deals/pipeline" element={layout(<DealPipeline />)} />,
+      <Route key="grc-deals-clauses" path="/grc/deals/clauses" element={layout(<ClauseLibrary />)} />,
+      <Route key="grc-deals-precedents" path="/grc/deals/precedents" element={layout(<PrecedentTemplates />)} />,
+      <Route key="grc-deals-legal" path="/grc/deals/legal" element={layout(<LegalKnowledge />)} />,
+      <Route key="grc-deals-detail" path="/grc/deals/:id" element={layout(<DealDetail />)} />,
 
       // Governance
       <Route
