@@ -23,6 +23,10 @@ import DealDetail from "@/pages/grc/deals/DealDetail";
 import ClauseLibrary from "@/pages/grc/deals/ClauseLibrary";
 import PrecedentTemplates from "@/pages/grc/deals/PrecedentTemplates";
 import LegalKnowledge from "@/pages/grc/deals/LegalKnowledge";
+import ComplianceObligations from "@/pages/grc/compliance/Obligations";
+import ComplianceCalendar from "@/pages/grc/compliance/Calendar";
+import ComplianceCertifications from "@/pages/grc/compliance/Certifications";
+import ComplianceRegulatoryChange from "@/pages/grc/compliance/RegulatoryChange";
 
 /** GRC — Governance, Risk & Compliance. Tenant-admin only for now. */
 export const grcRoutes = ({ isAdmin, accessibleModules }: RouteContext) => {
@@ -124,6 +128,26 @@ export const grcRoutes = ({ isAdmin, accessibleModules }: RouteContext) => {
       />,
 
       // Compliance
+      <Route
+        key="grc-compliance-obligations"
+        path="/grc/compliance/obligations"
+        element={layout(<ComplianceObligations />)}
+      />,
+      <Route
+        key="grc-compliance-calendar"
+        path="/grc/compliance/calendar"
+        element={layout(<ComplianceCalendar />)}
+      />,
+      <Route
+        key="grc-compliance-certifications"
+        path="/grc/compliance/certifications"
+        element={layout(<ComplianceCertifications />)}
+      />,
+      <Route
+        key="grc-compliance-change"
+        path="/grc/compliance/regulatory-change"
+        element={layout(<ComplianceRegulatoryChange />)}
+      />,
       <Route
         key="grc-compliance"
         path="/grc/compliance"
