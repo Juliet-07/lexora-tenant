@@ -186,9 +186,16 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
     },
     {
       title: "Compliance",
-      url: "/grc/compliance",
       icon: ShieldCheck,
       adminOnly: true,
+      children: [
+        { title: "Regulatory Obligations", url: "/grc/compliance/obligations" },
+        { title: "Compliance Calendar", url: "/grc/compliance/calendar" },
+        { title: "Certifications", url: "/grc/compliance/certifications" },
+        { title: "Policies", url: "/grc/operations/policies" },
+        { title: "Audit Management", url: "/grc/operations/audits" },
+        { title: "Regulatory Change", url: "/grc/compliance/regulatory-change" },
+      ],
     },
     {
       title: "Operations",
