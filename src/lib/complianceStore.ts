@@ -420,6 +420,7 @@ function seed(): ComplianceState {
       assessmentNotes: "",
       assessmentStatus: "Unassigned",
       loop: emptyLoop(),
+      loggedAt: nowIso(),
     },
     {
       id: "chg_3",
