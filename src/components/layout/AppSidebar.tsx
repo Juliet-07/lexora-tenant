@@ -144,14 +144,19 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
       adminOnly: true,
     },
     {
-      title: "Deals & Transactions",
-      icon: Handshake,
+      title: "Compliance",
+      icon: ShieldCheck,
       adminOnly: true,
       children: [
-        { title: "Deal Pipeline", url: "/grc/deals/pipeline" },
-        { title: "Clause Library", url: "/grc/deals/clauses" },
-        { title: "Precedent Templates", url: "/grc/deals/precedents" },
-        { title: "Legal Knowledge Base", url: "/grc/deals/legal" },
+        { title: "Regulatory Obligations", url: "/grc/compliance/obligations" },
+        { title: "Compliance Calendar", url: "/grc/compliance/calendar" },
+        { title: "Certifications", url: "/grc/compliance/certifications" },
+        { title: "Policies", url: "/grc/compliance/policies" },
+        { title: "Audit Management", url: "/grc/compliance/audits" },
+        {
+          title: "Regulatory Change",
+          url: "/grc/compliance/regulatory-change",
+        },
       ],
     },
     {
@@ -167,6 +172,17 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
       ],
     },
     {
+      title: "Deals & Transactions",
+      icon: Handshake,
+      adminOnly: true,
+      children: [
+        { title: "Deal Pipeline", url: "/grc/deals/pipeline" },
+        { title: "Clause Library", url: "/grc/deals/clauses" },
+        { title: "Precedent Templates", url: "/grc/deals/precedents" },
+        { title: "Legal Knowledge Base", url: "/grc/deals/legal" },
+      ],
+    },
+    {
       title: "Risk",
       icon: AlertTriangle,
       adminOnly: true,
@@ -179,33 +195,15 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
         {
           title: "Third-Party",
           url: "/grc/risk/vendors",
-          adminOnly: true,
         },
-        { title: "BCP / DR", url: "/grc/risk/bcp", adminOnly: true },
+        { title: "BCP / DR", url: "/grc/risk/bcp" },
       ],
     },
     {
-      title: "Compliance",
-      icon: ShieldCheck,
+      title: "Report",
+      url: "/grc/reporting",
+      icon: BarChart3,
       adminOnly: true,
-      children: [
-        { title: "Regulatory Obligations", url: "/grc/compliance/obligations" },
-        { title: "Compliance Calendar", url: "/grc/compliance/calendar" },
-        { title: "Certifications", url: "/grc/compliance/certifications" },
-        { title: "Policies", url: "/grc/operations/policies" },
-        { title: "Audit Management", url: "/grc/operations/audits" },
-        { title: "Regulatory Change", url: "/grc/compliance/regulatory-change" },
-      ],
-    },
-    {
-      title: "Operations",
-      icon: Cog,
-      adminOnly: true,
-      children: [
-        { title: "Policies", url: "/grc/operations/policies" },
-        { title: "Audits", url: "/grc/operations/audits" },
-        { title: "Reporting", url: "/grc/operations/reporting" },
-      ],
     },
   ],
 

@@ -8,8 +8,8 @@ import GrcControls from "@/pages/grc/risk/Controls";
 import GrcTreatment from "@/pages/grc/risk/Treatment";
 import GrcIncidents from "@/pages/grc/risk/Incidents";
 import GrcCompliance from "@/pages/grc/Compliance";
-import GrcPolicies from "@/pages/grc/operations/Policies";
-import GrcAudits from "@/pages/grc/operations/Audits";
+import GrcPolicies from "@/pages/grc/compliance/Policies";
+import GrcAudits from "@/pages/grc/compliance/Audits";
 import GrcVendors from "@/pages/grc/risk/Vendors";
 import GrcBcp from "@/pages/grc/risk/Bcp";
 import GrcMeetings from "@/pages/grc/governance/Meetings";
@@ -17,7 +17,7 @@ import GrcCommittees from "@/pages/grc/governance/Committees";
 import GrcBoardMgt from "@/pages/grc/governance/BoardMgt";
 import GrcCodes from "@/pages/grc/governance/Codes";
 import GrcResolutions from "@/pages/grc/governance/Resolutions";
-import GrcReporting from "@/pages/grc/operations/Reporting";
+import GrcReporting from "@/pages/grc/Reporting";
 import DealPipeline from "@/pages/grc/deals/Pipeline";
 import DealDetail from "@/pages/grc/deals/DealDetail";
 import ClauseLibrary from "@/pages/grc/deals/ClauseLibrary";
@@ -39,7 +39,11 @@ export const grcRoutes = ({ isAdmin, accessibleModules }: RouteContext) => {
         path="/grc/overview"
         element={layout(<GrcOverview />)}
       />,
-
+      <Route
+        key="grc-reporting"
+        path="/grc/reporting"
+        element={layout(<GrcReporting />)}
+      />,
       // Deals & Transactions
       <Route
         key="grc-deals-pipeline"
@@ -149,26 +153,19 @@ export const grcRoutes = ({ isAdmin, accessibleModules }: RouteContext) => {
         element={layout(<ComplianceRegulatoryChange />)}
       />,
       <Route
-        key="grc-compliance"
-        path="/grc/compliance"
-        element={layout(<GrcCompliance />)}
-      />,
-
-      // Operations
-      <Route
-        key="grc-ops-policies"
-        path="/grc/operations/policies"
+        key="grc-compliance-policies"
+        path="/grc/compliance/policies"
         element={layout(<GrcPolicies />)}
       />,
       <Route
-        key="grc-ops-audits"
-        path="/grc/operations/audits"
+        key="grc-compliance-audits"
+        path="/grc/compliance/audits"
         element={layout(<GrcAudits />)}
       />,
       <Route
-        key="grc-ops-reporting"
-        path="/grc/operations/reporting"
-        element={layout(<GrcReporting />)}
+        key="grc-compliance"
+        path="/grc/compliance"
+        element={layout(<GrcCompliance />)}
       />,
 
       // Legacy aliases (keep prior deep links working)
