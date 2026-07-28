@@ -130,6 +130,26 @@ export const grcRoutes = ({ isAdmin, accessibleModules }: RouteContext) => {
         element={layout(<GrcRisks />)}
       />,
       <Route
+        key="grc-risk-heatmap"
+        path="/grc/risk/heatmap"
+        element={layout(<GrcHeatmap />)}
+      />,
+      <Route
+        key="grc-risk-emerging"
+        path="/grc/risk/emerging"
+        element={layout(<GrcEmergingRisks />)}
+      />,
+      <Route
+        key="grc-risk-testing"
+        path="/grc/risk/testing"
+        element={layout(<GrcTestingProgramme />)}
+      />,
+      <Route
+        key="grc-risk-deficiencies"
+        path="/grc/risk/deficiencies"
+        element={layout(<GrcDeficiencies />)}
+      />,
+      <Route
         key="grc-risk-appetite"
         path="/grc/risk/appetite"
         element={layout(<GrcAppetite />)}
