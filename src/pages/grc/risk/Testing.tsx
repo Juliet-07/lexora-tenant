@@ -58,11 +58,20 @@ import {
 
 const RATINGS = ["Extreme", "High", "Medium", "Low"] as const;
 
-export default function GrcTestingProgramme() {
+export default function GrcTestingProgramme({
+  embedded = false,
+}: {
+  embedded?: boolean;
+} = {}) {
   const store = useRiskProgramme();
+  const { data: controls = [] } = useQuery({
+    queryKey: ["grc-controls"],
+    queryFn: fetchControls,
+  });
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [openNew, setOpenNew] = useState(false);
   const selected = store.tests.find((t) => t.id === selectedId) ?? null;
+
 
   const year = new Date().getFullYear();
   const thisYear = useMemo(
