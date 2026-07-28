@@ -392,9 +392,68 @@ export default function GrcOverview() {
           </div>
         )}
       </Section>
+
+      {/* ── DEALS & TRANSACTIONS ───────────────────────────────── */}
+      <Section title="Deals & Transactions" icon={Handshake} accent="from-teal-500 to-emerald-500">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+          <Kpi to="/grc/deals/pipeline" label="Active deals" value={activeDeals.length} icon={Handshake} tone="from-teal-500 to-emerald-500" />
+          <Kpi to="/grc/deals/pipeline" label="Pipeline value" value={formatMoney(pipelineValue)} icon={TrendingUp} tone="from-emerald-500 to-lime-500" />
+          <Kpi to="/grc/deals/clauses" label="Clause library" value={deals.clauses.length} icon={Scale} tone="from-blue-500 to-cyan-500" />
+          <Kpi to="/grc/intelligence/investor-readiness" label="Readiness assessments" value={intel.assessments.length} icon={ClipboardCheck} tone="from-indigo-500 to-violet-500" />
+        </div>
+        <Card>
+          <CardHeader><CardTitle className="text-base">Deals nearing close</CardTitle></CardHeader>
+          <CardContent className="space-y-2">
+            {activeDeals
+              .slice()
+              .sort((a, b) => (a.targetClose < b.targetClose ? -1 : 1))
+              .slice(0, 5)
+              .map((d) => (
+                <NavLink key={d.id} to={`/grc/deals/${d.id}`} className="flex items-center justify-between border rounded px-3 py-2 text-sm hover:bg-muted/50">
+                  <div className="min-w-0">
+                    <div className="font-medium truncate">{d.name}</div>
+                    <div className="text-xs text-muted-foreground">{d.type} · {d.client} · lead {d.leadPartner}</div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-xs">{formatMoney(d.value, d.currency)}</span>
+                    <Badge variant="outline">{d.stage}</Badge>
+                  </div>
+                </NavLink>
+              ))}
+            {activeDeals.length === 0 && <div className="text-sm text-muted-foreground">No active deals.</div>}
+          </CardContent>
+        </Card>
+      </Section>
+
+      {/* ── ESG ────────────────────────────────────────────────── */}
+      <Section title="ESG" icon={Leaf} accent="from-lime-500 to-emerald-500">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
+          <Kpi to="/grc/esg/dashboard" label={`ESG score (${scoreGrade(esgTotal)})`} value={esgTotal} icon={Leaf} tone="from-lime-500 to-emerald-500" />
+          <Kpi to="/grc/esg/environmental" label="Environmental" value={esgE} icon={Leaf} tone="from-emerald-500 to-teal-500" />
+          <Kpi to="/grc/esg/social" label="Social" value={esgS} icon={Users} tone="from-sky-500 to-blue-500" />
+          <Kpi to="/grc/esg/materiality" label="Material topics" value={materialTopics} icon={Grid3x3} tone="from-amber-500 to-orange-500" />
+          <Kpi to="/grc/esg/reporting" label="Disclosures signed off" value={esgSignedOff} icon={BadgeCheck} tone="from-violet-500 to-purple-500" />
+        </div>
+        <Card>
+          <CardHeader><CardTitle className="text-base">Framework alignment</CardTitle></CardHeader>
+          <CardContent className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+            {FRAMEWORKS.map((f) => {
+              const c = frameworkCoverage(esg.indicators, f);
+              return (
+                <NavLink key={f} to="/grc/esg/reporting" className="border rounded p-3 hover:bg-muted/50">
+                  <div className="text-sm font-medium">{f}</div>
+                  <div className="text-xl font-bold">{c.pct}%</div>
+                  <div className="text-xs text-muted-foreground">{c.signedOff}/{c.total}</div>
+                </NavLink>
+              );
+            })}
+          </CardContent>
+        </Card>
+      </Section>
     </div>
   );
 }
+
 
 function Section({ title, icon: Icon, accent, children }: any) {
   return (
