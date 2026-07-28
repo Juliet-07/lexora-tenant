@@ -240,10 +240,10 @@ export default function GrcOverview() {
       {/* ── COMPLIANCE ─────────────────────────────────────────── */}
       <Section title="Compliance" icon={ShieldCheck} accent="from-amber-500 to-yellow-500">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-          <Kpi to="/grc/compliance" label="Overdue obligations" value={overdueObligations} icon={AlertTriangle} tone="from-rose-500 to-orange-500" />
-          <Kpi to="/grc/compliance" label="Upcoming obligations" value={upcomingObligations} icon={CalendarClock} tone="from-amber-500 to-yellow-500" />
-          <Kpi to="/grc/compliance" label="Regulatory updates" value={regUpdates} icon={FileText} tone="from-blue-500 to-cyan-500" />
-          <Kpi to="/grc/operations/policies" label="Policy ack rate" value={`${policyAckPct}%`} icon={ClipboardCheck} tone="from-emerald-500 to-teal-500" />
+          <Kpi to="/grc/compliance/obligations" label="Overdue obligations" value={overdueObligations} icon={AlertTriangle} tone="from-rose-500 to-orange-500" />
+          <Kpi to="/grc/compliance/obligations" label="Upcoming obligations" value={upcomingObligations} icon={CalendarClock} tone="from-amber-500 to-yellow-500" />
+          <Kpi to="/grc/compliance/obligations" label="Regulatory updates" value={regUpdates} icon={FileText} tone="from-blue-500 to-cyan-500" />
+          <Kpi to="/grc/compliance/policies" label="Policy ack rate" value={`${policyAckPct}%`} icon={ClipboardCheck} tone="from-emerald-500 to-teal-500" />
         </div>
         <Card>
           <CardHeader><CardTitle className="text-base">Upcoming obligations</CardTitle></CardHeader>
@@ -253,7 +253,7 @@ export default function GrcOverview() {
               .sort((a, b) => (a.deadline < b.deadline ? -1 : 1))
               .slice(0, 5)
               .map((o) => (
-                <NavLink key={o.id} to="/grc/compliance" className="flex items-center justify-between border rounded px-3 py-2 text-sm hover:bg-muted/50">
+                <NavLink key={o.id} to="/grc/compliance/obligations" className="flex items-center justify-between border rounded px-3 py-2 text-sm hover:bg-muted/50">
                   <div className="min-w-0">
                     <div className="font-medium truncate">{o.title}</div>
                     <div className="text-xs text-muted-foreground">{o.regulationType} · owner: {o.owner}</div>
@@ -271,16 +271,16 @@ export default function GrcOverview() {
       {/* ── OPERATIONS ─────────────────────────────────────────── */}
       <Section title="Operations" icon={Activity} accent="from-violet-500 to-purple-500">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-          <Kpi to="/grc/operations/incidents" label="Open incidents" value={openIncidents} icon={FileWarning} tone="from-red-500 to-rose-500" />
-          <Kpi to="/grc/operations/audits" label="Active audits" value={activeAudits} icon={ClipboardCheck} tone="from-indigo-500 to-blue-500" />
-          <Kpi to="/grc/operations/audits" label="Open findings" value={openFindings} icon={Activity} tone="from-violet-500 to-purple-500" />
-          <Kpi to="/grc/operations/policies" label="Published policies" value={publishedPolicies} icon={FileText} tone="from-emerald-500 to-teal-500" />
+          <Kpi to="/grc/risk/incidents" label="Open incidents" value={openIncidents} icon={FileWarning} tone="from-red-500 to-rose-500" />
+          <Kpi to="/grc/compliance/audits" label="Active audits" value={activeAudits} icon={ClipboardCheck} tone="from-indigo-500 to-blue-500" />
+          <Kpi to="/grc/compliance/audits" label="Open findings" value={openFindings} icon={Activity} tone="from-violet-500 to-purple-500" />
+          <Kpi to="/grc/compliance/policies" label="Published policies" value={publishedPolicies} icon={FileText} tone="from-emerald-500 to-teal-500" />
         </div>
         <Card>
           <CardHeader><CardTitle className="text-base">Recent incidents</CardTitle></CardHeader>
           <CardContent className="space-y-2">
             {s.incidents.slice(0, 5).map((i) => (
-              <NavLink key={i.id} to="/grc/operations/incidents" className="flex items-center justify-between border rounded px-3 py-2 text-sm hover:bg-muted/50">
+              <NavLink key={i.id} to="/grc/risk/incidents" className="flex items-center justify-between border rounded px-3 py-2 text-sm hover:bg-muted/50">
                 <div className="min-w-0">
                   <div className="font-medium truncate">{i.title}</div>
                   <div className="text-xs text-muted-foreground">{i.category} · {new Date(i.reportedAt).toLocaleDateString()}</div>
@@ -296,15 +296,15 @@ export default function GrcOverview() {
       {/* ── THIRD-PARTY ────────────────────────────────────────── */}
       <Section title="Third-Party" icon={Briefcase} accent="from-cyan-500 to-blue-500">
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
-          <Kpi to="/grc/vendors" label="Active vendors" value={activeVendors} icon={Building2} tone="from-cyan-500 to-blue-500" />
-          <Kpi to="/grc/vendors" label="High / Extreme risk" value={vendorsHigh} icon={AlertTriangle} tone="from-rose-500 to-orange-500" />
-          <Kpi to="/grc/vendors" label="Due for review" value={vendorsDueReview} icon={CalendarClock} tone="from-amber-500 to-yellow-500" />
+          <Kpi to="/grc/risk/vendors" label="Active vendors" value={activeVendors} icon={Building2} tone="from-cyan-500 to-blue-500" />
+          <Kpi to="/grc/risk/vendors" label="High / Extreme risk" value={vendorsHigh} icon={AlertTriangle} tone="from-rose-500 to-orange-500" />
+          <Kpi to="/grc/risk/vendors" label="Due for review" value={vendorsDueReview} icon={CalendarClock} tone="from-amber-500 to-yellow-500" />
         </div>
         <Card>
           <CardHeader><CardTitle className="text-base">Vendor exposure</CardTitle></CardHeader>
           <CardContent className="space-y-2">
             {s.vendors.slice(0, 5).map((v) => (
-              <NavLink key={v.id} to="/grc/vendors" className="flex items-center justify-between border rounded px-3 py-2 text-sm hover:bg-muted/50">
+              <NavLink key={v.id} to="/grc/risk/vendors" className="flex items-center justify-between border rounded px-3 py-2 text-sm hover:bg-muted/50">
                 <div>
                   <div className="font-medium">{v.name}</div>
                   <div className="text-xs text-muted-foreground">{v.category}</div>
@@ -320,11 +320,11 @@ export default function GrcOverview() {
       {/* ── BCP / DR ───────────────────────────────────────────── */}
       <Section title="Business Continuity & DR" icon={LifeBuoy} accent="from-emerald-500 to-teal-500">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-          <Kpi to="/grc/bcp" label="BCP plans" value={bcpPlans} icon={FileText} tone="from-emerald-500 to-teal-500" />
-          <Kpi to="/grc/bcp" label="Tier-1 systems" value={tier1Systems} icon={ServerCog} tone="from-blue-500 to-cyan-500" />
-          <Kpi to="/grc/bcp" label="Crisis contacts" value={s.crisisContacts.length} icon={Users} tone="from-violet-500 to-purple-500" />
+          <Kpi to="/grc/risk/bcp" label="BCP plans" value={bcpPlans} icon={FileText} tone="from-emerald-500 to-teal-500" />
+          <Kpi to="/grc/risk/bcp" label="Tier-1 systems" value={tier1Systems} icon={ServerCog} tone="from-blue-500 to-cyan-500" />
+          <Kpi to="/grc/risk/bcp" label="Crisis contacts" value={s.crisisContacts.length} icon={Users} tone="from-violet-500 to-purple-500" />
           <Kpi
-            to="/grc/bcp"
+            to="/grc/risk/bcp"
             label="Last test"
             value={lastBcpTest ? lastBcpTest.outcome : "—"}
             icon={ClipboardCheck}
