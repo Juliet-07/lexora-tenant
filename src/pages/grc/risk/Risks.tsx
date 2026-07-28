@@ -107,7 +107,6 @@ export default function GrcRisks() {
       <Tabs defaultValue="list">
         <TabsList>
           <TabsTrigger value="list">Register</TabsTrigger>
-          <TabsTrigger value="heatmap">Heatmap</TabsTrigger>
           <TabsTrigger value="network">Relationships</TabsTrigger>
         </TabsList>
 
@@ -219,10 +218,6 @@ export default function GrcRisks() {
               </Table>
             </CardContent>
           </Card>
-        </TabsContent>
-
-        <TabsContent value="heatmap">
-          <HeatmapCard risks={risks.filter((r) => r.status !== "Closed")} />
         </TabsContent>
 
         <TabsContent value="network">
