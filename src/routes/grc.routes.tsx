@@ -1,4 +1,4 @@
-import { Route } from "react-router-dom";
+import { Navigate, Route } from "react-router-dom";
 import { layout, RouteContext } from "./_helpers";
 import { ModulePlaceholder } from "@/components/layout/ModulePlaceholder";
 import GrcOverview from "@/pages/grc/Overview";
@@ -9,8 +9,6 @@ import GrcTreatment from "@/pages/grc/risk/Treatment";
 import GrcIncidents from "@/pages/grc/risk/Incidents";
 import GrcHeatmap from "@/pages/grc/risk/Heatmap";
 import GrcEmergingRisks from "@/pages/grc/risk/EmergingRisks";
-import GrcTestingProgramme from "@/pages/grc/risk/Testing";
-import GrcDeficiencies from "@/pages/grc/risk/Deficiencies";
 import GrcCompliance from "@/pages/grc/Compliance";
 import GrcPolicies from "@/pages/grc/compliance/Policies";
 import GrcAudits from "@/pages/grc/compliance/Audits";
@@ -175,12 +173,12 @@ export const grcRoutes = ({ isAdmin, accessibleModules }: RouteContext) => {
       <Route
         key="grc-risk-testing"
         path="/grc/risk/testing"
-        element={layout(<GrcTestingProgramme />)}
+        element={<Navigate to="/grc/risk/controls" replace />}
       />,
       <Route
         key="grc-risk-deficiencies"
         path="/grc/risk/deficiencies"
-        element={layout(<GrcDeficiencies />)}
+        element={<Navigate to="/grc/risk/controls" replace />}
       />,
       <Route
         key="grc-risk-appetite"

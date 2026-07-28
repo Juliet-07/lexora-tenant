@@ -206,8 +206,8 @@ export default function GrcOverview() {
           <Kpi to="/grc/risk/controls" label="Open deficiencies" value={openDeficiencies} icon={ClipboardCheck} tone="from-blue-500 to-cyan-500" />
           <Kpi to="/grc/risk/treatment" label="Treatment plans" value={s.treatmentPlans.length} icon={ShieldCheck} tone="from-emerald-500 to-teal-500" />
           <Kpi to="/grc/risk/emerging" label="Emerging risks watched" value={watchListed} icon={TrendingUp} tone="from-fuchsia-500 to-pink-500" />
-          <Kpi to="/grc/risk/testing" label="Control tests outstanding" value={testsDue} icon={ClipboardCheck} tone="from-indigo-500 to-blue-500" />
-          <Kpi to="/grc/risk/deficiencies" label="Deficiencies open" value={progDeficiencies} icon={FileWarning} tone="from-rose-500 to-red-500" />
+          <Kpi to="/grc/risk/controls" label="Control tests outstanding" value={testsDue} icon={ClipboardCheck} tone="from-indigo-500 to-blue-500" />
+          <Kpi to="/grc/risk/controls" label="Deficiencies open" value={progDeficiencies} icon={FileWarning} tone="from-rose-500 to-red-500" />
 
         </div>
 

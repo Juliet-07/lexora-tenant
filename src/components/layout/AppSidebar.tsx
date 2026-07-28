@@ -193,9 +193,7 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
         { title: "Risk Heatmap", url: "/grc/risk/heatmap" },
         { title: "Risk Appetite", url: "/grc/risk/appetite" },
         { title: "Emerging Risks", url: "/grc/risk/emerging" },
-        { title: "Control Library", url: "/grc/risk/controls" },
-        { title: "Testing Programme", url: "/grc/risk/testing" },
-        { title: "Deficiencies", url: "/grc/risk/deficiencies" },
+        { title: "Controls & Testing", url: "/grc/risk/controls" },
         { title: "Treatment Plans", url: "/grc/risk/treatment" },
         { title: "Incidents", url: "/grc/risk/incidents" },
         {
