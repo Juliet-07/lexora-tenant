@@ -74,7 +74,25 @@ export const grcRoutes = ({ isAdmin, accessibleModules }: RouteContext) => {
         element={layout(<DealDetail />)}
       />,
 
+      // Deal Intelligence
+      <Route
+        key="grc-intel-readiness"
+        path="/grc/intelligence/investor-readiness"
+        element={layout(<InvestorReadiness />)}
+      />,
+      <Route
+        key="grc-intel-valuation"
+        path="/grc/intelligence/valuation"
+        element={layout(<CompanyValuation />)}
+      />,
+      <Route
+        key="grc-intel-portfolio"
+        path="/grc/intelligence/portfolio"
+        element={layout(<PortfolioAnalysis />)}
+      />,
+
       // Governance
+
       <Route
         key="grc-gov-meetings"
         path="/grc/governance/meetings"
