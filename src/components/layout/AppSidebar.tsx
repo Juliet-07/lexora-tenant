@@ -183,17 +183,6 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
       ],
     },
     {
-      title: "Deal Intelligence",
-      icon: BarChart3,
-      adminOnly: true,
-      children: [
-        { title: "Investor Readiness", url: "/grc/intelligence/investor-readiness" },
-        { title: "Company Valuation", url: "/grc/intelligence/valuation" },
-        { title: "Portfolio Analysis", url: "/grc/intelligence/portfolio" },
-      ],
-    },
-
-    {
       title: "Risk",
       icon: AlertTriangle,
       adminOnly: true,
@@ -208,6 +197,19 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
           url: "/grc/risk/vendors",
         },
         { title: "BCP / DR", url: "/grc/risk/bcp" },
+      ],
+    },
+    {
+      title: "Deal Intelligence",
+      icon: BarChart3,
+      adminOnly: true,
+      children: [
+        {
+          title: "Investor Readiness",
+          url: "/grc/intelligence/investor-readiness",
+        },
+        { title: "Company Valuation", url: "/grc/intelligence/valuation" },
+        { title: "Portfolio Analysis", url: "/grc/intelligence/portfolio" },
       ],
     },
     {
