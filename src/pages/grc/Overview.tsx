@@ -188,6 +188,8 @@ export default function GrcOverview() {
           <Kpi to="/grc/governance/committees" label="Open comm. tasks" value={openCommitteeTasks} icon={ClipboardCheck} tone="from-fuchsia-500 to-pink-500" />
           <Kpi to="/grc/governance/board" label="Board directors" value={directors} icon={Users} tone="from-blue-500 to-cyan-500" />
           <Kpi to="/grc/governance/codes" label="Published codes" value={publishedCodes} icon={BookOpen} tone="from-emerald-500 to-teal-500" />
+          <Kpi to="/grc/governance/resolutions" label="Open resolutions" value={openResolutions} icon={Gavel} tone="from-amber-500 to-orange-500" />
+
         </div>
         {expiringTerms > 0 && (
           <div className="mt-3 text-xs text-amber-700 dark:text-amber-400">
@@ -203,6 +205,10 @@ export default function GrcOverview() {
           <Kpi to="/grc/risk/register" label="Extreme / High" value={extremeHigh} icon={AlertTriangle} tone="from-orange-500 to-amber-500" />
           <Kpi to="/grc/risk/controls" label="Open deficiencies" value={openDeficiencies} icon={ClipboardCheck} tone="from-blue-500 to-cyan-500" />
           <Kpi to="/grc/risk/treatment" label="Treatment plans" value={s.treatmentPlans.length} icon={ShieldCheck} tone="from-emerald-500 to-teal-500" />
+          <Kpi to="/grc/risk/emerging" label="Emerging risks watched" value={watchListed} icon={TrendingUp} tone="from-fuchsia-500 to-pink-500" />
+          <Kpi to="/grc/risk/testing" label="Control tests outstanding" value={testsDue} icon={ClipboardCheck} tone="from-indigo-500 to-blue-500" />
+          <Kpi to="/grc/risk/deficiencies" label="Deficiencies open" value={progDeficiencies} icon={FileWarning} tone="from-rose-500 to-red-500" />
+
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -299,6 +305,11 @@ export default function GrcOverview() {
           <Kpi to="/grc/compliance/obligations" label="Upcoming obligations" value={upcomingObligations} icon={CalendarClock} tone="from-amber-500 to-yellow-500" />
           <Kpi to="/grc/compliance/obligations" label="Regulatory updates" value={regUpdates} icon={FileText} tone="from-blue-500 to-cyan-500" />
           <Kpi to="/grc/compliance/policies" label="Policy ack rate" value={`${policyAckPct}%`} icon={ClipboardCheck} tone="from-emerald-500 to-teal-500" />
+          <Kpi to="/grc/compliance/obligations" label="Filings overdue" value={compOverdue} icon={AlertTriangle} tone="from-red-500 to-rose-500" />
+          <Kpi to="/grc/compliance/calendar" label="Filings due" value={compDue} icon={CalendarClock} tone="from-amber-500 to-orange-500" />
+          <Kpi to="/grc/compliance/certifications" label="Certs expiring ≤90d" value={certsExpiring} icon={BadgeCheck} tone="from-violet-500 to-purple-500" />
+          <Kpi to="/grc/compliance/regulatory-change" label="Change assessments open" value={openRegChanges} icon={Scale} tone="from-cyan-500 to-blue-500" />
+
         </div>
         <Card>
           <CardHeader><CardTitle className="text-base">Upcoming obligations</CardTitle></CardHeader>
