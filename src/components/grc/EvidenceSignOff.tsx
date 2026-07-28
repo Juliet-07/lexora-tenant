@@ -3,17 +3,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Paperclip, CheckCircle2, FileText } from "lucide-react";
-import type { EvidenceItem } from "@/lib/grc/riskProgrammeStore";
+import { Paperclip, CheckCircle2, FileText, Loader2 } from "lucide-react";
+import { resolveGrcFileUrl, type EvidenceItem } from "@/lib/grc/risk-api";
 
-/**
- * Shared "evidence upload + validator sign-off" block.
- * Used by Testing Programme (management sign-off), Deficiencies
- * (validation and close-out), and Audit remediation.
- */
 export function EvidenceSignOff({
   evidence,
   onUpload,
+  uploading,
   signedBy,
   signedAt,
   validatorLabel = "Validated by",
@@ -25,7 +21,8 @@ export function EvidenceSignOff({
   requireEvidence = true,
 }: {
   evidence: EvidenceItem[];
-  onUpload: (items: EvidenceItem[]) => void;
+  onUpload: (files: File[]) => void;
+  uploading?: boolean;
   signedBy: string;
   signedAt: string | null;
   validatorLabel?: string;
@@ -37,19 +34,10 @@ export function EvidenceSignOff({
   requireEvidence?: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
-
   const pick = (files: FileList | null) => {
-    if (!files) return;
-    onUpload(
-      Array.from(files).map((f) => ({
-        id: Math.random().toString(36).slice(2, 10),
-        name: f.name,
-        size: f.size,
-        uploadedAt: new Date().toISOString(),
-      })),
-    );
+    if (!files || files.length === 0) return;
+    onUpload(Array.from(files));
   };
-
   const blocked = disabled || (requireEvidence && evidence.length === 0);
 
   return (
@@ -57,13 +45,24 @@ export function EvidenceSignOff({
       <div>
         <Label className="text-xs">Evidence</Label>
         <div className="space-y-1 mt-1">
-          {evidence.map((e) => (
+          {evidence.map((e, i) => (
             <div
-              key={e.id}
+              key={i}
               className="flex items-center gap-2 text-sm border rounded-md px-2 py-1.5"
             >
               <FileText className="h-3.5 w-3.5 text-muted-foreground" />
-              <span className="flex-1 truncate">{e.name}</span>
+              {e.fileUrl ? (
+                <a
+                  href={resolveGrcFileUrl(e.fileUrl)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex-1 truncate text-primary hover:underline"
+                >
+                  {e.name}
+                </a>
+              ) : (
+                <span className="flex-1 truncate">{e.name}</span>
+              )}
               <span className="text-xs text-muted-foreground">
                 {(e.size / 1024).toFixed(0)} KB
               </span>
@@ -89,10 +88,15 @@ export function EvidenceSignOff({
           size="sm"
           variant="outline"
           className="mt-2"
-          disabled={disabled}
+          disabled={disabled || uploading}
           onClick={() => inputRef.current?.click()}
         >
-          <Paperclip className="h-3.5 w-3.5 mr-1" /> Attach evidence
+          {uploading ? (
+            <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+          ) : (
+            <Paperclip className="h-3.5 w-3.5 mr-1" />
+          )}
+          Attach evidence
         </Button>
       </div>
 

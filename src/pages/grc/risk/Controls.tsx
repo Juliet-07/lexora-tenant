@@ -36,8 +36,7 @@ import GrcDeficiencies from "@/pages/grc/risk/Deficiencies";
 import {
   fetchControls,
   createControl,
-  logControlTest,
-  fetchAllControlTests,
+  fetchTests,
   type GrcControl,
 } from "@/lib/grc/risk-api";
 
@@ -48,13 +47,10 @@ export default function GrcControls() {
   });
   const { data: tests = [] } = useQuery({
     queryKey: ["grc-control-tests"],
-    queryFn: fetchAllControlTests,
+    queryFn: fetchTests,
   });
 
   const [newOpen, setNewOpen] = useState(false);
-  const [testOpen, setTestOpen] = useState<GrcControl | null>(null);
-
-
 
   if (isLoading)
     return (
@@ -99,59 +95,49 @@ export default function GrcControls() {
                     <TableHead>Frequency</TableHead>
                     <TableHead>Linked risks</TableHead>
                     <TableHead>Last test</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {controls.map((c) => {
                     const last = [...tests]
-                      .filter((t) => t.controlId === c._id)
+                      .filter((t) => t.controlId === c._id && t.completedAt)
                       .sort(
                         (a, b) =>
-                          new Date(b.testedAt).getTime() -
-                          new Date(a.testedAt).getTime(),
+                          new Date(b.completedAt!).getTime() -
+                          new Date(a.completedAt!).getTime(),
                       )[0];
                     return (
-                    <TableRow key={c._id}>
-                      <TableCell className="font-mono text-xs">
-                        {c.code}
-                      </TableCell>
-                      <TableCell className="font-medium">{c.name}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{c.type}</Badge>
-                      </TableCell>
-                      <TableCell>{c.owner || "—"}</TableCell>
-                      <TableCell>{c.frequency}</TableCell>
-                      <TableCell>{c.linkedRiskCount}</TableCell>
-                      <TableCell>
-                        {last ? (
-                          <Badge
-                            variant="outline"
-                            className={
-                              last.outcome === "Pass"
-                                ? "text-emerald-600 border-emerald-500/30"
-                                : "text-rose-600 border-rose-500/30"
-                            }
-                          >
-                            {last.outcome} ·{" "}
-                            {new Date(last.testedAt).toLocaleDateString()}
-                          </Badge>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">
-                            Not tested
-                          </span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => setTestOpen(c)}
-                        >
-                          Quick log test
-                        </Button>
-                      </TableCell>
-                    </TableRow>
+                      <TableRow key={c._id}>
+                        <TableCell className="font-mono text-xs">
+                          {c.code}
+                        </TableCell>
+                        <TableCell className="font-medium">{c.name}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline">{c.type}</Badge>
+                        </TableCell>
+                        <TableCell>{c.owner || "—"}</TableCell>
+                        <TableCell>{c.frequency}</TableCell>
+                        <TableCell>{c.linkedRiskCount}</TableCell>
+                        <TableCell>
+                          {last ? (
+                            <Badge
+                              variant="outline"
+                              className={
+                                last.conclusion === "Pass"
+                                  ? "text-emerald-600 border-emerald-500/30"
+                                  : "text-rose-600 border-rose-500/30"
+                              }
+                            >
+                              {last.conclusion} ·{" "}
+                              {new Date(last.completedAt!).toLocaleDateString()}
+                            </Badge>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">
+                              Not tested
+                            </span>
+                          )}
+                        </TableCell>
+                      </TableRow>
                     );
                   })}
                   {controls.length === 0 && (
@@ -180,7 +166,6 @@ export default function GrcControls() {
       </Tabs>
 
       <NewControlDialog open={newOpen} onOpenChange={setNewOpen} />
-      <TestDialog control={testOpen} onClose={() => setTestOpen(null)} />
     </div>
   );
 }
@@ -305,106 +290,6 @@ function NewControlDialog({ open, onOpenChange }: any) {
         <DialogFooter>
           <Button onClick={submit} disabled={mutation.isPending}>
             {mutation.isPending ? "Saving…" : "Save"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function TestDialog({
-  control,
-  onClose,
-}: {
-  control: GrcControl | null;
-  onClose: () => void;
-}) {
-  const queryClient = useQueryClient();
-  const [f, setF] = useState({
-    outcome: "Pass" as "Pass" | "Fail",
-    effectiveness: "Effective" as any,
-    notes: "",
-  });
-
-  const mutation = useMutation({
-    mutationFn: () => logControlTest(control!._id, f),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["grc-control-tests"] });
-      toast({ title: "Test logged" });
-      onClose();
-    },
-    onError: (err: any) =>
-      toast({
-        title: "Failed to log test",
-        description: err?.response?.data?.message,
-        variant: "destructive",
-      }),
-  });
-
-  if (!control) return null;
-  return (
-    <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Log test — {control.code}</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-3">
-          <div>
-            <Label>Outcome</Label>
-            <Select
-              value={f.outcome}
-              onValueChange={(v) => setF({ ...f, outcome: v as any })}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {["Pass", "Fail"].map((t) => (
-                  <SelectItem key={t} value={t}>
-                    {t}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label>Effectiveness</Label>
-            <Select
-              value={f.effectiveness}
-              onValueChange={(v) => setF({ ...f, effectiveness: v as any })}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {[
-                  "Effective",
-                  "Partially Effective",
-                  "Ineffective",
-                  "Not Tested",
-                ].map((t) => (
-                  <SelectItem key={t} value={t}>
-                    {t}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label>Notes</Label>
-            <Textarea
-              rows={3}
-              value={f.notes}
-              onChange={(e) => setF({ ...f, notes: e.target.value })}
-            />
-          </div>
-        </div>
-        <DialogFooter>
-          <Button
-            onClick={() => mutation.mutate()}
-            disabled={mutation.isPending}
-          >
-            {mutation.isPending ? "Saving…" : "Save test"}
           </Button>
         </DialogFooter>
       </DialogContent>

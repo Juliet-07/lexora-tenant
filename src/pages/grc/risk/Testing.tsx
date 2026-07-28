@@ -1,7 +1,5 @@
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { fetchControls } from "@/lib/grc/risk-api";
-
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,7 +39,6 @@ import {
 } from "@/components/ui/table";
 import {
   Plus,
-  RefreshCw,
   ClipboardCheck,
   AlertTriangle,
   Clock,
@@ -50,38 +47,47 @@ import {
 import { toast } from "@/hooks/use-toast";
 import { EvidenceSignOff } from "@/components/grc/EvidenceSignOff";
 import {
-  useRiskProgramme,
+  fetchControls,
+  fetchTests,
+  createTest,
+  updateTest,
+  assignTest,
+  addTestEvidence,
+  completeTest,
+  signOffTest,
+  deleteTest,
   FREQUENCY_BY_RATING,
   SEVERITIES,
   testStatusTone,
   daysUntil,
   type ControlTest,
+  type TestRiskRating,
   type Severity,
-} from "@/lib/grc/riskProgrammeStore";
+} from "@/lib/grc/risk-api";
 
-const RATINGS = ["Extreme", "High", "Medium", "Low"] as const;
+const RATINGS: TestRiskRating[] = ["Extreme", "High", "Medium", "Low"];
 
 export default function GrcTestingProgramme({
   embedded = false,
-}: {
-  embedded?: boolean;
-} = {}) {
-  const store = useRiskProgramme();
+}: { embedded?: boolean } = {}) {
+  const queryClient = useQueryClient();
+  const { data: tests = [], isLoading } = useQuery({
+    queryKey: ["grc-tests"],
+    queryFn: fetchTests,
+  });
   const { data: controls = [] } = useQuery({
     queryKey: ["grc-controls"],
     queryFn: fetchControls,
   });
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [openNew, setOpenNew] = useState(false);
-  const selected = store.tests.find((t) => t.id === selectedId) ?? null;
-
+  const selected = tests.find((t) => t._id === selectedId) ?? null;
 
   const year = new Date().getFullYear();
   const thisYear = useMemo(
-    () => store.tests.filter((t) => t.year === year),
-    [store.tests, year],
+    () => tests.filter((t) => t.year === year),
+    [tests, year],
   );
-
   const completed = thisYear.filter((t) => t.conclusion !== null);
   const passed = completed.filter((t) => t.conclusion === "Pass");
   const failed = completed.filter((t) => t.conclusion === "Fail");
@@ -96,61 +102,47 @@ export default function GrcTestingProgramme({
     : 0;
 
   const [form, setForm] = useState({
-    controlCode: "",
-    controlName: "",
-    riskRating: "High" as ControlTest["riskRating"],
+    controlId: "",
+    riskRating: "High" as TestRiskRating,
     procedure: "",
-    dueDate: "",
+    dueDate: new Date().toISOString().slice(0, 10),
     tester: "",
   });
 
+  const createMut = useMutation({
+    mutationFn: () => createTest(form),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["grc-tests"] });
+      setOpenNew(false);
+      setForm({
+        controlId: "",
+        riskRating: "High",
+        procedure: "",
+        dueDate: new Date().toISOString().slice(0, 10),
+        tester: "",
+      });
+      toast({ title: "Test added to the plan" });
+    },
+    onError: (err: any) =>
+      toast({
+        title: "Failed to add test",
+        description: err?.response?.data?.message,
+        variant: "destructive",
+      }),
+  });
+
   const create = () => {
-    if (!form.controlCode.trim() || !form.controlName.trim()) {
-      toast({ title: "Control code and name required", variant: "destructive" });
-      return;
-    }
-    store.addTest({
-      ...form,
-      dueDate: form.dueDate || new Date().toISOString(),
-    });
-    setOpenNew(false);
-    setForm({
-      controlCode: "",
-      controlName: "",
-      riskRating: "High",
-      procedure: "",
-      dueDate: "",
-      tester: "",
-    });
-    toast({ title: "Test added to the plan" });
+    if (!form.controlId)
+      return toast({ title: "Select a control", variant: "destructive" });
+    createMut.mutate();
   };
 
-  const regenerate = () => {
-    store.generateAnnualPlan([
-      {
-        controlCode: "CTL-002",
-        controlName: "Segregation of duties in month-end close",
-        riskRating: "High",
-        procedure: "Review close checklist sign-offs for two periods.",
-      },
-      {
-        controlCode: "CTL-009",
-        controlName: "Sanctions screening on new clients",
-        riskRating: "Extreme",
-        procedure: "Sample 20 onboardings and confirm screening hit review.",
-      },
-      {
-        controlCode: "CTL-013",
-        controlName: "Change management approvals",
-        riskRating: "Medium",
-        procedure: "Trace 15 production changes to an approval record.",
-      },
-    ]);
-    toast({
-      title: "Annual plan refreshed",
-      description: "Missing controls added at their risk-based frequency.",
-    });
-  };
+  if (isLoading)
+    return (
+      <div className="py-24 text-center text-sm text-muted-foreground">
+        Loading testing programme…
+      </div>
+    );
 
   return (
     <div className="space-y-6">
@@ -172,127 +164,104 @@ export default function GrcTestingProgramme({
             </p>
           )}
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={regenerate}>
-            <RefreshCw className="h-4 w-4 mr-2" /> Generate annual plan
-          </Button>
-          <Dialog open={openNew} onOpenChange={setOpenNew}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="h-4 w-4 mr-2" /> Schedule test
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Schedule a control test</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-3">
+        <Dialog open={openNew} onOpenChange={setOpenNew}>
+          <DialogTrigger asChild>
+            <Button>
+              <Plus className="h-4 w-4 mr-2" /> Schedule test
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Schedule a control test</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div>
+                <Label>Control</Label>
+                <Select
+                  value={form.controlId}
+                  onValueChange={(v) => setForm({ ...form, controlId: v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue
+                      placeholder={
+                        controls.length === 0
+                          ? "No controls registered yet"
+                          : "Select a registered control"
+                      }
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {controls.map((c) => (
+                      <SelectItem key={c._id} value={c._id}>
+                        {c.code} — {c.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Risk rating</Label>
+                <Select
+                  value={form.riskRating}
+                  onValueChange={(v) =>
+                    setForm({ ...form, riskRating: v as TestRiskRating })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {RATINGS.map((r) => (
+                      <SelectItem key={r} value={r}>
+                        {r}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Test procedure</Label>
+                <Textarea
+                  rows={3}
+                  value={form.procedure}
+                  onChange={(e) =>
+                    setForm({ ...form, procedure: e.target.value })
+                  }
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label>Control (from Control Library)</Label>
-                  <Select
-                    value={form.controlCode || undefined}
-                    onValueChange={(code) => {
-                      const c = controls.find((x) => x.code === code);
-                      setForm({
-                        ...form,
-                        controlCode: code,
-                        controlName: c?.name ?? form.controlName,
-                        procedure:
-                          form.procedure ||
-                          (c?.objective
-                            ? `Test that: ${c.objective}`
-                            : form.procedure),
-                      });
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a registered control" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {controls.map((c) => (
-                        <SelectItem key={c._id} value={c.code}>
-                          {c.code} — {c.name}
-                        </SelectItem>
-                      ))}
-                      {controls.length === 0 && (
-                        <SelectItem value="__none__" disabled>
-                          No controls registered yet
-                        </SelectItem>
-                      )}
-                    </SelectContent>
-                  </Select>
-                  {form.controlName && (
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {form.controlName}
-                    </p>
-                  )}
-                </div>
-                <div>
-                  <Label>Risk rating</Label>
-                  <Select
-                    value={form.riskRating}
-                    onValueChange={(v) =>
-                      setForm({ ...form, riskRating: v as any })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {RATINGS.map((r) => (
-                        <SelectItem key={r} value={r}>
-                          {r}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <Label>Test procedure</Label>
-                  <Textarea
-                    rows={3}
-                    value={form.procedure}
+                  <Label>Due date</Label>
+                  <Input
+                    type="date"
+                    value={form.dueDate}
                     onChange={(e) =>
-                      setForm({ ...form, procedure: e.target.value })
+                      setForm({ ...form, dueDate: e.target.value })
                     }
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <Label>Due date</Label>
-                    <Input
-                      type="date"
-                      value={form.dueDate.slice(0, 10)}
-                      onChange={(e) =>
-                        setForm({
-                          ...form,
-                          dueDate: new Date(e.target.value).toISOString(),
-                        })
-                      }
-                    />
-                  </div>
-                  <div>
-                    <Label>Tester (optional)</Label>
-                    <Input
-                      value={form.tester}
-                      onChange={(e) =>
-                        setForm({ ...form, tester: e.target.value })
-                      }
-                    />
-                  </div>
+                <div>
+                  <Label>Tester (optional)</Label>
+                  <Input
+                    value={form.tester}
+                    onChange={(e) =>
+                      setForm({ ...form, tester: e.target.value })
+                    }
+                  />
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Frequency applied:{" "}
-                  <strong>{FREQUENCY_BY_RATING[form.riskRating]}</strong>
-                </p>
               </div>
-              <DialogFooter>
-                <Button onClick={create}>Add to plan</Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        </div>
+              <p className="text-xs text-muted-foreground">
+                Frequency applied:{" "}
+                <strong>{FREQUENCY_BY_RATING[form.riskRating]}</strong>
+              </p>
+            </div>
+            <DialogFooter>
+              <Button onClick={create} disabled={createMut.isPending}>
+                {createMut.isPending ? "Adding…" : "Add to plan"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -380,13 +349,14 @@ export default function GrcTestingProgramme({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {store.tests.map((t) => {
-                    const late = t.conclusion === null && daysUntil(t.dueDate) < 0;
+                  {tests.map((t) => {
+                    const late =
+                      t.conclusion === null && daysUntil(t.dueDate) < 0;
                     return (
                       <TableRow
-                        key={t.id}
+                        key={t._id}
                         className="cursor-pointer"
-                        onClick={() => setSelectedId(t.id)}
+                        onClick={() => setSelectedId(t._id)}
                       >
                         <TableCell>
                           <div className="font-medium">{t.controlName}</div>
@@ -438,6 +408,16 @@ export default function GrcTestingProgramme({
                       </TableRow>
                     );
                   })}
+                  {tests.length === 0 && (
+                    <TableRow>
+                      <TableCell
+                        colSpan={7}
+                        className="text-center py-8 text-muted-foreground"
+                      >
+                        No tests scheduled.
+                      </TableCell>
+                    </TableRow>
+                  )}
                 </TableBody>
               </Table>
             </CardContent>
@@ -452,7 +432,7 @@ export default function GrcTestingProgramme({
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
-              {[...store.tests]
+              {[...tests]
                 .filter((t) => t.conclusion === null)
                 .sort(
                   (a, b) =>
@@ -463,9 +443,9 @@ export default function GrcTestingProgramme({
                   const d = daysUntil(t.dueDate);
                   return (
                     <div
-                      key={t.id}
+                      key={t._id}
                       className="flex items-center justify-between border rounded-lg p-3 cursor-pointer hover:bg-muted/40"
-                      onClick={() => setSelectedId(t.id)}
+                      onClick={() => setSelectedId(t._id)}
                     >
                       <div>
                         <div className="text-sm font-medium">
@@ -515,7 +495,7 @@ export default function GrcTestingProgramme({
                 </TableHeader>
                 <TableBody>
                   {RATINGS.map((r) => {
-                    const set = store.tests.filter((t) => t.riskRating === r);
+                    const set = tests.filter((t) => t.riskRating === r);
                     const done = set.filter((t) => t.conclusion !== null);
                     const pass = done.filter((t) => t.conclusion === "Pass");
                     return (
@@ -545,28 +525,92 @@ export default function GrcTestingProgramme({
         </TabsContent>
       </Tabs>
 
-      <TestSheet
-        test={selected}
-        store={store}
-        onClose={() => setSelectedId(null)}
-      />
+      <TestSheet test={selected} onClose={() => setSelectedId(null)} />
     </div>
   );
 }
 
 function TestSheet({
   test,
-  store,
   onClose,
 }: {
   test: ControlTest | null;
-  store: ReturnType<typeof useRiskProgramme>;
   onClose: () => void;
 }) {
+  const queryClient = useQueryClient();
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: ["grc-tests"] });
+  const onErr = (title: string) => (err: any) =>
+    toast({
+      title,
+      description: err?.response?.data?.message,
+      variant: "destructive",
+    });
+
   const [tester, setTester] = useState("");
   const [findings, setFindings] = useState("");
   const [severity, setSeverity] = useState<Severity>("High");
   const [approver, setApprover] = useState("");
+
+  const updateMut = useMutation({
+    mutationFn: (dto: { procedure?: string; dueDate?: string }) =>
+      updateTest(test!._id, dto),
+    onSuccess: invalidate,
+  });
+  const assignMut = useMutation({
+    mutationFn: () =>
+      assignTest(test!._id, tester || test!.tester, test!.dueDate),
+    onSuccess: () => {
+      invalidate();
+      toast({ title: "Test assigned" });
+    },
+    onError: onErr("Failed to assign test"),
+  });
+  const evidenceMut = useMutation({
+    mutationFn: (files: File[]) => addTestEvidence(test!._id, files),
+    onSuccess: invalidate,
+    onError: onErr("Failed to upload evidence"),
+  });
+  const completeMut = useMutation({
+    mutationFn: (conclusion: "Pass" | "Fail") =>
+      completeTest(
+        test!._id,
+        conclusion,
+        findings,
+        conclusion === "Fail" ? severity : undefined,
+      ),
+    onSuccess: (_r, conclusion) => {
+      invalidate();
+      if (conclusion === "Fail") {
+        queryClient.invalidateQueries({ queryKey: ["grc-deficiencies"] });
+        toast({
+          title: "Recorded as Fail",
+          description:
+            "A deficiency has been logged in the Deficiencies register.",
+        });
+      } else {
+        toast({ title: "Recorded as Pass" });
+      }
+    },
+    onError: onErr("Failed to record conclusion"),
+  });
+  const signOffMut = useMutation({
+    mutationFn: () => signOffTest(test!._id, approver),
+    onSuccess: () => {
+      invalidate();
+      setApprover("");
+      toast({ title: "Test signed off" });
+    },
+    onError: onErr("Failed to sign off"),
+  });
+  const deleteMut = useMutation({
+    mutationFn: () => deleteTest(test!._id),
+    onSuccess: () => {
+      invalidate();
+      onClose();
+    },
+    onError: onErr("Failed to remove test"),
+  });
 
   if (!test) return null;
 
@@ -578,7 +622,6 @@ function TestSheet({
             {test.controlCode} — {test.controlName}
           </SheetTitle>
         </SheetHeader>
-
         <div className="mt-4 space-y-5">
           <div className="flex flex-wrap gap-2">
             <Badge variant="outline">{test.riskRating}</Badge>
@@ -592,10 +635,8 @@ function TestSheet({
             <Label className="text-xs">Test procedure</Label>
             <Textarea
               rows={3}
-              value={test.procedure}
-              onChange={(e) =>
-                store.updateTest(test.id, { procedure: e.target.value })
-              }
+              defaultValue={test.procedure}
+              onBlur={(e) => updateMut.mutate({ procedure: e.target.value })}
             />
           </div>
 
@@ -615,26 +656,16 @@ function TestSheet({
                 <Input
                   className="h-8"
                   type="date"
-                  value={test.dueDate.slice(0, 10)}
-                  onChange={(e) =>
-                    store.updateTest(test.id, {
-                      dueDate: new Date(e.target.value).toISOString(),
-                    })
-                  }
+                  defaultValue={test.dueDate ? test.dueDate.slice(0, 10) : ""}
+                  onBlur={(e) => updateMut.mutate({ dueDate: e.target.value })}
                 />
               </div>
             </div>
             <Button
               size="sm"
               variant="outline"
-              onClick={() => {
-                store.assignTest(
-                  test.id,
-                  tester || test.tester,
-                  test.dueDate,
-                );
-                toast({ title: "Test assigned" });
-              }}
+              disabled={assignMut.isPending}
+              onClick={() => assignMut.mutate()}
             >
               Assign
             </Button>
@@ -687,24 +718,16 @@ function TestSheet({
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => {
-                      store.completeTest(test.id, "Pass", findings, severity);
-                      toast({ title: "Recorded as Pass" });
-                    }}
+                    disabled={completeMut.isPending}
+                    onClick={() => completeMut.mutate("Pass")}
                   >
                     Record Pass
                   </Button>
                   <Button
                     size="sm"
                     variant="destructive"
-                    onClick={() => {
-                      store.completeTest(test.id, "Fail", findings, severity);
-                      toast({
-                        title: "Recorded as Fail",
-                        description:
-                          "A deficiency has been logged in the Deficiencies register.",
-                      });
-                    }}
+                    disabled={completeMut.isPending}
+                    onClick={() => completeMut.mutate("Fail")}
                   >
                     Record Fail
                   </Button>
@@ -718,8 +741,9 @@ function TestSheet({
               Evidence & management sign-off
             </h3>
             <EvidenceSignOff
-              evidence={test.evidence}
-              onUpload={(items) => store.addTestEvidence(test.id, items)}
+              evidence={test.evidence ?? []}
+              onUpload={(files) => evidenceMut.mutate(files)}
+              uploading={evidenceMut.isPending}
               signedBy={test.signedOffBy}
               signedAt={test.signedOffAt}
               validatorLabel="Signed off by"
@@ -727,21 +751,15 @@ function TestSheet({
               validator={approver}
               onValidatorChange={setApprover}
               disabled={test.conclusion === null}
-              onSignOff={() => {
-                store.signOffTest(test.id, approver);
-                setApprover("");
-                toast({ title: "Test signed off" });
-              }}
+              onSignOff={() => signOffMut.mutate()}
             />
           </section>
 
           <Button
             variant="ghost"
             className="text-destructive"
-            onClick={() => {
-              store.deleteTest(test.id);
-              onClose();
-            }}
+            disabled={deleteMut.isPending}
+            onClick={() => deleteMut.mutate()}
           >
             <Trash2 className="h-4 w-4 mr-2" /> Remove from plan
           </Button>

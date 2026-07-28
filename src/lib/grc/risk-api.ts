@@ -278,6 +278,199 @@ export interface CrisisContact {
   escalationOrder: number;
 }
 
+export type EmergingRiskSource =
+  | "Manual entry"
+  | "Regulatory feed"
+  | "Horizon scan";
+export type Velocity = "Immediate" | "Short term" | "Medium term" | "Long term";
+export type WatchList = "Active watch" | "Monitor" | "Low priority";
+export type EmergingStatus = "Watching" | "Escalated" | "Removed";
+export type TriggerKind = "Likelihood increase" | "Proximity" | "Trigger event";
+export type ReviewRecommendation =
+  | "Escalate to register"
+  | "Maintain watch"
+  | "Remove";
+
+export const VELOCITIES: Velocity[] = [
+  "Immediate",
+  "Short term",
+  "Medium term",
+  "Long term",
+];
+
+const GRC_API_BASE = (api.defaults as any)?.baseURL ?? "/api";
+export const resolveGrcFileUrl = (url: string): string => {
+  if (!url) return url;
+  if (url.startsWith("http")) return url;
+  return `${new URL(GRC_API_BASE).origin}${url}`;
+};
+
+export function watchTone(w: WatchList): string {
+  return {
+    "Active watch": "bg-rose-100 text-rose-700 border-rose-200",
+    Monitor: "bg-amber-100 text-amber-700 border-amber-200",
+    "Low priority": "bg-muted text-muted-foreground border-border",
+  }[w];
+}
+
+export function categoriseWatchList(
+  impact: number,
+  velocity: Velocity,
+): WatchList {
+  const fast = velocity === "Immediate" || velocity === "Short term";
+  if (impact >= 4 && fast) return "Active watch";
+  if (impact >= 3) return "Monitor";
+  return "Low priority";
+}
+
+export interface EscalationTrigger {
+  kind: TriggerKind;
+  condition: string;
+  fired: boolean;
+  firedAt: string | null;
+}
+export interface QuarterlyReview {
+  at: string;
+  quarter: string;
+  recommendation: ReviewRecommendation;
+  note: string;
+}
+
+export interface EmergingRisk {
+  _id: string;
+  title: string;
+  category: RiskCategory;
+  source: EmergingRiskSource;
+  description: string;
+  impact: number;
+  velocity: Velocity;
+  watchList: WatchList;
+  owner: string;
+  triggers: EscalationTrigger[];
+  reviews: QuarterlyReview[];
+  status: EmergingStatus;
+  escalatedAt: string | null;
+  escalationNote: string;
+  linkedRiskId: string | null;
+  createdAt: string;
+}
+
+export type TestRiskRating = "Extreme" | "High" | "Medium" | "Low";
+export type TestFrequency =
+  | "Every 6 months"
+  | "Annually"
+  | "Biennially"
+  | "Every 2-3 years";
+export type TestStatus =
+  | "Planned"
+  | "Assigned"
+  | "In progress"
+  | "Awaiting sign-off"
+  | "Signed off";
+export type TestConclusion = "Pass" | "Fail" | null;
+export type DeficiencyOrigin =
+  | "Control test"
+  | "Incident investigation"
+  | "Audit finding";
+export type Severity = "Critical" | "High" | "Medium" | "Low";
+export type DefStatus =
+  | "Open"
+  | "Plan agreed"
+  | "In remediation"
+  | "Awaiting validation"
+  | "Closed";
+
+export const SEVERITIES: Severity[] = ["Critical", "High", "Medium", "Low"];
+export const REMEDIATION_DAYS: Record<Severity, number> = {
+  Critical: 30,
+  High: 60,
+  Medium: 90,
+  Low: 180,
+};
+export const FREQUENCY_BY_RATING: Record<TestRiskRating, TestFrequency> = {
+  Extreme: "Every 6 months",
+  High: "Annually",
+  Medium: "Biennially",
+  Low: "Every 2-3 years",
+};
+
+export const daysUntil = (dateIso: string) =>
+  Math.ceil((new Date(dateIso).getTime() - Date.now()) / 86400000);
+
+export const testStatusTone = (s: TestStatus): string =>
+  ({
+    Planned: "bg-muted text-muted-foreground border-border",
+    Assigned: "bg-sky-100 text-sky-700 border-sky-200",
+    "In progress": "bg-indigo-100 text-indigo-700 border-indigo-200",
+    "Awaiting sign-off": "bg-amber-100 text-amber-700 border-amber-200",
+    "Signed off": "bg-emerald-100 text-emerald-700 border-emerald-200",
+  })[s];
+
+export const defStatusTone = (s: DefStatus): string =>
+  ({
+    Open: "bg-rose-100 text-rose-700 border-rose-200",
+    "Plan agreed": "bg-sky-100 text-sky-700 border-sky-200",
+    "In remediation": "bg-indigo-100 text-indigo-700 border-indigo-200",
+    "Awaiting validation": "bg-amber-100 text-amber-700 border-amber-200",
+    Closed: "bg-emerald-100 text-emerald-700 border-emerald-200",
+  })[s];
+
+export const severityTone = (s: Severity): string =>
+  ({
+    Critical: "bg-rose-100 text-rose-700 border-rose-200",
+    High: "bg-orange-100 text-orange-700 border-orange-200",
+    Medium: "bg-amber-100 text-amber-700 border-amber-200",
+    Low: "bg-emerald-100 text-emerald-700 border-emerald-200",
+  })[s];
+
+export interface EvidenceItem {
+  name: string;
+  fileUrl: string | null;
+  mimeType: string | null;
+  size: number;
+  uploadedAt: string;
+}
+
+export interface ControlTest {
+  _id: string;
+  controlId: string;
+  controlCode: string;
+  controlName: string;
+  riskRating: TestRiskRating;
+  frequency: TestFrequency;
+  procedure: string;
+  year: number;
+  dueDate: string;
+  tester: string;
+  status: TestStatus;
+  conclusion: TestConclusion;
+  findings: string;
+  evidence: EvidenceItem[];
+  signedOffBy: string;
+  signedOffAt: string | null;
+  completedAt: string | null;
+}
+
+export interface Deficiency {
+  _id: string;
+  reference: string;
+  title: string;
+  origin: DeficiencyOrigin;
+  sourceRef: string;
+  category: RiskCategory;
+  severity: Severity;
+  rootCause: string;
+  owner: string;
+  loggedAt: string;
+  deadline: string;
+  plan: string;
+  managementResponse: string;
+  evidence: EvidenceItem[];
+  validatedBy: string;
+  validatedAt: string | null;
+  status: DefStatus;
+}
+
 // ── Display-only styling helpers — pure lookup, no business logic ──
 
 export function bandTone(band: RiskBand): string {
@@ -683,4 +876,199 @@ export const createCrisisContact = async (dto: {
 }): Promise<CrisisContact> => {
   const res = await api.post("/grc/risk/bcp/crisis-contacts", dto);
   return res.data?.data ?? res.data;
+};
+
+export const fetchEmergingRisks = async (): Promise<EmergingRisk[]> => {
+  const res = await api.get("/grc/risk/emerging");
+  const d = res.data?.data ?? res.data;
+  return Array.isArray(d) ? d : [];
+};
+
+export const createEmergingRisk = async (dto: {
+  title: string;
+  category: RiskCategory;
+  source: EmergingRiskSource;
+  description?: string;
+  impact: number;
+  velocity: Velocity;
+  owner?: string;
+}): Promise<EmergingRisk> => {
+  const res = await api.post("/grc/risk/emerging", dto);
+  return res.data?.data ?? res.data;
+};
+
+export const updateEmergingRisk = async (
+  id: string,
+  dto: { impact?: number; velocity?: Velocity },
+): Promise<EmergingRisk> => {
+  const res = await api.patch(`/grc/risk/emerging/${id}`, dto);
+  return res.data?.data ?? res.data;
+};
+
+export const addEmergingTrigger = async (
+  id: string,
+  dto: { kind: TriggerKind; condition: string },
+): Promise<EmergingRisk> => {
+  const res = await api.post(`/grc/risk/emerging/${id}/triggers`, dto);
+  return res.data?.data ?? res.data;
+};
+
+export const fireEmergingTrigger = async (
+  id: string,
+  triggerIndex: number,
+): Promise<EmergingRisk> => {
+  const res = await api.patch(
+    `/grc/risk/emerging/${id}/triggers/${triggerIndex}/fire`,
+    {},
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const addEmergingReview = async (
+  id: string,
+  dto: { quarter: string; recommendation: ReviewRecommendation; note?: string },
+): Promise<EmergingRisk> => {
+  const res = await api.post(`/grc/risk/emerging/${id}/reviews`, dto);
+  return res.data?.data ?? res.data;
+};
+
+export const escalateEmergingRisk = async (
+  id: string,
+  likelihood: number,
+  escalationNote?: string,
+): Promise<EmergingRisk> => {
+  const res = await api.post(`/grc/risk/emerging/${id}/escalate`, {
+    likelihood,
+    escalationNote,
+  });
+  return res.data?.data ?? res.data;
+};
+
+export const deleteEmergingRisk = async (id: string): Promise<void> => {
+  await api.delete(`/grc/risk/emerging/${id}`);
+};
+
+export const fetchTests = async (): Promise<ControlTest[]> => {
+  const res = await api.get("/grc/risk/controls/tests");
+  const d = res.data?.data ?? res.data;
+  return Array.isArray(d) ? d : [];
+};
+export const createTest = async (dto: {
+  controlId: string;
+  riskRating: TestRiskRating;
+  procedure?: string;
+  dueDate: string;
+  tester?: string;
+}): Promise<ControlTest> => {
+  const res = await api.post("/grc/risk/controls/tests", dto);
+  return res.data?.data ?? res.data;
+};
+export const updateTest = async (
+  id: string,
+  dto: { procedure?: string; dueDate?: string },
+): Promise<ControlTest> => {
+  const res = await api.patch(`/grc/risk/controls/tests/${id}`, dto);
+  return res.data?.data ?? res.data;
+};
+export const assignTest = async (
+  id: string,
+  tester: string,
+  dueDate: string,
+): Promise<ControlTest> => {
+  const res = await api.patch(`/grc/risk/controls/tests/${id}/assign`, {
+    tester,
+    dueDate,
+  });
+  return res.data?.data ?? res.data;
+};
+export const addTestEvidence = async (
+  id: string,
+  files: File[],
+): Promise<ControlTest> => {
+  const form = new FormData();
+  files.forEach((f) => form.append("files", f));
+  const res = await api.post(`/grc/risk/controls/tests/${id}/evidence`, form);
+  return res.data?.data ?? res.data;
+};
+export const completeTest = async (
+  id: string,
+  conclusion: "Pass" | "Fail",
+  findings: string,
+  severity?: Severity,
+): Promise<ControlTest> => {
+  const res = await api.patch(`/grc/risk/controls/tests/${id}/complete`, {
+    conclusion,
+    findings,
+    severity,
+  });
+  return res.data?.data ?? res.data;
+};
+export const signOffTest = async (
+  id: string,
+  signedOffBy: string,
+): Promise<ControlTest> => {
+  const res = await api.patch(`/grc/risk/controls/tests/${id}/sign-off`, {
+    signedOffBy,
+  });
+  return res.data?.data ?? res.data;
+};
+export const deleteTest = async (id: string): Promise<void> => {
+  await api.delete(`/grc/risk/controls/tests/${id}`);
+};
+
+export const fetchDeficiencies = async (): Promise<Deficiency[]> => {
+  const res = await api.get("/grc/risk/controls/deficiencies");
+  const d = res.data?.data ?? res.data;
+  return Array.isArray(d) ? d : [];
+};
+export const createDeficiency = async (dto: {
+  title: string;
+  origin: DeficiencyOrigin;
+  sourceRef?: string;
+  category: RiskCategory;
+  severity: Severity;
+  rootCause?: string;
+  owner?: string;
+}): Promise<Deficiency> => {
+  const res = await api.post("/grc/risk/controls/deficiencies", dto);
+  return res.data?.data ?? res.data;
+};
+export const updateDeficiency = async (
+  id: string,
+  dto: Partial<{
+    severity: Severity;
+    status: DefStatus;
+    owner: string;
+    rootCause: string;
+    plan: string;
+    managementResponse: string;
+  }>,
+): Promise<Deficiency> => {
+  const res = await api.patch(`/grc/risk/controls/deficiencies/${id}`, dto);
+  return res.data?.data ?? res.data;
+};
+export const addDeficiencyEvidence = async (
+  id: string,
+  files: File[],
+): Promise<Deficiency> => {
+  const form = new FormData();
+  files.forEach((f) => form.append("files", f));
+  const res = await api.post(
+    `/grc/risk/controls/deficiencies/${id}/evidence`,
+    form,
+  );
+  return res.data?.data ?? res.data;
+};
+export const validateDeficiency = async (
+  id: string,
+  validatedBy: string,
+): Promise<Deficiency> => {
+  const res = await api.patch(
+    `/grc/risk/controls/deficiencies/${id}/validate`,
+    { validatedBy },
+  );
+  return res.data?.data ?? res.data;
+};
+export const deleteDeficiency = async (id: string): Promise<void> => {
+  await api.delete(`/grc/risk/controls/deficiencies/${id}`);
 };

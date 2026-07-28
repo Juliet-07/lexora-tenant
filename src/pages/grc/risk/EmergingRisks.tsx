@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -46,46 +47,57 @@ import {
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import {
-  useRiskProgramme,
-  RISK_CATEGORY_LIST,
+  fetchEmergingRisks,
+  createEmergingRisk,
+  updateEmergingRisk,
+  addEmergingTrigger,
+  fireEmergingTrigger,
+  addEmergingReview,
+  escalateEmergingRisk,
+  deleteEmergingRisk,
+  RISK_CATEGORIES,
   VELOCITIES,
   watchTone,
   categoriseWatchList,
   type EmergingRisk,
-  type ProgCategory,
+  type RiskCategory,
   type Velocity,
-} from "@/lib/grc/riskProgrammeStore";
+  type TriggerKind,
+  type ReviewRecommendation,
+} from "@/lib/grc/risk-api";
 
 const SOURCES = ["Manual entry", "Regulatory feed", "Horizon scan"] as const;
-const TRIGGER_KINDS = [
+const TRIGGER_KINDS: TriggerKind[] = [
   "Likelihood increase",
   "Proximity",
   "Trigger event",
-] as const;
-const RECOMMENDATIONS = [
+];
+const RECOMMENDATIONS: ReviewRecommendation[] = [
   "Escalate to register",
   "Maintain watch",
   "Remove",
-] as const;
+];
 
 const currentQuarter = () =>
   `Q${Math.ceil((new Date().getMonth() + 1) / 3)} ${new Date().getFullYear()}`;
 
 export default function GrcEmergingRisks() {
-  const store = useRiskProgramme();
+  const { data: emerging = [], isLoading } = useQuery({
+    queryKey: ["grc-emerging"],
+    queryFn: fetchEmergingRisks,
+  });
   const [openNew, setOpenNew] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const selected = store.emerging.find((e) => e.id === selectedId) ?? null;
-
-  const watching = store.emerging.filter((e) => e.status === "Watching");
-  const escalated = store.emerging.filter((e) => e.status === "Escalated");
-  const removed = store.emerging.filter((e) => e.status === "Removed");
+  const selected = emerging.find((e) => e._id === selectedId) ?? null;
+  const watching = emerging.filter((e) => e.status === "Watching");
+  const escalated = emerging.filter((e) => e.status === "Escalated");
+  const removed = emerging.filter((e) => e.status === "Removed");
   const armed = watching.filter((e) => e.triggers.some((t) => t.fired));
 
   const [form, setForm] = useState({
     title: "",
-    category: "Compliance" as ProgCategory,
+    category: "Compliance" as RiskCategory,
     source: "Manual entry" as (typeof SOURCES)[number],
     description: "",
     impact: 3,
@@ -93,26 +105,38 @@ export default function GrcEmergingRisks() {
     owner: "",
   });
 
+  const createMut = useMutation({
+    mutationFn: () => createEmergingRisk(form),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["grc-emerging"] });
+      setOpenNew(false);
+      setForm({
+        title: "",
+        category: "Compliance",
+        source: "Manual entry",
+        description: "",
+        impact: 3,
+        velocity: "Medium term",
+        owner: "",
+      });
+      toast({
+        title: "Added to horizon scan",
+        description: `Watch-list: ${categoriseWatchList(form.impact, form.velocity)}`,
+      });
+    },
+    onError: (err: any) =>
+      toast({
+        title: "Failed to add entry",
+        description: err?.response?.data?.message,
+        variant: "destructive",
+      }),
+  });
+  const queryClient = useQueryClient();
+
   const create = () => {
-    if (!form.title.trim()) {
-      toast({ title: "Title is required", variant: "destructive" });
-      return;
-    }
-    store.addEmerging(form);
-    setOpenNew(false);
-    setForm({
-      title: "",
-      category: "Compliance",
-      source: "Manual entry",
-      description: "",
-      impact: 3,
-      velocity: "Medium term",
-      owner: "",
-    });
-    toast({
-      title: "Added to horizon scan",
-      description: `Watch-list: ${categoriseWatchList(form.impact, form.velocity)}`,
-    });
+    if (!form.title.trim())
+      return toast({ title: "Title is required", variant: "destructive" });
+    createMut.mutate();
   };
 
   const rows = (list: EmergingRisk[]) => (
@@ -131,9 +155,9 @@ export default function GrcEmergingRisks() {
       <TableBody>
         {list.map((e) => (
           <TableRow
-            key={e.id}
+            key={e._id}
             className="cursor-pointer"
-            onClick={() => setSelectedId(e.id)}
+            onClick={() => setSelectedId(e._id)}
           >
             <TableCell className="font-medium">{e.title}</TableCell>
             <TableCell className="text-muted-foreground">
@@ -177,6 +201,13 @@ export default function GrcEmergingRisks() {
     </Table>
   );
 
+  if (isLoading)
+    return (
+      <div className="py-24 text-center text-sm text-muted-foreground">
+        Loading horizon scan…
+      </div>
+    );
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -202,9 +233,7 @@ export default function GrcEmergingRisks() {
                 <Label>Title</Label>
                 <Input
                   value={form.title}
-                  onChange={(e) =>
-                    setForm({ ...form, title: e.target.value })
-                  }
+                  onChange={(e) => setForm({ ...form, title: e.target.value })}
                   placeholder="e.g. Draft directive on agent liquidity"
                 />
               </div>
@@ -214,14 +243,14 @@ export default function GrcEmergingRisks() {
                   <Select
                     value={form.category}
                     onValueChange={(v) =>
-                      setForm({ ...form, category: v as ProgCategory })
+                      setForm({ ...form, category: v as RiskCategory })
                     }
                   >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {RISK_CATEGORY_LIST.map((c) => (
+                      {RISK_CATEGORIES.map((c) => (
                         <SelectItem key={c} value={c}>
                           {c}
                         </SelectItem>
@@ -319,7 +348,9 @@ export default function GrcEmergingRisks() {
               </p>
             </div>
             <DialogFooter>
-              <Button onClick={create}>Add entry</Button>
+              <Button onClick={create} disabled={createMut.isPending}>
+                {createMut.isPending ? "Adding…" : "Add entry"}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -348,7 +379,7 @@ export default function GrcEmergingRisks() {
           icon={<CalendarClock className="h-4 w-4" />}
           label="Reviewed this quarter"
           value={
-            store.emerging.filter((e) =>
+            emerging.filter((e) =>
               e.reviews.some((r) => r.quarter === currentQuarter()),
             ).length
           }
@@ -398,11 +429,7 @@ export default function GrcEmergingRisks() {
         </TabsContent>
       </Tabs>
 
-      <EmergingSheet
-        risk={selected}
-        onClose={() => setSelectedId(null)}
-        store={store}
-      />
+      <EmergingSheet risk={selected} onClose={() => setSelectedId(null)} />
     </div>
   );
 }
@@ -438,24 +465,87 @@ function StatCard({
 function EmergingSheet({
   risk,
   onClose,
-  store,
 }: {
   risk: EmergingRisk | null;
   onClose: () => void;
-  store: ReturnType<typeof useRiskProgramme>;
 }) {
-  const [trigger, setTrigger] = useState({
-    kind: "Trigger event" as (typeof TRIGGER_KINDS)[number],
-    condition: "",
-  });
-  const [review, setReview] = useState({
-    recommendation: "Maintain watch" as (typeof RECOMMENDATIONS)[number],
-    note: "",
-  });
+  const queryClient = useQueryClient();
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: ["grc-emerging"] });
+  const onErr = (title: string) => (err: any) =>
+    toast({
+      title,
+      description: err?.response?.data?.message,
+      variant: "destructive",
+    });
+
+  const [trigger, setTrigger] = useState<{
+    kind: TriggerKind;
+    condition: string;
+  }>({ kind: "Trigger event", condition: "" });
+  const [review, setReview] = useState<{
+    recommendation: ReviewRecommendation;
+    note: string;
+  }>({ recommendation: "Maintain watch", note: "" });
   const [escalationNote, setEscalationNote] = useState("");
+  const [escalationLikelihood, setEscalationLikelihood] = useState(3);
+
+  const updateMut = useMutation({
+    mutationFn: (patch: { impact?: number; velocity?: Velocity }) =>
+      updateEmergingRisk(risk!._id, patch),
+    onSuccess: invalidate,
+  });
+  const addTriggerMut = useMutation({
+    mutationFn: () => addEmergingTrigger(risk!._id, trigger),
+    onSuccess: () => {
+      invalidate();
+      setTrigger({ ...trigger, condition: "" });
+    },
+    onError: onErr("Failed to add trigger"),
+  });
+  const fireTriggerMut = useMutation({
+    mutationFn: (index: number) => fireEmergingTrigger(risk!._id, index),
+    onSuccess: invalidate,
+    onError: onErr("Failed to mark fired"),
+  });
+  const addReviewMut = useMutation({
+    mutationFn: () =>
+      addEmergingReview(risk!._id, {
+        quarter: currentQuarter(),
+        recommendation: review.recommendation,
+        note: review.note,
+      }),
+    onSuccess: () => {
+      invalidate();
+      setReview({ recommendation: "Maintain watch", note: "" });
+      toast({ title: "Review recorded" });
+    },
+    onError: onErr("Failed to record review"),
+  });
+  const escalateMut = useMutation({
+    mutationFn: () =>
+      escalateEmergingRisk(risk!._id, escalationLikelihood, escalationNote),
+    onSuccess: () => {
+      invalidate();
+      queryClient.invalidateQueries({ queryKey: ["grc-risks"] });
+      setEscalationNote("");
+      toast({
+        title: "Escalated",
+        description: "A matching Risk Register entry has been created.",
+      });
+    },
+    onError: onErr("Failed to escalate"),
+  });
+  const deleteMut = useMutation({
+    mutationFn: () => deleteEmergingRisk(risk!._id),
+    onSuccess: () => {
+      invalidate();
+      onClose();
+    },
+    onError: onErr("Failed to delete"),
+  });
 
   const canEscalate = risk?.status === "Watching";
-
   const fired = useMemo(
     () => risk?.triggers.some((t) => t.fired) ?? false,
     [risk],
@@ -469,7 +559,6 @@ function EmergingSheet({
         <SheetHeader>
           <SheetTitle className="pr-8">{risk.title}</SheetTitle>
         </SheetHeader>
-
         <div className="mt-4 space-y-5">
           <div className="flex flex-wrap gap-2">
             <Badge variant="outline">{risk.category}</Badge>
@@ -501,9 +590,7 @@ function EmergingSheet({
                 <Label className="text-xs">Impact</Label>
                 <Select
                   value={String(risk.impact)}
-                  onValueChange={(v) =>
-                    store.updateEmerging(risk.id, { impact: Number(v) })
-                  }
+                  onValueChange={(v) => updateMut.mutate({ impact: Number(v) })}
                 >
                   <SelectTrigger className="h-8">
                     <SelectValue />
@@ -522,7 +609,7 @@ function EmergingSheet({
                 <Select
                   value={risk.velocity}
                   onValueChange={(v) =>
-                    store.updateEmerging(risk.id, { velocity: v as Velocity })
+                    updateMut.mutate({ velocity: v as Velocity })
                   }
                 >
                   <SelectTrigger className="h-8">
@@ -542,9 +629,9 @@ function EmergingSheet({
 
           <section className="space-y-2">
             <h3 className="text-sm font-semibold">Escalation triggers</h3>
-            {risk.triggers.map((t) => (
+            {risk.triggers.map((t, i) => (
               <div
-                key={t.id}
+                key={i}
                 className="border rounded-lg p-3 flex items-start justify-between gap-3"
               >
                 <div>
@@ -564,7 +651,8 @@ function EmergingSheet({
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => store.fireTrigger(risk.id, t.id)}
+                    disabled={fireTriggerMut.isPending}
+                    onClick={() => fireTriggerMut.mutate(i)}
                   >
                     <Zap className="h-3.5 w-3.5 mr-1" /> Mark fired
                   </Button>
@@ -577,7 +665,7 @@ function EmergingSheet({
                 <Select
                   value={trigger.kind}
                   onValueChange={(v) =>
-                    setTrigger({ ...trigger, kind: v as any })
+                    setTrigger({ ...trigger, kind: v as TriggerKind })
                   }
                 >
                   <SelectTrigger className="h-8">
@@ -606,11 +694,8 @@ function EmergingSheet({
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => {
-                  if (!trigger.condition.trim()) return;
-                  store.addTrigger(risk.id, trigger);
-                  setTrigger({ ...trigger, condition: "" });
-                }}
+                disabled={!trigger.condition.trim() || addTriggerMut.isPending}
+                onClick={() => addTriggerMut.mutate()}
               >
                 Add
               </Button>
@@ -619,8 +704,8 @@ function EmergingSheet({
 
           <section className="space-y-2">
             <h3 className="text-sm font-semibold">Quarterly review</h3>
-            {risk.reviews.map((r) => (
-              <div key={r.id} className="border rounded-lg p-3 text-sm">
+            {risk.reviews.map((r, i) => (
+              <div key={i} className="border rounded-lg p-3 text-sm">
                 <div className="flex justify-between">
                   <span className="font-medium">{r.recommendation}</span>
                   <span className="text-xs text-muted-foreground">
@@ -636,7 +721,10 @@ function EmergingSheet({
               <Select
                 value={review.recommendation}
                 onValueChange={(v) =>
-                  setReview({ ...review, recommendation: v as any })
+                  setReview({
+                    ...review,
+                    recommendation: v as ReviewRecommendation,
+                  })
                 }
               >
                 <SelectTrigger className="h-8">
@@ -659,15 +747,8 @@ function EmergingSheet({
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => {
-                  store.addEmergingReview(risk.id, {
-                    quarter: currentQuarter(),
-                    recommendation: review.recommendation,
-                    note: review.note,
-                  });
-                  setReview({ recommendation: "Maintain watch", note: "" });
-                  toast({ title: "Review recorded" });
-                }}
+                disabled={addReviewMut.isPending}
+                onClick={() => addReviewMut.mutate()}
               >
                 Record review
               </Button>
@@ -678,43 +759,60 @@ function EmergingSheet({
             <h3 className="text-sm font-semibold">Escalate to Risk Register</h3>
             <p className="text-xs text-muted-foreground">
               {fired
-                ? "A trigger has fired — this record is ready to enter the Risk Lifecycle at Step 1."
+                ? "A trigger has fired — this record is ready to enter the Risk Lifecycle at Step 1 (Identify)."
                 : "Usually done once a trigger fires, but the Risk Committee can escalate early."}
             </p>
-            <Input
-              placeholder="Handover note (e.g. new register ID)"
-              value={escalationNote}
-              onChange={(e) => setEscalationNote(e.target.value)}
-            />
-            <div className="flex gap-2">
-              <Button
-                disabled={!canEscalate}
-                onClick={() => {
-                  store.escalateEmerging(
-                    risk.id,
-                    escalationNote || "Escalated by Risk Committee.",
-                  );
-                  setEscalationNote("");
-                  toast({
-                    title: "Escalated",
-                    description:
-                      "Create the matching Risk Register entry to complete the handoff.",
-                  });
-                }}
-              >
-                <ArrowUpRight className="h-4 w-4 mr-2" /> Escalate
-              </Button>
-              <Button
-                variant="ghost"
-                className="text-destructive"
-                onClick={() => {
-                  store.removeEmerging(risk.id);
-                  onClose();
-                }}
-              >
-                <Trash2 className="h-4 w-4 mr-2" /> Delete
-              </Button>
-            </div>
+            {risk.linkedRiskId ? (
+              <p className="text-xs text-emerald-700">
+                Already escalated — a Risk Register entry exists for this
+                record.
+              </p>
+            ) : (
+              <>
+                <div>
+                  <Label className="text-xs">
+                    Likelihood (1-5) — the register's 5×5 matrix needs this, and
+                    nothing above implies one
+                  </Label>
+                  <Select
+                    value={String(escalationLikelihood)}
+                    onValueChange={(v) => setEscalationLikelihood(Number(v))}
+                  >
+                    <SelectTrigger className="h-8">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {[1, 2, 3, 4, 5].map((n) => (
+                        <SelectItem key={n} value={String(n)}>
+                          {n}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Input
+                  placeholder="Handover note (optional)"
+                  value={escalationNote}
+                  onChange={(e) => setEscalationNote(e.target.value)}
+                />
+                <div className="flex gap-2">
+                  <Button
+                    disabled={!canEscalate || escalateMut.isPending}
+                    onClick={() => escalateMut.mutate()}
+                  >
+                    <ArrowUpRight className="h-4 w-4 mr-2" /> Escalate
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    className="text-destructive"
+                    disabled={deleteMut.isPending}
+                    onClick={() => deleteMut.mutate()}
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" /> Delete
+                  </Button>
+                </div>
+              </>
+            )}
           </section>
         </div>
       </SheetContent>

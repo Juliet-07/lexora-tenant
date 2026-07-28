@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -46,8 +47,13 @@ import {
 import { toast } from "@/hooks/use-toast";
 import { EvidenceSignOff } from "@/components/grc/EvidenceSignOff";
 import {
-  useRiskProgramme,
-  RISK_CATEGORY_LIST,
+  fetchDeficiencies,
+  createDeficiency,
+  updateDeficiency,
+  addDeficiencyEvidence,
+  validateDeficiency,
+  deleteDeficiency,
+  RISK_CATEGORIES,
   SEVERITIES,
   REMEDIATION_DAYS,
   severityTone,
@@ -56,9 +62,9 @@ import {
   type Deficiency,
   type DeficiencyOrigin,
   type DefStatus,
-  type ProgCategory,
+  type RiskCategory,
   type Severity,
-} from "@/lib/grc/riskProgrammeStore";
+} from "@/lib/grc/risk-api";
 
 const ORIGINS: DeficiencyOrigin[] = [
   "Control test",
@@ -75,71 +81,89 @@ const STATUSES: DefStatus[] = [
 
 export default function GrcDeficiencies({
   embedded = false,
-}: {
-  embedded?: boolean;
-} = {}) {
-  const store = useRiskProgramme();
+}: { embedded?: boolean } = {}) {
+  const queryClient = useQueryClient();
+  const { data: deficiencies = [], isLoading } = useQuery({
+    queryKey: ["grc-deficiencies"],
+    queryFn: fetchDeficiencies,
+  });
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [openNew, setOpenNew] = useState(false);
   const [filter, setFilter] = useState<"all" | "open" | "overdue" | "closed">(
     "all",
   );
 
-  const selected =
-    store.deficiencies.find((d) => d.id === selectedId) ?? null;
-
-  const open = store.deficiencies.filter((d) => d.status !== "Closed");
+  const selected = deficiencies.find((d) => d._id === selectedId) ?? null;
+  const open = deficiencies.filter((d) => d.status !== "Closed");
   const overdue = open.filter((d) => daysUntil(d.deadline) < 0);
-  const closed = store.deficiencies.filter((d) => d.status === "Closed");
+  const closed = deficiencies.filter((d) => d.status === "Closed");
 
   const list = useMemo(() => {
     if (filter === "open") return open;
     if (filter === "overdue") return overdue;
     if (filter === "closed") return closed;
-    return store.deficiencies;
-  }, [filter, store.deficiencies, open, overdue, closed]);
+    return deficiencies;
+  }, [filter, deficiencies, open, overdue, closed]);
 
   const recurring = useMemo(() => {
     const byCause = new Map<string, number>();
-    store.deficiencies.forEach((d) => {
+    deficiencies.forEach((d) => {
       const key = d.rootCause.trim().toLowerCase().slice(0, 40);
       if (!key) return;
       byCause.set(key, (byCause.get(key) ?? 0) + 1);
     });
     return Array.from(byCause.entries()).filter(([, n]) => n > 1);
-  }, [store.deficiencies]);
+  }, [deficiencies]);
 
   const [form, setForm] = useState({
     title: "",
     origin: "Audit finding" as DeficiencyOrigin,
     sourceRef: "",
-    category: "Operational" as ProgCategory,
+    category: "Operational" as RiskCategory,
     severity: "Medium" as Severity,
     rootCause: "",
     owner: "",
   });
 
+  const createMut = useMutation({
+    mutationFn: () => createDeficiency(form),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["grc-deficiencies"] });
+      setOpenNew(false);
+      setForm({
+        title: "",
+        origin: "Audit finding",
+        sourceRef: "",
+        category: "Operational",
+        severity: "Medium",
+        rootCause: "",
+        owner: "",
+      });
+      toast({
+        title: "Deficiency logged",
+        description: `Remediation deadline set at ${REMEDIATION_DAYS[form.severity]} days.`,
+      });
+    },
+    onError: (err: any) =>
+      toast({
+        title: "Failed to log deficiency",
+        description: err?.response?.data?.message,
+        variant: "destructive",
+      }),
+  });
+
   const create = () => {
-    if (!form.title.trim()) {
-      toast({ title: "Title is required", variant: "destructive" });
-      return;
-    }
-    store.addDeficiency(form);
-    setOpenNew(false);
-    setForm({
-      title: "",
-      origin: "Audit finding",
-      sourceRef: "",
-      category: "Operational",
-      severity: "Medium",
-      rootCause: "",
-      owner: "",
-    });
-    toast({
-      title: "Deficiency logged",
-      description: `Remediation deadline set at ${REMEDIATION_DAYS[form.severity]} days.`,
-    });
+    if (!form.title.trim())
+      return toast({ title: "Title is required", variant: "destructive" });
+    createMut.mutate();
   };
+
+  if (isLoading)
+    return (
+      <div className="py-24 text-center text-sm text-muted-foreground">
+        Loading deficiencies…
+      </div>
+    );
 
   return (
     <div className="space-y-6">
@@ -208,14 +232,14 @@ export default function GrcDeficiencies({
                   <Select
                     value={form.category}
                     onValueChange={(v) =>
-                      setForm({ ...form, category: v as ProgCategory })
+                      setForm({ ...form, category: v as RiskCategory })
                     }
                   >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {RISK_CATEGORY_LIST.map((c) => (
+                      {RISK_CATEGORIES.map((c) => (
                         <SelectItem key={c} value={c}>
                           {c}
                         </SelectItem>
@@ -263,7 +287,9 @@ export default function GrcDeficiencies({
               </div>
             </div>
             <DialogFooter>
-              <Button onClick={create}>Log deficiency</Button>
+              <Button onClick={create} disabled={createMut.isPending}>
+                {createMut.isPending ? "Logging…" : "Log deficiency"}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -340,9 +366,9 @@ export default function GrcDeficiencies({
                       d.status !== "Closed" && daysUntil(d.deadline) < 0;
                     return (
                       <TableRow
-                        key={d.id}
+                        key={d._id}
                         className="cursor-pointer"
-                        onClick={() => setSelectedId(d.id)}
+                        onClick={() => setSelectedId(d._id)}
                       >
                         <TableCell className="font-mono text-xs">
                           {d.reference}
@@ -402,11 +428,9 @@ export default function GrcDeficiencies({
               </CardHeader>
               <CardContent className="space-y-2">
                 {SEVERITIES.map((s) => {
-                  const n = store.deficiencies.filter(
-                    (d) => d.severity === s,
-                  ).length;
-                  const pct = store.deficiencies.length
-                    ? (n / store.deficiencies.length) * 100
+                  const n = deficiencies.filter((d) => d.severity === s).length;
+                  const pct = deficiencies.length
+                    ? (n / deficiencies.length) * 100
                     : 0;
                   return (
                     <div key={s} className="space-y-1">
@@ -431,9 +455,7 @@ export default function GrcDeficiencies({
               </CardHeader>
               <CardContent className="space-y-2">
                 {ORIGINS.map((o) => {
-                  const n = store.deficiencies.filter(
-                    (d) => d.origin === o,
-                  ).length;
+                  const n = deficiencies.filter((d) => d.origin === o).length;
                   return (
                     <div
                       key={o}
@@ -451,10 +473,8 @@ export default function GrcDeficiencies({
                 <CardTitle className="text-base">By category</CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
-                {RISK_CATEGORY_LIST.map((c) => {
-                  const n = store.deficiencies.filter(
-                    (d) => d.category === c,
-                  ).length;
+                {RISK_CATEGORIES.map((c) => {
+                  const n = deficiencies.filter((d) => d.category === c).length;
                   if (!n) return null;
                   return (
                     <div
@@ -506,7 +526,7 @@ export default function GrcDeficiencies({
                 <ul className="list-disc pl-5 mt-1 text-muted-foreground">
                   {recurring.map(([cause, n]) => (
                     <li key={cause}>
-                      “{cause}…” — {n} occurrences
+                      "{cause}…" — {n} occurrences
                     </li>
                   ))}
                 </ul>
@@ -518,7 +538,6 @@ export default function GrcDeficiencies({
 
       <DeficiencySheet
         deficiency={selected}
-        store={store}
         onClose={() => setSelectedId(null)}
       />
     </div>
@@ -539,7 +558,10 @@ function Stat({
   onClick: () => void;
 }) {
   return (
-    <Card className="cursor-pointer hover:shadow-sm transition" onClick={onClick}>
+    <Card
+      className="cursor-pointer hover:shadow-sm transition"
+      onClick={onClick}
+    >
       <CardContent className="p-4 flex items-center gap-3">
         <div
           className={`h-9 w-9 rounded-lg bg-gradient-to-br ${tone} text-white flex items-center justify-center`}
@@ -557,14 +579,52 @@ function Stat({
 
 function DeficiencySheet({
   deficiency,
-  store,
   onClose,
 }: {
   deficiency: Deficiency | null;
-  store: ReturnType<typeof useRiskProgramme>;
   onClose: () => void;
 }) {
+  const queryClient = useQueryClient();
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: ["grc-deficiencies"] });
+  const onErr = (title: string) => (err: any) =>
+    toast({
+      title,
+      description: err?.response?.data?.message,
+      variant: "destructive",
+    });
   const [validator, setValidator] = useState("");
+
+  const updateMut = useMutation({
+    mutationFn: (patch: Parameters<typeof updateDeficiency>[1]) =>
+      updateDeficiency(deficiency!._id, patch),
+    onSuccess: invalidate,
+    onError: onErr("Failed to save"),
+  });
+  const evidenceMut = useMutation({
+    mutationFn: (files: File[]) =>
+      addDeficiencyEvidence(deficiency!._id, files),
+    onSuccess: invalidate,
+    onError: onErr("Failed to upload evidence"),
+  });
+  const validateMut = useMutation({
+    mutationFn: () => validateDeficiency(deficiency!._id, validator),
+    onSuccess: () => {
+      invalidate();
+      setValidator("");
+      toast({ title: "Deficiency closed" });
+    },
+    onError: onErr("Failed to validate"),
+  });
+  const deleteMut = useMutation({
+    mutationFn: () => deleteDeficiency(deficiency!._id),
+    onSuccess: () => {
+      invalidate();
+      onClose();
+    },
+    onError: onErr("Failed to delete"),
+  });
+
   if (!deficiency) return null;
   const d = deficiency;
   const late = d.status !== "Closed" && daysUntil(d.deadline) < 0;
@@ -577,7 +637,6 @@ function DeficiencySheet({
             {d.reference} — {d.title}
           </SheetTitle>
         </SheetHeader>
-
         <div className="mt-4 space-y-5">
           <div className="flex flex-wrap gap-2">
             <Badge variant="outline" className={severityTone(d.severity)}>
@@ -610,7 +669,7 @@ function DeficiencySheet({
               <Select
                 value={d.severity}
                 onValueChange={(v) =>
-                  store.updateDeficiency(d.id, { severity: v as Severity })
+                  updateMut.mutate({ severity: v as Severity })
                 }
               >
                 <SelectTrigger className="h-8">
@@ -630,7 +689,7 @@ function DeficiencySheet({
               <Select
                 value={d.status}
                 onValueChange={(v) =>
-                  store.updateDeficiency(d.id, { status: v as DefStatus })
+                  updateMut.mutate({ status: v as DefStatus })
                 }
               >
                 <SelectTrigger className="h-8">
@@ -651,48 +710,34 @@ function DeficiencySheet({
             <Label className="text-xs">Owner</Label>
             <Input
               className="h-8"
-              value={d.owner}
-              onChange={(e) =>
-                store.updateDeficiency(d.id, { owner: e.target.value })
-              }
+              defaultValue={d.owner}
+              onBlur={(e) => updateMut.mutate({ owner: e.target.value })}
             />
           </div>
-
           <div>
             <Label className="text-xs">Root cause</Label>
             <Textarea
               rows={2}
-              value={d.rootCause}
-              onChange={(e) =>
-                store.updateDeficiency(d.id, { rootCause: e.target.value })
-              }
+              defaultValue={d.rootCause}
+              onBlur={(e) => updateMut.mutate({ rootCause: e.target.value })}
             />
           </div>
-
           <div>
             <Label className="text-xs">Remediation plan</Label>
             <Textarea
               rows={3}
-              value={d.plan}
+              defaultValue={d.plan}
               placeholder="Actions, milestones and deadline"
-              onChange={(e) =>
-                store.updateDeficiency(d.id, {
-                  plan: e.target.value,
-                  status: d.status === "Open" ? "Plan agreed" : d.status,
-                })
-              }
+              onBlur={(e) => updateMut.mutate({ plan: e.target.value })}
             />
           </div>
-
           <div>
             <Label className="text-xs">Management response</Label>
             <Textarea
               rows={2}
-              value={d.managementResponse}
-              onChange={(e) =>
-                store.updateDeficiency(d.id, {
-                  managementResponse: e.target.value,
-                })
+              defaultValue={d.managementResponse}
+              onBlur={(e) =>
+                updateMut.mutate({ managementResponse: e.target.value })
               }
             />
           </div>
@@ -703,26 +748,21 @@ function DeficiencySheet({
             </h3>
             <EvidenceSignOff
               evidence={d.evidence}
-              onUpload={(items) => store.addDeficiencyEvidence(d.id, items)}
+              onUpload={(files) => evidenceMut.mutate(files)}
+              uploading={evidenceMut.isPending}
               signedBy={d.validatedBy}
               signedAt={d.validatedAt}
               validator={validator}
               onValidatorChange={setValidator}
-              onSignOff={() => {
-                store.validateDeficiency(d.id, validator);
-                setValidator("");
-                toast({ title: "Deficiency closed" });
-              }}
+              onSignOff={() => validateMut.mutate()}
             />
           </section>
 
           <Button
             variant="ghost"
             className="text-destructive"
-            onClick={() => {
-              store.deleteDeficiency(d.id);
-              onClose();
-            }}
+            disabled={deleteMut.isPending}
+            onClick={() => deleteMut.mutate()}
           >
             <Trash2 className="h-4 w-4 mr-2" /> Delete
           </Button>
