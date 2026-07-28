@@ -128,7 +128,7 @@ export default function GrcOverview() {
 
   // ── Risk programme
   const watchListed = programme.emerging.filter((e) => e.status === "Watching").length;
-  const testsDue = programme.tests.filter((t) => t.status !== "Signed off" && t.status !== "Complete").length;
+  const testsDue = programme.tests.filter((t) => t.status !== "Signed off").length;
   const progDeficiencies = programme.deficiencies.filter((d) => d.status !== "Closed").length;
 
   // ── Deals
