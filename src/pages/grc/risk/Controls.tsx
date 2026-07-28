@@ -31,17 +31,14 @@ import {
 } from "@/components/ui/table";
 import { Plus } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import GrcTestingProgramme from "@/pages/grc/risk/Testing";
+import GrcDeficiencies from "@/pages/grc/risk/Deficiencies";
 import {
   fetchControls,
   createControl,
   logControlTest,
   fetchAllControlTests,
-  logDeficiency,
-  fetchAllDeficiencies,
-  markDeficiencyRemediated,
-  REMEDIATION_DEADLINE_DAYS,
   type GrcControl,
-  type DeficiencySeverity,
 } from "@/lib/grc/risk-api";
 
 export default function GrcControls() {
@@ -54,22 +51,10 @@ export default function GrcControls() {
     queryKey: ["grc-control-tests"],
     queryFn: fetchAllControlTests,
   });
-  const { data: deficiencies = [] } = useQuery({
-    queryKey: ["grc-deficiencies"],
-    queryFn: fetchAllDeficiencies,
-  });
 
   const [newOpen, setNewOpen] = useState(false);
   const [testOpen, setTestOpen] = useState<GrcControl | null>(null);
-  const [defOpen, setDefOpen] = useState<GrcControl | null>(null);
 
-  const remediateMut = useMutation({
-    mutationFn: (id: string) => markDeficiencyRemediated(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["grc-deficiencies"] });
-      toast({ title: "Marked remediated" });
-    },
-  });
 
   if (isLoading)
     return (
@@ -84,7 +69,8 @@ export default function GrcControls() {
         <div>
           <h1 className="text-2xl font-bold">Controls Library</h1>
           <p className="text-sm text-muted-foreground">
-            Central control catalogue, testing schedule and deficiency tracker.
+            Central control catalogue with its risk-based testing programme and
+            deficiency remediation cycle.
           </p>
         </div>
         <Button onClick={() => setNewOpen(true)}>
@@ -96,7 +82,7 @@ export default function GrcControls() {
       <Tabs defaultValue="library">
         <TabsList>
           <TabsTrigger value="library">Library</TabsTrigger>
-          <TabsTrigger value="tests">Tests</TabsTrigger>
+          <TabsTrigger value="testing">Testing programme</TabsTrigger>
           <TabsTrigger value="deficiencies">Deficiencies</TabsTrigger>
         </TabsList>
 
@@ -128,20 +114,13 @@ export default function GrcControls() {
                       <TableCell>{c.owner || "—"}</TableCell>
                       <TableCell>{c.frequency}</TableCell>
                       <TableCell>{c.linkedRiskCount}</TableCell>
-                      <TableCell className="text-right space-x-1">
+                      <TableCell className="text-right">
                         <Button
                           size="sm"
                           variant="outline"
                           onClick={() => setTestOpen(c)}
                         >
-                          Log test
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => setDefOpen(c)}
-                        >
-                          Log deficiency
+                          Quick log test
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -162,140 +141,17 @@ export default function GrcControls() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="tests">
-          <Card>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Control</TableHead>
-                    <TableHead>Outcome</TableHead>
-                    <TableHead>Effectiveness</TableHead>
-                    <TableHead>Notes</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {tests.map((t) => {
-                    const c = controls.find((x) => x._id === t.controlId);
-                    return (
-                      <TableRow key={t._id}>
-                        <TableCell>
-                          {new Date(t.testedAt).toLocaleDateString()}
-                        </TableCell>
-                        <TableCell>
-                          {c?.code} — {c?.name}
-                        </TableCell>
-                        <TableCell>
-                          <Badge
-                            variant="outline"
-                            className={
-                              t.outcome === "Pass"
-                                ? "text-emerald-600 border-emerald-500/30"
-                                : "text-rose-600 border-rose-500/30"
-                            }
-                          >
-                            {t.outcome}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>{t.effectiveness}</TableCell>
-                        <TableCell className="text-xs">{t.notes}</TableCell>
-                      </TableRow>
-                    );
-                  })}
-                  {tests.length === 0 && (
-                    <TableRow>
-                      <TableCell
-                        colSpan={5}
-                        className="text-center py-6 text-muted-foreground"
-                      >
-                        No tests logged.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+        <TabsContent value="testing" className="pt-2">
+          <GrcTestingProgramme embedded />
         </TabsContent>
 
-        <TabsContent value="deficiencies">
-          <Card>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Control</TableHead>
-                    <TableHead>Severity</TableHead>
-                    <TableHead>Root cause</TableHead>
-                    <TableHead>Deadline</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead />
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {deficiencies.map((d) => {
-                    const c = controls.find((x) => x._id === d.controlId);
-                    const tone =
-                      d.severity === "Critical"
-                        ? "text-rose-600 border-rose-500/30"
-                        : d.severity === "High"
-                          ? "text-orange-600 border-orange-500/30"
-                          : d.severity === "Medium"
-                            ? "text-amber-600 border-amber-500/30"
-                            : "text-emerald-600 border-emerald-500/30";
-                    return (
-                      <TableRow key={d._id}>
-                        <TableCell>
-                          {c?.code} — {c?.name}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className={tone}>
-                            {d.severity}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-xs">{d.rootCause}</TableCell>
-                        <TableCell>
-                          {new Date(d.remediationDeadline).toLocaleDateString()}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline">{d.status}</Badge>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {d.status !== "Remediated" && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              disabled={remediateMut.isPending}
-                              onClick={() => remediateMut.mutate(d._id)}
-                            >
-                              Mark remediated
-                            </Button>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                  {deficiencies.length === 0 && (
-                    <TableRow>
-                      <TableCell
-                        colSpan={6}
-                        className="text-center py-6 text-muted-foreground"
-                      >
-                        No deficiencies.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+        <TabsContent value="deficiencies" className="pt-2">
+          <GrcDeficiencies embedded />
         </TabsContent>
       </Tabs>
 
       <NewControlDialog open={newOpen} onOpenChange={setNewOpen} />
       <TestDialog control={testOpen} onClose={() => setTestOpen(null)} />
-      <DeficiencyDialog control={defOpen} onClose={() => setDefOpen(null)} />
     </div>
   );
 }
@@ -520,89 +376,6 @@ function TestDialog({
             disabled={mutation.isPending}
           >
             {mutation.isPending ? "Saving…" : "Save test"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function DeficiencyDialog({
-  control,
-  onClose,
-}: {
-  control: GrcControl | null;
-  onClose: () => void;
-}) {
-  const queryClient = useQueryClient();
-  const [f, setF] = useState<{
-    severity: DeficiencySeverity;
-    rootCause: string;
-  }>({ severity: "Medium", rootCause: "" });
-
-  const mutation = useMutation({
-    mutationFn: () => logDeficiency(control!._id, f),
-    onSuccess: (d) => {
-      queryClient.invalidateQueries({ queryKey: ["grc-deficiencies"] });
-      toast({
-        title: "Deficiency logged",
-        description: `Remediate by ${new Date(d.remediationDeadline).toLocaleDateString()}`,
-      });
-      onClose();
-    },
-    onError: (err: any) =>
-      toast({
-        title: "Failed to log deficiency",
-        description: err?.response?.data?.message,
-        variant: "destructive",
-      }),
-  });
-
-  if (!control) return null;
-  return (
-    <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Log deficiency — {control.code}</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-3">
-          <div>
-            <Label>Severity</Label>
-            <Select
-              value={f.severity}
-              onValueChange={(v) =>
-                setF({ ...f, severity: v as DeficiencySeverity })
-              }
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {(
-                  ["Critical", "High", "Medium", "Low"] as DeficiencySeverity[]
-                ).map((t) => (
-                  <SelectItem key={t} value={t}>
-                    {t} — {REMEDIATION_DEADLINE_DAYS[t]}d
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label>Root cause</Label>
-            <Textarea
-              rows={3}
-              value={f.rootCause}
-              onChange={(e) => setF({ ...f, rootCause: e.target.value })}
-            />
-          </div>
-        </div>
-        <DialogFooter>
-          <Button
-            onClick={() => mutation.mutate()}
-            disabled={mutation.isPending}
-          >
-            {mutation.isPending ? "Saving…" : "Log"}
           </Button>
         </DialogFooter>
       </DialogContent>
