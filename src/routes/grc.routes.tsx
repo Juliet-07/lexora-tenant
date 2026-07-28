@@ -34,6 +34,11 @@ import ComplianceRegulatoryChange from "@/pages/grc/compliance/RegulatoryChange"
 import InvestorReadiness from "@/pages/grc/intelligence/InvestorReadiness";
 import CompanyValuation from "@/pages/grc/intelligence/CompanyValuation";
 import PortfolioAnalysis from "@/pages/grc/intelligence/PortfolioAnalysis";
+import EsgDashboard from "@/pages/grc/esg/Dashboard";
+import EsgEnvironmental from "@/pages/grc/esg/Environmental";
+import EsgSocial from "@/pages/grc/esg/Social";
+import EsgMateriality from "@/pages/grc/esg/Materiality";
+import EsgReporting from "@/pages/grc/esg/Reporting";
 
 /** GRC — Governance, Risk & Compliance. Tenant-admin only for now. */
 export const grcRoutes = ({ isAdmin, accessibleModules }: RouteContext) => {
@@ -93,6 +98,34 @@ export const grcRoutes = ({ isAdmin, accessibleModules }: RouteContext) => {
         key="grc-intel-portfolio"
         path="/grc/intelligence/portfolio"
         element={layout(<PortfolioAnalysis />)}
+      />,
+
+      // Governance
+      // ESG
+      <Route
+        key="grc-esg-dashboard"
+        path="/grc/esg/dashboard"
+        element={layout(<EsgDashboard />)}
+      />,
+      <Route
+        key="grc-esg-environmental"
+        path="/grc/esg/environmental"
+        element={layout(<EsgEnvironmental />)}
+      />,
+      <Route
+        key="grc-esg-social"
+        path="/grc/esg/social"
+        element={layout(<EsgSocial />)}
+      />,
+      <Route
+        key="grc-esg-materiality"
+        path="/grc/esg/materiality"
+        element={layout(<EsgMateriality />)}
+      />,
+      <Route
+        key="grc-esg-reporting"
+        path="/grc/esg/reporting"
+        element={layout(<EsgReporting />)}
       />,
 
       // Governance

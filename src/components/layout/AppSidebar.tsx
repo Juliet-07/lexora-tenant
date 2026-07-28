@@ -37,6 +37,8 @@ import {
   Handshake,
   Scale,
   FileStack,
+  Leaf,
+  FileBarChart,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
@@ -205,7 +207,7 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
     },
     {
       title: "Deal Intelligence",
-      icon: BarChart3,
+      icon: TrendingUp,
       adminOnly: true,
       children: [
         {
@@ -217,9 +219,21 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
       ],
     },
     {
-      title: "Report",
+      title: "ESG",
+      icon: Leaf,
+      adminOnly: true,
+      children: [
+        { title: "ESG Dashboard", url: "/grc/esg/dashboard" },
+        { title: "Environmental", url: "/grc/esg/environmental" },
+        { title: "Social", url: "/grc/esg/social" },
+        { title: "Materiality", url: "/grc/esg/materiality" },
+        { title: "ESG Reporting", url: "/grc/esg/reporting" },
+      ],
+    },
+    {
+      title: "Reporting & Analytics",
       url: "/grc/reporting",
-      icon: BarChart3,
+      icon: FileBarChart,
       adminOnly: true,
     },
   ],
