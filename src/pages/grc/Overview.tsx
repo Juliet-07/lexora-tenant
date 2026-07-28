@@ -15,6 +15,12 @@ import {
   Building2,
   ServerCog,
   LifeBuoy,
+  Handshake,
+  Leaf,
+  TrendingUp,
+  Grid3x3,
+  Scale,
+  BadgeCheck,
 } from "lucide-react";
 import {
   useGrc,
@@ -27,12 +33,33 @@ import {
   RISK_CATEGORIES,
 } from "@/lib/grcStore";
 import { useGov } from "@/lib/grcGovernanceStore";
+import { useResolutions } from "@/lib/grcResolutionsStore";
+import { useCompliance, obligationStatus } from "@/lib/complianceStore";
+import { useRiskProgramme } from "@/lib/grc/riskProgrammeStore";
+import { useDeals, formatMoney } from "@/lib/dealsStore";
+import { useDealIntel } from "@/lib/dealIntelligenceStore";
+import {
+  useEsg,
+  pillarScore,
+  consolidatedScore,
+  scoreGrade,
+  topicStatus,
+  frameworkCoverage,
+  FRAMEWORKS,
+} from "@/lib/grc/esgStore";
 import { NavLink } from "react-router-dom";
 
 export default function GrcOverview() {
   const s = useGrc();
   const g = useGov();
+  const resolutions = useResolutions();
+  const comp = useCompliance();
+  const programme = useRiskProgramme();
+  const deals = useDeals();
+  const intel = useDealIntel();
+  const { state: esg } = useEsg();
   const today = new Date().toISOString().slice(0, 10);
+
 
   // ── Risk
   const openRisks = s.risks.filter((r) => r.status !== "Closed");
