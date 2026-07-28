@@ -144,11 +144,21 @@ export default function GrcTestingProgramme() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Testing Programme</h1>
-          <p className="text-sm text-muted-foreground">
-            Risk-based annual test plan over the Control Library. A failed test
-            logs a deficiency automatically.
-          </p>
+          {!embedded && (
+            <>
+              <h1 className="text-2xl font-bold">Testing Programme</h1>
+              <p className="text-sm text-muted-foreground">
+                Risk-based annual test plan over the Control Library. A failed
+                test logs a deficiency automatically.
+              </p>
+            </>
+          )}
+          {embedded && (
+            <p className="text-sm text-muted-foreground">
+              Schedule tests against registered controls. A failed test logs a
+              deficiency automatically.
+            </p>
+          )}
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={regenerate}>
@@ -157,55 +167,75 @@ export default function GrcTestingProgramme() {
           <Dialog open={openNew} onOpenChange={setOpenNew}>
             <DialogTrigger asChild>
               <Button>
-                <Plus className="h-4 w-4 mr-2" /> Add test
+                <Plus className="h-4 w-4 mr-2" /> Schedule test
               </Button>
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>Add test plan item</DialogTitle>
+                <DialogTitle>Schedule a control test</DialogTitle>
               </DialogHeader>
               <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <Label>Control code</Label>
-                    <Input
-                      value={form.controlCode}
-                      onChange={(e) =>
-                        setForm({ ...form, controlCode: e.target.value })
-                      }
-                      placeholder="CTL-020"
-                    />
-                  </div>
-                  <div>
-                    <Label>Risk rating</Label>
-                    <Select
-                      value={form.riskRating}
-                      onValueChange={(v) =>
-                        setForm({ ...form, riskRating: v as any })
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {RATINGS.map((r) => (
-                          <SelectItem key={r} value={r}>
-                            {r}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                <div>
+                  <Label>Control (from Control Library)</Label>
+                  <Select
+                    value={form.controlCode || undefined}
+                    onValueChange={(code) => {
+                      const c = controls.find((x) => x.code === code);
+                      setForm({
+                        ...form,
+                        controlCode: code,
+                        controlName: c?.name ?? form.controlName,
+                        procedure:
+                          form.procedure ||
+                          (c?.objective
+                            ? `Test that: ${c.objective}`
+                            : form.procedure),
+                      });
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a registered control" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {controls.map((c) => (
+                        <SelectItem key={c._id} value={c.code}>
+                          {c.code} — {c.name}
+                        </SelectItem>
+                      ))}
+                      {controls.length === 0 && (
+                        <SelectItem value="__none__" disabled>
+                          No controls registered yet
+                        </SelectItem>
+                      )}
+                    </SelectContent>
+                  </Select>
+                  {form.controlName && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {form.controlName}
+                    </p>
+                  )}
                 </div>
                 <div>
-                  <Label>Control name</Label>
-                  <Input
-                    value={form.controlName}
-                    onChange={(e) =>
-                      setForm({ ...form, controlName: e.target.value })
+                  <Label>Risk rating</Label>
+                  <Select
+                    value={form.riskRating}
+                    onValueChange={(v) =>
+                      setForm({ ...form, riskRating: v as any })
                     }
-                  />
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {RATINGS.map((r) => (
+                        <SelectItem key={r} value={r}>
+                          {r}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
+
                 <div>
                   <Label>Test procedure</Label>
                   <Textarea
