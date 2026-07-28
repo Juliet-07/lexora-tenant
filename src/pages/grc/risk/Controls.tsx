@@ -98,11 +98,20 @@ export default function GrcControls() {
                     <TableHead>Owner</TableHead>
                     <TableHead>Frequency</TableHead>
                     <TableHead>Linked risks</TableHead>
+                    <TableHead>Last test</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {controls.map((c) => (
+                  {controls.map((c) => {
+                    const last = [...tests]
+                      .filter((t) => t.controlId === c._id)
+                      .sort(
+                        (a, b) =>
+                          new Date(b.testedAt).getTime() -
+                          new Date(a.testedAt).getTime(),
+                      )[0];
+                    return (
                     <TableRow key={c._id}>
                       <TableCell className="font-mono text-xs">
                         {c.code}
@@ -114,6 +123,25 @@ export default function GrcControls() {
                       <TableCell>{c.owner || "—"}</TableCell>
                       <TableCell>{c.frequency}</TableCell>
                       <TableCell>{c.linkedRiskCount}</TableCell>
+                      <TableCell>
+                        {last ? (
+                          <Badge
+                            variant="outline"
+                            className={
+                              last.outcome === "Pass"
+                                ? "text-emerald-600 border-emerald-500/30"
+                                : "text-rose-600 border-rose-500/30"
+                            }
+                          >
+                            {last.outcome} ·{" "}
+                            {new Date(last.testedAt).toLocaleDateString()}
+                          </Badge>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">
+                            Not tested
+                          </span>
+                        )}
+                      </TableCell>
                       <TableCell className="text-right">
                         <Button
                           size="sm"
@@ -124,11 +152,12 @@ export default function GrcControls() {
                         </Button>
                       </TableCell>
                     </TableRow>
-                  ))}
+                    );
+                  })}
                   {controls.length === 0 && (
                     <TableRow>
                       <TableCell
-                        colSpan={7}
+                        colSpan={8}
                         className="text-center py-8 text-muted-foreground"
                       >
                         No controls yet.
