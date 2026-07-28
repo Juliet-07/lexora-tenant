@@ -18,7 +18,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Printer, ArrowDownRight, ArrowUpRight, Minus } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, Minus } from "lucide-react";
 import { fetchRisks, bandTone, type Risk } from "@/lib/grc/risk-api";
 
 type View = "inherent" | "residual";
@@ -125,9 +125,6 @@ export default function GrcHeatmap() {
             no separate scoring is kept here.
           </p>
         </div>
-        <Button variant="outline" onClick={() => window.print()}>
-          <Printer className="h-4 w-4 mr-2" /> Board-ready print
-        </Button>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -147,7 +144,6 @@ export default function GrcHeatmap() {
         <TabsList>
           <TabsTrigger value="matrix">Matrix</TabsTrigger>
           <TabsTrigger value="comparison">Movement</TabsTrigger>
-          <TabsTrigger value="board">Board pack</TabsTrigger>
         </TabsList>
 
         <TabsContent value="matrix" className="space-y-4">
@@ -302,68 +298,6 @@ export default function GrcHeatmap() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="board">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">
-                Auto-generated narrative
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm leading-relaxed">
-              <p>
-                The enterprise register currently holds{" "}
-                <strong>{active.length}</strong> active risks.{" "}
-                <strong>{counts.Extreme}</strong> sit in the Extreme band and{" "}
-                <strong>{counts.High}</strong> in High on a residual basis,
-                which is what the Board is asked to focus on this cycle.
-              </p>
-              <p>
-                Controls reduce measured exposure on{" "}
-                <strong>
-                  {movements.filter((m) => m.direction === "improved").length}
-                </strong>{" "}
-                risks, leave{" "}
-                <strong>
-                  {movements.filter((m) => m.direction === "stable").length}
-                </strong>{" "}
-                unchanged, and{" "}
-                <strong>
-                  {
-                    movements.filter((m) => m.direction === "deteriorated")
-                      .length
-                  }
-                </strong>{" "}
-                show no net benefit after control effectiveness is applied.
-              </p>
-              {movements.slice(-3).reverse().length > 0 && (
-                <div>
-                  <p className="font-medium mb-1">
-                    Risks with the weakest control uplift:
-                  </p>
-                  <ul className="list-disc pl-5 space-y-1">
-                    {movements
-                      .slice(-3)
-                      .reverse()
-                      .map((m) => (
-                        <li key={m.risk._id}>
-                          {m.risk.title} — residual {m.risk.residualScore} (
-                          {m.risk.residualBand}), owner{" "}
-                          {m.risk.owner || "unassigned"}
-                        </li>
-                      ))}
-                  </ul>
-                </div>
-              )}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => window.print()}
-              >
-                <Printer className="h-4 w-4 mr-2" /> Print for Board pack
-              </Button>
-            </CardContent>
-          </Card>
-        </TabsContent>
       </Tabs>
 
       <Sheet open={!!cell} onOpenChange={(o) => !o && setCell(null)}>
