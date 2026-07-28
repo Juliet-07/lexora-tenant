@@ -116,7 +116,35 @@ export default function GrcOverview() {
   }).length;
   const publishedCodes = g.codes.filter((c) => c.status === "Published").length;
 
+  const openResolutions = resolutions.filter((r) => r.status !== "Closed").length;
+
+  // ── Compliance programme (obligations / certifications / change)
+  const compOverdue = comp.obligations.filter((o) => obligationStatus(o) === "Overdue").length;
+  const compDue = comp.obligations.filter((o) => obligationStatus(o) === "Due").length;
+  const certsExpiring = comp.certifications.filter(
+    (c) => c.expiryDate <= new Date(Date.now() + 90 * 86400000).toISOString().slice(0, 10),
+  ).length;
+  const openRegChanges = comp.changes.filter((c) => c.assessmentStatus !== "Complete").length;
+
+  // ── Risk programme
+  const watchListed = programme.emerging.filter((e) => e.status === "Watching").length;
+  const testsDue = programme.tests.filter((t) => t.status !== "Signed off" && t.status !== "Complete").length;
+  const progDeficiencies = programme.deficiencies.filter((d) => d.status !== "Closed").length;
+
+  // ── Deals
+  const activeDeals = deals.deals.filter((d) => d.status === "Active");
+  const pipelineValue = activeDeals.reduce((t, d) => t + d.value, 0);
+
+  // ── ESG
+  const esgE = pillarScore(esg.metrics, "Environmental");
+  const esgS = pillarScore(esg.metrics, "Social");
   const health = grcHealthScore(s);
+  const esgTotal = consolidatedScore(esgE, esgS, health);
+  const materialTopics = esg.topics.filter(
+    (t) => topicStatus(t, esg.cycle.threshold) === "Material",
+  ).length;
+  const esgSignedOff = esg.indicators.filter((i) => i.status === "Signed off").length;
+
 
   // heatmap
   const cells: Record<string, number> = {};
