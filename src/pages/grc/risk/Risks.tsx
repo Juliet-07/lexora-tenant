@@ -260,9 +260,6 @@ export default function GrcRisks() {
   );
 }
 
-  );
-}
-
 function NewRiskDialog({
   open,
   onOpenChange,
