@@ -42,7 +42,6 @@ import {
 } from "@/lib/grc/risk-api";
 
 export default function GrcControls() {
-  const queryClient = useQueryClient();
   const { data: controls = [], isLoading } = useQuery({
     queryKey: ["grc-controls"],
     queryFn: fetchControls,
@@ -54,6 +53,7 @@ export default function GrcControls() {
 
   const [newOpen, setNewOpen] = useState(false);
   const [testOpen, setTestOpen] = useState<GrcControl | null>(null);
+
 
 
   if (isLoading)
