@@ -27,6 +27,9 @@ import ComplianceObligations from "@/pages/grc/compliance/Obligations";
 import ComplianceCalendar from "@/pages/grc/compliance/Calendar";
 import ComplianceCertifications from "@/pages/grc/compliance/Certifications";
 import ComplianceRegulatoryChange from "@/pages/grc/compliance/RegulatoryChange";
+import InvestorReadiness from "@/pages/grc/intelligence/InvestorReadiness";
+import CompanyValuation from "@/pages/grc/intelligence/CompanyValuation";
+import PortfolioAnalysis from "@/pages/grc/intelligence/PortfolioAnalysis";
 
 /** GRC — Governance, Risk & Compliance. Tenant-admin only for now. */
 export const grcRoutes = ({ isAdmin, accessibleModules }: RouteContext) => {
@@ -71,7 +74,25 @@ export const grcRoutes = ({ isAdmin, accessibleModules }: RouteContext) => {
         element={layout(<DealDetail />)}
       />,
 
+      // Deal Intelligence
+      <Route
+        key="grc-intel-readiness"
+        path="/grc/intelligence/investor-readiness"
+        element={layout(<InvestorReadiness />)}
+      />,
+      <Route
+        key="grc-intel-valuation"
+        path="/grc/intelligence/valuation"
+        element={layout(<CompanyValuation />)}
+      />,
+      <Route
+        key="grc-intel-portfolio"
+        path="/grc/intelligence/portfolio"
+        element={layout(<PortfolioAnalysis />)}
+      />,
+
       // Governance
+
       <Route
         key="grc-gov-meetings"
         path="/grc/governance/meetings"
