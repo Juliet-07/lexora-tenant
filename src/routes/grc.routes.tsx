@@ -7,6 +7,10 @@ import GrcRisks from "@/pages/grc/risk/Risks";
 import GrcControls from "@/pages/grc/risk/Controls";
 import GrcTreatment from "@/pages/grc/risk/Treatment";
 import GrcIncidents from "@/pages/grc/risk/Incidents";
+import GrcHeatmap from "@/pages/grc/risk/Heatmap";
+import GrcEmergingRisks from "@/pages/grc/risk/EmergingRisks";
+import GrcTestingProgramme from "@/pages/grc/risk/Testing";
+import GrcDeficiencies from "@/pages/grc/risk/Deficiencies";
 import GrcCompliance from "@/pages/grc/Compliance";
 import GrcPolicies from "@/pages/grc/compliance/Policies";
 import GrcAudits from "@/pages/grc/compliance/Audits";
@@ -124,6 +128,26 @@ export const grcRoutes = ({ isAdmin, accessibleModules }: RouteContext) => {
         key="grc-risk-register"
         path="/grc/risk/register"
         element={layout(<GrcRisks />)}
+      />,
+      <Route
+        key="grc-risk-heatmap"
+        path="/grc/risk/heatmap"
+        element={layout(<GrcHeatmap />)}
+      />,
+      <Route
+        key="grc-risk-emerging"
+        path="/grc/risk/emerging"
+        element={layout(<GrcEmergingRisks />)}
+      />,
+      <Route
+        key="grc-risk-testing"
+        path="/grc/risk/testing"
+        element={layout(<GrcTestingProgramme />)}
+      />,
+      <Route
+        key="grc-risk-deficiencies"
+        path="/grc/risk/deficiencies"
+        element={layout(<GrcDeficiencies />)}
       />,
       <Route
         key="grc-risk-appetite"
