@@ -34,6 +34,11 @@ import ComplianceRegulatoryChange from "@/pages/grc/compliance/RegulatoryChange"
 import InvestorReadiness from "@/pages/grc/intelligence/InvestorReadiness";
 import CompanyValuation from "@/pages/grc/intelligence/CompanyValuation";
 import PortfolioAnalysis from "@/pages/grc/intelligence/PortfolioAnalysis";
+import EsgDashboard from "@/pages/grc/esg/Dashboard";
+import EsgEnvironmental from "@/pages/grc/esg/Environmental";
+import EsgSocial from "@/pages/grc/esg/Social";
+import EsgMateriality from "@/pages/grc/esg/Materiality";
+import EsgReporting from "@/pages/grc/esg/Reporting";
 
 /** GRC — Governance, Risk & Compliance. Tenant-admin only for now. */
 export const grcRoutes = ({ isAdmin, accessibleModules }: RouteContext) => {
