@@ -73,7 +73,11 @@ const STATUSES: DefStatus[] = [
   "Closed",
 ];
 
-export default function GrcDeficiencies() {
+export default function GrcDeficiencies({
+  embedded = false,
+}: {
+  embedded?: boolean;
+} = {}) {
   const store = useRiskProgramme();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [openNew, setOpenNew] = useState(false);
@@ -141,7 +145,7 @@ export default function GrcDeficiencies() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Deficiencies</h1>
+          {!embedded && <h1 className="text-2xl font-bold">Deficiencies</h1>}
           <p className="text-sm text-muted-foreground">
             One remediation cycle for control test failures, incident findings,
             and audit findings. Evidence and validation are required before
