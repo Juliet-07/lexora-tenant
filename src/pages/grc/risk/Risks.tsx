@@ -260,57 +260,6 @@ export default function GrcRisks() {
   );
 }
 
-function HeatmapCard({ risks }: { risks: Risk[] }) {
-  const cells: Record<string, Risk[]> = {};
-  risks.forEach((r) => {
-    const k = `${r.likelihood}-${r.impact}`;
-    (cells[k] = cells[k] || []).push(r);
-  });
-  return (
-    <Card>
-      <CardContent className="p-4">
-        <div className="grid grid-cols-6 gap-1 text-xs">
-          <div />
-          {[1, 2, 3, 4, 5].map((i) => (
-            <div key={"h" + i} className="text-center text-muted-foreground">
-              Impact {i}
-            </div>
-          ))}
-          {[5, 4, 3, 2, 1].map((l) => (
-            <div key={"row" + l} className="contents">
-              <div className="text-right pr-1 text-muted-foreground">
-                Likelihood {l}
-              </div>
-              {[1, 2, 3, 4, 5].map((i) => {
-                const list = cells[`${l}-${i}`] || [];
-                const score = l * i;
-                const bg =
-                  score >= 17
-                    ? "bg-rose-500/70"
-                    : score >= 10
-                      ? "bg-orange-500/60"
-                      : score >= 5
-                        ? "bg-amber-500/50"
-                        : "bg-emerald-500/40";
-                return (
-                  <div
-                    key={`c${l}${i}`}
-                    className={`min-h-[64px] rounded ${bg} p-1 text-white text-[10px] space-y-0.5 overflow-hidden`}
-                  >
-                    {list.slice(0, 3).map((r) => (
-                      <div key={r._id} className="truncate">
-                        {r.title}
-                      </div>
-                    ))}
-                    {list.length > 3 && <div>+{list.length - 3} more</div>}
-                  </div>
-                );
-              })}
-            </div>
-          ))}
-        </div>
-      </CardContent>
-    </Card>
   );
 }
 
