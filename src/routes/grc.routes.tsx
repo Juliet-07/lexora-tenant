@@ -27,6 +27,9 @@ import ComplianceObligations from "@/pages/grc/compliance/Obligations";
 import ComplianceCalendar from "@/pages/grc/compliance/Calendar";
 import ComplianceCertifications from "@/pages/grc/compliance/Certifications";
 import ComplianceRegulatoryChange from "@/pages/grc/compliance/RegulatoryChange";
+import InvestorReadiness from "@/pages/grc/intelligence/InvestorReadiness";
+import CompanyValuation from "@/pages/grc/intelligence/CompanyValuation";
+import PortfolioAnalysis from "@/pages/grc/intelligence/PortfolioAnalysis";
 
 /** GRC — Governance, Risk & Compliance. Tenant-admin only for now. */
 export const grcRoutes = ({ isAdmin, accessibleModules }: RouteContext) => {
