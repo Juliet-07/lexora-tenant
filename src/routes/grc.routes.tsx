@@ -101,6 +101,34 @@ export const grcRoutes = ({ isAdmin, accessibleModules }: RouteContext) => {
       />,
 
       // Governance
+      // ESG
+      <Route
+        key="grc-esg-dashboard"
+        path="/grc/esg/dashboard"
+        element={layout(<EsgDashboard />)}
+      />,
+      <Route
+        key="grc-esg-environmental"
+        path="/grc/esg/environmental"
+        element={layout(<EsgEnvironmental />)}
+      />,
+      <Route
+        key="grc-esg-social"
+        path="/grc/esg/social"
+        element={layout(<EsgSocial />)}
+      />,
+      <Route
+        key="grc-esg-materiality"
+        path="/grc/esg/materiality"
+        element={layout(<EsgMateriality />)}
+      />,
+      <Route
+        key="grc-esg-reporting"
+        path="/grc/esg/reporting"
+        element={layout(<EsgReporting />)}
+      />,
+
+      // Governance
 
       <Route
         key="grc-gov-meetings"
