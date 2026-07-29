@@ -44,7 +44,6 @@ export function AppRoutes() {
     );
   }
 
-
   if (!user) return <Login />;
 
   const ctx = {

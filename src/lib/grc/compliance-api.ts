@@ -114,6 +114,47 @@ export interface ComplianceObligation {
   activeReminderDays: number | null;
 }
 
+export type RenewalStage =
+  | "Current"
+  | "Renewal initiated"
+  | "Documentation gathering"
+  | "Application submitted"
+  | "Approved"
+  | "Expired";
+export const RENEWAL_STAGES: RenewalStage[] = [
+  "Current",
+  "Renewal initiated",
+  "Documentation gathering",
+  "Application submitted",
+  "Approved",
+  "Expired",
+];
+
+export interface CertEvidence {
+  name: string;
+  fileUrl: string | null;
+  mimeType: string | null;
+  size: number;
+  uploadedAt: string;
+  uploadedBy: string;
+}
+
+export interface Certification {
+  _id: string;
+  name: string;
+  issuingBody: string;
+  certificateNumber: string;
+  issueDate: string;
+  expiryDate: string;
+  renewalRequirements: string;
+  cost: number;
+  currency: string;
+  responsiblePerson: string;
+  leadTimeDays: number;
+  renewalStage: RenewalStage;
+  evidence: CertEvidence[];
+}
+
 export const fetchObligations = async (): Promise<ComplianceObligation[]> => {
   const res = await api.get("/grc/compliance/obligations");
   const d = res.data?.data ?? res.data;
@@ -186,4 +227,63 @@ export const confirmFilingReceipt = async (
     { receiptRef },
   );
   return res.data?.data ?? res.data;
+};
+
+export const fetchCertifications = async (): Promise<Certification[]> => {
+  const res = await api.get("/grc/compliance/certifications");
+  const d = res.data?.data ?? res.data;
+  return Array.isArray(d) ? d : [];
+};
+
+export const createCertification = async (dto: {
+  name: string;
+  issuingBody?: string;
+  certificateNumber?: string;
+  issueDate: string;
+  expiryDate: string;
+  renewalRequirements?: string;
+  cost?: number;
+  currency?: string;
+  responsiblePerson?: string;
+  leadTimeDays?: number;
+}): Promise<Certification> => {
+  const res = await api.post("/grc/compliance/certifications", dto);
+  return res.data?.data ?? res.data;
+};
+
+export const updateCertStage = async (
+  id: string,
+  renewalStage: RenewalStage,
+): Promise<Certification> => {
+  const res = await api.patch(`/grc/compliance/certifications/${id}/stage`, {
+    renewalStage,
+  });
+  return res.data?.data ?? res.data;
+};
+
+export const recordCertRenewal = async (
+  id: string,
+  newExpiryDate: string,
+): Promise<Certification> => {
+  const res = await api.patch(`/grc/compliance/certifications/${id}/renew`, {
+    newExpiryDate,
+  });
+  return res.data?.data ?? res.data;
+};
+
+export const addCertEvidence = async (
+  id: string,
+  files: File[],
+): Promise<Certification> => {
+  const form = new FormData();
+  files.forEach((f) => form.append("files", f));
+  const res = await api.post(
+    `/grc/compliance/certifications/${id}/evidence`,
+    form,
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const deleteCertification = async (id: string): Promise<void> => {
+  await api.delete(`/grc/compliance/certifications/${id}`);
 };

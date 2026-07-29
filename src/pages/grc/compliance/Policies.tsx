@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,7 +12,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import {
   Select,
   SelectContent,
@@ -27,16 +33,16 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Plus, Upload, Download, Trash2, Link as LinkIcon, FileText } from "lucide-react";
+import { Plus, Upload, Download, Trash2, FileText } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import {
-  addPolicy,
+  fetchPolicies,
+  createPolicy,
   deletePolicy,
-  readFileAsDataUrl,
-  useUploadedPolicies,
+  resolvePolicyFileUrl,
+  type Policy,
   type PolicyType,
-  type UploadedPolicy,
-} from "@/lib/grc/policyAckStore";
+} from "@/lib/grc/policy-api";
 
 const typeLabel: Record<PolicyType, string> = {
   organisation: "Organisation policy",
@@ -44,22 +50,31 @@ const typeLabel: Record<PolicyType, string> = {
 };
 
 export default function GrcPolicies() {
-  const policies = useUploadedPolicies();
+  const { data: policies = [], isLoading } = useQuery({
+    queryKey: ["grc-policies"],
+    queryFn: fetchPolicies,
+  });
   const [open, setOpen] = useState(false);
-  const [selected, setSelected] = useState<UploadedPolicy | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const current = policies.find((p) => p._id === selectedId) ?? null;
 
-  const current = useMemo(
-    () => policies.find((p) => p.id === selected?.id) ?? null,
-    [policies, selected],
-  );
+  if (isLoading)
+    return (
+      <div className="py-24 text-center text-sm text-muted-foreground">
+        Loading policies…
+      </div>
+    );
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-start flex-wrap gap-2">
         <div>
-          <h1 className="text-2xl font-bold">Policy &amp; Procedure Management</h1>
+          <h1 className="text-2xl font-bold">
+            Policy &amp; Procedure Management
+          </h1>
           <p className="text-sm text-muted-foreground">
-            Upload policies and track acknowledgement by employees and board members.
+            Upload policies and track acknowledgement by employees and board
+            members.
           </p>
         </div>
         <Button onClick={() => setOpen(true)}>
@@ -83,16 +98,19 @@ export default function GrcPolicies() {
             <TableBody>
               {policies.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-sm text-muted-foreground py-10">
+                  <TableCell
+                    colSpan={6}
+                    className="text-center text-sm text-muted-foreground py-10"
+                  >
                     No policies uploaded yet.
                   </TableCell>
                 </TableRow>
               )}
               {policies.map((p) => (
                 <TableRow
-                  key={p.id}
+                  key={p._id}
                   className="cursor-pointer"
-                  onClick={() => setSelected(p)}
+                  onClick={() => setSelectedId(p._id)}
                 >
                   <TableCell className="font-medium">{p.title}</TableCell>
                   <TableCell>{p.category || "—"}</TableCell>
@@ -101,10 +119,12 @@ export default function GrcPolicies() {
                       {typeLabel[p.type]}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{p.fileName}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
+                    {p.fileName}
+                  </TableCell>
                   <TableCell>{p.acknowledgments.length}</TableCell>
                   <TableCell className="text-xs">
-                    {new Date(p.uploadedAt).toLocaleDateString()}
+                    {new Date(p.createdAt).toLocaleDateString()}
                   </TableCell>
                 </TableRow>
               ))}
@@ -114,7 +134,9 @@ export default function GrcPolicies() {
       </Card>
 
       <UploadDialog open={open} onOpenChange={setOpen} />
-      <PolicySheet policy={current} onClose={() => setSelected(null)} />
+      {current && (
+        <PolicySheet policy={current} onClose={() => setSelectedId(null)} />
+      )}
     </div>
   );
 }
@@ -126,46 +148,50 @@ function UploadDialog({
   open: boolean;
   onOpenChange: (v: boolean) => void;
 }) {
+  const queryClient = useQueryClient();
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("");
   const [type, setType] = useState<PolicyType>("organisation");
   const [file, setFile] = useState<File | null>(null);
-  const [busy, setBusy] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const reset = () => {
-    setTitle("");
-    setCategory("");
-    setType("organisation");
-    setFile(null);
-  };
-
-  const submit = async () => {
-    if (!title.trim()) return toast({ title: "Title required", variant: "destructive" });
-    if (!file) return toast({ title: "Document required", variant: "destructive" });
-    setBusy(true);
-    try {
-      const tooLarge = file.size > 3 * 1024 * 1024;
-      const dataUrl = tooLarge ? null : await readFileAsDataUrl(file);
-      addPolicy({
+  const mutation = useMutation({
+    mutationFn: () =>
+      createPolicy({
         title: title.trim(),
         category: category.trim(),
         type,
-        fileName: file.name,
-        fileDataUrl: dataUrl,
-        mimeType: file.type || null,
-      });
+        file: file!,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["grc-policies"] });
       toast({
         title: "Policy uploaded",
-        description: tooLarge
-          ? "File over 3MB — reference stored without preview."
-          : undefined,
+        description:
+          type === "board"
+            ? "Board members have been emailed their acknowledgement link."
+            : undefined,
       });
-      reset();
+      setTitle("");
+      setCategory("");
+      setType("organisation");
+      setFile(null);
       onOpenChange(false);
-    } finally {
-      setBusy(false);
-    }
+    },
+    onError: (err: any) =>
+      toast({
+        title: "Failed to upload policy",
+        description: err?.response?.data?.message,
+        variant: "destructive",
+      }),
+  });
+
+  const submit = () => {
+    if (!title.trim())
+      return toast({ title: "Title required", variant: "destructive" });
+    if (!file)
+      return toast({ title: "Document required", variant: "destructive" });
+    mutation.mutate();
   };
 
   return (
@@ -189,15 +215,26 @@ function UploadDialog({
           </div>
           <div>
             <Label>Type</Label>
-            <Select value={type} onValueChange={(v) => setType(v as PolicyType)}>
+            <Select
+              value={type}
+              onValueChange={(v) => setType(v as PolicyType)}
+            >
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="organisation">Organisation policy</SelectItem>
+                <SelectItem value="organisation">
+                  Organisation policy
+                </SelectItem>
                 <SelectItem value="board">Board policy</SelectItem>
               </SelectContent>
             </Select>
+            {type === "board" && (
+              <p className="text-xs text-muted-foreground mt-1">
+                Every current board member will be emailed their own
+                acknowledgement link.
+              </p>
+            )}
           </div>
           <div>
             <Label>Document</Label>
@@ -219,8 +256,8 @@ function UploadDialog({
           </div>
         </div>
         <DialogFooter>
-          <Button onClick={submit} disabled={busy}>
-            Upload
+          <Button onClick={submit} disabled={mutation.isPending}>
+            {mutation.isPending ? "Uploading…" : "Upload"}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -232,11 +269,24 @@ function PolicySheet({
   policy,
   onClose,
 }: {
-  policy: UploadedPolicy | null;
+  policy: Policy;
   onClose: () => void;
 }) {
-  if (!policy) return null;
-  const externalLink = `${window.location.origin}/policy-ack/${policy.token}`;
+  const queryClient = useQueryClient();
+  const deleteMut = useMutation({
+    mutationFn: () => deletePolicy(policy._id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["grc-policies"] });
+      toast({ title: "Policy deleted" });
+      onClose();
+    },
+    onError: (err: any) =>
+      toast({
+        title: "Failed to delete",
+        description: err?.response?.data?.message,
+        variant: "destructive",
+      }),
+  });
 
   return (
     <Sheet open onOpenChange={(o) => !o && onClose()}>
@@ -246,7 +296,9 @@ function PolicySheet({
         </SheetHeader>
         <div className="mt-4 space-y-5">
           <div className="flex flex-wrap gap-2">
-            {policy.category && <Badge variant="outline">{policy.category}</Badge>}
+            {policy.category && (
+              <Badge variant="outline">{policy.category}</Badge>
+            )}
             <Badge variant={policy.type === "board" ? "default" : "outline"}>
               {typeLabel[policy.type]}
             </Badge>
@@ -257,8 +309,12 @@ function PolicySheet({
               <FileText className="h-4 w-4 shrink-0" />
               <span className="truncate">{policy.fileName}</span>
             </div>
-            {policy.fileDataUrl && (
-              <a href={policy.fileDataUrl} download={policy.fileName}>
+            {policy.fileUrl && (
+              <a
+                href={resolvePolicyFileUrl(policy.fileUrl)}
+                target="_blank"
+                rel="noreferrer"
+              >
                 <Button variant="outline" size="sm">
                   <Download className="h-4 w-4 mr-1" /> Download
                 </Button>
@@ -267,24 +323,10 @@ function PolicySheet({
           </div>
 
           {policy.type === "board" && (
-            <div className="space-y-2">
-              <Label>External acknowledgement link</Label>
-              <div className="flex gap-2">
-                <Input readOnly value={externalLink} className="text-xs" />
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    navigator.clipboard.writeText(externalLink);
-                    toast({ title: "Link copied" });
-                  }}
-                >
-                  <LinkIcon className="h-4 w-4" />
-                </Button>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Share with board members to record their acknowledgement.
-              </p>
-            </div>
+            <p className="text-xs text-muted-foreground">
+              Every current board member was emailed their own personal
+              acknowledgement link when this policy was published.
+            </p>
           )}
 
           <div className="border-t pt-3">
@@ -292,17 +334,22 @@ function PolicySheet({
               Acknowledgements ({policy.acknowledgments.length})
             </div>
             {policy.acknowledgments.length === 0 ? (
-              <p className="text-xs text-muted-foreground">No acknowledgements yet.</p>
+              <p className="text-xs text-muted-foreground">
+                No acknowledgements yet.
+              </p>
             ) : (
               <div className="space-y-1">
-                {policy.acknowledgments.map((a) => (
+                {policy.acknowledgments.map((a, i) => (
                   <div
-                    key={a.email + a.ackedAt}
+                    key={i}
                     className="flex justify-between gap-2 text-sm border rounded px-2 py-1"
                   >
                     <span className="truncate">
                       {a.name}
-                      <span className="text-muted-foreground text-xs"> · {a.email}</span>
+                      <span className="text-muted-foreground text-xs">
+                        {" "}
+                        · {a.email}
+                      </span>
                     </span>
                     <span className="text-emerald-600 text-xs whitespace-nowrap">
                       {a.source === "external" ? "External" : "Employee"} ·{" "}
@@ -316,11 +363,8 @@ function PolicySheet({
 
           <Button
             variant="destructive"
-            onClick={() => {
-              deletePolicy(policy.id);
-              toast({ title: "Policy deleted" });
-              onClose();
-            }}
+            disabled={deleteMut.isPending}
+            onClick={() => deleteMut.mutate()}
           >
             <Trash2 className="h-4 w-4 mr-1" /> Delete policy
           </Button>
