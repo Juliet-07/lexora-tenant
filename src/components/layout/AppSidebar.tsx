@@ -383,6 +383,7 @@ export function AppSidebar() {
     { title: "Payslips", url: "/my/payslips", icon: Wallet },
     { title: "Requisitions", url: "/my/requisitions", icon: ClipboardList },
     { title: "Learning", url: "/my/learning", icon: GraduationCap },
+    { title: "Policies", url: "/my/policies", icon: ShieldCheck },
     { title: "Disputes", url: "/my/disputes", icon: ShieldAlert },
     {
       title: "Team Disputes",
