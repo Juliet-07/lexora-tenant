@@ -240,7 +240,7 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
   crm: [
     { title: "Dashboard", url: "/", icon: LayoutDashboard },
     {
-      title: "Pipeline",
+      title: "CRM Pipeline",
       url: "/crm/pipeline",
       icon: TrendingUp,
       adminOnly: true,
