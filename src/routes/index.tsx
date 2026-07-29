@@ -11,6 +11,7 @@ import { employeeRoutes } from "./employee.routes";
 import SignContractPage from "@/pages/SigninContractPage";
 import MeetingAckPage from "@/pages/grc/governance/MeetingAck";
 import MinutesReviewPage from "@/pages/grc/governance/MinutesReview";
+import PolicyAckPage from "@/pages/grc/compliance/PolicyAck";
 
 /**
  * Top-level router. Module-specific routes live in their own files so
@@ -21,6 +22,7 @@ const PUBLIC_ROUTE_PATTERNS = [
   /^\/sign-contract\/[^/]+$/,
   /^\/meeting-ack\/[^/]+$/,
   /^\/minutes-review\/[^/]+$/,
+  /^\/policy-ack\/[^/]+$/,
 ];
 
 export function AppRoutes() {
@@ -37,9 +39,11 @@ export function AppRoutes() {
         <Route path="/sign-contract/:token" element={<SignContractPage />} />
         <Route path="/meeting-ack/:token" element={<MeetingAckPage />} />
         <Route path="/minutes-review/:token" element={<MinutesReviewPage />} />
+        <Route path="/policy-ack/:token" element={<PolicyAckPage />} />
       </Routes>
     );
   }
+
 
   if (!user) return <Login />;
 
