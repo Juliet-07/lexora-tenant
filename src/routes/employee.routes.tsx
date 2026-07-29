@@ -11,6 +11,7 @@ import MyDepartment from "@/pages/hr/employee/MyDepartment";
 import MyDisputes from "@/pages/hr/employee/MyDisputes";
 import MyLearning from "@/pages/hr/employee/MyLearning";
 import TeamDisputes from "@/pages/hr/employee/TeamDisputes";
+import MyPolicies from "@/pages/hr/employee/MyPolicies";
 import EmployeeOnboarding from "@/pages/EmployeeOnboarding";
 
 /** Self-service routes available only to employee. */
@@ -39,6 +40,11 @@ export const employeeRoutes = ({ isAdmin, hierarchyRole }: RouteContext) => {
       key="my-disputes"
       path="/my/disputes"
       element={layout(<MyDisputes />)}
+    />,
+    <Route
+      key="my-policies"
+      path="/my/policies"
+      element={layout(<MyPolicies />)}
     />,
     <Route
       key="my-learning"
