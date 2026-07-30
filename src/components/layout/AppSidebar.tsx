@@ -239,7 +239,8 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
 
   // ── CRM & Project Management ──────────────────────────────
   crm: [
-    { title: "CRM Dashboard", url: "/crm/overview", icon: LayoutDashboard },
+    { title: "Dashboard", url: "/", icon: LayoutDashboard },
+    { title: "CRM Overview", url: "/crm/overview", icon: BarChart3 },
     {
       title: "CRM",
       icon: TrendingUp,
@@ -287,7 +288,6 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
       ],
     },
     { title: "Notifications", url: "/crm/notifications", icon: Bell },
-    { title: "Clients (KYC)", url: "/clients", icon: Users, adminOnly: true },
   ],
 
   // ── HR & People Management ─────────────────────────────────
