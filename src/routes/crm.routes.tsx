@@ -7,6 +7,8 @@ import TimeTracking from "@/pages/crm/TimeTracking";
 import Resources from "@/pages/crm/Resources";
 import Invoicing from "@/pages/crm/Invoicing";
 import Contracts from "@/pages/crm/Contracts";
+import TrustAccounting from "@/pages/crm/TrustAccounting";
+import Documents from "@/pages/crm/Documents";
 import { Navigate } from "react-router-dom";
 import ClientPortal from "@/pages/crm/ClientPortal";
 import Billing from "@/pages/Billing";
@@ -66,10 +68,16 @@ export const crmRoutes = ({ isAdmin, accessibleModules }: RouteContext) => {
         element={layout(<Contracts />)}
       />,
       <Route
+        key="crm-trust"
+        path="/crm/trust"
+        element={layout(<TrustAccounting />)}
+      />,
+      <Route
         key="crm-documents"
         path="/crm/documents"
-        element={<Navigate to="/crm/contracts" replace />}
+        element={layout(<Documents />)}
       />,
+
       <Route
         key="crm-portal"
         path="/crm/portal"

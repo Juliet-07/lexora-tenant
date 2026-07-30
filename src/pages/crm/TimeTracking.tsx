@@ -1,230 +1,303 @@
-import { useState, useEffect, useRef } from "react";
+import { useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Progress } from "@/components/ui/progress";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Play, Square, Timer, DollarSign, Clock, TrendingUp } from "lucide-react";
-import { projects, timeEntries as initialEntries, type TimeEntry } from "@/data/mockData";
-import { useAuth } from "@/contexts/AuthContext";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Play, Square, Plus, Lock, CheckCircle2, XCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import {
+  timeEntries as seed,
+  TimeEntry,
+  TimesheetStatus,
+  mandates,
+  rateCards,
+  utilisation,
+  money,
+} from "@/data/crmPmMockData";
+
+const statusClass: Record<TimesheetStatus, string> = {
+  Draft: "bg-muted text-muted-foreground",
+  Submitted: "bg-primary/10 text-primary",
+  "Lead Approved": "bg-warning/10 text-warning",
+  Approved: "bg-success/10 text-success",
+  Rejected: "bg-destructive/10 text-destructive",
+};
+
+const ME = "Sarah Chen";
 
 export default function TimeTracking() {
-  const { user, isAdmin } = useAuth();
+  const [entries, setEntries] = useState<TimeEntry[]>(seed);
+  const [running, setRunning] = useState<{ start: number; mandateId: string } | null>(
+    null,
+  );
+  const [selected, setSelected] = useState<string[]>([]);
+  const [openNew, setOpenNew] = useState(false);
+  const [lockDate, setLockDate] = useState("2026-06-30");
+  const [draft, setDraft] = useState({
+    date: "2026-07-30",
+    mandateId: mandates[0].id,
+    taskTitle: "",
+    narrative: "",
+    hours: 1,
+    billable: true,
+  });
   const { toast } = useToast();
-  const [entries, setEntries] = useState<TimeEntry[]>(initialEntries);
-  const [running, setRunning] = useState(false);
-  const [seconds, setSeconds] = useState(0);
-  const [activeProject, setActiveProject] = useState("");
-  const [activeNote, setActiveNote] = useState("");
-  const intervalRef = useRef<number | null>(null);
 
-  // manual entry
-  const [manual, setManual] = useState({ projectId: "", hours: 0, description: "", rate: 250 });
+  const pending = entries.filter((e) =>
+    ["Submitted", "Lead Approved"].includes(e.status),
+  );
+  const approvedValue = entries
+    .filter((e) => e.status === "Approved" && e.billable)
+    .reduce((s, e) => s + e.hours * e.rate, 0);
+  const billableHrs = entries
+    .filter((e) => e.billable)
+    .reduce((s, e) => s + e.hours, 0);
+  const totalHrs = entries.reduce((s, e) => s + e.hours, 0);
 
-  useEffect(() => {
-    if (running) {
-      intervalRef.current = window.setInterval(() => setSeconds(s => s + 1), 1000);
-    } else if (intervalRef.current) {
-      window.clearInterval(intervalRef.current);
-    }
-    return () => {
-      if (intervalRef.current) window.clearInterval(intervalRef.current);
-    };
-  }, [running]);
-
-  const fullName = user ? `${user.firstName} ${user.lastName}` : "";
-  const myProjects = isAdmin ? projects : projects.filter(p => p.assignedTeam.includes(fullName));
-  const visible = isAdmin ? entries : entries.filter(e => e.teamMemberName === fullName);
-
-  const totalHours = visible.reduce((s, e) => s + e.hours, 0);
-  const billableHours = visible.filter(e => e.billable).reduce((s, e) => s + e.hours, 0);
-  const totalAmount = visible.filter(e => e.billable).reduce((s, e) => s + e.hours * e.rate, 0);
-  const utilization = Math.min(100, Math.round((billableHours / Math.max(totalHours, 1)) * 100));
-
-  const fmt = (s: number) => {
-    const h = Math.floor(s / 3600);
-    const m = Math.floor((s % 3600) / 60);
-    const sec = s % 60;
-    return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
+  const setStatus = (ids: string[], status: TimesheetStatus, reason?: string) => {
+    setEntries((p) =>
+      p.map((e) =>
+        ids.includes(e.id) ? { ...e, status, rejectReason: reason } : e,
+      ),
+    );
+    setSelected([]);
   };
 
-  const stopTimer = () => {
-    if (!activeProject || seconds < 5) {
-      setRunning(false);
-      setSeconds(0);
-      return;
-    }
-    const project = projects.find(p => p.id === activeProject);
-    const hours = Math.round((seconds / 3600) * 100) / 100;
-    const entry: TimeEntry = {
-      id: `TE-${String(entries.length + 1).padStart(3, "0")}`,
-      projectId: activeProject,
-      projectName: project?.name || "",
-      teamMemberId: user?.id || "",
-      teamMemberName: fullName,
-      date: new Date().toISOString().split("T")[0],
-      hours,
-      description: activeNote || "Timer entry",
-      billable: true,
-      rate: 250,
-    };
-    setEntries([entry, ...entries]);
-    setRunning(false);
-    setSeconds(0);
-    setActiveNote("");
-    toast({ title: "Time logged", description: `${hours}h on ${project?.name}` });
+  const addEntry = (hours: number, extra?: Partial<TimeEntry>) => {
+    const m = mandates.find((x) => x.id === draft.mandateId)!;
+    const rate = rateCards.find((r) => r.member === ME)?.standard ?? 200;
+    setEntries((p) => [
+      {
+        id: `TE-${String(p.length + 101)}`,
+        date: draft.date,
+        member: ME,
+        mandateId: m.id,
+        mandateName: m.name,
+        taskTitle: draft.taskTitle || "Ad-hoc work",
+        narrative: draft.narrative || "—",
+        hours: Number(hours.toFixed(2)),
+        billable: draft.billable,
+        rate: draft.billable ? rate : 0,
+        status: "Draft",
+        ...extra,
+      },
+      ...p,
+    ]);
   };
 
-  const logManual = () => {
-    if (!manual.projectId || !manual.hours) return;
-    const project = projects.find(p => p.id === manual.projectId);
-    const entry: TimeEntry = {
-      id: `TE-${String(entries.length + 1).padStart(3, "0")}`,
-      projectId: manual.projectId,
-      projectName: project?.name || "",
-      teamMemberId: user?.id || "",
-      teamMemberName: fullName,
-      date: new Date().toISOString().split("T")[0],
-      hours: manual.hours,
-      description: manual.description,
-      billable: true,
-      rate: manual.rate,
-    };
-    setEntries([entry, ...entries]);
-    setManual({ projectId: "", hours: 0, description: "", rate: 250 });
-    toast({ title: "Entry added" });
-  };
+  const weekGrid = useMemo(() => {
+    const days = ["2026-07-27", "2026-07-28", "2026-07-29", "2026-07-30"];
+    const members = Array.from(new Set(entries.map((e) => e.member)));
+    return { days, members };
+  }, [entries]);
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Time Tracking</h1>
-        <p className="text-sm text-muted-foreground">Capture billable time across projects</p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold">Timesheets</h1>
+          <p className="text-sm text-muted-foreground">
+            Time entry, two-stage approval, utilisation and billing integration
+          </p>
+        </div>
+        <div className="flex gap-2">
+          {running ? (
+            <Button
+              variant="destructive"
+              onClick={() => {
+                const hrs = Math.max(
+                  0.25,
+                  (Date.now() - running.start) / 3600000,
+                );
+                addEntry(hrs);
+                setRunning(null);
+                toast({
+                  title: "Timer stopped",
+                  description: `${hrs.toFixed(2)} hrs captured as a draft entry.`,
+                });
+              }}
+            >
+              <Square className="mr-2 h-4 w-4" /> Stop timer
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              onClick={() => {
+                setRunning({ start: Date.now(), mandateId: draft.mandateId });
+                toast({ title: "Timer started" });
+              }}
+            >
+              <Play className="mr-2 h-4 w-4" /> Start timer
+            </Button>
+          )}
+          <Button onClick={() => setOpenNew(true)}>
+            <Plus className="mr-2 h-4 w-4" /> Log time
+          </Button>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card><CardContent className="p-5 flex items-center gap-3"><div className="p-3 rounded-xl bg-primary/10"><Clock className="h-5 w-5 text-primary" /></div><div><p className="text-sm text-muted-foreground">Total Hours</p><p className="text-xl font-bold">{totalHours.toFixed(1)}h</p></div></CardContent></Card>
-        <Card><CardContent className="p-5 flex items-center gap-3"><div className="p-3 rounded-xl bg-info/10"><Timer className="h-5 w-5 text-info" /></div><div><p className="text-sm text-muted-foreground">Billable</p><p className="text-xl font-bold">{billableHours.toFixed(1)}h</p></div></CardContent></Card>
-        <Card><CardContent className="p-5 flex items-center gap-3"><div className="p-3 rounded-xl bg-success/10"><DollarSign className="h-5 w-5 text-success" /></div><div><p className="text-sm text-muted-foreground">Revenue</p><p className="text-xl font-bold">${totalAmount.toLocaleString()}</p></div></CardContent></Card>
-        <Card><CardContent className="p-5 flex items-center gap-3"><div className="p-3 rounded-xl bg-warning/10"><TrendingUp className="h-5 w-5 text-warning" /></div><div><p className="text-sm text-muted-foreground">Utilization</p><p className="text-xl font-bold">{utilization}%</p></div></CardContent></Card>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {[
+          { l: "Hours logged", v: totalHrs.toFixed(1) },
+          { l: "Billable hours", v: billableHrs.toFixed(1) },
+          { l: "Approved value (to WIP)", v: money(approvedValue) },
+          { l: "Awaiting approval", v: String(pending.length) },
+        ].map((k) => (
+          <Card key={k.l}>
+            <CardContent className="p-4">
+              <p className="text-xs text-muted-foreground">{k.l}</p>
+              <p className="mt-1 text-xl font-bold">{k.v}</p>
+            </CardContent>
+          </Card>
+        ))}
       </div>
-
-      <Card>
-        <CardHeader><CardTitle className="text-base">Live Timer</CardTitle></CardHeader>
-        <CardContent>
-          <div className="flex flex-col md:flex-row md:items-end gap-4">
-            <div className="flex-1 space-y-2">
-              <Label>Project / Matter</Label>
-              <Select value={activeProject} onValueChange={setActiveProject} disabled={running}>
-                <SelectTrigger><SelectValue placeholder="Select project" /></SelectTrigger>
-                <SelectContent>
-                  {myProjects.map(p => <SelectItem key={p.id} value={p.id}>{p.name} — {p.clientName}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex-1 space-y-2">
-              <Label>Note</Label>
-              <Input value={activeNote} onChange={e => setActiveNote(e.target.value)} placeholder="What are you working on?" />
-            </div>
-            <div className="font-mono text-2xl font-bold tabular-nums px-4">{fmt(seconds)}</div>
-            {!running ? (
-              <Button onClick={() => activeProject && setRunning(true)} className="bg-gradient-to-r from-primary to-secondary">
-                <Play className="h-4 w-4 mr-2" /> Start
-              </Button>
-            ) : (
-              <Button onClick={stopTimer} variant="destructive">
-                <Square className="h-4 w-4 mr-2" /> Stop & Log
-              </Button>
-            )}
-          </div>
-        </CardContent>
-      </Card>
 
       <Tabs defaultValue="entries">
-        <TabsList>
-          <TabsTrigger value="entries">Time Entries</TabsTrigger>
-          <TabsTrigger value="manual">Manual Entry</TabsTrigger>
-          <TabsTrigger value="byproject">By Project</TabsTrigger>
+        <TabsList className="flex-wrap">
+          <TabsTrigger value="entries">Time entries</TabsTrigger>
+          <TabsTrigger value="grid">Weekly grid</TabsTrigger>
+          <TabsTrigger value="approvals">Approvals</TabsTrigger>
+          <TabsTrigger value="utilisation">Utilisation</TabsTrigger>
+          <TabsTrigger value="rates">Rate cards &amp; billing</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="entries" className="mt-4">
+        <TabsContent value="entries" className="pt-4">
           <Card>
-            <CardContent className="p-4">
+            <CardContent className="p-0">
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Date</TableHead>
-                    {isAdmin && <TableHead>Member</TableHead>}
-                    <TableHead>Project</TableHead>
-                    <TableHead>Hours</TableHead>
-                    <TableHead>Rate</TableHead>
-                    <TableHead>Amount</TableHead>
+                    <TableHead>Member</TableHead>
+                    <TableHead>Mandate / task</TableHead>
+                    <TableHead>Narrative</TableHead>
+                    <TableHead className="text-right">Hrs</TableHead>
                     <TableHead>Billable</TableHead>
-                    <TableHead>Description</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Value</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {visible.map(e => (
+                  {entries.map((e) => (
                     <TableRow key={e.id}>
                       <TableCell className="text-sm">{e.date}</TableCell>
-                      {isAdmin && <TableCell className="text-sm">{e.teamMemberName}</TableCell>}
-                      <TableCell className="text-sm font-medium">{e.projectName}</TableCell>
-                      <TableCell className="font-semibold">{e.hours}h</TableCell>
-                      <TableCell className="text-sm">${e.rate}/hr</TableCell>
-                      <TableCell className="font-semibold">${(e.hours * e.rate).toLocaleString()}</TableCell>
-                      <TableCell>{e.billable ? <Badge className="text-[10px] bg-success/10 text-success">Billable</Badge> : <Badge variant="outline" className="text-[10px]">Non-billable</Badge>}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate">{e.description}</TableCell>
+                      <TableCell className="text-sm">{e.member}</TableCell>
+                      <TableCell>
+                        <p className="text-sm">{e.taskTitle}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {e.mandateName}
+                        </p>
+                      </TableCell>
+                      <TableCell className="max-w-[240px] text-xs text-muted-foreground">
+                        {e.narrative}
+                        {e.rejectReason && (
+                          <span className="block text-destructive">
+                            Rejected: {e.rejectReason}
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right text-sm">
+                        {e.hours}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline">
+                          {e.billable ? "Billable" : "Non-billable"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge className={statusClass[e.status]}>
+                          {e.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right text-sm">
+                        {money(e.hours * e.rate)}
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
             </CardContent>
           </Card>
+          <div className="mt-3 flex gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() =>
+                setStatus(
+                  entries.filter((e) => e.status === "Draft").map((e) => e.id),
+                  "Submitted",
+                )
+              }
+            >
+              Submit all drafts
+            </Button>
+          </div>
         </TabsContent>
 
-        <TabsContent value="manual" className="mt-4">
+        <TabsContent value="grid" className="pt-4">
           <Card>
-            <CardContent className="p-5 space-y-4 max-w-2xl">
-              <div className="space-y-2">
-                <Label>Project</Label>
-                <Select value={manual.projectId} onValueChange={v => setManual({ ...manual, projectId: v })}>
-                  <SelectTrigger><SelectValue placeholder="Select project" /></SelectTrigger>
-                  <SelectContent>
-                    {myProjects.map(p => <SelectItem key={p.id} value={p.id}>{p.name} — {p.clientName}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2"><Label>Hours</Label><Input type="number" step="0.25" value={manual.hours || ""} onChange={e => setManual({ ...manual, hours: Number(e.target.value) })} /></div>
-                <div className="space-y-2"><Label>Rate ($/hr)</Label><Input type="number" value={manual.rate} onChange={e => setManual({ ...manual, rate: Number(e.target.value) })} /></div>
-              </div>
-              <div className="space-y-2"><Label>Description</Label><Textarea value={manual.description} onChange={e => setManual({ ...manual, description: e.target.value })} placeholder="Describe the work performed..." /></div>
-              <Button onClick={logManual} className="bg-gradient-to-r from-primary to-secondary">Add Entry</Button>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="byproject" className="mt-4">
-          <Card>
-            <CardContent className="p-4">
+            <CardContent className="p-0">
               <Table>
-                <TableHeader><TableRow><TableHead>Project</TableHead><TableHead>Hours</TableHead><TableHead>Billable Amount</TableHead><TableHead>Entries</TableHead></TableRow></TableHeader>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Member</TableHead>
+                    {weekGrid.days.map((d) => (
+                      <TableHead key={d} className="text-center">
+                        {d.slice(5)}
+                      </TableHead>
+                    ))}
+                    <TableHead className="text-right">Total</TableHead>
+                  </TableRow>
+                </TableHeader>
                 <TableBody>
-                  {projects.map(p => {
-                    const pe = visible.filter(e => e.projectId === p.id);
-                    const h = pe.reduce((s, e) => s + e.hours, 0);
-                    const a = pe.filter(e => e.billable).reduce((s, e) => s + e.hours * e.rate, 0);
+                  {weekGrid.members.map((m) => {
+                    const rowTotal = entries
+                      .filter((e) => e.member === m)
+                      .reduce((s, e) => s + e.hours, 0);
                     return (
-                      <TableRow key={p.id}>
-                        <TableCell className="text-sm font-medium">{p.name}<span className="block text-xs text-muted-foreground">{p.clientName}</span></TableCell>
-                        <TableCell className="font-semibold">{h.toFixed(1)}h</TableCell>
-                        <TableCell className="font-semibold">${a.toLocaleString()}</TableCell>
-                        <TableCell className="text-sm">{pe.length}</TableCell>
+                      <TableRow key={m}>
+                        <TableCell className="text-sm font-medium">{m}</TableCell>
+                        {weekGrid.days.map((d) => {
+                          const hrs = entries
+                            .filter((e) => e.member === m && e.date === d)
+                            .reduce((s, e) => s + e.hours, 0);
+                          return (
+                            <TableCell key={d} className="text-center text-sm">
+                              {hrs || "—"}
+                            </TableCell>
+                          );
+                        })}
+                        <TableCell className="text-right text-sm font-semibold">
+                          {rowTotal}
+                        </TableCell>
                       </TableRow>
                     );
                   })}
@@ -233,7 +306,263 @@ export default function TimeTracking() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        <TabsContent value="approvals" className="space-y-4 pt-4">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">
+                Two-stage approval — team lead then partner
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  size="sm"
+                  disabled={!selected.length}
+                  onClick={() => {
+                    const leadStage = entries.filter(
+                      (e) => selected.includes(e.id) && e.status === "Submitted",
+                    );
+                    setStatus(
+                      leadStage.map((e) => e.id),
+                      "Lead Approved",
+                    );
+                    const partnerStage = entries.filter(
+                      (e) =>
+                        selected.includes(e.id) && e.status === "Lead Approved",
+                    );
+                    setStatus(
+                      partnerStage.map((e) => e.id),
+                      "Approved",
+                    );
+                    toast({
+                      title: "Approved",
+                      description:
+                        "Approved billable time flows to WIP for invoicing.",
+                    });
+                  }}
+                >
+                  <CheckCircle2 className="mr-2 h-4 w-4" /> Approve selected
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={!selected.length}
+                  onClick={() => {
+                    setStatus(selected, "Rejected", "Narrative insufficient");
+                    toast({
+                      title: "Rejected",
+                      description: "Submitter notified with reason.",
+                    });
+                  }}
+                >
+                  <XCircle className="mr-2 h-4 w-4" /> Reject selected
+                </Button>
+                <div className="ml-auto flex items-center gap-2">
+                  <Lock className="h-4 w-4 text-muted-foreground" />
+                  <Label className="text-xs">Locked up to</Label>
+                  <Input
+                    type="date"
+                    className="w-40"
+                    value={lockDate}
+                    onChange={(e) => setLockDate(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-10" />
+                    <TableHead>Member</TableHead>
+                    <TableHead>Mandate</TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead className="text-right">Hrs</TableHead>
+                    <TableHead>Stage</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {pending.map((e) => (
+                    <TableRow key={e.id}>
+                      <TableCell>
+                        <Checkbox
+                          checked={selected.includes(e.id)}
+                          onCheckedChange={(v) =>
+                            setSelected((p) =>
+                              v ? [...p, e.id] : p.filter((x) => x !== e.id),
+                            )
+                          }
+                        />
+                      </TableCell>
+                      <TableCell className="text-sm">{e.member}</TableCell>
+                      <TableCell className="text-sm">{e.mandateName}</TableCell>
+                      <TableCell className="text-sm">{e.date}</TableCell>
+                      <TableCell className="text-right text-sm">
+                        {e.hours}
+                      </TableCell>
+                      <TableCell>
+                        <Badge className={statusClass[e.status]}>
+                          {e.status === "Submitted"
+                            ? "Awaiting team lead"
+                            : "Awaiting partner"}
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {!pending.length && (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center text-sm text-muted-foreground">
+                        Nothing awaiting approval.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="utilisation" className="pt-4">
+          <Card>
+            <CardContent className="space-y-4 p-4">
+              {utilisation.map((u) => {
+                const pct = Math.round((u.billable / u.available) * 100);
+                return (
+                  <div key={u.member} className="space-y-1">
+                    <div className="flex justify-between text-sm">
+                      <span className="font-medium">{u.member}</span>
+                      <span>
+                        {pct}% · target {u.target}% · trend{" "}
+                        {u.trend.join(" → ")}
+                      </span>
+                    </div>
+                    <Progress value={pct} className="h-2" />
+                  </div>
+                );
+              })}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="rates" className="pt-4">
+          <Card>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Member</TableHead>
+                    <TableHead>Role</TableHead>
+                    <TableHead className="text-right">Standard rate</TableHead>
+                    <TableHead>Client</TableHead>
+                    <TableHead className="text-right">Negotiated rate</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {rateCards.map((r) => (
+                    <TableRow key={r.member}>
+                      <TableCell className="text-sm">{r.member}</TableCell>
+                      <TableCell className="text-sm">{r.role}</TableCell>
+                      <TableCell className="text-right text-sm">
+                        {money(r.standard)}
+                      </TableCell>
+                      <TableCell className="text-sm">{r.client}</TableCell>
+                      <TableCell className="text-right text-sm">
+                        {money(r.negotiated)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
+
+      <Dialog open={openNew} onOpenChange={setOpenNew}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Log time</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Date</Label>
+                <Input
+                  type="date"
+                  value={draft.date}
+                  onChange={(e) => setDraft({ ...draft, date: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label>Hours</Label>
+                <Input
+                  type="number"
+                  step="0.25"
+                  value={draft.hours}
+                  onChange={(e) =>
+                    setDraft({ ...draft, hours: Number(e.target.value) })
+                  }
+                />
+              </div>
+            </div>
+            <div>
+              <Label>Mandate</Label>
+              <Select
+                value={draft.mandateId}
+                onValueChange={(v) => setDraft({ ...draft, mandateId: v })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {mandates.map((m) => (
+                    <SelectItem key={m.id} value={m.id}>
+                      {m.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Task</Label>
+              <Input
+                value={draft.taskTitle}
+                onChange={(e) =>
+                  setDraft({ ...draft, taskTitle: e.target.value })
+                }
+              />
+            </div>
+            <div>
+              <Label>Narrative</Label>
+              <Textarea
+                rows={3}
+                value={draft.narrative}
+                onChange={(e) =>
+                  setDraft({ ...draft, narrative: e.target.value })
+                }
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <Switch
+                checked={draft.billable}
+                onCheckedChange={(v) => setDraft({ ...draft, billable: v })}
+              />
+              <Label>Billable</Label>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              onClick={() => {
+                addEntry(draft.hours);
+                setOpenNew(false);
+                toast({ title: "Time entry saved as draft" });
+              }}
+            >
+              Save entry
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
