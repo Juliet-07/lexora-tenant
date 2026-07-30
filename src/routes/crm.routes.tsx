@@ -7,6 +7,8 @@ import TimeTracking from "@/pages/crm/TimeTracking";
 import Resources from "@/pages/crm/Resources";
 import Invoicing from "@/pages/crm/Invoicing";
 import Contracts from "@/pages/crm/Contracts";
+import TrustAccounting from "@/pages/crm/TrustAccounting";
+import Documents from "@/pages/crm/Documents";
 import { Navigate } from "react-router-dom";
 import ClientPortal from "@/pages/crm/ClientPortal";
 import Billing from "@/pages/Billing";
