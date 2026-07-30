@@ -248,7 +248,7 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
       children: [
         // { title: "Contacts", url: "/crm/contacts" },
         { title: "Pipeline", url: "/crm/pipeline" },
-        { title: "Clients & Engagements", url: "/crm/clients" },
+        { title: "Client Management", url: "/crm/clients" },
         // { title: "Communications", url: "/crm/communications" },
         { title: "SLA Management", url: "/crm/sla" },
       ],
