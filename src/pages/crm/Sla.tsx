@@ -21,8 +21,9 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
-  slaProfiles as seedProfiles, slaCompliance, slaTrend, tickets, SlaProfile,
+  slaProfiles as seedProfiles, slaCompliance, slaTrend, SlaProfile,
 } from "@/data/crmClientMockData";
+import { tickets } from "@/data/crmPmMockData";
 
 const PRIORITIES: ("Critical" | "High" | "Medium" | "Low")[] = ["Critical", "High", "Medium", "Low"];
 
