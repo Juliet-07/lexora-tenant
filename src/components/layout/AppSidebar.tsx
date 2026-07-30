@@ -39,6 +39,7 @@ import {
   FileStack,
   Leaf,
   FileBarChart,
+  Bell,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
@@ -238,36 +239,55 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
 
   // ── CRM & Project Management ──────────────────────────────
   crm: [
-    { title: "Dashboard", url: "/", icon: LayoutDashboard },
+    { title: "CRM Dashboard", url: "/crm/overview", icon: LayoutDashboard },
     {
-      title: "CRM Pipeline",
-      url: "/crm/pipeline",
+      title: "CRM",
       icon: TrendingUp,
       adminOnly: true,
-    },
-    // { title: "Contacts & Accounts", url: "/crm/contacts", icon: Contact, adminOnly: true },
-    { title: "Clients", url: "/clients", icon: Users, adminOnly: true },
-    { title: "Projects", url: "/crm/projects", icon: FolderKanban },
-    { title: "Time Tracking", url: "/crm/time", icon: Clock },
-    {
-      title: "Resources",
-      url: "/crm/resources",
-      icon: UsersRound,
-      adminOnly: true,
+      children: [
+        { title: "Contacts", url: "/crm/contacts" },
+        { title: "Leads & Pipeline", url: "/crm/pipeline" },
+        { title: "Clients & Engagements", url: "/crm/clients" },
+        { title: "Communications", url: "/crm/communications" },
+        { title: "SLA Management", url: "/crm/sla" },
+      ],
     },
     {
-      title: "Invoicing",
-      url: "/crm/invoicing",
+      title: "Projects",
+      icon: FolderKanban,
+      children: [
+        { title: "Mandates", url: "/crm/mandates" },
+        { title: "Tasks", url: "/crm/tasks" },
+        { title: "Gantt & Planning", url: "/crm/gantt" },
+        { title: "Timesheets", url: "/crm/time" },
+        { title: "Service Desk", url: "/crm/service-desk" },
+        { title: "ADR", url: "/crm/adr" },
+      ],
+    },
+    {
+      title: "Finance",
       icon: Receipt,
       adminOnly: true,
+      children: [
+        { title: "Billing & Invoicing", url: "/crm/invoicing" },
+        { title: "Trust Accounting", url: "/crm/trust" },
+      ],
     },
     {
-      title: "Contracts & Docs",
-      url: "/crm/contracts",
-      icon: FileSignature,
+      title: "Tools",
+      icon: Cog,
       adminOnly: true,
+      children: [
+        { title: "Documents", url: "/crm/documents" },
+        { title: "Contracts", url: "/crm/contracts" },
+        { title: "Forms & Workflows", url: "/crm/forms" },
+        { title: "Calendar", url: "/crm/calendar" },
+        { title: "Reports", url: "/crm/reports" },
+        { title: "PMO", url: "/crm/pmo" },
+      ],
     },
-    // { title: "Client Portal", url: "/crm/portal", icon: Globe, adminOnly: true },
+    { title: "Notifications", url: "/crm/notifications", icon: Bell },
+    { title: "Clients (KYC)", url: "/clients", icon: Users, adminOnly: true },
   ],
 
   // ── HR & People Management ─────────────────────────────────
