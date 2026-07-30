@@ -1,139 +1,258 @@
 import { useState } from "react";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Progress } from "@/components/ui/progress";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, DollarSign, Clock, AlertTriangle, Receipt, TrendingUp, Download } from "lucide-react";
-import { invoices as initialInvoices, clients, type Invoice } from "@/data/mockData";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Plus,
+  Send,
+  CheckCircle2,
+  Eye,
+  Banknote,
+  Bell,
+  ArrowRight,
+} from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import {
+  pmInvoices as seed,
+  PmInvoice,
+  InvoiceStage,
+  invoiceTotal,
+  wipEntries,
+  dunningLog,
+  paymentsReceived,
+  mandates,
+  money,
+} from "@/data/crmPmMockData";
 
-const statusColor: Record<string, string> = {
+const STEPS = [
+  "WIP accumulation",
+  "Invoice creation",
+  "Review",
+  "Delivery",
+  "Payment",
+  "Dunning",
+];
+
+const stageClass: Record<InvoiceStage, string> = {
+  Draft: "bg-muted text-muted-foreground",
+  "In Review": "bg-primary/10 text-primary",
+  Approved: "bg-primary/10 text-primary",
+  Sent: "bg-warning/10 text-warning",
+  "Part Paid": "bg-warning/10 text-warning",
   Paid: "bg-success/10 text-success",
-  Pending: "bg-warning/10 text-warning",
   Overdue: "bg-destructive/10 text-destructive",
+  "Written Off": "bg-muted text-muted-foreground",
 };
 
-const payments = [
-  { id: "PAY-001", invoiceId: "INV-001", clientName: "Meridian Holdings Ltd", amount: 45000, method: "Wire", date: "2026-03-29" },
-  { id: "PAY-002", invoiceId: "INV-003", clientName: "Tanaka Enterprises", amount: 22000, method: "ACH", date: "2026-03-12" },
-  { id: "PAY-003", invoiceId: "INV-006", clientName: "Nordic Shipping AS", amount: 18750, method: "Wire", date: "2026-02-05" },
-];
-
-const expenses = [
-  { id: "EXP-001", category: "Travel", description: "Client meeting — London", amount: 1240, date: "2026-05-12", billable: true },
-  { id: "EXP-002", category: "Software", description: "Annual SaaS renewal", amount: 4800, date: "2026-04-01", billable: false },
-  { id: "EXP-003", category: "Legal Research", description: "Database subscription", amount: 980, date: "2026-05-20", billable: true },
-];
+const ageBucket = (dueOn: string) => {
+  const days = Math.floor(
+    (new Date("2026-07-30").getTime() - new Date(dueOn).getTime()) / 86400000,
+  );
+  if (days <= 0) return "Current";
+  if (days <= 30) return "1–30 days";
+  if (days <= 60) return "31–60 days";
+  if (days <= 90) return "61–90 days";
+  return "90+ days";
+};
 
 export default function Invoicing() {
-  const [list, setList] = useState<Invoice[]>(initialInvoices);
-  const [open, setOpen] = useState(false);
-  const [draft, setDraft] = useState({ clientId: "", amount: 0, type: "Fixed" as Invoice["type"], dueDate: "" });
+  const [list, setList] = useState<PmInvoice[]>(seed);
+  const [selected, setSelected] = useState<PmInvoice | null>(null);
+  const [openNew, setOpenNew] = useState(false);
+  const [payments, setPayments] = useState(paymentsReceived);
+  const [draft, setDraft] = useState({
+    mandateId: mandates[0].id,
+    model: "Time & materials" as PmInvoice["model"],
+    currency: "USD" as PmInvoice["currency"],
+    subtotal: 0,
+    vatRate: 18,
+    whtRate: 5,
+    discount: 0,
+    dueOn: "",
+    proforma: false,
+  });
   const { toast } = useToast();
 
-  const paid = list.filter(i => i.status === "Paid").reduce((s, i) => s + i.amount, 0);
-  const pending = list.filter(i => i.status === "Pending").reduce((s, i) => s + i.amount, 0);
-  const overdue = list.filter(i => i.status === "Overdue").reduce((s, i) => s + i.amount, 0);
-  const revenue = paid;
+  const patch = (id: string, p: Partial<PmInvoice>) => {
+    setList((l) => l.map((i) => (i.id === id ? { ...i, ...p } : i)));
+    setSelected((s) => (s && s.id === id ? { ...s, ...p } : s));
+  };
 
-  const create = () => {
-    if (!draft.clientId || !draft.amount) return;
-    const client = clients.find(c => c.id === draft.clientId);
-    const inv: Invoice = {
-      id: `INV-${String(list.length + 1).padStart(3, "0")}`,
-      clientId: draft.clientId,
-      clientName: client?.name || "",
-      amount: draft.amount,
-      status: "Pending",
-      date: new Date().toISOString().split("T")[0],
-      dueDate: draft.dueDate,
-      type: draft.type,
+  const totalWip = wipEntries.reduce((s, w) => s + w.value, 0);
+  const receivables = list
+    .filter((i) => !["Paid", "Draft", "Written Off"].includes(i.stage))
+    .reduce((s, i) => s + invoiceTotal(i).payable - i.paidAmount, 0);
+  const collected = list.reduce((s, i) => s + i.paidAmount, 0);
+
+  const aged = ["Current", "1–30 days", "31–60 days", "61–90 days", "90+ days"].map(
+    (b) => ({
+      bucket: b,
+      value: list
+        .filter(
+          (i) =>
+            !["Paid", "Draft", "Written Off"].includes(i.stage) &&
+            ageBucket(i.dueOn) === b,
+        )
+        .reduce((s, i) => s + invoiceTotal(i).payable - i.paidAmount, 0),
+    }),
+  );
+
+  const createFromWip = (wipId: string) => {
+    const w = wipEntries.find((x) => x.id === wipId)!;
+    const inv: PmInvoice = {
+      id: `INV-2026-${String(50 + list.length)}`,
+      clientName: w.clientName,
+      mandateId: w.mandateId,
+      mandateName: w.mandateName,
+      currency: "USD",
+      subtotal: w.value,
+      vatRate: 18,
+      whtRate: 5,
+      discount: 0,
+      stage: "Draft",
+      issuedOn: new Date().toISOString().slice(0, 10),
+      dueOn: "2026-08-30",
+      paidAmount: 0,
+      openedByClient: false,
+      model: "Time & materials",
+      lines: [
+        { description: `${w.hours} hrs from approved timesheets`, qty: 1, unit: w.value },
+      ],
     };
     setList([inv, ...list]);
-    setOpen(false);
-    setDraft({ clientId: "", amount: 0, type: "Fixed", dueDate: "" });
-    toast({ title: "Invoice created", description: `${inv.id} for ${client?.name}` });
+    toast({
+      title: "Invoice drafted from WIP",
+      description: `${inv.id} · ${money(w.value)} · VAT and WHT calculated.`,
+    });
   };
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Billing & Invoicing</h1>
-          <p className="text-sm text-muted-foreground">Accounting, invoices, payments & expenses</p>
+          <h1 className="text-2xl font-bold">Billing &amp; Invoicing</h1>
+          <p className="text-sm text-muted-foreground">
+            Invoice-to-Cash: WIP → creation → review → delivery → payment →
+            dunning
+          </p>
         </div>
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button className="bg-gradient-to-r from-primary to-secondary"><Plus className="h-4 w-4 mr-2" /> Create Invoice</Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader><DialogTitle>Create Invoice</DialogTitle></DialogHeader>
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label>Client</Label>
-                <Select value={draft.clientId} onValueChange={v => setDraft({ ...draft, clientId: v })}>
-                  <SelectTrigger><SelectValue placeholder="Select client" /></SelectTrigger>
-                  <SelectContent>
-                    {clients.filter(c => c.status === "Active").map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Type</Label>
-                <Select value={draft.type} onValueChange={(v: Invoice["type"]) => setDraft({ ...draft, type: v })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Fixed">Fixed Fee</SelectItem>
-                    <SelectItem value="Hourly">Hourly</SelectItem>
-                    <SelectItem value="Milestone">Milestone</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2"><Label>Amount ($)</Label><Input type="number" value={draft.amount || ""} onChange={e => setDraft({ ...draft, amount: Number(e.target.value) })} /></div>
-                <div className="space-y-2"><Label>Due</Label><Input type="date" value={draft.dueDate} onChange={e => setDraft({ ...draft, dueDate: e.target.value })} /></div>
-              </div>
-              <Button onClick={create} className="w-full bg-gradient-to-r from-primary to-secondary">Create</Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+        <Button onClick={() => setOpenNew(true)}>
+          <Plus className="mr-2 h-4 w-4" /> New invoice
+        </Button>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card><CardContent className="p-5 flex items-center gap-3"><div className="p-3 rounded-xl bg-success/10"><DollarSign className="h-5 w-5 text-success" /></div><div><p className="text-sm text-muted-foreground">Revenue (YTD)</p><p className="text-xl font-bold">${revenue.toLocaleString()}</p></div></CardContent></Card>
-        <Card><CardContent className="p-5 flex items-center gap-3"><div className="p-3 rounded-xl bg-warning/10"><Clock className="h-5 w-5 text-warning" /></div><div><p className="text-sm text-muted-foreground">Pending</p><p className="text-xl font-bold">${pending.toLocaleString()}</p></div></CardContent></Card>
-        <Card><CardContent className="p-5 flex items-center gap-3"><div className="p-3 rounded-xl bg-destructive/10"><AlertTriangle className="h-5 w-5 text-destructive" /></div><div><p className="text-sm text-muted-foreground">Overdue</p><p className="text-xl font-bold">${overdue.toLocaleString()}</p></div></CardContent></Card>
-        <Card><CardContent className="p-5 flex items-center gap-3"><div className="p-3 rounded-xl bg-info/10"><TrendingUp className="h-5 w-5 text-info" /></div><div><p className="text-sm text-muted-foreground">Collection Rate</p><p className="text-xl font-bold">{Math.round((paid / (paid + pending + overdue)) * 100)}%</p></div></CardContent></Card>
+      <Card>
+        <CardContent className="flex flex-wrap items-center gap-2 p-4">
+          {STEPS.map((s, i) => (
+            <div key={s} className="flex items-center gap-2">
+              <Badge variant="outline">
+                {i + 1}. {s}
+              </Badge>
+              {i < STEPS.length - 1 && (
+                <ArrowRight className="h-3 w-3 text-muted-foreground" />
+              )}
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {[
+          { l: "Unbilled WIP", v: money(totalWip) },
+          { l: "Outstanding receivables", v: money(receivables) },
+          { l: "Collected (period)", v: money(collected) },
+          {
+            l: "Overdue",
+            v: money(
+              list
+                .filter((i) => i.stage === "Overdue")
+                .reduce((s, i) => s + invoiceTotal(i).payable, 0),
+            ),
+          },
+        ].map((k) => (
+          <Card key={k.l}>
+            <CardContent className="p-4">
+              <p className="text-xs text-muted-foreground">{k.l}</p>
+              <p className="mt-1 text-xl font-bold">{k.v}</p>
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
       <Tabs defaultValue="invoices">
-        <TabsList>
+        <TabsList className="flex-wrap">
+          <TabsTrigger value="wip">WIP</TabsTrigger>
           <TabsTrigger value="invoices">Invoices</TabsTrigger>
           <TabsTrigger value="payments">Payments</TabsTrigger>
-          <TabsTrigger value="expenses">Expenses</TabsTrigger>
+          <TabsTrigger value="aged">Aged receivables</TabsTrigger>
+          <TabsTrigger value="dunning">Dunning</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="invoices" className="mt-4">
+        <TabsContent value="wip" className="pt-4">
           <Card>
-            <CardContent className="p-4">
+            <CardContent className="p-0">
               <Table>
-                <TableHeader><TableRow><TableHead>Invoice</TableHead><TableHead>Client</TableHead><TableHead>Type</TableHead><TableHead>Amount</TableHead><TableHead>Status</TableHead><TableHead>Date</TableHead><TableHead>Due</TableHead><TableHead></TableHead></TableRow></TableHeader>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Mandate</TableHead>
+                    <TableHead>Source</TableHead>
+                    <TableHead className="text-right">Hours</TableHead>
+                    <TableHead className="text-right">Value</TableHead>
+                    <TableHead className="text-right">Age</TableHead>
+                    <TableHead />
+                  </TableRow>
+                </TableHeader>
                 <TableBody>
-                  {list.map(inv => (
-                    <TableRow key={inv.id}>
-                      <TableCell className="font-medium text-sm">{inv.id}</TableCell>
-                      <TableCell className="text-sm">{inv.clientName}</TableCell>
-                      <TableCell><Badge variant="outline" className="text-xs">{inv.type}</Badge></TableCell>
-                      <TableCell className="font-semibold">${inv.amount.toLocaleString()}</TableCell>
-                      <TableCell><Badge className={`text-xs ${statusColor[inv.status]}`}>{inv.status}</Badge></TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{inv.date}</TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{inv.dueDate}</TableCell>
-                      <TableCell><Button size="sm" variant="ghost"><Download className="h-3 w-3" /></Button></TableCell>
+                  {wipEntries.map((w) => (
+                    <TableRow key={w.id}>
+                      <TableCell>
+                        <p className="text-sm font-medium">{w.mandateName}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {w.clientName}
+                        </p>
+                      </TableCell>
+                      <TableCell className="text-sm">{w.source}</TableCell>
+                      <TableCell className="text-right text-sm">
+                        {w.hours}
+                      </TableCell>
+                      <TableCell className="text-right text-sm">
+                        {money(w.value)}
+                      </TableCell>
+                      <TableCell className="text-right text-sm">
+                        {w.ageDays}d
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button size="sm" onClick={() => createFromWip(w.id)}>
+                          Raise invoice
+                        </Button>
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -142,20 +261,92 @@ export default function Invoicing() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="payments" className="mt-4">
+        <TabsContent value="invoices" className="pt-4">
           <Card>
-            <CardContent className="p-4">
+            <CardContent className="p-0">
               <Table>
-                <TableHeader><TableRow><TableHead>Payment</TableHead><TableHead>Invoice</TableHead><TableHead>Client</TableHead><TableHead>Amount</TableHead><TableHead>Method</TableHead><TableHead>Date</TableHead></TableRow></TableHeader>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Invoice</TableHead>
+                    <TableHead>Client / mandate</TableHead>
+                    <TableHead>Model</TableHead>
+                    <TableHead>Stage</TableHead>
+                    <TableHead>Due</TableHead>
+                    <TableHead className="text-right">Payable</TableHead>
+                  </TableRow>
+                </TableHeader>
                 <TableBody>
-                  {payments.map(p => (
+                  {list.map((i) => {
+                    const t = invoiceTotal(i);
+                    return (
+                      <TableRow
+                        key={i.id}
+                        className="cursor-pointer"
+                        onClick={() => setSelected(i)}
+                      >
+                        <TableCell>
+                          <p className="font-mono text-sm">{i.id}</p>
+                          {i.proforma && (
+                            <Badge variant="outline" className="text-[10px]">
+                              Proforma
+                            </Badge>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <p className="text-sm">{i.clientName}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {i.mandateName}
+                          </p>
+                        </TableCell>
+                        <TableCell className="text-sm">{i.model}</TableCell>
+                        <TableCell>
+                          <Badge className={stageClass[i.stage]}>{i.stage}</Badge>
+                          {i.openedByClient && i.stage === "Sent" && (
+                            <span className="ml-2 inline-flex items-center text-[11px] text-muted-foreground">
+                              <Eye className="mr-1 h-3 w-3" /> opened
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-sm">{i.dueOn}</TableCell>
+                        <TableCell className="text-right text-sm font-medium">
+                          {money(t.payable, i.currency)}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="payments" className="pt-4">
+          <Card>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Payment</TableHead>
+                    <TableHead>Invoice</TableHead>
+                    <TableHead>Client</TableHead>
+                    <TableHead>Method</TableHead>
+                    <TableHead>Allocation</TableHead>
+                    <TableHead className="text-right">Amount</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {payments.map((p) => (
                     <TableRow key={p.id}>
-                      <TableCell className="font-medium text-sm">{p.id}</TableCell>
+                      <TableCell className="font-mono text-sm">{p.id}</TableCell>
                       <TableCell className="text-sm">{p.invoiceId}</TableCell>
                       <TableCell className="text-sm">{p.clientName}</TableCell>
-                      <TableCell className="font-semibold">${p.amount.toLocaleString()}</TableCell>
-                      <TableCell><Badge variant="outline" className="text-xs">{p.method}</Badge></TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{p.date}</TableCell>
+                      <TableCell className="text-sm">{p.method}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{p.matched}</Badge>
+                      </TableCell>
+                      <TableCell className="text-right text-sm">
+                        {money(p.amount, p.currency)}
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -164,28 +355,373 @@ export default function Invoicing() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="expenses" className="mt-4">
+        <TabsContent value="aged" className="pt-4">
           <Card>
-            <CardContent className="p-4">
-              <Table>
-                <TableHeader><TableRow><TableHead>ID</TableHead><TableHead>Category</TableHead><TableHead>Description</TableHead><TableHead>Amount</TableHead><TableHead>Billable</TableHead><TableHead>Date</TableHead></TableRow></TableHeader>
-                <TableBody>
-                  {expenses.map(e => (
-                    <TableRow key={e.id}>
-                      <TableCell className="font-medium text-sm">{e.id}</TableCell>
-                      <TableCell><Badge variant="outline" className="text-xs">{e.category}</Badge></TableCell>
-                      <TableCell className="text-sm">{e.description}</TableCell>
-                      <TableCell className="font-semibold">${e.amount.toLocaleString()}</TableCell>
-                      <TableCell>{e.billable ? <Badge className="text-[10px] bg-success/10 text-success">Yes</Badge> : <Badge variant="outline" className="text-[10px]">No</Badge>}</TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{e.date}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+            <CardContent className="space-y-4 p-4">
+              {aged.map((a) => (
+                <div key={a.bucket} className="space-y-1">
+                  <div className="flex justify-between text-sm">
+                    <span>{a.bucket}</span>
+                    <span className="font-medium">{money(a.value)}</span>
+                  </div>
+                  <Progress
+                    value={
+                      receivables ? (a.value / receivables) * 100 : 0
+                    }
+                    className="h-2"
+                  />
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="dunning" className="pt-4">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">
+                Reminders at 30 / 60 / 90 days
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {dunningLog.map((d, i) => (
+                <div
+                  key={i}
+                  className="flex items-center justify-between rounded border p-3 text-sm"
+                >
+                  <div>
+                    <p className="font-medium">
+                      {d.invoiceId} — {d.action}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {d.at} · by {d.by}
+                    </p>
+                  </div>
+                  <Badge variant="outline">{d.stage}</Badge>
+                </div>
+              ))}
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() =>
+                  toast({
+                    title: "Escalated to partner",
+                    description:
+                      "INV-2026-039 flagged at 60 days; bad debt review scheduled at 90 days.",
+                  })
+                }
+              >
+                <Bell className="mr-2 h-4 w-4" /> Run dunning cycle
+              </Button>
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Create invoice */}
+      <Dialog open={openNew} onOpenChange={setOpenNew}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>New invoice</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-3">
+            <div>
+              <Label>Mandate</Label>
+              <Select
+                value={draft.mandateId}
+                onValueChange={(v) => setDraft({ ...draft, mandateId: v })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {mandates.map((m) => (
+                    <SelectItem key={m.id} value={m.id}>
+                      {m.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Billing model</Label>
+                <Select
+                  value={draft.model}
+                  onValueChange={(v) =>
+                    setDraft({ ...draft, model: v as PmInvoice["model"] })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {["Time & materials", "Fixed fee", "Retainer", "Milestone"].map(
+                      (m) => (
+                        <SelectItem key={m} value={m}>
+                          {m}
+                        </SelectItem>
+                      ),
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Currency</Label>
+                <Select
+                  value={draft.currency}
+                  onValueChange={(v) =>
+                    setDraft({ ...draft, currency: v as PmInvoice["currency"] })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {["USD", "EUR", "RWF", "GBP"].map((c) => (
+                      <SelectItem key={c} value={c}>
+                        {c}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Subtotal</Label>
+                <Input
+                  type="number"
+                  value={draft.subtotal}
+                  onChange={(e) =>
+                    setDraft({ ...draft, subtotal: Number(e.target.value) })
+                  }
+                />
+              </div>
+              <div>
+                <Label>Discount</Label>
+                <Input
+                  type="number"
+                  value={draft.discount}
+                  onChange={(e) =>
+                    setDraft({ ...draft, discount: Number(e.target.value) })
+                  }
+                />
+              </div>
+              <div>
+                <Label>VAT %</Label>
+                <Input
+                  type="number"
+                  value={draft.vatRate}
+                  onChange={(e) =>
+                    setDraft({ ...draft, vatRate: Number(e.target.value) })
+                  }
+                />
+              </div>
+              <div>
+                <Label>WHT %</Label>
+                <Input
+                  type="number"
+                  value={draft.whtRate}
+                  onChange={(e) =>
+                    setDraft({ ...draft, whtRate: Number(e.target.value) })
+                  }
+                />
+              </div>
+            </div>
+            <div>
+              <Label>Due date</Label>
+              <Input
+                type="date"
+                value={draft.dueOn}
+                onChange={(e) => setDraft({ ...draft, dueOn: e.target.value })}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              onClick={() => {
+                const m = mandates.find((x) => x.id === draft.mandateId)!;
+                setList([
+                  {
+                    id: `INV-2026-${String(50 + list.length)}`,
+                    clientName: m.clientName,
+                    mandateId: m.id,
+                    mandateName: m.name,
+                    currency: draft.currency,
+                    subtotal: Number(draft.subtotal),
+                    vatRate: Number(draft.vatRate),
+                    whtRate: Number(draft.whtRate),
+                    discount: Number(draft.discount),
+                    stage: "Draft",
+                    issuedOn: new Date().toISOString().slice(0, 10),
+                    dueOn: draft.dueOn || "2026-08-31",
+                    paidAmount: 0,
+                    openedByClient: false,
+                    model: draft.model,
+                    lines: [
+                      { description: `${draft.model} fees`, qty: 1, unit: Number(draft.subtotal) },
+                    ],
+                  },
+                  ...list,
+                ]);
+                setOpenNew(false);
+                toast({ title: "Draft invoice created" });
+              }}
+            >
+              Create draft
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Invoice detail */}
+      <Sheet open={!!selected} onOpenChange={(o) => !o && setSelected(null)}>
+        <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">
+          {selected && (
+            <>
+              <SheetHeader>
+                <SheetTitle>{selected.id}</SheetTitle>
+                <p className="text-sm text-muted-foreground">
+                  {selected.clientName} · {selected.mandateName}
+                </p>
+              </SheetHeader>
+
+              <div className="mt-4 space-y-4">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Line</TableHead>
+                      <TableHead className="text-right">Qty</TableHead>
+                      <TableHead className="text-right">Unit</TableHead>
+                      <TableHead className="text-right">Amount</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {selected.lines.map((l, i) => (
+                      <TableRow key={i}>
+                        <TableCell className="text-sm">{l.description}</TableCell>
+                        <TableCell className="text-right text-sm">{l.qty}</TableCell>
+                        <TableCell className="text-right text-sm">
+                          {money(l.unit, selected.currency)}
+                        </TableCell>
+                        <TableCell className="text-right text-sm">
+                          {money(l.qty * l.unit, selected.currency)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+
+                {(() => {
+                  const t = invoiceTotal(selected);
+                  return (
+                    <div className="space-y-1 rounded border p-3 text-sm">
+                      {[
+                        ["Net of discount", t.net],
+                        [`VAT (${selected.vatRate}%)`, t.vat],
+                        [`WHT (${selected.whtRate}%)`, -t.wht],
+                        ["Payable", t.payable],
+                      ].map(([l, v]) => (
+                        <div key={String(l)} className="flex justify-between">
+                          <span className="text-muted-foreground">{l}</span>
+                          <span className="font-medium">
+                            {money(Number(v), selected.currency)}
+                          </span>
+                        </div>
+                      ))}
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Paid</span>
+                        <span>{money(selected.paidAmount, selected.currency)}</span>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                <div className="flex flex-wrap gap-2">
+                  {selected.stage === "Draft" && (
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        patch(selected.id, { stage: "In Review" });
+                        toast({ title: "Sent for partner review" });
+                      }}
+                    >
+                      Submit for review
+                    </Button>
+                  )}
+                  {selected.stage === "In Review" && (
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        patch(selected.id, { stage: "Approved" });
+                        toast({ title: "Approved by partner" });
+                      }}
+                    >
+                      <CheckCircle2 className="mr-2 h-4 w-4" /> Approve
+                    </Button>
+                  )}
+                  {selected.stage === "Approved" && (
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        patch(selected.id, { stage: "Sent" });
+                        toast({
+                          title: "Invoice delivered",
+                          description: "Sent via client portal and email.",
+                        });
+                      }}
+                    >
+                      <Send className="mr-2 h-4 w-4" /> Send to client
+                    </Button>
+                  )}
+                  {["Sent", "Part Paid", "Overdue"].includes(selected.stage) && (
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        const t = invoiceTotal(selected);
+                        patch(selected.id, {
+                          stage: "Paid",
+                          paidAmount: t.payable,
+                        });
+                        setPayments((p) => [
+                          {
+                            id: `PMT-${p.length + 101}`,
+                            invoiceId: selected.id,
+                            clientName: selected.clientName,
+                            amount: t.payable,
+                            currency: selected.currency,
+                            method: "Bank feed",
+                            matched: "Auto-matched",
+                            at: new Date().toISOString().slice(0, 10),
+                          },
+                          ...p,
+                        ]);
+                        toast({
+                          title: "Payment recorded",
+                          description: "Allocated and posted to the accounting engine.",
+                        });
+                      }}
+                    >
+                      <Banknote className="mr-2 h-4 w-4" /> Record payment
+                    </Button>
+                  )}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      patch(selected.id, { stage: "Written Off" });
+                      toast({ title: "Written off after bad debt review" });
+                    }}
+                  >
+                    Write off
+                  </Button>
+                </div>
+              </div>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
