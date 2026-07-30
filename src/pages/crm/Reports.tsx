@@ -21,15 +21,21 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import {
   prebuiltReports, scheduledReports, mandates, timeEntries, pmInvoices,
-  tickets, contacts, pmContracts, utilisation, portfolioRisks, money, ragClass,
+  tickets, pmContracts, utilisation, portfolioRisks, money, ragClass,
 } from "@/data/crmPmMockData";
+
+const mockContacts = [
+  { name: "Eleanor Pritchard", company: "Meridian Holdings Ltd", email: "e.pritchard@meridian.com", stage: "Client" },
+  { name: "Isabella Ortega", company: "Helios Renewables", email: "i.ortega@helios.com", stage: "Client" },
+  { name: "Kenji Watanabe", company: "Tanaka Enterprises", email: "k.watanabe@tanaka.jp", stage: "Prospect" },
+];
 
 const DATA_SOURCES: Record<string, { label: string; fields: string[]; rows: any[] }> = {
   Mandates: { label: "Mandates", fields: ["ref", "name", "clientName", "stage", "rag", "budget", "progress"], rows: mandates },
   Timesheets: { label: "Timesheets", fields: ["date", "member", "mandateName", "hours", "billable", "status"], rows: timeEntries },
   Invoices: { label: "Invoices", fields: ["id", "clientName", "mandateName", "subtotal", "stage", "issuedOn"], rows: pmInvoices },
-  Tickets: { label: "Tickets", fields: ["id", "subject", "clientName", "status", "priority", "agent"], rows: tickets ?? [] },
-  Contacts: { label: "Contacts", fields: ["name", "company", "email", "stage"], rows: (contacts as any) ?? [] },
+  Tickets: { label: "Tickets", fields: ["id", "subject", "clientName", "status", "priority", "agent"], rows: tickets },
+  Contacts: { label: "Contacts", fields: ["name", "company", "email", "stage"], rows: mockContacts },
   Contracts: { label: "Contracts", fields: ["id", "title", "counterparty", "stage", "value", "expiresOn"], rows: pmContracts },
 };
 
