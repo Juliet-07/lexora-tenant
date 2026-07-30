@@ -66,10 +66,16 @@ export const crmRoutes = ({ isAdmin, accessibleModules }: RouteContext) => {
         element={layout(<Contracts />)}
       />,
       <Route
+        key="crm-trust"
+        path="/crm/trust"
+        element={layout(<TrustAccounting />)}
+      />,
+      <Route
         key="crm-documents"
         path="/crm/documents"
-        element={<Navigate to="/crm/contracts" replace />}
+        element={layout(<Documents />)}
       />,
+
       <Route
         key="crm-portal"
         path="/crm/portal"
