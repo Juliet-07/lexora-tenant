@@ -24,6 +24,9 @@ import {
   slaProfiles as seedProfiles, slaCompliance, slaTrend, SlaProfile,
 } from "@/data/crmClientMockData";
 import { tickets } from "@/data/crmPmMockData";
+import { useClientCommercials } from "@/lib/crm/clientCommercialStore";
+import { Link } from "react-router-dom";
+import { Link2 } from "lucide-react";
 
 const PRIORITIES: ("Critical" | "High" | "Medium" | "Low")[] = ["Critical", "High", "Medium", "Low"];
 
@@ -40,6 +43,11 @@ const barClass = (pct: number) =>
 
 export default function Sla() {
   const { toast } = useToast();
+  const commercials = useClientCommercials();
+  const assignedClients = (profileId: string) =>
+    Object.values(commercials)
+      .filter((c) => c.slaProfileId === profileId)
+      .map((c) => c.clientName);
   const [profiles, setProfiles] = useState<SlaProfile[]>(seedProfiles);
   const [editing, setEditing] = useState<SlaProfile | null>(null);
   const [editDraft, setEditDraft] = useState<SlaProfile | null>(null);
@@ -84,6 +92,9 @@ export default function Sla() {
       <div>
         <h1 className="text-2xl font-bold">SLA Management</h1>
         <p className="text-sm text-muted-foreground">Service level profiles, live timers, escalation and compliance reporting.</p>
+        <Button asChild size="sm" variant="outline" className="mt-3">
+          <Link to="/crm/clients"><Link2 className="mr-1 h-3 w-3" />Assign clients to SLA profiles</Link>
+        </Button>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -131,8 +142,14 @@ export default function Sla() {
                     </TableBody>
                   </Table>
                   <div>
-                    <p className="text-xs text-muted-foreground">Clients covered</p>
-                    <div className="mt-1 flex flex-wrap gap-1">{p.clients.map((c) => <Badge key={c} variant="secondary" className="text-xs">{c}</Badge>)}</div>
+                    <p className="text-xs text-muted-foreground">Clients covered (assigned in Client Management)</p>
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {assignedClients(p.id).length ? (
+                        assignedClients(p.id).map((c) => <Badge key={c} variant="secondary" className="text-xs">{c}</Badge>)
+                      ) : (
+                        <span className="text-xs text-muted-foreground">No clients assigned yet.</span>
+                      )}
+                    </div>
                   </div>
                   <p className="text-xs text-muted-foreground">{p.escalations}</p>
                   <Button size="sm" variant="outline" onClick={() => openEdit(p)}><Pencil className="mr-1 h-3 w-3" />Edit</Button>
