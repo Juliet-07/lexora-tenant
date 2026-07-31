@@ -185,12 +185,6 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
       ],
     },
     {
-      title: "Legal Knowledge Base",
-      url: "/grc/legal-knowledge",
-      icon: Scale,
-      adminOnly: true,
-    },
-    {
       title: "Risk",
       icon: AlertTriangle,
       adminOnly: true,
@@ -238,6 +232,12 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
       title: "Reporting & Analytics",
       url: "/grc/reporting",
       icon: FileBarChart,
+      adminOnly: true,
+    },
+    {
+      title: "Legal Knowledge Base",
+      url: "/grc/legal-knowledge",
+      icon: Scale,
       adminOnly: true,
     },
   ],

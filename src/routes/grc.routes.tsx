@@ -24,7 +24,7 @@ import DealPipeline from "@/pages/grc/deals/Pipeline";
 import DealDetail from "@/pages/grc/deals/DealDetail";
 import ClauseLibrary from "@/pages/grc/deals/ClauseLibrary";
 import PrecedentTemplates from "@/pages/grc/deals/PrecedentTemplates";
-import LegalKnowledge from "@/pages/grc/deals/LegalKnowledge";
+import LegalKnowledge from "@/pages/grc/LegalKnowledge";
 import ComplianceObligations from "@/pages/grc/compliance/Obligations";
 import ComplianceCalendar from "@/pages/grc/compliance/Calendar";
 import ComplianceCertifications from "@/pages/grc/compliance/Certifications";
