@@ -168,6 +168,13 @@ export interface LegalDoc {
   practiceArea: string;
   summary: string;
   urgency?: "Action Required" | "Review" | "Informational" | "Noted";
+  /** Full body of the feed item published by the platform (superadmin) */
+  content?: string;
+  jurisdiction?: string;
+  source?: string;
+  reference?: string;
+  link?: string;
+  publishedAt?: string;
   updatedAt: string;
 }
 
