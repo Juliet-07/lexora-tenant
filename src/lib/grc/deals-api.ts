@@ -50,7 +50,11 @@ export interface Precedent {
   name: string;
   type: DealType;
   jurisdiction: string;
-  sections: PrecedentSection[];
+  fileName: string;
+  fileUrl: string | null;
+  mimeType: string | null;
+  size: number;
+  content: string;
 }
 
 export const DEAL_STAGES = [
@@ -102,7 +106,6 @@ export function formatMoney(v: number, ccy = "USD") {
 }
 
 export interface TermSheet {
-  parties: string;
   structure: string;
   consideration: string;
   conditions: string;
@@ -111,6 +114,15 @@ export interface TermSheet {
   timeline: string;
   updatedAt: string;
 }
+
+export interface ContractReviewSnapshot {
+  dealName: string;
+  pdfUrl: string | null;
+  prefillName: string;
+  alreadyResponded: boolean;
+  previousDecision: string | null;
+}
+
 export interface DataRoomFile {
   name: string;
   fileUrl: string | null;
@@ -168,10 +180,28 @@ export interface PostCompletionItem {
   status: ChecklistStatus;
 }
 
+export type DealPartySide = "Buyer" | "Seller";
+
+export interface DealPartyPermissions {
+  dataRoom: boolean;
+  contractReview: boolean;
+  offerReview: boolean;
+}
+
+export interface DealParty {
+  side: DealPartySide;
+  title: string;
+  name: string;
+  email: string;
+  phone: string;
+  permissions: DealPartyPermissions;
+}
+
 export interface Deal {
   _id: string;
   name: string;
   client: string;
+  parties: DealParty[];
   counterparty: string;
   type: DealType;
   stage: DealStage;
@@ -185,7 +215,7 @@ export interface Deal {
   targetClose: string;
   longstopDate: string;
   termSheet: TermSheet;
-  dataRoom: { files: DataRoomFile[] };
+  dataRoom: { files: DataRoomFile[]; folders: { name: string }[] };
   dd: DDItem[];
   contract: { sections: ContractSection[]; variables: Record<string, string> };
   cps: CP[];
@@ -215,6 +245,45 @@ export const createClause = async (dto: {
   body: string;
 }): Promise<Clause> => {
   const res = await api.post("/deals/clauses", dto);
+  return res.data?.data ?? res.data;
+};
+
+export const addParty = async (
+  dealId: string,
+  dto: {
+    side: DealPartySide;
+    title: string;
+    name: string;
+    email: string;
+    phone?: string;
+    permissions?: Partial<DealPartyPermissions>;
+  },
+): Promise<Deal> => {
+  const res = await api.post(`/deals/${dealId}/parties`, dto);
+  return res.data?.data ?? res.data;
+};
+
+export const updateParty = async (
+  dealId: string,
+  index: number,
+  dto: Partial<{
+    side: DealPartySide;
+    title: string;
+    name: string;
+    email: string;
+    phone: string;
+    permissions: Partial<DealPartyPermissions>;
+  }>,
+): Promise<Deal> => {
+  const res = await api.patch(`/deals/${dealId}/parties/${index}`, dto);
+  return res.data?.data ?? res.data;
+};
+
+export const removeParty = async (
+  dealId: string,
+  index: number,
+): Promise<Deal> => {
+  const res = await api.delete(`/deals/${dealId}/parties/${index}`);
   return res.data?.data ?? res.data;
 };
 
@@ -249,6 +318,48 @@ export const fetchPrecedents = async (): Promise<Precedent[]> => {
   const res = await api.get("/deals/precedents");
   const d = res.data?.data ?? res.data;
   return Array.isArray(d) ? d : [];
+};
+
+export const fetchPrecedent = async (id: string): Promise<Precedent> => {
+  const res = await api.get(`/deals/precedents/${id}`);
+  return res.data?.data ?? res.data;
+};
+
+export const createPrecedent = async (dto: {
+  name: string;
+  type: DealType;
+  jurisdiction?: string;
+  file: File;
+}): Promise<Precedent> => {
+  const form = new FormData();
+  form.append("name", dto.name);
+  form.append("type", dto.type);
+  if (dto.jurisdiction) form.append("jurisdiction", dto.jurisdiction);
+  form.append("file", dto.file);
+  const res = await api.post("/deals/precedents", form);
+  return res.data?.data ?? res.data;
+};
+
+export const updatePrecedentContent = async (
+  id: string,
+  content: string,
+): Promise<Precedent> => {
+  const res = await api.patch(`/deals/precedents/${id}/content`, { content });
+  return res.data?.data ?? res.data;
+};
+
+export const replacePrecedentDocument = async (
+  id: string,
+  file: File,
+): Promise<Precedent> => {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await api.post(`/deals/precedents/${id}/replace-document`, form);
+  return res.data?.data ?? res.data;
+};
+
+export const deletePrecedent = async (id: string): Promise<void> => {
+  await api.delete(`/deals/precedents/${id}`);
 };
 
 export const fetchDeals = async (): Promise<Deal[]> => {
@@ -295,6 +406,26 @@ export const updateTermSheet = async (
   const res = await api.patch(`/deals/${id}/term-sheet`, dto);
   return res.data?.data ?? res.data;
 };
+
+export const downloadContractPdf = (dealId: string): void => {
+  const token = localStorage.getItem("tenantToken");
+  const base = (import.meta.env.VITE_REACT_APP_BASE_URL ?? "").replace(
+    /\/api\/?$/,
+    "",
+  );
+  fetch(`${base}/api/deals/${dealId}/contract/pdf`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+    .then((r) => r.blob())
+    .then((blob) => {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "Contract.pdf";
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
+};
+
 export const addDataRoomFile = async (
   id: string,
   file: File,
@@ -306,6 +437,31 @@ export const addDataRoomFile = async (
   const res = await api.post(`/deals/${id}/data-room/files`, form);
   return res.data?.data ?? res.data;
 };
+
+export const addDataRoomFolder = async (
+  id: string,
+  name: string,
+): Promise<Deal> => {
+  const res = await api.post(`/deals/${id}/data-room/folders`, { name });
+  return res.data?.data ?? res.data;
+};
+
+export const removeDataRoomFolder = async (
+  id: string,
+  index: number,
+): Promise<Deal> => {
+  const res = await api.delete(`/deals/${id}/data-room/folders/${index}`);
+  return res.data?.data ?? res.data;
+};
+
+export const removeDataRoomFile = async (
+  id: string,
+  index: number,
+): Promise<Deal> => {
+  const res = await api.delete(`/deals/${id}/data-room/files/${index}`);
+  return res.data?.data ?? res.data;
+};
+
 export const addDDItem = async (
   id: string,
   dto: { workstream: DDWorkstream; item: string; owner?: string },
@@ -463,5 +619,53 @@ export const togglePostCompletion = async (
     `/deals/${id}/post-completion/${index}/toggle`,
     {},
   );
+  return res.data?.data ?? res.data;
+};
+
+export const sendDataRoomEmail = async (
+  dealId: string,
+  partyIndex: number,
+): Promise<{ success: boolean; sentTo: string }> => {
+  const res = await api.post(
+    `/deals/${dealId}/data-room/send/${partyIndex}`,
+    {},
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const sendForReview = async (
+  dealId: string,
+  kind: "contract" | "offer",
+): Promise<{ sent: string[] }> => {
+  const res = await api.post(`/deals/${dealId}/review/${kind}/send`, {});
+  return res.data?.data ?? res.data;
+};
+
+export interface OfferReviewSnapshot {
+  dealName: string;
+  termSheet: TermSheet;
+  prefillName: string;
+  alreadyResponded: boolean;
+  previousDecision: string | null;
+}
+
+export const fetchReviewSnapshot = async (
+  kind: "contract" | "offer",
+  token: string,
+): Promise<ContractReviewSnapshot | OfferReviewSnapshot> => {
+  const res = await api.get(`/deals/review/${kind}/${token}`);
+  return res.data?.data ?? res.data;
+};
+
+export const submitReview = async (
+  kind: "contract" | "offer",
+  token: string,
+  dto: {
+    name: string;
+    decision: "Approved" | "Changes Requested";
+    comment?: string;
+  },
+): Promise<{ success: boolean }> => {
+  const res = await api.post(`/deals/review/${kind}/${token}`, dto);
   return res.data?.data ?? res.data;
 };

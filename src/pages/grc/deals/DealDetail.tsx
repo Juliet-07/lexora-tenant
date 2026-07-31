@@ -74,6 +74,16 @@ import {
   type DDWorkstream,
   type Materiality,
   type CPKind,
+  addDataRoomFolder,
+  removeDataRoomFolder,
+  removeDataRoomFile,
+  DealPartySide,
+  removeParty,
+  updateParty,
+  addParty,
+  sendDataRoomEmail,
+  sendForReview,
+  downloadContractPdf,
 } from "@/lib/grc/deals-api";
 import { toast } from "sonner";
 
@@ -296,10 +306,11 @@ function useDealMutation<T = void>(
 
 // ─────────────────────────── Overview ───────────────────────────
 function OverviewTab({ deal }: { deal: Deal }) {
-  const flags = deal.dd.filter((x) => x.status === "Red Flag");
-  const signDone = deal.signing.checklist.filter(
-    (c) => c.status === "Done",
-  ).length;
+  const dd = deal.dd ?? [];
+  const signingChecklist = deal.signing?.checklist ?? [];
+  const flags = dd.filter((x) => x.status === "Red Flag");
+  const signDone = signingChecklist.filter((c) => c.status === "Done").length;
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
       <Card className="lg:col-span-2">
@@ -334,13 +345,13 @@ function OverviewTab({ deal }: { deal: Deal }) {
             <div className="flex justify-between text-xs mb-1">
               <span>Pre-signing checklist</span>
               <span>
-                {signDone}/{deal.signing.checklist.length}
+                {signDone}/{signingChecklist.length}
               </span>
             </div>
             <Progress
               value={
-                deal.signing.checklist.length
-                  ? (signDone / deal.signing.checklist.length) * 100
+                signingChecklist.length
+                  ? (signDone / signingChecklist.length) * 100
                   : 0
               }
               className="h-2"
@@ -356,9 +367,9 @@ function OverviewTab({ deal }: { deal: Deal }) {
           <div>
             <b>Lead partner:</b> {deal.leadPartner}
           </div>
-          {deal.team.length > 0 && (
+          {(deal.team ?? []).length > 0 && (
             <div>
-              <b>Team:</b> {deal.team.join(", ")}
+              <b>Team:</b> {(deal.team ?? []).join(", ")}
             </div>
           )}
           <div className="pt-2">
@@ -382,6 +393,15 @@ function OverviewTab({ deal }: { deal: Deal }) {
           <div className="text-xs text-muted-foreground">
             {deal.conflictCheck.note}
           </div>
+        </CardContent>
+      </Card>
+
+      <Card className="lg:col-span-3">
+        <CardHeader>
+          <CardTitle className="text-base">Deal parties</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <PartiesSection deal={deal} />
         </CardContent>
       </Card>
       {flags.length > 0 && (
@@ -414,12 +434,31 @@ function OverviewTab({ deal }: { deal: Deal }) {
 
 // ─────────────────────────── Term Sheet ───────────────────────────
 function TermSheetTab({ deal }: { deal: Deal }) {
-  const [t, setT] = useState(deal.termSheet);
+  const [t, setT] = useState({
+    structure: "",
+    consideration: "",
+    conditions: "",
+    exclusivity: "",
+    confidentiality: "",
+    timeline: "",
+    updatedAt: "",
+    ...deal.termSheet,
+  });
   const mut = useDealMutation(deal._id, () => updateTermSheet(deal._id, t), {
     successMsg: "Term sheet saved",
   });
+  const reviewLoop = deal.offerReviewLoop ?? { tokens: [], responses: [] };
+  const sendReviewMut = useMutation({
+    mutationFn: () => sendForReview(deal._id, "offer"),
+    onSuccess: (res) =>
+      toast.success(
+        `Sent to ${res.sent.length} part${res.sent.length === 1 ? "y" : "ies"}`,
+      ),
+    onError: (err: any) =>
+      toast.error(err?.response?.data?.message ?? "Failed to send for review"),
+  });
+
   const fields: [string, keyof typeof t][] = [
-    ["Parties", "parties"],
     ["Structure", "structure"],
     ["Consideration", "consideration"],
     ["Conditions", "conditions"],
@@ -427,65 +466,258 @@ function TermSheetTab({ deal }: { deal: Deal }) {
     ["Confidentiality", "confidentiality"],
     ["Timeline", "timeline"],
   ];
+
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle className="text-base flex items-center gap-2">
-          <FileText className="h-4 w-4" />
-          Term Sheet Builder
-        </CardTitle>
-        <Button size="sm" disabled={mut.isPending} onClick={() => mut.mutate()}>
-          {mut.isPending ? "Saving…" : "Save"}
-        </Button>
-      </CardHeader>
-      <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        {fields.map(([label, key]) => (
-          <div
-            key={key}
-            className={
-              key === "parties" || key === "structure" ? "md:col-span-2" : ""
-            }
-          >
-            <Label>{label}</Label>
-            <Textarea
-              value={t[key] as string}
-              onChange={(e) => setT({ ...t, [key]: e.target.value })}
-              rows={2}
-            />
+    <div className="space-y-4">
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="text-base flex items-center gap-2">
+            <FileText className="h-4 w-4" />
+            Term Sheet Builder
+          </CardTitle>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={sendReviewMut.isPending}
+              onClick={() => sendReviewMut.mutate()}
+            >
+              Send for review
+            </Button>
+            <Button
+              size="sm"
+              disabled={mut.isPending}
+              onClick={() => mut.mutate()}
+            >
+              {mut.isPending ? "Saving…" : "Save"}
+            </Button>
           </div>
-        ))}
-      </CardContent>
-    </Card>
+        </CardHeader>
+        <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {fields.map(([label, key]) => (
+            <div
+              key={key}
+              className={key === "structure" ? "md:col-span-2" : ""}
+            >
+              <Label>{label}</Label>
+              <Textarea
+                value={t[key] as string}
+                onChange={(e) => setT({ ...t, [key]: e.target.value })}
+                rows={2}
+              />
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
+      {reviewLoop.responses.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Review responses</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {reviewLoop.responses.map((r, i) => (
+              <div
+                key={i}
+                className={`border rounded-md p-2.5 text-sm ${r.decision === "Approved" ? "border-emerald-500/30 bg-emerald-500/5" : "border-amber-500/30 bg-amber-500/5"}`}
+              >
+                <div className="flex justify-between">
+                  <span className="font-medium">{r.partyName}</span>
+                  <Badge variant="outline">{r.decision}</Badge>
+                </div>
+                {r.comment && (
+                  <div className="text-xs text-muted-foreground mt-1">
+                    {r.comment}
+                  </div>
+                )}
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+    </div>
   );
 }
 
 // ─────────────────────────── Data Room (files only) ───────────────────────────
 function DataRoomTab({ deal }: { deal: Deal }) {
+  const queryClient = useQueryClient();
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: ["deal", deal._id] });
+  const folders = deal.dataRoom?.folders ?? [];
+  const dataRoomFiles = deal.dataRoom?.files ?? [];
   const [file, setFile] = useState<File | null>(null);
-  const [folder, setFolder] = useState("01 Corporate");
+  const [newFolder, setNewFolder] = useState("");
   const [q, setQ] = useState("");
-  const mut = useDealMutation(
-    deal._id,
-    () => addDataRoomFile(deal._id, file!, folder),
-    { successMsg: "File uploaded" },
-  );
+  const [openFolder, setOpenFolder] = useState<string | null>(null);
 
-  const files = deal.dataRoom.files.filter(
-    (f) => !q || f.name.toLowerCase().includes(q.toLowerCase()),
-  );
+  const folderMut = useMutation({
+    mutationFn: () => addDataRoomFolder(deal._id, newFolder.trim()),
+    onSuccess: () => {
+      invalidate();
+      setNewFolder("");
+    },
+    onError: (err: any) =>
+      toast.error(err?.response?.data?.message ?? "Failed to add folder"),
+  });
+  const removeFolderMut = useMutation({
+    mutationFn: (index: number) => removeDataRoomFolder(deal._id, index),
+    onSuccess: () => {
+      invalidate();
+      setOpenFolder(null);
+    },
+  });
+  const uploadMut = useMutation({
+    mutationFn: () => addDataRoomFile(deal._id, file!, openFolder!),
+    onSuccess: () => {
+      invalidate();
+      setFile(null);
+      toast.success("File uploaded");
+    },
+    onError: (err: any) =>
+      toast.error(err?.response?.data?.message ?? "Failed to upload"),
+  });
+  const removeFileMut = useMutation({
+    mutationFn: (index: number) => removeDataRoomFile(deal._id, index),
+    onSuccess: invalidate,
+  });
 
-  const upload = () => {
-    if (!file) return toast.error("Choose a file first");
-    mut.mutate(undefined as any, { onSuccess: () => setFile(null) } as any);
-  };
+  const countInFolder = (folderName: string) =>
+    dataRoomFiles.filter((f) => f.folder === folderName).length;
+
+  const partiesWithAccess = (deal.parties ?? [])
+    .map((p, i) => ({ ...p, index: i }))
+    .filter((p) => p.permissions.dataRoom);
+  const sendMut = useMutation({
+    mutationFn: (partyIndex: number) => sendDataRoomEmail(deal._id, partyIndex),
+    onSuccess: (res) => toast.success(`Sent to ${res.sentTo}`),
+    onError: (err: any) =>
+      toast.error(err?.response?.data?.message ?? "Failed to send data room"),
+  });
+
+  // ── Folder list view ──────────────────────────────────────────
+  if (!openFolder) {
+    return (
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {partiesWithAccess.length > 0 && (
+          <Card className="lg:col-span-3">
+            <CardHeader>
+              <CardTitle className="text-base">Send data room</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {partiesWithAccess.map((p) => (
+                <div
+                  key={p.index}
+                  className="flex items-center justify-between border rounded-md p-2.5 text-sm"
+                >
+                  <div>
+                    <span className="font-medium">{p.name}</span>{" "}
+                    <span className="text-xs text-muted-foreground">
+                      — {p.title} ({p.side})
+                    </span>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={sendMut.isPending}
+                    onClick={() => sendMut.mutate(p.index)}
+                  >
+                    Send zip to {p.email}
+                  </Button>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        )}
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <FolderOpen className="h-4 w-4" />
+              Data Room folders
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              {folders.map((f, i) => (
+                <div
+                  key={i}
+                  onClick={() => setOpenFolder(f.name)}
+                  className="border rounded-md p-3 cursor-pointer hover:border-primary transition group relative"
+                >
+                  <FolderOpen className="h-6 w-6 text-muted-foreground mb-2" />
+                  <div className="text-sm font-medium truncate pr-6">
+                    {f.name}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {countInFolder(f.name)} file(s)
+                  </div>
+                  <button
+                    className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (confirm(`Delete "${f.name}" and every file in it?`))
+                        removeFolderMut.mutate(i);
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
+                  </button>
+                </div>
+              ))}
+              {folders.length === 0 && (
+                <div className="col-span-full text-sm text-muted-foreground text-center py-8">
+                  No folders yet — create one to start uploading.
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">New folder</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <Input
+              placeholder="Folder name"
+              value={newFolder}
+              onChange={(e) => setNewFolder(e.target.value)}
+            />
+            <Button
+              className="w-full"
+              disabled={!newFolder.trim() || folderMut.isPending}
+              onClick={() => folderMut.mutate()}
+            >
+              <Plus className="h-4 w-4 mr-1" />
+              {folderMut.isPending ? "Creating…" : "Create folder"}
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // ── Inside a folder ────────────────────────────────────────────
+  const files = dataRoomFiles
+    .filter((f) => f.folder === openFolder)
+    .filter((f) => !q || f.name.toLowerCase().includes(q.toLowerCase()));
 
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle className="text-base flex items-center gap-2">
-          <FolderOpen className="h-4 w-4" />
-          Documents ({deal.dataRoom.files.length})
-        </CardTitle>
+        <div className="flex items-center gap-2 text-sm">
+          <button
+            className="text-muted-foreground hover:text-foreground flex items-center gap-1"
+            onClick={() => setOpenFolder(null)}
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Documents
+          </button>
+          <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+          <span className="font-semibold">{openFolder}</span>
+          <Badge variant="outline" className="ml-1">
+            {files.length}
+          </Badge>
+        </div>
         <Input
           placeholder="Search…"
           value={q}
@@ -498,46 +730,55 @@ function DataRoomTab({ deal }: { deal: Deal }) {
           <TableHeader>
             <TableRow>
               <TableHead>Name</TableHead>
-              <TableHead>Folder</TableHead>
               <TableHead>Size</TableHead>
               <TableHead>Version</TableHead>
               <TableHead>Views</TableHead>
+              <TableHead />
             </TableRow>
           </TableHeader>
           <TableBody>
-            {files.map((f, i) => (
-              <TableRow key={i}>
-                <TableCell className="text-sm">
-                  {f.fileUrl ? (
-                    <a
-                      href={f.fileUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-primary hover:underline"
+            {files.map((f) => {
+              const globalIndex = dataRoomFiles.indexOf(f);
+              return (
+                <TableRow key={globalIndex}>
+                  <TableCell className="text-sm">
+                    {f.fileUrl ? (
+                      <a
+                        href={f.fileUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-primary hover:underline"
+                      >
+                        {f.name}
+                      </a>
+                    ) : (
+                      f.name
+                    )}
+                  </TableCell>
+                  <TableCell className="text-xs">
+                    {(f.size / (1024 * 1024)).toFixed(1)} MB
+                  </TableCell>
+                  <TableCell className="text-xs">v{f.version}</TableCell>
+                  <TableCell className="text-xs">{f.views}</TableCell>
+                  <TableCell>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => removeFileMut.mutate(globalIndex)}
                     >
-                      {f.name}
-                    </a>
-                  ) : (
-                    f.name
-                  )}
-                </TableCell>
-                <TableCell className="text-xs text-muted-foreground">
-                  {f.folder}
-                </TableCell>
-                <TableCell className="text-xs">
-                  {(f.size / (1024 * 1024)).toFixed(1)} MB
-                </TableCell>
-                <TableCell className="text-xs">v{f.version}</TableCell>
-                <TableCell className="text-xs">{f.views}</TableCell>
-              </TableRow>
-            ))}
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
             {files.length === 0 && (
               <TableRow>
                 <TableCell
                   colSpan={5}
                   className="text-center text-xs text-muted-foreground py-6"
                 >
-                  No files.
+                  No files in this folder.
                 </TableCell>
               </TableRow>
             )}
@@ -549,28 +790,12 @@ function DataRoomTab({ deal }: { deal: Deal }) {
             onChange={(e) => setFile(e.target.files?.[0] ?? null)}
             className="flex-1"
           />
-          <Select value={folder} onValueChange={setFolder}>
-            <SelectTrigger className="w-40">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {[
-                "01 Corporate",
-                "02 Financials",
-                "03 Contracts",
-                "04 HR",
-                "05 Regulatory",
-                "06 IP",
-              ].map((f) => (
-                <SelectItem key={f} value={f}>
-                  {f}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button disabled={!file || mut.isPending} onClick={upload}>
+          <Button
+            disabled={!file || uploadMut.isPending}
+            onClick={() => uploadMut.mutate()}
+          >
             <Upload className="h-4 w-4 mr-1" />
-            {mut.isPending ? "Uploading…" : "Upload"}
+            {uploadMut.isPending ? "Uploading…" : "Upload to " + openFolder}
           </Button>
         </div>
       </CardContent>
@@ -611,7 +836,8 @@ function DDTab({ deal }: { deal: Deal }) {
     onSuccess: invalidate,
   });
 
-  const grouped = deal.dd.reduce(
+  const dd = deal.dd ?? [];
+  const grouped = dd.reduce(
     (a: Record<string, (DDItem & { index: number })[]>, d, index) => {
       (a[d.workstream] ||= []).push({ ...d, index });
       return a;
@@ -774,7 +1000,7 @@ function DDTab({ deal }: { deal: Deal }) {
           </CardContent>
         </Card>
       ))}
-      {deal.dd.length === 0 && (
+      {dd.length === 0 && (
         <div className="text-sm text-muted-foreground text-center py-6">
           No DD items yet.
         </div>
@@ -792,14 +1018,27 @@ function ContractTab({ deal }: { deal: Deal }) {
     queryKey: ["deals-clauses"],
     queryFn: fetchClauses,
   });
+  const reviewLoop = deal.contractReviewLoop ?? { tokens: [], responses: [] };
+  const sendReviewMut = useMutation({
+    mutationFn: () => sendForReview(deal._id, "contract"),
+    onSuccess: (res) => {
+      invalidate();
+      toast.success(
+        `Sent to ${res.sent.length} part${res.sent.length === 1 ? "y" : "ies"}`,
+      );
+    },
+    onError: (err: any) =>
+      toast.error(err?.response?.data?.message ?? "Failed to send for review"),
+  });
   const [showLib, setShowLib] = useState(false);
   const [openComments, setOpenComments] = useState<number | null>(null);
   const [commentText, setCommentText] = useState("");
   const [commentAuthor, setCommentAuthor] = useState("");
 
-  const vars = deal.contract.variables;
+  const vars = deal.contract?.variables ?? {};
   const varList = Object.keys(vars);
-  const bodyText = deal.contract.sections.map((s) => s.body).join(" ");
+  const sections = deal.contract?.sections ?? [];
+  const bodyText = sections.map((s) => s.body).join(" ");
   const usedVars = Array.from(
     new Set(
       (bodyText.match(/\[([A-Z_]+)\]/g) || []).map((v) => v.slice(1, -1)),
@@ -863,9 +1102,14 @@ function ContractTab({ deal }: { deal: Deal }) {
             </Button>
             <Button
               size="sm"
-              onClick={() => toast.success("Export ready — Word/PDF")}
+              variant="outline"
+              disabled={sendReviewMut.isPending}
+              onClick={() => sendReviewMut.mutate()}
             >
-              Export
+              Send for review
+            </Button>
+            <Button size="sm" onClick={() => downloadContractPdf(deal._id)}>
+              Export PDF
             </Button>
           </div>
         </CardHeader>
@@ -1000,7 +1244,7 @@ function ContractTab({ deal }: { deal: Deal }) {
         </CardContent>
       </Card>
 
-      <Card>
+      {/* <Card>
         <CardHeader>
           <CardTitle className="text-base">Smart variables</CardTitle>
         </CardHeader>
@@ -1063,10 +1307,37 @@ function ContractTab({ deal }: { deal: Deal }) {
             )}
           </div>
         </CardContent>
-      </Card>
+      </Card> */}
+
+      {reviewLoop.responses.length > 0 && (
+        <Card className="lg:col-span-4">
+          <CardHeader>
+            <CardTitle className="text-base">Review responses</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {reviewLoop.responses.map((r, i) => (
+              <div
+                key={i}
+                className={`border rounded-md p-2.5 text-sm ${r.decision === "Approved" ? "border-emerald-500/30 bg-emerald-500/5" : "border-amber-500/30 bg-amber-500/5"}`}
+              >
+                <div className="flex justify-between">
+                  <span className="font-medium">{r.partyName}</span>
+                  <Badge variant="outline">{r.decision}</Badge>
+                </div>
+                {r.comment && (
+                  <div className="text-xs text-muted-foreground mt-1">
+                    {r.comment}
+                  </div>
+                )}
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
+
 function AlertTriangleIcon() {
   return (
     <svg
@@ -1120,7 +1391,8 @@ function CPsTab({ deal }: { deal: Deal }) {
     ["Precedent", "Conditions Precedent"],
     ["Subsequent", "Conditions Subsequent"],
   ] as const;
-  const withIndex = deal.cps.map((c, index) => ({ ...c, index }));
+  const cps = deal.cps ?? [];
+  const withIndex = cps.map((c, index) => ({ ...c, index }));
 
   return (
     <div className="space-y-4">
@@ -1143,7 +1415,7 @@ function CPsTab({ deal }: { deal: Deal }) {
           <div>
             <div className="text-xs text-muted-foreground">CPs at risk</div>
             <div className="text-lg font-bold text-amber-700">
-              {deal.cps.filter((c) => c.status === "At Risk").length}
+              {cps.filter((c) => c.status === "At Risk").length}
             </div>
           </div>
           <div>
@@ -1304,6 +1576,8 @@ function SigningTab({ deal }: { deal: Deal }) {
   const queryClient = useQueryClient();
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: ["deal", deal._id] });
+  const checklist = deal.signing?.checklist ?? [];
+  const signatories = deal.signing?.signatories ?? [];
   const [item, setItem] = useState({ item: "", owner: "" });
   const [sig, setSig] = useState({ name: "", party: "", role: "" });
   const [details, setDetails] = useState({
@@ -1339,8 +1613,8 @@ function SigningTab({ deal }: { deal: Deal }) {
     onSuccess: invalidate,
   });
 
-  const done = deal.signing.checklist.filter((c) => c.status === "Done").length;
-  const total = deal.signing.checklist.length;
+  const done = checklist.filter((c) => c.status === "Done").length;
+  const total = checklist.length;
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -1353,7 +1627,7 @@ function SigningTab({ deal }: { deal: Deal }) {
         </CardHeader>
         <CardContent className="space-y-2">
           <Progress value={total ? (done / total) * 100 : 0} className="h-2" />
-          {deal.signing.checklist.map((c, i) => (
+          {checklist.map((c, i) => (
             <label
               key={i}
               className="flex items-center gap-2 text-sm p-2 border rounded cursor-pointer hover:bg-muted/40"
@@ -1429,7 +1703,7 @@ function SigningTab({ deal }: { deal: Deal }) {
           </div>
           <div className="pt-2 border-t">
             <div className="text-xs font-semibold mb-2">Signatories</div>
-            {deal.signing.signatories.map((s, i) => (
+            {signatories.map((s, i) => (
               <div
                 key={i}
                 className="flex items-center justify-between border rounded p-2 mb-1"
@@ -1458,7 +1732,7 @@ function SigningTab({ deal }: { deal: Deal }) {
                 )}
               </div>
             ))}
-            {deal.signing.signatories.length === 0 && (
+            {signatories.length === 0 && (
               <div className="text-xs text-muted-foreground">
                 No signatories added.
               </div>
@@ -1501,6 +1775,7 @@ function PostTab({ deal }: { deal: Deal }) {
   const queryClient = useQueryClient();
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: ["deal", deal._id] });
+  const postCompletion = deal.postCompletion ?? [];
   const [f, setF] = useState({ item: "", dueDate: "" });
 
   const addMut = useMutation({
@@ -1529,7 +1804,7 @@ function PostTab({ deal }: { deal: Deal }) {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-2">
-        {deal.postCompletion.map((p, i) => (
+        {postCompletion.map((p, i) => (
           <label
             key={i}
             className="flex items-center gap-2 text-sm p-2 border rounded cursor-pointer hover:bg-muted/40"
@@ -1572,5 +1847,156 @@ function PostTab({ deal }: { deal: Deal }) {
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function PartiesSection({ deal }: { deal: Deal }) {
+  const queryClient = useQueryClient();
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: ["deal", deal._id] });
+  const parties = deal.parties ?? [];
+  const [f, setF] = useState({
+    side: "Buyer" as DealPartySide,
+    title: "",
+    name: "",
+    email: "",
+    phone: "",
+  });
+
+  const addMut = useMutation({
+    mutationFn: () => addParty(deal._id, f),
+    onSuccess: () => {
+      invalidate();
+      setF({ side: "Buyer", title: "", name: "", email: "", phone: "" });
+    },
+    onError: (err: any) =>
+      toast.error(err?.response?.data?.message ?? "Failed to add party"),
+  });
+  const patchMut = useMutation({
+    mutationFn: ({ index, patch }: { index: number; patch: any }) =>
+      updateParty(deal._id, index, patch),
+    onSuccess: invalidate,
+  });
+  const removeMut = useMutation({
+    mutationFn: (index: number) => removeParty(deal._id, index),
+    onSuccess: invalidate,
+  });
+
+  const bySide = (side: DealPartySide) =>
+    parties.map((p, i) => ({ ...p, index: i })).filter((p) => p.side === side);
+
+  const SideColumn = ({ side }: { side: DealPartySide }) => (
+    <div className="space-y-2">
+      <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+        {side} side
+      </div>
+      {bySide(side).map((p) => (
+        <div key={p.index} className="border rounded-md p-2.5 space-y-1.5">
+          <div className="flex items-start justify-between gap-2">
+            <div className="text-sm">
+              <div className="font-medium">
+                {p.name}{" "}
+                <span className="text-xs text-muted-foreground font-normal">
+                  — {p.title}
+                </span>
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {p.email}
+                {p.phone && ` · ${p.phone}`}
+              </div>
+            </div>
+            <Button
+              size="icon"
+              variant="ghost"
+              onClick={() => removeMut.mutate(p.index)}
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
+          <div className="flex flex-wrap gap-3 text-xs pt-1 border-t">
+            {(["dataRoom", "contractReview", "offerReview"] as const).map(
+              (key) => (
+                <label
+                  key={key}
+                  className="flex items-center gap-1.5 cursor-pointer"
+                >
+                  <input
+                    type="checkbox"
+                    checked={p.permissions[key]}
+                    onChange={(e) =>
+                      patchMut.mutate({
+                        index: p.index,
+                        patch: { permissions: { [key]: e.target.checked } },
+                      })
+                    }
+                  />
+                  {key === "dataRoom"
+                    ? "Data room"
+                    : key === "contractReview"
+                      ? "Contract review"
+                      : "Offer review"}
+                </label>
+              ),
+            )}
+          </div>
+        </div>
+      ))}
+      {bySide(side).length === 0 && (
+        <div className="text-xs text-muted-foreground">
+          No {side.toLowerCase()}-side parties yet.
+        </div>
+      )}
+    </div>
+  );
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <SideColumn side="Buyer" />
+        <SideColumn side="Seller" />
+      </div>
+      <div className="border-t pt-3 grid grid-cols-2 md:grid-cols-6 gap-2 items-end">
+        <Select
+          value={f.side}
+          onValueChange={(v) => setF({ ...f, side: v as DealPartySide })}
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="Buyer">Buyer</SelectItem>
+            <SelectItem value="Seller">Seller</SelectItem>
+          </SelectContent>
+        </Select>
+        <Input
+          placeholder="Title (e.g. Counsel)"
+          value={f.title}
+          onChange={(e) => setF({ ...f, title: e.target.value })}
+        />
+        <Input
+          placeholder="Name"
+          value={f.name}
+          onChange={(e) => setF({ ...f, name: e.target.value })}
+        />
+        <Input
+          placeholder="Email"
+          type="email"
+          value={f.email}
+          onChange={(e) => setF({ ...f, email: e.target.value })}
+        />
+        <Input
+          placeholder="Phone"
+          value={f.phone}
+          onChange={(e) => setF({ ...f, phone: e.target.value })}
+        />
+        <Button
+          disabled={!f.title || !f.name || !f.email || addMut.isPending}
+          onClick={() => addMut.mutate()}
+        >
+          <Plus className="h-4 w-4 mr-1" />
+          Add
+        </Button>
+      </div>
+    </div>
   );
 }

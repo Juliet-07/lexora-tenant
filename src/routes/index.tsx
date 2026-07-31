@@ -12,6 +12,8 @@ import SignContractPage from "@/pages/SigninContractPage";
 import MeetingAckPage from "@/pages/grc/governance/MeetingAck";
 import MinutesReviewPage from "@/pages/grc/governance/MinutesReview";
 import PolicyAckPage from "@/pages/grc/compliance/PolicyAck";
+import DealContractReviewPage from "@/pages/grc/deals/DealContractReview";
+import DealOfferReviewPage from "@/pages/grc/deals/DealOfferReview";
 
 /**
  * Top-level router. Module-specific routes live in their own files so
@@ -23,6 +25,8 @@ const PUBLIC_ROUTE_PATTERNS = [
   /^\/meeting-ack\/[^/]+$/,
   /^\/minutes-review\/[^/]+$/,
   /^\/policy-ack\/[^/]+$/,
+  /^\/deal-review\/contract\/[^/]+$/,
+  /^\/deal-review\/offer\/[^/]+$/,
 ];
 
 export function AppRoutes() {
@@ -40,6 +44,14 @@ export function AppRoutes() {
         <Route path="/meeting-ack/:token" element={<MeetingAckPage />} />
         <Route path="/minutes-review/:token" element={<MinutesReviewPage />} />
         <Route path="/policy-ack/:token" element={<PolicyAckPage />} />
+        <Route
+          path="/deal-review/contract/:token"
+          element={<DealContractReviewPage />}
+        />
+        <Route
+          path="/deal-review/offer/:token"
+          element={<DealOfferReviewPage />}
+        />
       </Routes>
     );
   }
