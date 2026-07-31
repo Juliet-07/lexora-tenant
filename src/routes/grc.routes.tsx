@@ -71,9 +71,14 @@ export const grcRoutes = ({ isAdmin, accessibleModules }: RouteContext) => {
         element={layout(<PrecedentTemplates />)}
       />,
       <Route
+        key="grc-legal-knowledge"
+        path="/grc/legal-knowledge"
+        element={layout(<LegalKnowledge />)}
+      />,
+      <Route
         key="grc-deals-legal"
         path="/grc/deals/legal"
-        element={layout(<LegalKnowledge />)}
+        element={<Navigate to="/grc/legal-knowledge" replace />}
       />,
       <Route
         key="grc-deals-detail"

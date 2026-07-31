@@ -182,8 +182,13 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
         { title: "Deal Pipeline", url: "/grc/deals/pipeline" },
         { title: "Clause Library", url: "/grc/deals/clauses" },
         { title: "Precedent Templates", url: "/grc/deals/precedents" },
-        { title: "Legal Knowledge Base", url: "/grc/deals/legal" },
       ],
+    },
+    {
+      title: "Legal Knowledge Base",
+      url: "/grc/legal-knowledge",
+      icon: Scale,
+      adminOnly: true,
     },
     {
       title: "Risk",
