@@ -155,6 +155,90 @@ export interface Certification {
   evidence: CertEvidence[];
 }
 
+export type AuditType = "Internal" | "External";
+export type AuditEngagementStatus =
+  | "Planned"
+  | "In Progress"
+  | "Reporting"
+  | "Closed";
+export type RequestStatus = "Requested" | "Received" | "Overdue";
+export type FindingSeverity = "Critical" | "High" | "Medium" | "Low";
+export type FindingStatus = "Open" | "In Progress" | "Remediated" | "Closed";
+
+export interface AuditRequest {
+  description: string;
+  assignedTo: string;
+  dueDate: string;
+  status: RequestStatus;
+}
+export interface AuditFinding {
+  observation: string;
+  condition: string;
+  criteria: string;
+  cause: string;
+  consequence: string;
+  recommendation: string;
+  severity: FindingSeverity;
+  status: FindingStatus;
+  managementResponse: string;
+  remediationDueDate: string | null;
+  createdAt: string;
+}
+
+export interface AuditEngagement {
+  _id: string;
+  name: string;
+  type: AuditType;
+  scope: string;
+  startDate: string;
+  endDate: string;
+  status: AuditEngagementStatus;
+  requests: AuditRequest[];
+  findings: AuditFinding[];
+}
+
+export type ChangeUrgency =
+  | "Action Required"
+  | "Review"
+  | "Informational"
+  | "Noted";
+export type AssessmentStatus = "Unassigned" | "In Progress" | "Complete";
+export type LoopStatus = "Pending" | "In Progress" | "Done" | "Not Applicable";
+
+export const URGENCIES: ChangeUrgency[] = [
+  "Action Required",
+  "Review",
+  "Informational",
+  "Noted",
+];
+
+export interface LoopAction {
+  status: LoopStatus;
+  note: string;
+  completedAt: string | null;
+}
+
+export interface RegulatoryChange {
+  _id: string;
+  title: string;
+  regulator: Regulator;
+  publishedAt: string;
+  summary: string;
+  fullTextRef: string;
+  urgency: ChangeUrgency;
+  practiceAreas: string[];
+  affectedObligationIds: string[];
+  affectedPolicyTitles: string[];
+  assessmentOwner: string;
+  assessmentDeadline: string | null;
+  assessmentNotes: string;
+  assessmentStatus: AssessmentStatus;
+  obligationAction: LoopAction;
+  policyAction: LoopAction;
+  clauseAction: LoopAction;
+  advisoryAction: LoopAction;
+}
+
 export const fetchObligations = async (): Promise<ComplianceObligation[]> => {
   const res = await api.get("/grc/compliance/obligations");
   const d = res.data?.data ?? res.data;
@@ -286,4 +370,137 @@ export const addCertEvidence = async (
 
 export const deleteCertification = async (id: string): Promise<void> => {
   await api.delete(`/grc/compliance/certifications/${id}`);
+};
+
+export const fetchAudits = async (): Promise<AuditEngagement[]> => {
+  const res = await api.get("/grc/compliance/audits");
+  const d = res.data?.data ?? res.data;
+  return Array.isArray(d) ? d : [];
+};
+
+export const createAudit = async (dto: {
+  name: string;
+  type: AuditType;
+  scope?: string;
+  startDate: string;
+  endDate: string;
+}): Promise<AuditEngagement> => {
+  const res = await api.post("/grc/compliance/audits", dto);
+  return res.data?.data ?? res.data;
+};
+
+export const setAuditStatus = async (
+  id: string,
+  status: AuditEngagementStatus,
+): Promise<AuditEngagement> => {
+  const res = await api.patch(`/grc/compliance/audits/${id}/status`, {
+    status,
+  });
+  return res.data?.data ?? res.data;
+};
+
+export const addAuditRequest = async (
+  id: string,
+  dto: { description: string; assignedTo?: string; dueDate: string },
+): Promise<AuditEngagement> => {
+  const res = await api.post(`/grc/compliance/audits/${id}/requests`, dto);
+  return res.data?.data ?? res.data;
+};
+
+export const setRequestStatus = async (
+  id: string,
+  index: number,
+  status: RequestStatus,
+): Promise<AuditEngagement> => {
+  const res = await api.patch(
+    `/grc/compliance/audits/${id}/requests/${index}/status`,
+    { status },
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const addFinding = async (
+  id: string,
+  dto: {
+    observation: string;
+    condition?: string;
+    criteria?: string;
+    cause?: string;
+    consequence?: string;
+    recommendation?: string;
+    severity: FindingSeverity;
+  },
+): Promise<AuditEngagement> => {
+  const res = await api.post(`/grc/compliance/audits/${id}/findings`, dto);
+  return res.data?.data ?? res.data;
+};
+
+export const updateFinding = async (
+  id: string,
+  index: number,
+  dto: Partial<{
+    managementResponse: string;
+    remediationDueDate: string;
+    status: FindingStatus;
+  }>,
+): Promise<AuditEngagement> => {
+  const res = await api.patch(
+    `/grc/compliance/audits/${id}/findings/${index}`,
+    dto,
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const fetchRegChanges = async (): Promise<RegulatoryChange[]> => {
+  const res = await api.get("/grc/compliance/regulatory-changes");
+  const d = res.data?.data ?? res.data;
+  return Array.isArray(d) ? d : [];
+};
+
+export const createRegChange = async (dto: {
+  title: string;
+  regulator: Regulator;
+  publishedAt: string;
+  summary?: string;
+  fullTextRef?: string;
+  urgency: ChangeUrgency;
+  practiceAreas?: string[];
+  affectedObligationIds?: string[];
+  assessmentOwner?: string;
+  assessmentDeadline?: string;
+}): Promise<RegulatoryChange> => {
+  const res = await api.post("/grc/compliance/regulatory-changes", dto);
+  return res.data?.data ?? res.data;
+};
+
+export const updateRegChangeAssessment = async (
+  id: string,
+  dto: Partial<{
+    assessmentOwner: string;
+    assessmentDeadline: string;
+    assessmentNotes: string;
+    assessmentStatus: AssessmentStatus;
+  }>,
+): Promise<RegulatoryChange> => {
+  const res = await api.patch(
+    `/grc/compliance/regulatory-changes/${id}/assessment`,
+    dto,
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const updateLoopAction = async (
+  id: string,
+  field:
+    | "obligationAction"
+    | "policyAction"
+    | "clauseAction"
+    | "advisoryAction",
+  dto: Partial<{ status: LoopStatus; note: string }>,
+): Promise<RegulatoryChange> => {
+  const res = await api.patch(
+    `/grc/compliance/regulatory-changes/${id}/loop/${field}`,
+    dto,
+  );
+  return res.data?.data ?? res.data;
 };
