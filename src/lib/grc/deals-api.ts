@@ -113,6 +113,7 @@ export interface ReviewLoopToken {
 
 export interface ReviewLoopResponse {
   name: string;
+  partyName?: string;
   decision: "Approved" | "Changes Requested";
   comment?: string;
   respondedAt: string;
