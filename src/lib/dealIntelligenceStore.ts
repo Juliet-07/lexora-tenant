@@ -557,6 +557,50 @@ function seedValuation(): Valuation {
   };
 }
 
+/** Empty starting model for a new subject (own company or a client). */
+export function blankValuation(
+  company: string,
+  currency = "USD",
+  advisor = "",
+): Valuation {
+  return {
+    id: id("val"),
+    company,
+    currency,
+    advisor,
+    createdAt: today(),
+    updatedAt: now(),
+    dcf: {
+      baseRevenue: 1_000_000,
+      growthRate: 10,
+      ebitdaMargin: 20,
+      taxRate: 30,
+      daPct: 4,
+      capexPct: 6,
+      wcPct: 10,
+      wacc: 16,
+      terminalGrowth: 3,
+      netDebt: 0,
+      sharesOutstanding: 1_000_000,
+    },
+    comps: [],
+    privateDiscount: 25,
+    precedents: [],
+    nav: { bookAssets: 0, ppeUplift: 0, intangibleWriteDown: 0, liabilities: 0 },
+    ddm: { dividend: 0, growth: 3, requiredReturn: 15 },
+    blend: {
+      DCF: { weight: 50, rationale: "Primary method.", confidence: "Medium", enabled: true },
+      Comparables: { weight: 20, rationale: "Add peers to activate.", confidence: "Low", enabled: false },
+      Precedents: { weight: 20, rationale: "Add precedents to activate.", confidence: "Low", enabled: false },
+      NAV: { weight: 10, rationale: "Asset floor.", confidence: "Medium", enabled: true },
+      DDM: { weight: 0, rationale: "Not applicable.", confidence: "Low", enabled: false },
+    },
+    history: [
+      { version: 1, at: today(), change: `Model initiated for ${company}.`, blendedEv: 0 },
+    ],
+  };
+}
+
 function seed(): DealIntelState {
   return {
     assessments: seedAssessments(),
