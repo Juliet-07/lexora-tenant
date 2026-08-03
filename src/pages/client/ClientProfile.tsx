@@ -32,6 +32,12 @@ import {
   toneFor,
 } from "@/lib/client/clients-api";
 import { api } from "@/lib/api";
+import {
+  ClientDealsPanel,
+  ClientProjectsPanel,
+  ClientInvoicesPanel,
+  ClientCommercialPanel,
+} from "@/components/client/ClientRelationshipPanels";
 import { useToast } from "@/hooks/use-toast";
 
 export default function ClientProfile() {
@@ -269,13 +275,30 @@ export default function ClientProfile() {
 
       {/* Tabs */}
       <Tabs defaultValue="overview">
-        <TabsList>
+        <TabsList className="flex-wrap h-auto">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="kyc">KYC</TabsTrigger>
           <TabsTrigger value="risk">Risk</TabsTrigger>
           <TabsTrigger value="documents">Documents</TabsTrigger>
+          <TabsTrigger value="deals">Deals</TabsTrigger>
+          <TabsTrigger value="projects">Projects</TabsTrigger>
+          <TabsTrigger value="invoices">Invoices</TabsTrigger>
+          <TabsTrigger value="commercial">Commercial</TabsTrigger>
           <TabsTrigger value="activity">Activity</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="deals" className="mt-4">
+          <ClientDealsPanel clientId={client._id} clientName={displayName(client)} />
+        </TabsContent>
+        <TabsContent value="projects" className="mt-4">
+          <ClientProjectsPanel clientId={client._id} clientName={displayName(client)} />
+        </TabsContent>
+        <TabsContent value="invoices" className="mt-4">
+          <ClientInvoicesPanel clientId={client._id} clientName={displayName(client)} />
+        </TabsContent>
+        <TabsContent value="commercial" className="mt-4">
+          <ClientCommercialPanel clientId={client._id} clientName={displayName(client)} />
+        </TabsContent>
 
         {/* ── Overview ── */}
         <TabsContent value="overview" className="mt-4">
