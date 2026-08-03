@@ -53,6 +53,7 @@ import {
   createDeal,
   setDealStage,
 } from "@/lib/grc/deals-api";
+import { ClientSelect } from "@/components/ClientDropdown";
 import { toast } from "sonner";
 
 const TYPES: DealType[] = [
@@ -65,6 +66,7 @@ const TYPES: DealType[] = [
 ];
 
 export default function DealPipeline() {
+  const [clientId, setClientId] = useState("");
   const queryClient = useQueryClient();
   const { data: deals = [], isLoading } = useQuery({
     queryKey: ["deals"],
@@ -101,6 +103,7 @@ export default function DealPipeline() {
       queryClient.invalidateQueries({ queryKey: ["deals"] });
       toast.success("Deal created");
       setOpen(false);
+      setClientId("");
       setForm({
         name: "",
         client: "",
@@ -198,11 +201,19 @@ export default function DealPipeline() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label>Client</Label>
-                  <Input
-                    value={form.client}
-                    onChange={(e) =>
-                      setForm({ ...form, client: e.target.value })
+                  <ClientSelect
+                    value={clientId}
+                    onValueChange={setClientId}
+                    onClientChange={(c) =>
+                      setForm((f) => ({
+                        ...f,
+                        client:
+                          c.businessName ||
+                          [c.firstName, c.lastName].filter(Boolean).join(" ") ||
+                          c.email,
+                      }))
                     }
+                    placeholder="Select client…"
                   />
                 </div>
                 <div>

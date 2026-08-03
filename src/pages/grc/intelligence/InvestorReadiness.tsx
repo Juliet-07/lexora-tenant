@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,6 +27,11 @@ import {
   ReadinessAssessment, ReadinessGap, GapPriority, GapStatus,
   effectiveScore, overallScore, readinessBand, projectedReadyDate,
 } from "@/lib/dealIntelligenceStore";
+import {
+  IntelSubjectPicker,
+  ownSubject,
+  type IntelSubject,
+} from "@/components/grc/IntelSubjectPicker";
 
 const PRIORITY_TONE: Record<GapPriority, string> = {
   P1: "text-rose-600 border-rose-500/40 bg-rose-500/10",
@@ -42,9 +47,12 @@ const PRIORITY_LABEL: Record<GapPriority, string> = {
 
 export default function InvestorReadiness() {
   const s = useDealIntel();
-  const [company, setCompany] = useState<string>(
-    () => s.assessments[s.assessments.length - 1]?.company ?? "",
-  );
+  const [subject, setSubject] = useState<IntelSubject>(() => ownSubject());
+  const company = subject.label;
+  const setCompany = (c: string) =>
+    setSubject((prev) =>
+      c === prev.label ? prev : { kind: "client", label: c },
+    );
   const [newOpen, setNewOpen] = useState(false);
   const [gapOpen, setGapOpen] = useState(false);
   const [override, setOverride] = useState<{ dim: string; value: string; reason: string } | null>(null);
@@ -65,10 +73,17 @@ export default function InvestorReadiness() {
     return (
       <div className="space-y-6">
         <Header onNew={() => setNewOpen(true)} />
+        <IntelSubjectPicker value={subject} onChange={setSubject} existing={companies} />
         <Card><CardContent className="p-10 text-center text-muted-foreground">
-          No assessments yet — initiate one to pull scores from the connected modules.
+          No assessment for <span className="font-medium text-foreground">{company}</span> yet —
+          initiate one to pull scores from the connected modules.
         </CardContent></Card>
-        <NewAssessmentDialog open={newOpen} onOpenChange={setNewOpen} onCreated={setCompany} />
+        <NewAssessmentDialog
+          open={newOpen}
+          onOpenChange={setNewOpen}
+          defaultCompany={company}
+          onCreated={setCompany}
+        />
       </div>
     );
   }
@@ -131,12 +146,7 @@ export default function InvestorReadiness() {
       <Header onNew={() => setNewOpen(true)} />
 
       <div className="flex flex-wrap items-center gap-3">
-        <Select value={company} onValueChange={setCompany}>
-          <SelectTrigger className="w-72"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            {companies.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-          </SelectContent>
-        </Select>
+        <IntelSubjectPicker value={subject} onChange={setSubject} existing={companies} />
         <Badge variant="outline">Version {current.version} · {current.createdAt}</Badge>
         <Badge variant="outline">Advisor: {current.advisor}</Badge>
       </div>
@@ -452,7 +462,12 @@ export default function InvestorReadiness() {
         open={gapOpen} onOpenChange={setGapOpen}
         onAdd={(g) => patch((a) => ({ ...a, gaps: [...a.gaps, g] }))}
       />
-      <NewAssessmentDialog open={newOpen} onOpenChange={setNewOpen} onCreated={setCompany} />
+      <NewAssessmentDialog
+        open={newOpen}
+        onOpenChange={setNewOpen}
+        defaultCompany={company}
+        onCreated={setCompany}
+      />
     </div>
   );
 }
@@ -594,10 +609,11 @@ function AddGapDialog({
 }
 
 function NewAssessmentDialog({
-  open, onOpenChange, onCreated,
-}: { open: boolean; onOpenChange: (o: boolean) => void; onCreated: (c: string) => void }) {
+  open, onOpenChange, onCreated, defaultCompany = "",
+}: { open: boolean; onOpenChange: (o: boolean) => void; onCreated: (c: string) => void; defaultCompany?: string }) {
   const s = useDealIntel();
-  const [name, setName] = useState("");
+  const [name, setName] = useState(defaultCompany);
+  useEffect(() => { if (open) setName(defaultCompany); }, [open, defaultCompany]);
   const [advisor, setAdvisor] = useState("Aline Uwase");
 
   const create = () => {

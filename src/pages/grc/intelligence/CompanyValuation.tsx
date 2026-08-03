@@ -21,21 +21,50 @@ import {
   runDcf, runComps, runPrecedents, runNav, runDdm,
   methodEv, methodRange, blendedValuation, compsStats, sensitivityMatrix,
 } from "@/lib/dealIntelligenceStore";
+import { blankValuation } from "@/lib/dealIntelligenceStore";
+import {
+  IntelSubjectPicker,
+  ownSubject,
+  type IntelSubject,
+} from "@/components/grc/IntelSubjectPicker";
 
 export default function CompanyValuation() {
   const s = useDealIntel();
-  const [selId, setSelId] = useState<string>(() => s.valuations[0]?.id ?? "");
-  const v = s.valuations.find((x) => x.id === selId) ?? s.valuations[0];
+  const [subject, setSubject] = useState<IntelSubject>(() => ownSubject());
+  const [selId, setSelId] = useState<string>("");
+
+  const subjectModels = s.valuations.filter((x) => x.company === subject.label);
+  const v = subjectModels.find((x) => x.id === selId) ?? subjectModels[0];
+
+  const createModel = () => {
+    const model = blankValuation(subject.label);
+    mutateDealIntel((st) => ({ ...st, valuations: [...st.valuations, model] }));
+    setSelId(model.id);
+    toast({
+      title: "Valuation model created",
+      description: `New model for ${subject.label} — enter assumptions to start.`,
+    });
+  };
 
   if (!v) {
     return (
       <div className="space-y-6">
         <div>
           <h1 className="text-2xl font-bold">Company Valuation</h1>
-          <p className="text-sm text-muted-foreground">No valuation models yet.</p>
+          <p className="text-sm text-muted-foreground">
+            Value your own company or any client — five methods, one blended range.
+          </p>
         </div>
-        <Button onClick={() => toast({ title: "Seed data missing", description: "Reset the module store to reseed." })}>
-          <Plus className="h-4 w-4 mr-1" />New valuation
+        <IntelSubjectPicker
+          value={subject}
+          onChange={setSubject}
+          existing={s.valuations.map((x) => x.company)}
+        />
+        <Card><CardContent className="p-10 text-center text-muted-foreground">
+          No valuation model for <span className="font-medium text-foreground">{subject.label}</span> yet.
+        </CardContent></Card>
+        <Button onClick={createModel}>
+          <Plus className="h-4 w-4 mr-1" />New valuation for {subject.label}
         </Button>
       </div>
     );
@@ -81,13 +110,25 @@ export default function CompanyValuation() {
             Five independent methods, blended into one negotiation range. Every input recalculates instantly.
           </p>
         </div>
-        <div className="flex gap-2">
-          <Select value={v.id} onValueChange={setSelId}>
-            <SelectTrigger className="w-64"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {s.valuations.map((x) => <SelectItem key={x.id} value={x.id}>{x.company}</SelectItem>)}
-            </SelectContent>
-          </Select>
+        <div className="flex gap-2 flex-wrap items-center">
+          <IntelSubjectPicker
+            value={subject}
+            onChange={(sub) => { setSubject(sub); setSelId(""); }}
+            existing={s.valuations.map((x) => x.company)}
+          />
+          {subjectModels.length > 1 && (
+            <Select value={v.id} onValueChange={setSelId}>
+              <SelectTrigger className="w-56"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {subjectModels.map((x, i) => (
+                  <SelectItem key={x.id} value={x.id}>Model {i + 1} · {x.createdAt}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          <Button variant="outline" onClick={createModel}>
+            <Plus className="h-4 w-4 mr-1" />New model
+          </Button>
           <Button variant="outline" onClick={() => { toast({ title: "Valuation report queued" }); window.print(); }}>
             <Download className="h-4 w-4 mr-1" />Report
           </Button>
