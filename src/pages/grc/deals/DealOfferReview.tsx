@@ -97,7 +97,7 @@ export default function DealOfferReviewPage() {
     (decision !== "Changes Requested" || comment.trim());
   const ts = snap.termSheet;
   const fields: [string, string][] = [
-    ["Parties", ts.parties],
+    ["Parties", ts.parties ?? ""],
     ["Structure", ts.structure],
     ["Consideration", ts.consideration],
     ["Conditions", ts.conditions],

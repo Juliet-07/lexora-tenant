@@ -105,7 +105,26 @@ export function formatMoney(v: number, ccy = "USD") {
   }).format(v);
 }
 
+export interface ReviewLoopToken {
+  token: string;
+  partyIndex: number;
+  sentAt: string;
+}
+
+export interface ReviewLoopResponse {
+  name: string;
+  decision: "Approved" | "Changes Requested";
+  comment?: string;
+  respondedAt: string;
+}
+
+export interface ReviewLoop {
+  tokens: ReviewLoopToken[];
+  responses: ReviewLoopResponse[];
+}
+
 export interface TermSheet {
+  parties?: string;
   structure: string;
   consideration: string;
   conditions: string;
@@ -226,6 +245,8 @@ export interface Deal {
     venue: string;
   };
   postCompletion: PostCompletionItem[];
+  offerReviewLoop?: ReviewLoop;
+  contractReviewLoop?: ReviewLoop;
   conflictCheck: { cleared: boolean; note: string };
   ddProgress: number;
   cpsProgress: { done: number; total: number };
