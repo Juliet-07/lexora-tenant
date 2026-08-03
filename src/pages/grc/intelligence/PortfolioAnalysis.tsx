@@ -20,6 +20,11 @@ import { useDeals, DEAL_STAGES, Deal } from "@/lib/dealsStore";
 import {
   useDealIntel, mutateDealIntel, id, money, pct, ScenarioDeal,
 } from "@/lib/dealIntelligenceStore";
+import {
+  IntelSubjectPicker,
+  ownSubject,
+  type IntelSubject,
+} from "@/components/grc/IntelSubjectPicker";
 
 /** Normalised view of a deal for portfolio maths — live or hypothetical. */
 interface PDeal {
@@ -38,11 +43,22 @@ interface PDeal {
 export default function PortfolioAnalysis() {
   const deals = useDeals();
   const di = useDealIntel();
+  const [subject, setSubject] = useState<IntelSubject>(() => ownSubject());
+  const norm = (x: string) => x.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const scoped = useMemo(
+    () =>
+      subject.kind === "own"
+        ? (deals.deals as Deal[])
+        : (deals.deals as Deal[]).filter(
+            (d) => norm(d.client ?? "") === norm(subject.label),
+          ),
+    [deals.deals, subject],
+  );
   const { settings, scenario } = di.portfolio;
 
   const live: PDeal[] = useMemo(
     () =>
-      (deals.deals as Deal[]).map((d) => ({
+      scoped.map((d) => ({
         id: d.id,
         name: d.name,
         sector: d.type,
@@ -59,7 +75,7 @@ export default function PortfolioAnalysis() {
         won: d.status === "Completed",
         lost: d.status === "Lost",
       })),
-    [deals.deals, settings.defaultFeeRate],
+    [scoped, settings.defaultFeeRate],
   );
 
   const effective: PDeal[] = useMemo(() => {
@@ -95,8 +111,15 @@ export default function PortfolioAnalysis() {
         <div>
           <h1 className="text-2xl font-bold">Portfolio Analysis</h1>
           <p className="text-sm text-muted-foreground">
-            Auto-aggregated from the live deal pipeline — concentration, performance and a what-if sandbox.
+            Auto-aggregated from the live deal pipeline — for your own company or a selected client.
           </p>
+          <div className="mt-3">
+            <IntelSubjectPicker
+              value={subject}
+              onChange={setSubject}
+              existing={Array.from(new Set((deals.deals as Deal[]).map((d) => d.client).filter(Boolean) as string[]))}
+            />
+          </div>
         </div>
         <Button variant="outline" onClick={() => { toast({ title: "Portfolio report queued" }); window.print(); }}>
           <Download className="h-4 w-4 mr-1" />Report
