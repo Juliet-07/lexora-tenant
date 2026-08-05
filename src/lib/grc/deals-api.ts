@@ -261,6 +261,8 @@ export interface Deal {
   team: string[];
   value: number;
   currency: string;
+  feeRate: number | null;
+  feeRecovered: number;
   jurisdiction: string;
   startDate: string;
   targetClose: string;
@@ -967,3 +969,11 @@ export interface ContractReviewSection {
   redlines: Redline[];
 }
 // Add `sections: ContractReviewSection[]` to ContractReviewSnapshot.
+
+export const updateCommercialTerms = async (
+  dealId: string,
+  dto: Partial<{ feeRate: number; feeRecovered: number }>,
+): Promise<Deal> => {
+  const res = await api.patch(`/deals/${dealId}/commercial-terms`, dto);
+  return res.data?.data ?? res.data;
+};

@@ -1,14 +1,24 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { type Deal } from "@/lib/grc/deals-api";
+import { type Deal, updateCommercialTerms } from "@/lib/grc/deals-api";
 import PartiesSection from "./PartiesSection";
+import { Label } from "@radix-ui/react-label";
+import { Input } from "@/components/ui/input";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 export default function OverviewTab({ deal }: { deal: Deal }) {
   const dd = deal.dd ?? [];
   const signingChecklist = deal.signing?.checklist ?? [];
   const flags = dd.filter((x) => x.status === "Red Flag");
   const signDone = signingChecklist.filter((c) => c.status === "Done").length;
+  const queryClient = useQueryClient();
+  const updateCommercialTermsMut = useMutation({
+    mutationFn: (dto: Partial<{ feeRate: number; feeRecovered: number }>) =>
+      updateCommercialTerms(deal._id, dto),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ["deal", deal._id] }),
+  });
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -94,7 +104,40 @@ export default function OverviewTab({ deal }: { deal: Deal }) {
           </div>
         </CardContent>
       </Card>
-
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Commercial terms</CardTitle>
+        </CardHeader>
+        <CardContent className="grid grid-cols-2 gap-3">
+          <div>
+            <Label className="text-xs">
+              Fee rate % (blank = tenant default)
+            </Label>
+            <Input
+              type="number"
+              defaultValue={deal.feeRate ?? ""}
+              placeholder="Uses default"
+              onBlur={(e) =>
+                updateCommercialTermsMut.mutate({
+                  feeRate: e.target.value ? Number(e.target.value) : undefined,
+                })
+              }
+            />
+          </div>
+          <div>
+            <Label className="text-xs">Fee recovered so far</Label>
+            <Input
+              type="number"
+              defaultValue={deal.feeRecovered}
+              onBlur={(e) =>
+                updateCommercialTermsMut.mutate({
+                  feeRecovered: Number(e.target.value),
+                })
+              }
+            />
+          </div>
+        </CardContent>
+      </Card>
       <Card className="lg:col-span-3">
         <CardHeader>
           <CardTitle className="text-base">Deal parties</CardTitle>

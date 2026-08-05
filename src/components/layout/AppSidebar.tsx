@@ -208,12 +208,12 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
       icon: TrendingUp,
       adminOnly: true,
       children: [
+        { title: "Company Valuation", url: "/grc/intelligence/valuation" },
+        { title: "Portfolio Analysis", url: "/grc/intelligence/portfolio" },
         {
           title: "Investor Readiness",
           url: "/grc/intelligence/investor-readiness",
         },
-        { title: "Company Valuation", url: "/grc/intelligence/valuation" },
-        { title: "Portfolio Analysis", url: "/grc/intelligence/portfolio" },
       ],
     },
     {
