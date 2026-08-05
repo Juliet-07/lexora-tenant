@@ -75,12 +75,11 @@ export function ClientDealsPanel({ clientId, clientName }: Props) {
   });
 
   const rows = useMemo(
-    () => deals.filter((d) => norm(d.client ?? "") === norm(clientName)),
-    [deals, clientName],
+    () => deals.filter((d) => d.clientId === clientId),
+    [deals, clientId],
   );
 
-  if (isLoading)
-    return <Empty text="Loading deals…" />;
+  if (isLoading) return <Empty text="Loading deals…" />;
   if (!rows.length)
     return <Empty text={`No deals recorded for ${clientName} yet.`} />;
 
@@ -239,7 +238,11 @@ export function ClientInvoicesPanel({ clientId, clientName }: Props) {
       <div className="grid gap-3 sm:grid-cols-3">
         <Kpi label="Invoices" value={String(rows.length)} icon={Receipt} />
         <Kpi label="Billed" value={money(billed)} icon={Receipt} />
-        <Kpi label="Outstanding" value={money(Math.max(billed - paid, 0))} icon={Receipt} />
+        <Kpi
+          label="Outstanding"
+          value={money(Math.max(billed - paid, 0))}
+          icon={Receipt}
+        />
       </div>
       <Card>
         <CardContent className="p-0">
@@ -295,7 +298,10 @@ export function ClientCommercialPanel({ clientId, clientName }: Props) {
             No commercial parameters assigned to {clientName} yet — relationship
             manager, service lines, SLA profile and fees are set in CRM.
           </p>
-          <Link to="/crm/clients" className="text-primary inline-flex items-center gap-1">
+          <Link
+            to="/crm/clients"
+            className="text-primary inline-flex items-center gap-1"
+          >
             Go to Client Management <ExternalLink className="h-3 w-3" />
           </Link>
         </CardContent>
@@ -307,14 +313,29 @@ export function ClientCommercialPanel({ clientId, clientName }: Props) {
   return (
     <div className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-4">
-        <Kpi label="Relationship manager" value={rec.relationshipManager || "—"} icon={Handshake} />
+        <Kpi
+          label="Relationship manager"
+          value={rec.relationshipManager || "—"}
+          icon={Handshake}
+        />
         <Kpi label="Fee tier" value={rec.feeTier} icon={Receipt} />
-        <Kpi label="Revenue YTD" value={money(rec.revenueYtd, rec.currency)} icon={Receipt} />
-        <Kpi label="Health" value={`${score} · ${healthBand(score)}`} icon={Briefcase} />
+        <Kpi
+          label="Revenue YTD"
+          value={money(rec.revenueYtd, rec.currency)}
+          icon={Receipt}
+        />
+        <Kpi
+          label="Health"
+          value={`${score} · ${healthBand(score)}`}
+          icon={Briefcase}
+        />
       </div>
       <Card>
         <CardContent className="p-5 grid gap-4 sm:grid-cols-2">
-          <Field label="Service lines" value={rec.serviceLines.join(", ") || "—"} />
+          <Field
+            label="Service lines"
+            value={rec.serviceLines.join(", ") || "—"}
+          />
           <Field label="Risk rating" value={rec.riskRating} />
           <Field label="Cost YTD" value={money(rec.costYtd, rec.currency)} />
           <Field label="Satisfaction (CSAT)" value={`${rec.satisfaction}/5`} />

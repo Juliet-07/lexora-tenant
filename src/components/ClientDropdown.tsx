@@ -15,7 +15,7 @@ import { fetchClients, type ApiClient } from "@/lib/client/clients-api";
 
 function clientDisplayName(c: ApiClient): string {
   const name = [c.firstName, c.lastName].filter(Boolean).join(" ");
-  return name || c.email;
+  return name || c.businessName || c.email;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -35,6 +35,13 @@ interface ClientSelectProps {
   className?: string;
   /** Only show clients with this KYC status — e.g. "approved" */
   filterByKycStatus?: string;
+  /** Only show clients whose overall account status is "approved".
+   *  Opt-in and off by default — existing callers (e.g. STR, which
+   *  often needs to reference clients regardless of approval state)
+   *  are unaffected unless they explicitly turn this on. */
+  onlyApproved?: boolean;
+  /** Only show clients of this classification */
+  classification?: "individual" | "corporate";
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -49,6 +56,8 @@ export function ClientSelect({
   disabled = false,
   className,
   filterByKycStatus,
+  onlyApproved = false,
+  classification,
 }: ClientSelectProps) {
   const { data: clients = [], isLoading } = useQuery({
     queryKey: ["clients-list"],
@@ -56,13 +65,29 @@ export function ClientSelect({
     staleTime: 5 * 60_000, // cache for 5 min — avoids re-fetching on every mount
   });
 
-  const filtered = filterByKycStatus
-    ? clients.filter((c) => c.kycStatus === filterByKycStatus)
-    : clients;
+  let filtered = clients;
+  if (filterByKycStatus)
+    filtered = filtered.filter((c) => c.kycStatus === filterByKycStatus);
+  if (onlyApproved) {
+    filtered = filtered.filter(
+      (c) =>
+        c.kycStatus?.toLowerCase() === "approved" &&
+        c.status?.toLowerCase() === "active",
+    );
+  }
+  if (classification)
+    filtered = filtered.filter(
+      (c) => c.classifications?.toLowerCase() === classification,
+    );
 
   if (isLoading) {
     return <Skeleton className={`h-10 w-full ${className ?? ""}`} />;
   }
+
+  const emptyMessage =
+    filterByKycStatus || onlyApproved || classification
+      ? "No eligible clients"
+      : "No clients found";
 
   return (
     <Select
@@ -78,13 +103,7 @@ export function ClientSelect({
     >
       <SelectTrigger className={className}>
         <SelectValue
-          placeholder={
-            filtered.length === 0
-              ? filterByKycStatus
-                ? `No ${filterByKycStatus} clients`
-                : "No clients found"
-              : placeholder
-          }
+          placeholder={filtered.length === 0 ? emptyMessage : placeholder}
         />
       </SelectTrigger>
       <SelectContent>
@@ -101,4 +120,17 @@ export function ClientSelect({
       </SelectContent>
     </Select>
   );
+}
+
+// ─────────────────────────────────────────────────────────────
+// SPECIALIZED VARIANT — approved corporate clients only.
+// A drop-in dropdown for anywhere a deal/engagement needs to be
+// tied to a real, vetted corporate client — Deal Pipeline today,
+// Deal Intelligence and anywhere else that comes up later.
+// ─────────────────────────────────────────────────────────────
+
+export function ApprovedCorporateClientSelect(
+  props: Omit<ClientSelectProps, "onlyApproved" | "classification">,
+) {
+  return <ClientSelect {...props} onlyApproved classification="corporate" />;
 }

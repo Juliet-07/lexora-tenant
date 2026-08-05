@@ -50,6 +50,7 @@ export interface Precedent {
   name: string;
   type: DealType;
   jurisdiction: string;
+  folderId: string;
   fileName: string;
   fileUrl: string | null;
   mimeType: string | null;
@@ -162,6 +163,7 @@ export interface DDItem {
   finding: string;
   materiality: Materiality | null;
 }
+
 export interface ContractComment {
   author: string;
   text: string;
@@ -174,6 +176,34 @@ export interface ContractSection {
   body: string;
   comments: ContractComment[];
 }
+export interface ReviewToken {
+  token: string;
+  partyEmail: string;
+  partyName: string;
+  sentAt: string;
+}
+export interface ReviewResponse {
+  partyEmail: string;
+  partyName: string;
+  decision: "Approved" | "Changes Requested";
+  comment: string;
+  respondedAt: string;
+}
+export interface ReviewLoop {
+  tokens: ReviewToken[];
+  responses: ReviewResponse[];
+}
+
+export interface Contract {
+  _id: string;
+  name: string;
+  sections: ContractSection[];
+  variables: Record<string, string>;
+  reviewLoop: ReviewLoop;
+  pdfUrl: string | null;
+  createdAt: string;
+}
+
 export interface CP {
   type: CPKind;
   description: string;
@@ -221,6 +251,7 @@ export interface Deal {
   _id: string;
   name: string;
   client: string;
+  clientId: string | null;
   parties: DealParty[];
   counterparty: string;
   type: DealType;
@@ -351,12 +382,14 @@ export const createPrecedent = async (dto: {
   name: string;
   type: DealType;
   jurisdiction?: string;
+  folderId: string;
   file: File;
 }): Promise<Precedent> => {
   const form = new FormData();
   form.append("name", dto.name);
   form.append("type", dto.type);
   if (dto.jurisdiction) form.append("jurisdiction", dto.jurisdiction);
+  form.append("folderId", dto.folderId);
   form.append("file", dto.file);
   const res = await api.post("/deals/precedents", form);
   return res.data?.data ?? res.data;
@@ -395,7 +428,7 @@ export const fetchDeal = async (id: string): Promise<Deal> => {
 };
 export const createDeal = async (dto: {
   name: string;
-  client: string;
+  clientId: string;
   counterparty?: string;
   type: DealType;
   leadPartner?: string;
@@ -429,24 +462,24 @@ export const updateTermSheet = async (
   return res.data?.data ?? res.data;
 };
 
-export const downloadContractPdf = (dealId: string): void => {
-  const token = localStorage.getItem("tenantToken");
-  const base = (import.meta.env.VITE_REACT_APP_BASE_URL ?? "").replace(
-    /\/api\/?$/,
-    "",
-  );
-  fetch(`${base}/api/deals/${dealId}/contract/pdf`, {
-    headers: { Authorization: `Bearer ${token}` },
-  })
-    .then((r) => r.blob())
-    .then((blob) => {
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = "Contract.pdf";
-      a.click();
-      URL.revokeObjectURL(a.href);
-    });
-};
+// export const downloadContractPdf = (dealId: string): void => {
+//   const token = localStorage.getItem("tenantToken");
+//   const base = (import.meta.env.VITE_REACT_APP_BASE_URL ?? "").replace(
+//     /\/api\/?$/,
+//     "",
+//   );
+//   fetch(`${base}/api/deals/${dealId}/contract/pdf`, {
+//     headers: { Authorization: `Bearer ${token}` },
+//   })
+//     .then((r) => r.blob())
+//     .then((blob) => {
+//       const a = document.createElement("a");
+//       a.href = URL.createObjectURL(blob);
+//       a.download = "Contract.pdf";
+//       a.click();
+//       URL.revokeObjectURL(a.href);
+//     });
+// };
 
 export const addDataRoomFile = async (
   id: string,
@@ -499,64 +532,7 @@ export const updateDDItem = async (
   const res = await api.patch(`/deals/${id}/dd/${index}`, dto);
   return res.data?.data ?? res.data;
 };
-export const addContractSection = async (
-  id: string,
-  clauseId: string,
-): Promise<Deal> => {
-  const res = await api.post(`/deals/${id}/contract/sections`, { clauseId });
-  return res.data?.data ?? res.data;
-};
-export const removeContractSection = async (
-  id: string,
-  index: number,
-): Promise<Deal> => {
-  const res = await api.delete(`/deals/${id}/contract/sections/${index}`);
-  return res.data?.data ?? res.data;
-};
-export const updateContractSectionBody = async (
-  id: string,
-  index: number,
-  body: string,
-): Promise<Deal> => {
-  const res = await api.patch(`/deals/${id}/contract/sections/${index}`, {
-    body,
-  });
-  return res.data?.data ?? res.data;
-};
-export const addContractComment = async (
-  id: string,
-  index: number,
-  author: string,
-  text: string,
-): Promise<Deal> => {
-  const res = await api.post(
-    `/deals/${id}/contract/sections/${index}/comments`,
-    { author, text },
-  );
-  return res.data?.data ?? res.data;
-};
-export const toggleContractComment = async (
-  id: string,
-  sectionIndex: number,
-  commentIndex: number,
-): Promise<Deal> => {
-  const res = await api.patch(
-    `/deals/${id}/contract/sections/${sectionIndex}/comments/${commentIndex}/toggle`,
-    {},
-  );
-  return res.data?.data ?? res.data;
-};
-export const setContractVariable = async (
-  id: string,
-  key: string,
-  value: string,
-): Promise<Deal> => {
-  const res = await api.patch(`/deals/${id}/contract/variables`, {
-    key,
-    value,
-  });
-  return res.data?.data ?? res.data;
-};
+
 export const addCP = async (
   id: string,
   dto: {
@@ -691,3 +667,303 @@ export const submitReview = async (
   const res = await api.post(`/deals/review/${kind}/${token}`, dto);
   return res.data?.data ?? res.data;
 };
+
+export interface PrecedentFolder {
+  _id: string;
+  name: string;
+}
+
+export const fetchPrecedentFolders = async (): Promise<PrecedentFolder[]> => {
+  const res = await api.get("/deals/precedents/folders");
+  const d = res.data?.data ?? res.data;
+  return Array.isArray(d) ? d : [];
+};
+
+export const createPrecedentFolder = async (
+  name: string,
+): Promise<PrecedentFolder> => {
+  const res = await api.post("/deals/precedents/folders", { name });
+  return res.data?.data ?? res.data;
+};
+
+export const deletePrecedentFolder = async (id: string): Promise<void> => {
+  await api.delete(`/deals/precedents/folders/${id}`);
+};
+
+export const createContract = async (
+  dealId: string,
+  name: string,
+): Promise<Deal> => {
+  const res = await api.post(`/deals/${dealId}/contracts`, { name });
+  return res.data?.data ?? res.data;
+};
+export const renameContract = async (
+  dealId: string,
+  contractId: string,
+  name: string,
+): Promise<Deal> => {
+  const res = await api.patch(`/deals/${dealId}/contracts/${contractId}`, {
+    name,
+  });
+  return res.data?.data ?? res.data;
+};
+export const deleteContract = async (
+  dealId: string,
+  contractId: string,
+): Promise<Deal> => {
+  const res = await api.delete(`/deals/${dealId}/contracts/${contractId}`);
+  return res.data?.data ?? res.data;
+};
+export const addContractSection = async (
+  dealId: string,
+  contractId: string,
+  clauseId: string,
+): Promise<Deal> => {
+  const res = await api.post(
+    `/deals/${dealId}/contracts/${contractId}/sections`,
+    { clauseId },
+  );
+  return res.data?.data ?? res.data;
+};
+export const removeContractSection = async (
+  dealId: string,
+  contractId: string,
+  index: number,
+): Promise<Deal> => {
+  const res = await api.delete(
+    `/deals/${dealId}/contracts/${contractId}/sections/${index}`,
+  );
+  return res.data?.data ?? res.data;
+};
+export const updateContractSectionBody = async (
+  dealId: string,
+  contractId: string,
+  index: number,
+  body: string,
+): Promise<Deal> => {
+  const res = await api.patch(
+    `/deals/${dealId}/contracts/${contractId}/sections/${index}`,
+    { body },
+  );
+  return res.data?.data ?? res.data;
+};
+export const addContractComment = async (
+  dealId: string,
+  contractId: string,
+  index: number,
+  author: string,
+  text: string,
+): Promise<Deal> => {
+  const res = await api.post(
+    `/deals/${dealId}/contracts/${contractId}/sections/${index}/comments`,
+    { author, text },
+  );
+  return res.data?.data ?? res.data;
+};
+export const toggleContractComment = async (
+  dealId: string,
+  contractId: string,
+  sectionIndex: number,
+  commentIndex: number,
+): Promise<Deal> => {
+  const res = await api.patch(
+    `/deals/${dealId}/contracts/${contractId}/sections/${sectionIndex}/comments/${commentIndex}/toggle`,
+    {},
+  );
+  return res.data?.data ?? res.data;
+};
+export const setContractVariable = async (
+  dealId: string,
+  contractId: string,
+  key: string,
+  value: string,
+): Promise<Deal> => {
+  const res = await api.patch(
+    `/deals/${dealId}/contracts/${contractId}/variables`,
+    { key, value },
+  );
+  return res.data?.data ?? res.data;
+};
+export const downloadContractPdf = (
+  dealId: string,
+  contractId: string,
+): void => {
+  const token = localStorage.getItem("tenantToken");
+  const base = (import.meta.env.VITE_REACT_APP_BASE_URL ?? "").replace(
+    /\/api\/?$/,
+    "",
+  );
+  fetch(`${base}/api/deals/${dealId}/contracts/${contractId}/pdf`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+    .then((r) => r.blob())
+    .then((blob) => {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "Contract.pdf";
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
+};
+export const sendContractForReview = async (
+  dealId: string,
+  contractId: string,
+): Promise<{ sent: string[] }> => {
+  const res = await api.post(
+    `/deals/${dealId}/contracts/${contractId}/review/send`,
+    {},
+  );
+  return res.data?.data ?? res.data;
+};
+export const sendOfferForReview = async (
+  dealId: string,
+): Promise<{ sent: string[] }> => {
+  const res = await api.post(`/deals/${dealId}/review/offer/send`, {});
+  return res.data?.data ?? res.data;
+};
+
+export interface OfferReviewSnapshot {
+  dealName: string;
+  termSheet: TermSheet;
+  prefillName: string;
+  alreadyResponded: boolean;
+  previousDecision: string | null;
+}
+export interface ContractReviewSnapshot {
+  dealName: string;
+  contractName: string;
+  pdfUrl: string | null;
+  prefillName: string;
+  alreadyResponded: boolean;
+  previousDecision: string | null;
+}
+export const fetchOfferReviewSnapshot = async (
+  token: string,
+): Promise<OfferReviewSnapshot> => {
+  const res = await api.get(`/deals/review/offer/${token}`);
+  return res.data?.data ?? res.data;
+};
+export const submitOfferReview = async (
+  token: string,
+  dto: {
+    name: string;
+    decision: "Approved" | "Changes Requested";
+    comment?: string;
+  },
+): Promise<{ success: boolean }> => {
+  const res = await api.post(`/deals/review/offer/${token}`, dto);
+  return res.data?.data ?? res.data;
+};
+export const fetchContractReviewSnapshot = async (
+  token: string,
+): Promise<ContractReviewSnapshot> => {
+  const res = await api.get(`/deals/review/contract/${token}`);
+  return res.data?.data ?? res.data;
+};
+export const submitContractReview = async (
+  token: string,
+  dto: {
+    name: string;
+    decision: "Approved" | "Changes Requested";
+    comment?: string;
+  },
+): Promise<{ success: boolean }> => {
+  const res = await api.post(`/deals/review/contract/${token}`, dto);
+  return res.data?.data ?? res.data;
+};
+export const addContractSectionFromPrecedent = async (
+  dealId: string,
+  contractId: string,
+  precedentId: string,
+): Promise<Deal> => {
+  const res = await api.post(
+    `/deals/${dealId}/contracts/${contractId}/sections/from-precedent`,
+    { precedentId },
+  );
+  return res.data?.data ?? res.data;
+};
+export const fetchContractPdfBlob = async (
+  dealId: string,
+  contractId: string,
+): Promise<Blob> => {
+  const token = localStorage.getItem("tenantToken");
+  const base = (import.meta.env.VITE_REACT_APP_BASE_URL ?? "").replace(
+    /\/api\/?$/,
+    "",
+  );
+  const res = await fetch(
+    `${base}/api/deals/${dealId}/contracts/${contractId}/pdf`,
+    {
+      headers: { Authorization: `Bearer ${token}` },
+    },
+  );
+  if (!res.ok) throw new Error("Failed to load preview");
+  return res.blob();
+};
+
+export interface Redline {
+  lineIndex: number;
+  quotedText: string;
+  comment: string;
+  authorName: string;
+  authorEmail: string;
+  source: "internal" | "external";
+  createdAt: string;
+}
+
+// Add `lines: string[]` and `redlines: Redline[]` to the ContractSection interface.
+
+export const addRedline = async (
+  dealId: string,
+  contractId: string,
+  sectionIndex: number,
+  lineIndex: number,
+  comment: string,
+): Promise<Deal> => {
+  const res = await api.post(
+    `/deals/${dealId}/contracts/${contractId}/sections/${sectionIndex}/redlines`,
+    { lineIndex, comment },
+  );
+  return res.data?.data ?? res.data;
+};
+export const addExternalRedline = async (
+  token: string,
+  sectionIndex: number,
+  lineIndex: number,
+  comment: string,
+): Promise<{ success: boolean }> => {
+  const res = await api.post(
+    `/deals/review/contract/${token}/sections/${sectionIndex}/redlines`,
+    { lineIndex, comment },
+  );
+  return res.data?.data ?? res.data;
+};
+export const downloadRedlinedContractPdf = (
+  dealId: string,
+  contractId: string,
+): void => {
+  const token = localStorage.getItem("tenantToken");
+  const base = (import.meta.env.VITE_REACT_APP_BASE_URL ?? "").replace(
+    /\/api\/?$/,
+    "",
+  );
+  fetch(`${base}/api/deals/${dealId}/contracts/${contractId}/pdf/redlined`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+    .then((r) => r.blob())
+    .then((blob) => {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "Contract - Redlined.pdf";
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
+};
+
+export interface ContractReviewSection {
+  index: number;
+  title: string;
+  lines: string[];
+  redlines: Redline[];
+}
+// Add `sections: ContractReviewSection[]` to ContractReviewSnapshot.

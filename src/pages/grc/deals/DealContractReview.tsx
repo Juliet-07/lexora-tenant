@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Document, Page, pdfjs } from "react-pdf";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { CheckCircle2, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import {
+  addExternalRedline,
   fetchReviewSnapshot,
   submitReview,
   type ContractReviewSnapshot,
@@ -148,6 +149,8 @@ export default function DealContractReviewPage() {
           </CardContent>
         </Card>
 
+        <ExternalRedlineCard token={token!} sections={snap.sections ?? []} />
+
         <Card className={reviewed ? "" : "opacity-50 pointer-events-none"}>
           <CardContent className="p-5 space-y-3">
             <div className="text-sm font-medium">2. Confirm and sign</div>
@@ -251,6 +254,128 @@ function ReviewPdfViewer({
   );
 }
 
+function ExternalRedlineCard({
+  token,
+  sections,
+}: {
+  token: string;
+  sections: ContractReviewSnapshot["sections"];
+}) {
+  const queryClient = useQueryClient();
+  const [openSection, setOpenSection] = useState<number | null>(null);
+  const [draftLine, setDraftLine] = useState<number | null>(null);
+  const [text, setText] = useState("");
+
+  const mutation = useMutation({
+    mutationFn: ({
+      sectionIndex,
+      lineIndex,
+      comment,
+    }: {
+      sectionIndex: number;
+      lineIndex: number;
+      comment: string;
+    }) => addExternalRedline(token, sectionIndex, lineIndex, comment),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["contract-review", token] });
+      setText("");
+      setDraftLine(null);
+      toast.success("Redline added");
+    },
+    onError: (err: any) =>
+      toast.error(err?.response?.data?.message ?? "Failed to add redline"),
+  });
+
+  if (!sections || sections.length === 0) return null;
+
+  return (
+    <Card>
+      <CardContent className="p-5 space-y-3">
+        <div className="text-sm font-medium">
+          Redline (optional) — comment on any specific line
+        </div>
+        {sections.map((s) => (
+          <div key={s.index} className="border rounded-md">
+            <button
+              className="w-full text-left p-2 text-sm font-medium flex items-center justify-between"
+              onClick={() =>
+                setOpenSection(openSection === s.index ? null : s.index)
+              }
+            >
+              {s.title}
+              <span className="text-xs text-muted-foreground">
+                {s.redlines.length} redline{s.redlines.length === 1 ? "" : "s"}
+              </span>
+            </button>
+            {openSection === s.index && (
+              <div className="p-2 pt-0 space-y-1.5">
+                {s.lines.map((line, lineIdx) => {
+                  const lineRedlines = s.redlines.filter(
+                    (r) => r.lineIndex === lineIdx,
+                  );
+                  return (
+                    <div key={lineIdx} className="border rounded p-2 text-xs">
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="flex-1">{line}</span>
+                        <button
+                          className="text-rose-600 hover:text-rose-700 shrink-0"
+                          onClick={() => {
+                            setDraftLine(
+                              draftLine === lineIdx ? null : lineIdx,
+                            );
+                            setText("");
+                          }}
+                        >
+                          +
+                        </button>
+                      </div>
+                      {lineRedlines.map((r, ri) => (
+                        <div
+                          key={ri}
+                          className="mt-1.5 pl-2 border-l-2 border-rose-300 text-[11px]"
+                        >
+                          <span className="font-medium">{r.authorName}</span>{" "}
+                          <span className="text-muted-foreground">
+                            ({new Date(r.createdAt).toLocaleDateString()})
+                          </span>
+                          <div>{r.comment}</div>
+                        </div>
+                      ))}
+                      {draftLine === lineIdx && (
+                        <div className="flex gap-2 mt-2">
+                          <Input
+                            placeholder="Your comment…"
+                            value={text}
+                            onChange={(e) => setText(e.target.value)}
+                            className="h-7 text-xs"
+                          />
+                          <Button
+                            size="sm"
+                            disabled={!text.trim() || mutation.isPending}
+                            onClick={() =>
+                              mutation.mutate({
+                                sectionIndex: s.index,
+                                lineIndex: lineIdx,
+                                comment: text,
+                              })
+                            }
+                          >
+                            Add
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
 function InvalidCard() {
   return (
     <Card className="max-w-md mx-auto">
@@ -264,6 +389,7 @@ function InvalidCard() {
     </Card>
   );
 }
+
 function DoneCard({ title, body }: { title: string; body: string }) {
   return (
     <Card className="max-w-md mx-auto border-emerald-200">
@@ -275,6 +401,7 @@ function DoneCard({ title, body }: { title: string; body: string }) {
     </Card>
   );
 }
+
 function Shell({ children }: { children: React.ReactNode }) {
   return <div className="min-h-screen bg-muted/30 py-10 px-4">{children}</div>;
 }

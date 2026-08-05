@@ -28,11 +28,14 @@ import {
 } from "@/components/ui/sheet";
 import {
   FileStack,
+  FolderOpen,
   Plus,
   Upload,
   Download,
   Trash2,
   RefreshCw,
+  ArrowLeft,
+  ChevronRight,
 } from "lucide-react";
 import { toast } from "sonner";
 import { RichTextEditor } from "@/components/RichTextEditor";
@@ -42,6 +45,9 @@ import {
   updatePrecedentContent,
   replacePrecedentDocument,
   deletePrecedent,
+  fetchPrecedentFolders,
+  createPrecedentFolder,
+  deletePrecedentFolder,
   type Precedent,
   type DealType,
 } from "@/lib/grc/deals-api";
@@ -64,33 +70,157 @@ const resolveFileUrl = (url: string | null): string | null => {
 };
 
 export default function PrecedentTemplates() {
-  const { data: precedents = [], isLoading } = useQuery({
+  const queryClient = useQueryClient();
+  const { data: folders = [], isLoading: loadingFolders } = useQuery({
+    queryKey: ["precedent-folders"],
+    queryFn: fetchPrecedentFolders,
+  });
+  const { data: precedents = [], isLoading: loadingPrecedents } = useQuery({
     queryKey: ["deals-precedents"],
     queryFn: fetchPrecedents,
   });
   const [uploadOpen, setUploadOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [newFolder, setNewFolder] = useState("");
+  const [openFolder, setOpenFolder] = useState<string | null>(null);
   const selected = precedents.find((p) => p._id === selectedId) ?? null;
 
-  if (isLoading)
+  const folderMut = useMutation({
+    mutationFn: () => createPrecedentFolder(newFolder.trim()),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["precedent-folders"] });
+      setNewFolder("");
+    },
+    onError: (err: any) =>
+      toast.error(err?.response?.data?.message ?? "Failed to create folder"),
+  });
+  const removeFolderMut = useMutation({
+    mutationFn: (id: string) => deletePrecedentFolder(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["precedent-folders"] });
+      queryClient.invalidateQueries({ queryKey: ["deals-precedents"] });
+      setOpenFolder(null);
+    },
+  });
+
+  const countInFolder = (folderId: string) =>
+    precedents.filter((p) => p.folderId === folderId).length;
+
+  if (loadingFolders || loadingPrecedents) {
     return (
       <div className="py-24 text-center text-sm text-muted-foreground">
         Loading precedent templates…
       </div>
     );
+  }
+
+  // ── Folder list view ──────────────────────────────────────────
+  if (!openFolder) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-bold flex items-center gap-2">
+              <FileStack className="h-6 w-6" />
+              Precedent Templates
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              Organize templates into folders — upload a Word document to create
+              a reusable, editable contract shell.
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <Card className="lg:col-span-2">
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <FolderOpen className="h-4 w-4" />
+                Folders
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                {folders.map((f) => (
+                  <div
+                    key={f._id}
+                    onClick={() => setOpenFolder(f._id)}
+                    className="border rounded-md p-3 cursor-pointer hover:border-primary transition group relative"
+                  >
+                    <FolderOpen className="h-6 w-6 text-muted-foreground mb-2" />
+                    <div className="text-sm font-medium truncate pr-6">
+                      {f.name}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {countInFolder(f._id)} template(s)
+                    </div>
+                    <button
+                      className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (
+                          confirm(
+                            `Delete "${f.name}" and every template in it?`,
+                          )
+                        )
+                          removeFolderMut.mutate(f._id);
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
+                    </button>
+                  </div>
+                ))}
+                {folders.length === 0 && (
+                  <div className="col-span-full text-sm text-muted-foreground text-center py-8">
+                    No folders yet — create one to start uploading.
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">New folder</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <Input
+                placeholder="Folder name"
+                value={newFolder}
+                onChange={(e) => setNewFolder(e.target.value)}
+              />
+              <Button
+                className="w-full"
+                disabled={!newFolder.trim() || folderMut.isPending}
+                onClick={() => folderMut.mutate()}
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                {folderMut.isPending ? "Creating…" : "Create folder"}
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Inside a folder ──────────────────────────────────────────
+  const folder = folders.find((f) => f._id === openFolder);
+  const rows = precedents.filter((p) => p.folderId === openFolder);
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <FileStack className="h-6 w-6" />
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 text-sm">
+          <button
+            className="text-muted-foreground hover:text-foreground flex items-center gap-1"
+            onClick={() => setOpenFolder(null)}
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
             Precedent Templates
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Upload a Word document to create a reusable, editable contract
-            shell.
-          </p>
+          </button>
+          <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+          <span className="font-semibold text-base">{folder?.name}</span>
         </div>
         <Button onClick={() => setUploadOpen(true)}>
           <Plus className="h-4 w-4 mr-1" />
@@ -99,7 +229,7 @@ export default function PrecedentTemplates() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        {precedents.map((p) => (
+        {rows.map((p) => (
           <Card
             key={p._id}
             className="cursor-pointer hover:shadow-md transition"
@@ -118,14 +248,18 @@ export default function PrecedentTemplates() {
             </CardHeader>
           </Card>
         ))}
-        {precedents.length === 0 && (
+        {rows.length === 0 && (
           <div className="col-span-full text-center text-sm text-muted-foreground py-10">
-            No precedent templates yet — upload a .docx to create one.
+            No templates in this folder yet.
           </div>
         )}
       </div>
 
-      <UploadDialog open={uploadOpen} onOpenChange={setUploadOpen} />
+      <UploadDialog
+        open={uploadOpen}
+        onOpenChange={setUploadOpen}
+        folderId={openFolder}
+      />
       {selected && (
         <PrecedentSheet
           precedent={selected}
@@ -139,9 +273,11 @@ export default function PrecedentTemplates() {
 function UploadDialog({
   open,
   onOpenChange,
+  folderId,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
+  folderId: string;
 }) {
   const queryClient = useQueryClient();
   const [name, setName] = useState("");
@@ -152,7 +288,7 @@ function UploadDialog({
 
   const mutation = useMutation({
     mutationFn: () =>
-      createPrecedent({ name, type, jurisdiction, file: file! }),
+      createPrecedent({ name, type, jurisdiction, folderId, file: file! }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["deals-precedents"] });
       toast.success("Precedent created");

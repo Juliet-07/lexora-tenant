@@ -53,7 +53,7 @@ import {
   createDeal,
   setDealStage,
 } from "@/lib/grc/deals-api";
-import { ClientSelect } from "@/components/ClientDropdown";
+import { ApprovedCorporateClientSelect } from "@/components/ClientDropdown";
 import { toast } from "sonner";
 
 const TYPES: DealType[] = [
@@ -80,7 +80,7 @@ export default function DealPipeline() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({
     name: "",
-    client: "",
+    clientId: "",
     counterparty: "",
     type: "M&A" as DealType,
     leadPartner: "",
@@ -106,7 +106,7 @@ export default function DealPipeline() {
       setClientId("");
       setForm({
         name: "",
-        client: "",
+        clientId: "",
         counterparty: "",
         type: "M&A",
         leadPartner: "",
@@ -156,7 +156,7 @@ export default function DealPipeline() {
   }, [deals]);
 
   function createDealClick() {
-    if (!form.name || !form.client)
+    if (!form.name || !form.clientId)
       return toast.error("Name and client required");
     createMut.mutate();
   }
@@ -201,18 +201,18 @@ export default function DealPipeline() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label>Client</Label>
-                  <ClientSelect
-                    value={clientId}
-                    onValueChange={setClientId}
-                    onClientChange={(c) =>
-                      setForm((f) => ({
-                        ...f,
-                        client:
-                          c.businessName ||
-                          [c.firstName, c.lastName].filter(Boolean).join(" ") ||
-                          c.email,
-                      }))
-                    }
+                  <ApprovedCorporateClientSelect
+                    value={form.clientId}
+                    onValueChange={(clientId) => setForm({ ...form, clientId })}
+                    // onClientChange={(c) =>
+                    //   setForm((f) => ({
+                    //     ...f,
+                    //     client:
+                    //       c.businessName ||
+                    //       [c.firstName, c.lastName].filter(Boolean).join(" ") ||
+                    //       c.email,
+                    //   }))
+                    // }
                     placeholder="Select client…"
                   />
                 </div>
