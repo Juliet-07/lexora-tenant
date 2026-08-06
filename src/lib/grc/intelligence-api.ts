@@ -310,4 +310,239 @@ export const setValueOverride = async (
   return res.data?.data ?? res.data;
 };
 
+// READINESS
+export type ReadinessDimension =
+  | "Corporate Structure & Governance"
+  | "Financial Statements"
+  | "Legal & Regulatory Compliance"
+  | "Tax Compliance"
+  | "Operational & Commercial"
+  | "Management Team & HR"
+  | "ESG & Sustainability"
+  | "Data Room Completeness";
+
+export const READINESS_DIMENSIONS: ReadinessDimension[] = [
+  "Corporate Structure & Governance",
+  "Financial Statements",
+  "Legal & Regulatory Compliance",
+  "Tax Compliance",
+  "Operational & Commercial",
+  "Management Team & HR",
+  "ESG & Sustainability",
+  "Data Room Completeness",
+];
+
+export const DIMENSION_SOURCE: Record<ReadinessDimension, string> = {
+  "Corporate Structure & Governance":
+    "GRC → Governance (board, committees, codes, meetings)",
+  "Financial Statements": "Manual — no connected accounting engine yet",
+  "Legal & Regulatory Compliance": "GRC → Compliance obligations",
+  "Tax Compliance": "GRC → Compliance obligations (RRA)",
+  "Operational & Commercial": "Manual — no connected CRM/PM data yet",
+  "Management Team & HR":
+    "HR module (contracts, onboarding, performance reviews)",
+  "ESG & Sustainability": "Manual — no connected ESG register yet",
+  "Data Room Completeness":
+    "Manual — Deals data room is per-transaction, not company-wide",
+};
+
+export type ComputeMode = "auto" | "manual";
+export const DIMENSION_COMPUTE_MODE: Record<ReadinessDimension, ComputeMode> = {
+  "Corporate Structure & Governance": "auto",
+  "Financial Statements": "manual",
+  "Legal & Regulatory Compliance": "auto",
+  "Tax Compliance": "auto",
+  "Operational & Commercial": "manual",
+  "Management Team & HR": "auto",
+  "ESG & Sustainability": "manual",
+  "Data Room Completeness": "manual",
+};
+
+export type GapPriority = "P1" | "P2" | "P3";
+export type GapStatus = "Open" | "In progress" | "Closed";
+export type ReportSectionState = "Auto" | "Review" | "Incomplete";
+export const REPORT_SECTIONS = [
+  "Executive summary",
+  "Company overview",
+  "Governance",
+  "Financials",
+  "Compliance",
+  "Tax",
+  "ESG",
+  "Key risks",
+  "Remediation plan",
+];
+
+export interface DimensionScore {
+  dimension: ReadinessDimension;
+  computeMode: ComputeMode;
+  autoScore: number;
+  override: number | null;
+  overrideReason: string | null;
+}
+export interface ReadinessGap {
+  _id: string;
+  dimension: ReadinessDimension;
+  priority: GapPriority;
+  description: string;
+  impact: string;
+  remediation: string;
+  owner: string;
+  targetDate: string;
+  status: GapStatus;
+  closedAt: string | null;
+}
+export interface ReportSectionFlag {
+  name: string;
+  state: ReportSectionState;
+}
+export interface ReadinessBand {
+  label: string;
+  tone: string;
+}
+
+export interface ReadinessAssessment {
+  _id: string;
+  company: string;
+  version: number;
+  createdAt: string;
+  advisor: string;
+  threshold: number;
+  scores: DimensionScore[];
+  gaps: ReadinessGap[];
+  reportSections: ReportSectionFlag[];
+  notes: string;
+  // Server-computed, authoritative — refreshed after every mutation.
+  overallScore: number;
+  band: ReadinessBand;
+  projectedReadyDate: string;
+  gapsClosed: number;
+  gapsOpen: number;
+}
+
+export function effectiveScore(d: DimensionScore): number {
+  return d.override ?? d.autoScore;
+}
+
+export const fetchAssessments = async (): Promise<ReadinessAssessment[]> => {
+  const res = await api.get("/deal-intel/readiness");
+  const d = res.data?.data ?? res.data;
+  return Array.isArray(d) ? d : [];
+};
+export const createAssessment = async (
+  advisor?: string,
+): Promise<ReadinessAssessment> => {
+  const res = await api.post(
+    "/deal-intel/readiness",
+    advisor ? { advisor } : {},
+  );
+  return res.data?.data ?? res.data;
+};
+export const updateReadinessThreshold = async (
+  id: string,
+  threshold: number,
+): Promise<ReadinessAssessment> => {
+  const res = await api.patch(`/deal-intel/readiness/${id}/threshold`, {
+    threshold,
+  });
+  return res.data?.data ?? res.data;
+};
+export const setDimensionOverride = async (
+  id: string,
+  dimension: ReadinessDimension,
+  value: number,
+  reason: string,
+): Promise<ReadinessAssessment> => {
+  const res = await api.patch(`/deal-intel/readiness/${id}/override`, {
+    dimension,
+    value,
+    reason,
+  });
+  return res.data?.data ?? res.data;
+};
+export const clearDimensionOverride = async (
+  id: string,
+  dimension: ReadinessDimension,
+): Promise<ReadinessAssessment> => {
+  const res = await api.post(`/deal-intel/readiness/${id}/override/clear`, {
+    dimension,
+  });
+  return res.data?.data ?? res.data;
+};
+export const recomputeAutoScores = async (
+  id: string,
+): Promise<ReadinessAssessment> => {
+  const res = await api.post(`/deal-intel/readiness/${id}/recompute`);
+  return res.data?.data ?? res.data;
+};
+export const addReadinessGap = async (
+  id: string,
+  dto: {
+    dimension: ReadinessDimension;
+    priority: GapPriority;
+    description: string;
+    impact?: string;
+    remediation?: string;
+    owner?: string;
+    targetDate: string;
+  },
+): Promise<ReadinessAssessment> => {
+  const res = await api.post(`/deal-intel/readiness/${id}/gaps`, dto);
+  return res.data?.data ?? res.data;
+};
+export const setGapStatus = async (
+  id: string,
+  gapId: string,
+  status: GapStatus,
+): Promise<ReadinessAssessment> => {
+  const res = await api.patch(
+    `/deal-intel/readiness/${id}/gaps/${gapId}/status`,
+    { status },
+  );
+  return res.data?.data ?? res.data;
+};
+export const deleteGap = async (
+  id: string,
+  gapId: string,
+): Promise<ReadinessAssessment> => {
+  const res = await api.delete(`/deal-intel/readiness/${id}/gaps/${gapId}`);
+  return res.data?.data ?? res.data;
+};
+export const setReportSection = async (
+  id: string,
+  name: string,
+  state: ReportSectionState,
+): Promise<ReadinessAssessment> => {
+  const res = await api.patch(`/deal-intel/readiness/${id}/report-sections`, {
+    name,
+    state,
+  });
+  return res.data?.data ?? res.data;
+};
+export const updateReadinessNotes = async (
+  id: string,
+  notes: string,
+): Promise<ReadinessAssessment> => {
+  const res = await api.patch(`/deal-intel/readiness/${id}/notes`, { notes });
+  return res.data?.data ?? res.data;
+};
+export const downloadReadinessReport = (id: string): void => {
+  const token = localStorage.getItem("tenantToken");
+  const base = (import.meta.env.VITE_REACT_APP_BASE_URL ?? "").replace(
+    /\/api\/?$/,
+    "",
+  );
+  fetch(`${base}/api/deal-intel/readiness/${id}/report`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+    .then((r) => r.blob())
+    .then((blob) => {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "Investor Readiness Report.pdf";
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
+};
+
 export { DEAL_STAGES };
