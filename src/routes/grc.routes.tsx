@@ -9,7 +9,6 @@ import GrcTreatment from "@/pages/grc/risk/Treatment";
 import GrcIncidents from "@/pages/grc/risk/Incidents";
 import GrcHeatmap from "@/pages/grc/risk/Heatmap";
 import GrcEmergingRisks from "@/pages/grc/risk/EmergingRisks";
-import GrcCompliance from "@/pages/grc/Compliance";
 import GrcPolicies from "@/pages/grc/compliance/Policies";
 import GrcAudits from "@/pages/grc/compliance/Audits";
 import GrcVendors from "@/pages/grc/risk/Vendors";
@@ -242,11 +241,6 @@ export const grcRoutes = ({ isAdmin, accessibleModules }: RouteContext) => {
         key="grc-compliance-audits"
         path="/grc/compliance/audits"
         element={layout(<GrcAudits />)}
-      />,
-      <Route
-        key="grc-compliance"
-        path="/grc/compliance"
-        element={layout(<GrcCompliance />)}
       />,
 
       // Legacy aliases (keep prior deep links working)
