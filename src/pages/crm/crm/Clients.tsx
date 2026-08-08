@@ -32,6 +32,7 @@ import {
   healthBand, healthFactors, RELATIONSHIP_MANAGERS, SERVICE_LINES,
   type ClientCommercial, type ClientRisk, type FeeTier,
 } from "@/lib/crm/clientCommercialStore";
+import { fetchEmployees } from "@/lib/hr/hr-api";
 
 const money = (n: number, c = "USD") =>
   n.toLocaleString(undefined, { style: "currency", currency: c, maximumFractionDigits: 0 });
