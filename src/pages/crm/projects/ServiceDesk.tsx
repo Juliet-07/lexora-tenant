@@ -232,37 +232,110 @@ export default function ServiceDesk() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="kb" className="pt-4">
-          <Card>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Article</TableHead>
-                    <TableHead>Category</TableHead>
-                    <TableHead>Audience</TableHead>
-                    <TableHead className="text-right">Views</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {knowledgeBase.map((a) => (
-                    <TableRow key={a.id}>
-                      <TableCell className="text-sm font-medium">
-                        {a.title}
-                      </TableCell>
-                      <TableCell className="text-sm">{a.category}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{a.audience}</Badge>
-                      </TableCell>
-                      <TableCell className="text-right text-sm">
-                        {a.views}
-                      </TableCell>
-                    </TableRow>
+        <TabsContent value="kb" className="space-y-4 pt-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-1 flex-wrap items-center gap-2">
+              <div className="relative w-64">
+                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  className="pl-8"
+                  placeholder="Search articles…"
+                  value={kbSearch}
+                  onChange={(e) => setKbSearch(e.target.value)}
+                />
+              </div>
+              <Select value={kbCategoryFilter} onValueChange={setKbCategoryFilter}>
+                <SelectTrigger className="w-48">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All categories</SelectItem>
+                  {kbCategories.map((c) => (
+                    <SelectItem key={c} value={c}>
+                      {c}
+                    </SelectItem>
                   ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+                </SelectContent>
+              </Select>
+            </div>
+            <Button onClick={() => openArticleEditor()}>
+              <Plus className="mr-2 h-4 w-4" /> New article
+            </Button>
+          </div>
+
+          {kbGroups.length === 0 && (
+            <p className="text-sm text-muted-foreground">No articles match your filters.</p>
+          )}
+
+          {kbGroups.map(([category, arts]) => (
+            <div key={category} className="space-y-2">
+              <h3 className="text-sm font-semibold text-muted-foreground">{category}</h3>
+              <Card>
+                <CardContent className="p-0">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Article</TableHead>
+                        <TableHead>Audience</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="text-right">Views</TableHead>
+                        <TableHead className="text-right">Helpful</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {arts.map((a) => (
+                        <TableRow
+                          key={a.id}
+                          className="cursor-pointer"
+                          onClick={() => {
+                            recordView(a.id);
+                            setKbSelected(a);
+                          }}
+                        >
+                          <TableCell className="text-sm font-medium">
+                            {a.title}
+                            {a.tags.length > 0 && (
+                              <div className="mt-1 flex flex-wrap gap-1">
+                                {a.tags.map((t) => (
+                                  <Badge key={t} variant="outline" className="text-[10px]">
+                                    {t}
+                                  </Badge>
+                                ))}
+                              </div>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline">{a.audience}</Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Badge
+                              className={
+                                a.status === "Published"
+                                  ? "bg-success/10 text-success"
+                                  : "bg-muted text-muted-foreground"
+                              }
+                            >
+                              {a.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right text-sm">
+                            <span className="inline-flex items-center gap-1">
+                              <Eye className="h-3 w-3" /> {a.views}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-right text-sm">
+                            <span className="inline-flex items-center gap-1 text-success">
+                              <ThumbsUp className="h-3 w-3" /> {a.helpful}
+                            </span>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            </div>
+          ))}
         </TabsContent>
 
         <TabsContent value="csat" className="pt-4">
