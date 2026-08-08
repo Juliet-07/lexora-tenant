@@ -87,6 +87,22 @@ const slaState = (t: Ticket) => {
   return { pct, label: "On track", tone: "text-success" };
 };
 
+const emptyArticleDraft = (): KbArticle => ({
+  id: "",
+  title: "",
+  category: "Portal access",
+  audience: "Internal",
+  status: "Draft",
+  tags: [],
+  body: "",
+  author: "Sarah Chen",
+  createdAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString(),
+  views: 0,
+  helpful: 0,
+  notHelpful: 0,
+});
+
 export default function ServiceDesk() {
   const [list, setList] = useState<Ticket[]>(seed);
   const [selected, setSelected] = useState<Ticket | null>(null);
@@ -103,6 +119,68 @@ export default function ServiceDesk() {
     description: "",
   });
   const { toast } = useToast();
+
+  // Knowledge base state
+  const kbArticles = useKbArticles();
+  const kbCategories = useKbCategories();
+  const [kbSearch, setKbSearch] = useState("");
+  const [kbCategoryFilter, setKbCategoryFilter] = useState("all");
+  const [kbSelected, setKbSelected] = useState<KbArticle | null>(null);
+  const [kbEditorOpen, setKbEditorOpen] = useState(false);
+  const [kbEditing, setKbEditing] = useState(false);
+  const [kbDraft, setKbDraft] = useState<KbArticle>(emptyArticleDraft());
+  const [kbTagsInput, setKbTagsInput] = useState("");
+  const [kbNewCategory, setKbNewCategory] = useState("");
+
+  const kbFiltered = kbArticles.filter((a) => {
+    const matchesSearch =
+      !kbSearch ||
+      a.title.toLowerCase().includes(kbSearch.toLowerCase()) ||
+      a.tags.some((t) => t.toLowerCase().includes(kbSearch.toLowerCase()));
+    const matchesCategory =
+      kbCategoryFilter === "all" || a.category === kbCategoryFilter;
+    return matchesSearch && matchesCategory;
+  });
+
+  const kbGroups = Object.entries(
+    kbFiltered.reduce<Record<string, KbArticle[]>>((acc, a) => {
+      (acc[a.category] ||= []).push(a);
+      return acc;
+    }, {}),
+  );
+
+  const openArticleEditor = (prefill?: Partial<KbArticle>) => {
+    setKbEditing(false);
+    setKbDraft({ ...emptyArticleDraft(), ...prefill });
+    setKbTagsInput("");
+    setKbEditorOpen(true);
+  };
+
+  const openArticleForEdit = (a: KbArticle) => {
+    setKbEditing(true);
+    setKbDraft(a);
+    setKbTagsInput(a.tags.join(", "));
+    setKbEditorOpen(true);
+  };
+
+  const saveKbDraft = () => {
+    if (!kbDraft.title.trim()) return;
+    const tags = kbTagsInput
+      .split(",")
+      .map((t) => t.trim())
+      .filter(Boolean);
+    const toSave: KbArticle = {
+      ...kbDraft,
+      id: kbEditing ? kbDraft.id : newArticleId(),
+      tags,
+    };
+    saveArticle(toSave);
+    setKbEditorOpen(false);
+    toast({
+      title: kbEditing ? "Article updated" : "Article created",
+      description: toSave.title,
+    });
+  };
 
   const filtered = list.filter(
     (t) => statusFilter === "all" || t.status === statusFilter,
