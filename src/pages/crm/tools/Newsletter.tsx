@@ -38,7 +38,7 @@ const statusClass: Record<string, string> = {
 
 const templates = ["Regulatory update", "Event invitation", "Onboarding welcome", "Filing reminder", "Thought leadership"];
 
-export default function Communications() {
+export default function Newsletter() {
   const { toast } = useToast();
   const [campaigns, setCampaigns] = useState<Campaign[]>(seedCampaigns);
   const [segments, setSegments] = useState(seedSegments);

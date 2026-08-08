@@ -10,7 +10,6 @@ import ClientOnboarding from "@/pages/kyc/ClientOnboarding";
 import OnboardingDetail from "@/pages/kyc/OnboardingDetail";
 import Settings from "@/pages/settings/Index";
 import MySettings from "@/pages/hr/employee/MySettings";
-import { ProjectsList, ProjectDetail } from "@/pages/Projects";
 import { MyProjectsList, MyProjectDetail } from "@/pages/MyProjects";
 
 /**
@@ -30,19 +29,18 @@ export const coreRoutes = ({ isAdmin }: RouteContext) => {
     <Route
       key="projects"
       path="/projects"
-      element={layout(isAdmin ? <ProjectsList /> : <MyProjectsList />)}
+      element={layout(isAdmin ? <ModulePlaceholder /> : <MyProjectsList />)}
     />,
     <Route
       key="project-detail"
       path="/projects/:id"
-      element={layout(isAdmin ? <ProjectDetail /> : <MyProjectDetail />)}
+      element={layout(isAdmin ? <ModulePlaceholder /> : <MyProjectDetail />)}
     />,
     <Route
       key="settings"
       path="/settings"
       element={layout(isAdmin ? <Settings /> : <MySettings />)}
     />,
-    
   ];
 
   if (isAdmin) {
