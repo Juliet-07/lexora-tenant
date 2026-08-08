@@ -20,8 +20,16 @@ import {
 } from "@/lib/grc/reportExport";
 import {
   mandates, timeEntries, pmInvoices, tickets, utilisation, pmTasks,
-  campaigns, money, invoiceTotal,
+  money, invoiceTotal,
 } from "@/data/crmPmMockData";
+
+// Campaign engagement mock (kept local — no shared export exists yet).
+const campaigns = [
+  { id: "CMP-01", name: "Q3 regulatory update — BNR circulars", channel: "Newsletter", segment: "All active clients", status: "Sent", recipients: 184, opened: 121, clicked: 47, unsubscribed: 2 },
+  { id: "CMP-02", name: "Governance breakfast invitation", channel: "Email", segment: "Tier 1 · Board contacts", status: "Sent", recipients: 62, opened: 44, clicked: 21, unsubscribed: 0 },
+  { id: "CMP-03", name: "New client onboarding sequence", channel: "Drip", segment: "Clients onboarded < 30 days", status: "Running", recipients: 11, opened: 9, clicked: 6, unsubscribed: 0 },
+  { id: "CMP-04", name: "Filing deadline reminder", channel: "WhatsApp", segment: "Compliance retainer clients", status: "Scheduled", recipients: 38, opened: 0, clicked: 0, unsubscribed: 0 },
+];
 import { organisations, opportunities, contacts, weightedValue } from "@/data/crmClientMockData";
 import { useClientCommercials } from "@/lib/crm/clientCommercialStore";
 import { fetchClients, displayName, type ApiClient } from "@/lib/client/clients-api";
