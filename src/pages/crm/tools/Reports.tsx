@@ -22,7 +22,7 @@ import {
   mandates, timeEntries, pmInvoices, tickets, utilisation, pmTasks,
   campaigns, money, invoiceTotal,
 } from "@/data/crmPmMockData";
-import { organisations, opportunities, contacts, weightedValue, healthScore, healthBand } from "@/data/crmClientMockData";
+import { organisations, opportunities, contacts, weightedValue } from "@/data/crmClientMockData";
 import { useClientCommercials } from "@/lib/crm/clientCommercialStore";
 import { fetchClients, displayName, type ApiClient } from "@/lib/client/clients-api";
 
@@ -120,7 +120,7 @@ export default function Reports() {
           { label: "KYC clients", value: kycClients.length },
           { label: "Assigned RM", value: commercialList.filter((c) => c.relationshipManager).length },
           { label: "Total revenue YTD", value: money(commercialList.reduce((s, c) => s + c.revenueYtd, 0)) },
-          { label: "At-risk clients", value: commercialList.filter((c) => healthScore ? false : false).length || commercialList.filter((c) => c.riskRating === "High").length },
+          { label: "At-risk clients", value: commercialList.filter((c) => c.riskRating === "High").length },
         ],
         sections: [
           {
