@@ -74,7 +74,7 @@ export default function Tasks() {
     enabled: !!draftMandate?.teamId,
     retry: false,
   });
-  const teamEmployees = employeesPage?.data ?? employeesPage?.items ?? [];
+  const teamEmployees = employeesPage?.items ?? [];
   const eligibleAssignees = Array.isArray(teamEmployees) ? teamEmployees : [];
 
   const filtered = useMemo(
@@ -347,23 +347,39 @@ export default function Tasks() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label>Assignee</Label>
-                <Select
-                  value={draft.assignee}
-                  onValueChange={(v) => setDraft({ ...draft, assignee: v })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {teamDirectory
-                      .filter((t) => t.mandates > 0)
-                      .map((t) => (
-                        <SelectItem key={t.name} value={t.name}>
-                          {t.name}
+                {!draftMandate?.teamId ? (
+                  <p className="rounded border border-dashed p-2 text-xs text-muted-foreground">
+                    Pick a mandate with a team assigned to see eligible assignees.
+                  </p>
+                ) : eligibleAssignees.length > 0 ? (
+                  <Select
+                    value={draft.assignee}
+                    onValueChange={(v) => setDraft({ ...draft, assignee: v })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select assignee..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {eligibleAssignees.map((e) => (
+                        <SelectItem
+                          key={e._id}
+                          value={`${e.firstName} ${e.lastName}`}
+                        >
+                          {e.firstName} {e.lastName}
+                          {e.jobTitle ? ` · ${e.jobTitle}` : ""}
                         </SelectItem>
                       ))}
-                  </SelectContent>
-                </Select>
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input
+                    placeholder="Assignee name"
+                    value={draft.assignee}
+                    onChange={(e) =>
+                      setDraft({ ...draft, assignee: e.target.value })
+                    }
+                  />
+                )}
               </div>
               <div>
                 <Label>Priority</Label>

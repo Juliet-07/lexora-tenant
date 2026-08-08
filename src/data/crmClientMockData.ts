@@ -352,36 +352,6 @@ export const healthBand = (score: number) =>
 
 // ── Communications ──────────────────────────────────────────
 
-export interface Campaign {
-  id: string;
-  name: string;
-  channel: "Email" | "Newsletter" | "WhatsApp" | "Drip";
-  segment: string;
-  status: "Draft" | "Scheduled" | "Sent" | "Running";
-  recipients: number;
-  opened: number;
-  clicked: number;
-  unsubscribed: number;
-  sentAt?: string;
-  steps?: { day: number; subject: string }[];
-}
-
-export const campaigns: Campaign[] = [
-  { id: "CMP-01", name: "Q3 regulatory update — BNR circulars", channel: "Newsletter", segment: "All active clients · Financial services", status: "Sent", recipients: 184, opened: 121, clicked: 47, unsubscribed: 2, sentAt: "2026-07-14" },
-  { id: "CMP-02", name: "Governance breakfast invitation", channel: "Email", segment: "Tier 1 · Board contacts", status: "Sent", recipients: 62, opened: 44, clicked: 21, unsubscribed: 0, sentAt: "2026-07-02" },
-  { id: "CMP-03", name: "New client onboarding sequence", channel: "Drip", segment: "Clients onboarded < 30 days", status: "Running", recipients: 11, opened: 9, clicked: 6, unsubscribed: 0, steps: [{ day: 0, subject: "Welcome to Lexora" }, { day: 3, subject: "Meet your engagement team" }, { day: 10, subject: "Using the client portal" }, { day: 21, subject: "Your first month check-in" }] },
-  { id: "CMP-04", name: "Filing deadline reminder", channel: "WhatsApp", segment: "Compliance retainer clients", status: "Scheduled", recipients: 38, opened: 0, clicked: 0, unsubscribed: 0 },
-  { id: "CMP-05", name: "Thought leadership — ESG in East Africa", channel: "Newsletter", segment: "All contacts with consent", status: "Draft", recipients: 0, opened: 0, clicked: 0, unsubscribed: 0 },
-];
-
-export const segments = [
-  { id: "SEG-01", name: "Tier 1 clients", criteria: "Fee tier = Tier 1", size: 2 },
-  { id: "SEG-02", name: "Financial services", criteria: "Industry = Financial services", size: 1 },
-  { id: "SEG-03", name: "High risk", criteria: "Risk rating = High", size: 2 },
-  { id: "SEG-04", name: "Rwanda entities", criteria: "Jurisdiction = Rwanda", size: 3 },
-  { id: "SEG-05", name: "Compliance retainer", criteria: "Service line includes Compliance", size: 3 },
-];
-
 // ── SLA management ──────────────────────────────────────────
 
 export interface SlaProfile {

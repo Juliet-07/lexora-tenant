@@ -108,12 +108,15 @@ export function formatMoney(v: number, ccy = "USD") {
 
 export interface ReviewLoopToken {
   token: string;
-  partyIndex: number;
+  partyIndex?: number;
+  partyEmail?: string;
+  partyName?: string;
   sentAt: string;
 }
 
 export interface ReviewLoopResponse {
-  name: string;
+  name?: string;
+  partyEmail?: string;
   partyName?: string;
   decision: "Approved" | "Changes Requested";
   comment?: string;
@@ -138,10 +141,12 @@ export interface TermSheet {
 
 export interface ContractReviewSnapshot {
   dealName: string;
+  contractName?: string;
   pdfUrl: string | null;
   prefillName: string;
   alreadyResponded: boolean;
   previousDecision: string | null;
+  sections?: ContractReviewSection[];
 }
 
 export interface DataRoomFile {
@@ -175,24 +180,12 @@ export interface ContractSection {
   title: string;
   body: string;
   comments: ContractComment[];
+  /** Optional line-split body used by the redline reviewer. */
+  lines?: string[];
+  redlines?: Redline[];
 }
-export interface ReviewToken {
-  token: string;
-  partyEmail: string;
-  partyName: string;
-  sentAt: string;
-}
-export interface ReviewResponse {
-  partyEmail: string;
-  partyName: string;
-  decision: "Approved" | "Changes Requested";
-  comment: string;
-  respondedAt: string;
-}
-export interface ReviewLoop {
-  tokens: ReviewToken[];
-  responses: ReviewResponse[];
-}
+export type ReviewToken = ReviewLoopToken;
+export type ReviewResponse = ReviewLoopResponse;
 
 export interface Contract {
   _id: string;
@@ -271,6 +264,8 @@ export interface Deal {
   dataRoom: { files: DataRoomFile[]; folders: { name: string }[] };
   dd: DDItem[];
   contract: { sections: ContractSection[]; variables: Record<string, string> };
+  /** Multi-contract deals; the singular `contract` remains the primary one. */
+  contracts?: Contract[];
   cps: CP[];
   signing: {
     checklist: SigningItem[];
@@ -827,14 +822,6 @@ export const sendOfferForReview = async (
 export interface OfferReviewSnapshot {
   dealName: string;
   termSheet: TermSheet;
-  prefillName: string;
-  alreadyResponded: boolean;
-  previousDecision: string | null;
-}
-export interface ContractReviewSnapshot {
-  dealName: string;
-  contractName: string;
-  pdfUrl: string | null;
   prefillName: string;
   alreadyResponded: boolean;
   previousDecision: string | null;
