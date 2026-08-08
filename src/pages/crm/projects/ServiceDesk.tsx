@@ -673,17 +673,35 @@ export default function ServiceDesk() {
                   );
                 })()}
 
-                <Button
-                  variant="outline"
-                  onClick={() =>
-                    toast({
-                      title: "Converted to mandate",
-                      description: `New mandate pre-populated from ${selected.id}; ${selected.loggedHrs}h of logged time transferred.`,
-                    })
-                  }
-                >
-                  <Briefcase className="mr-2 h-4 w-4" /> Convert to mandate
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() =>
+                      toast({
+                        title: "Converted to mandate",
+                        description: `New mandate pre-populated from ${selected.id}; ${selected.loggedHrs}h of logged time transferred.`,
+                      })
+                    }
+                  >
+                    <Briefcase className="mr-2 h-4 w-4" /> Convert to mandate
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() =>
+                      openArticleEditor({
+                        title: `Resolution: ${selected.subject}`,
+                        category: selected.category,
+                        audience: "Internal",
+                        body: selected.description
+                          ? `<p>${selected.description}</p>`
+                          : "",
+                        linkedTicketId: selected.id,
+                      })
+                    }
+                  >
+                    <Link2 className="mr-2 h-4 w-4" /> Create article from this ticket
+                  </Button>
+                </div>
 
                 <div className="space-y-2">
                   <h4 className="flex items-center gap-2 text-sm font-semibold">
