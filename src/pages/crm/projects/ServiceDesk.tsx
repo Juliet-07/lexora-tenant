@@ -38,17 +38,38 @@ import {
   MessageSquare,
   BookOpen,
   AlertTriangle,
+  Search,
+  Eye,
+  ThumbsUp,
+  ThumbsDown,
+  FileText,
+  Trash2,
+  Link2,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { MentionText } from "@/components/crm/CommentThread";
+import { RichTextEditor } from "@/components/RichTextEditor";
 import {
   tickets as seed,
   Ticket,
   TicketStatus,
   TICKET_STATUSES,
-  knowledgeBase,
   teamDirectory,
 } from "@/data/crmPmMockData";
+import {
+  useKbArticles,
+  useKbCategories,
+  addCategory,
+  saveArticle,
+  deleteArticle,
+  setArticleStatus,
+  recordView,
+  voteArticle,
+  newArticleId,
+  KbArticle,
+  KbAudience,
+  KbStatus,
+} from "@/lib/crm/knowledgeBaseStore";
 
 const priorityClass: Record<string, string> = {
   Low: "bg-muted text-muted-foreground",
@@ -67,6 +88,22 @@ const slaState = (t: Ticket) => {
   return { pct, label: "On track", tone: "text-success" };
 };
 
+const emptyArticleDraft = (): KbArticle => ({
+  id: "",
+  title: "",
+  category: "Portal access",
+  audience: "Internal",
+  status: "Draft",
+  tags: [],
+  body: "",
+  author: "Sarah Chen",
+  createdAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString(),
+  views: 0,
+  helpful: 0,
+  notHelpful: 0,
+});
+
 export default function ServiceDesk() {
   const [list, setList] = useState<Ticket[]>(seed);
   const [selected, setSelected] = useState<Ticket | null>(null);
@@ -83,6 +120,68 @@ export default function ServiceDesk() {
     description: "",
   });
   const { toast } = useToast();
+
+  // Knowledge base state
+  const kbArticles = useKbArticles();
+  const kbCategories = useKbCategories();
+  const [kbSearch, setKbSearch] = useState("");
+  const [kbCategoryFilter, setKbCategoryFilter] = useState("all");
+  const [kbSelected, setKbSelected] = useState<KbArticle | null>(null);
+  const [kbEditorOpen, setKbEditorOpen] = useState(false);
+  const [kbEditing, setKbEditing] = useState(false);
+  const [kbDraft, setKbDraft] = useState<KbArticle>(emptyArticleDraft());
+  const [kbTagsInput, setKbTagsInput] = useState("");
+  const [kbNewCategory, setKbNewCategory] = useState("");
+
+  const kbFiltered = kbArticles.filter((a) => {
+    const matchesSearch =
+      !kbSearch ||
+      a.title.toLowerCase().includes(kbSearch.toLowerCase()) ||
+      a.tags.some((t) => t.toLowerCase().includes(kbSearch.toLowerCase()));
+    const matchesCategory =
+      kbCategoryFilter === "all" || a.category === kbCategoryFilter;
+    return matchesSearch && matchesCategory;
+  });
+
+  const kbGroups = Object.entries(
+    kbFiltered.reduce<Record<string, KbArticle[]>>((acc, a) => {
+      (acc[a.category] ||= []).push(a);
+      return acc;
+    }, {}),
+  );
+
+  const openArticleEditor = (prefill?: Partial<KbArticle>) => {
+    setKbEditing(false);
+    setKbDraft({ ...emptyArticleDraft(), ...prefill });
+    setKbTagsInput("");
+    setKbEditorOpen(true);
+  };
+
+  const openArticleForEdit = (a: KbArticle) => {
+    setKbEditing(true);
+    setKbDraft(a);
+    setKbTagsInput(a.tags.join(", "));
+    setKbEditorOpen(true);
+  };
+
+  const saveKbDraft = () => {
+    if (!kbDraft.title.trim()) return;
+    const tags = kbTagsInput
+      .split(",")
+      .map((t) => t.trim())
+      .filter(Boolean);
+    const toSave: KbArticle = {
+      ...kbDraft,
+      id: kbEditing ? kbDraft.id : newArticleId(),
+      tags,
+    };
+    saveArticle(toSave);
+    setKbEditorOpen(false);
+    toast({
+      title: kbEditing ? "Article updated" : "Article created",
+      description: toSave.title,
+    });
+  };
 
   const filtered = list.filter(
     (t) => statusFilter === "all" || t.status === statusFilter,
@@ -212,37 +311,110 @@ export default function ServiceDesk() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="kb" className="pt-4">
-          <Card>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Article</TableHead>
-                    <TableHead>Category</TableHead>
-                    <TableHead>Audience</TableHead>
-                    <TableHead className="text-right">Views</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {knowledgeBase.map((a) => (
-                    <TableRow key={a.id}>
-                      <TableCell className="text-sm font-medium">
-                        {a.title}
-                      </TableCell>
-                      <TableCell className="text-sm">{a.category}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{a.audience}</Badge>
-                      </TableCell>
-                      <TableCell className="text-right text-sm">
-                        {a.views}
-                      </TableCell>
-                    </TableRow>
+        <TabsContent value="kb" className="space-y-4 pt-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-1 flex-wrap items-center gap-2">
+              <div className="relative w-64">
+                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  className="pl-8"
+                  placeholder="Search articles…"
+                  value={kbSearch}
+                  onChange={(e) => setKbSearch(e.target.value)}
+                />
+              </div>
+              <Select value={kbCategoryFilter} onValueChange={setKbCategoryFilter}>
+                <SelectTrigger className="w-48">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All categories</SelectItem>
+                  {kbCategories.map((c) => (
+                    <SelectItem key={c} value={c}>
+                      {c}
+                    </SelectItem>
                   ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+                </SelectContent>
+              </Select>
+            </div>
+            <Button onClick={() => openArticleEditor()}>
+              <Plus className="mr-2 h-4 w-4" /> New article
+            </Button>
+          </div>
+
+          {kbGroups.length === 0 && (
+            <p className="text-sm text-muted-foreground">No articles match your filters.</p>
+          )}
+
+          {kbGroups.map(([category, arts]) => (
+            <div key={category} className="space-y-2">
+              <h3 className="text-sm font-semibold text-muted-foreground">{category}</h3>
+              <Card>
+                <CardContent className="p-0">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Article</TableHead>
+                        <TableHead>Audience</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="text-right">Views</TableHead>
+                        <TableHead className="text-right">Helpful</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {arts.map((a) => (
+                        <TableRow
+                          key={a.id}
+                          className="cursor-pointer"
+                          onClick={() => {
+                            recordView(a.id);
+                            setKbSelected(a);
+                          }}
+                        >
+                          <TableCell className="text-sm font-medium">
+                            {a.title}
+                            {a.tags.length > 0 && (
+                              <div className="mt-1 flex flex-wrap gap-1">
+                                {a.tags.map((t) => (
+                                  <Badge key={t} variant="outline" className="text-[10px]">
+                                    {t}
+                                  </Badge>
+                                ))}
+                              </div>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline">{a.audience}</Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Badge
+                              className={
+                                a.status === "Published"
+                                  ? "bg-success/10 text-success"
+                                  : "bg-muted text-muted-foreground"
+                              }
+                            >
+                              {a.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right text-sm">
+                            <span className="inline-flex items-center gap-1">
+                              <Eye className="h-3 w-3" /> {a.views}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-right text-sm">
+                            <span className="inline-flex items-center gap-1 text-success">
+                              <ThumbsUp className="h-3 w-3" /> {a.helpful}
+                            </span>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            </div>
+          ))}
         </TabsContent>
 
         <TabsContent value="csat" className="pt-4">
@@ -502,17 +674,35 @@ export default function ServiceDesk() {
                   );
                 })()}
 
-                <Button
-                  variant="outline"
-                  onClick={() =>
-                    toast({
-                      title: "Converted to mandate",
-                      description: `New mandate pre-populated from ${selected.id}; ${selected.loggedHrs}h of logged time transferred.`,
-                    })
-                  }
-                >
-                  <Briefcase className="mr-2 h-4 w-4" /> Convert to mandate
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() =>
+                      toast({
+                        title: "Converted to mandate",
+                        description: `New mandate pre-populated from ${selected.id}; ${selected.loggedHrs}h of logged time transferred.`,
+                      })
+                    }
+                  >
+                    <Briefcase className="mr-2 h-4 w-4" /> Convert to mandate
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() =>
+                      openArticleEditor({
+                        title: `Resolution: ${selected.subject}`,
+                        category: selected.category,
+                        audience: "Internal",
+                        body: selected.description
+                          ? `<p>${selected.description}</p>`
+                          : "",
+                        linkedTicketId: selected.id,
+                      })
+                    }
+                  >
+                    <Link2 className="mr-2 h-4 w-4" /> Create article from this ticket
+                  </Button>
+                </div>
 
                 <div className="space-y-2">
                   <h4 className="flex items-center gap-2 text-sm font-semibold">
@@ -579,6 +769,230 @@ export default function ServiceDesk() {
                     {selected.rating}/5 — {selected.ratingComment}
                   </p>
                 )}
+              </div>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
+
+      {/* Article editor */}
+      <Dialog open={kbEditorOpen} onOpenChange={setKbEditorOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>{kbEditing ? "Edit article" : "New article"}</DialogTitle>
+          </DialogHeader>
+          <div className="grid max-h-[70vh] gap-3 overflow-y-auto pr-1">
+            <div>
+              <Label>Title</Label>
+              <Input
+                value={kbDraft.title}
+                onChange={(e) => setKbDraft({ ...kbDraft, title: e.target.value })}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Category</Label>
+                <div className="flex gap-2">
+                  <Select
+                    value={kbDraft.category}
+                    onValueChange={(v) => setKbDraft({ ...kbDraft, category: v })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {kbCategories.map((c) => (
+                        <SelectItem key={c} value={c}>
+                          {c}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="mt-1 flex gap-2">
+                  <Input
+                    placeholder="Add new category…"
+                    value={kbNewCategory}
+                    onChange={(e) => setKbNewCategory(e.target.value)}
+                    className="h-8 text-xs"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      if (!kbNewCategory.trim()) return;
+                      addCategory(kbNewCategory.trim());
+                      setKbDraft({ ...kbDraft, category: kbNewCategory.trim() });
+                      setKbNewCategory("");
+                    }}
+                  >
+                    Add
+                  </Button>
+                </div>
+              </div>
+              <div>
+                <Label>Audience</Label>
+                <Select
+                  value={kbDraft.audience}
+                  onValueChange={(v) =>
+                    setKbDraft({ ...kbDraft, audience: v as KbAudience })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Internal">Internal</SelectItem>
+                    <SelectItem value="Client-facing">Client-facing</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div>
+              <Label>Tags (comma separated)</Label>
+              <Input
+                value={kbTagsInput}
+                onChange={(e) => setKbTagsInput(e.target.value)}
+                placeholder="portal, access, login"
+              />
+            </div>
+            <div>
+              <Label>Content</Label>
+              <RichTextEditor
+                value={kbDraft.body}
+                onChange={(html) => setKbDraft({ ...kbDraft, body: html })}
+                placeholder="Write the article…"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <Label className="text-xs">Status</Label>
+              <Select
+                value={kbDraft.status}
+                onValueChange={(v) =>
+                  setKbDraft({ ...kbDraft, status: v as KbArticle["status"] })
+                }
+              >
+                <SelectTrigger className="w-40">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Draft">Draft</SelectItem>
+                  <SelectItem value="Published">Published</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={saveKbDraft} disabled={!kbDraft.title.trim()}>
+              {kbEditing ? "Save changes" : "Create article"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Article detail */}
+      <Sheet open={!!kbSelected} onOpenChange={(o) => !o && setKbSelected(null)}>
+        <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">
+          {kbSelected && (
+            <>
+              <SheetHeader>
+                <SheetTitle className="flex items-center gap-2">
+                  <FileText className="h-5 w-5" /> {kbSelected.title}
+                </SheetTitle>
+                <p className="text-sm text-muted-foreground">
+                  {kbSelected.category} · {kbSelected.audience} · by{" "}
+                  {kbSelected.author}
+                </p>
+              </SheetHeader>
+              <div className="mt-4 space-y-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge
+                    className={
+                      kbSelected.status === "Published"
+                        ? "bg-success/10 text-success"
+                        : "bg-muted text-muted-foreground"
+                    }
+                  >
+                    {kbSelected.status}
+                  </Badge>
+                  {kbSelected.tags.map((t) => (
+                    <Badge key={t} variant="outline">
+                      {t}
+                    </Badge>
+                  ))}
+                  {kbSelected.linkedTicketId && (
+                    <Badge variant="outline">From {kbSelected.linkedTicketId}</Badge>
+                  )}
+                </div>
+
+                <div
+                  className="prose prose-sm max-w-none rounded border p-3 text-sm [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5"
+                  dangerouslySetInnerHTML={{ __html: kbSelected.body || "<p class='text-muted-foreground'>No content yet.</p>" }}
+                />
+
+                <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
+                  <span className="inline-flex items-center gap-1">
+                    <Eye className="h-3.5 w-3.5" /> {kbSelected.views} views
+                  </span>
+                  <span>
+                    Updated {new Date(kbSelected.updatedAt).toLocaleDateString()}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      voteArticle(kbSelected.id, true);
+                      setKbSelected({ ...kbSelected, helpful: kbSelected.helpful + 1 });
+                    }}
+                  >
+                    <ThumbsUp className="mr-2 h-4 w-4" /> Helpful ({kbSelected.helpful})
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      voteArticle(kbSelected.id, false);
+                      setKbSelected({
+                        ...kbSelected,
+                        notHelpful: kbSelected.notHelpful + 1,
+                      });
+                    }}
+                  >
+                    <ThumbsDown className="mr-2 h-4 w-4" /> Not helpful ({kbSelected.notHelpful})
+                  </Button>
+                </div>
+
+                <div className="flex flex-wrap gap-2 border-t pt-4">
+                  <Button variant="outline" onClick={() => openArticleForEdit(kbSelected)}>
+                    Edit
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      const next: KbStatus =
+                        kbSelected.status === "Published" ? "Draft" : "Published";
+                      setArticleStatus(kbSelected.id, next);
+                      setKbSelected({ ...kbSelected, status: next });
+                    }}
+                  >
+                    {kbSelected.status === "Published" ? "Unpublish" : "Publish"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="text-destructive"
+                    onClick={() => {
+                      deleteArticle(kbSelected.id);
+                      setKbSelected(null);
+                      toast({ title: "Article deleted" });
+                    }}
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" /> Delete
+                  </Button>
+                </div>
               </div>
             </>
           )}

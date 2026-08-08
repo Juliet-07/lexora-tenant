@@ -32,6 +32,7 @@ import {
   healthBand, healthFactors, RELATIONSHIP_MANAGERS, SERVICE_LINES,
   type ClientCommercial, type ClientRisk, type FeeTier,
 } from "@/lib/crm/clientCommercialStore";
+import { fetchEmployees } from "@/lib/hr/hr-api";
 
 const money = (n: number, c = "USD") =>
   n.toLocaleString(undefined, { style: "currency", currency: c, maximumFractionDigits: 0 });
@@ -63,6 +64,19 @@ export default function Clients() {
     queryFn: fetchClients,
     staleTime: 5 * 60_000,
   });
+
+  const { data: employeesPage, isError: employeesError } = useQuery({
+    queryKey: ["hr-employees", "rm-dropdown"],
+    queryFn: () => fetchEmployees({ limit: 200 }),
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+  const employeeOptions = (employeesPage?.items ?? []).map((e) => ({
+    id: e._id,
+    name: `${e.firstName} ${e.lastName}`.trim(),
+    jobTitle: e.jobTitle,
+  }));
+  const hasEmployees = employeeOptions.length > 0 && !employeesError;
 
   const [q, setQ] = useState("");
   const [serviceFilter, setServiceFilter] = useState("all");
@@ -366,11 +380,33 @@ export default function Clients() {
             <div className="grid gap-4">
               <div className="grid gap-3 sm:grid-cols-2">
                 <div>
-                  <Label>Relationship manager</Label>
-                  <Select value={draft.relationshipManager} onValueChange={(v) => setDraft({ ...draft, relationshipManager: v })}>
-                    <SelectTrigger><SelectValue placeholder="Select RM" /></SelectTrigger>
-                    <SelectContent>{RELATIONSHIP_MANAGERS.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
-                  </Select>
+                  <Label>Relationship manager (RM)</Label>
+                  {hasEmployees ? (
+                    <Select
+                      value={draft.relationshipManager}
+                      onValueChange={(v) => setDraft({ ...draft, relationshipManager: v })}
+                    >
+                      <SelectTrigger><SelectValue placeholder="Select RM" /></SelectTrigger>
+                      <SelectContent>
+                        {employeeOptions.map((e) => (
+                          <SelectItem key={e.id} value={e.name}>
+                            {e.name}{e.jobTitle ? ` — ${e.jobTitle}` : ""}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Input
+                      placeholder="Type relationship manager's name"
+                      value={draft.relationshipManager}
+                      onChange={(e) => setDraft({ ...draft, relationshipManager: e.target.value })}
+                    />
+                  )}
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {hasEmployees
+                      ? "Selected from employees in HR."
+                      : "No employees found in HR — type the RM's name directly."}
+                  </p>
                 </div>
                 <div>
                   <Label>SLA profile</Label>

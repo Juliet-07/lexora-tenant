@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -32,6 +33,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Plus, Repeat, LayoutGrid } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { CommentThread } from "@/components/crm/CommentThread";
+import { fetchEmployees } from "@/lib/hr/hr-api";
 import {
   pmTasks as seedTasks,
   PmTask,
@@ -64,6 +66,16 @@ export default function Tasks() {
     estimateHrs: 4,
   });
   const { toast } = useToast();
+
+  const draftMandate = mandates.find((m) => m.id === draft.mandateId);
+  const { data: employeesPage } = useQuery({
+    queryKey: ["hr-employees-by-team", draftMandate?.teamId],
+    queryFn: () => fetchEmployees({ teamId: draftMandate!.teamId, limit: 100 }),
+    enabled: !!draftMandate?.teamId,
+    retry: false,
+  });
+  const teamEmployees = employeesPage?.items ?? [];
+  const eligibleAssignees = Array.isArray(teamEmployees) ? teamEmployees : [];
 
   const filtered = useMemo(
     () =>
@@ -335,23 +347,39 @@ export default function Tasks() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label>Assignee</Label>
-                <Select
-                  value={draft.assignee}
-                  onValueChange={(v) => setDraft({ ...draft, assignee: v })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {teamDirectory
-                      .filter((t) => t.mandates > 0)
-                      .map((t) => (
-                        <SelectItem key={t.name} value={t.name}>
-                          {t.name}
+                {!draftMandate?.teamId ? (
+                  <p className="rounded border border-dashed p-2 text-xs text-muted-foreground">
+                    Pick a mandate with a team assigned to see eligible assignees.
+                  </p>
+                ) : eligibleAssignees.length > 0 ? (
+                  <Select
+                    value={draft.assignee}
+                    onValueChange={(v) => setDraft({ ...draft, assignee: v })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select assignee..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {eligibleAssignees.map((e) => (
+                        <SelectItem
+                          key={e._id}
+                          value={`${e.firstName} ${e.lastName}`}
+                        >
+                          {e.firstName} {e.lastName}
+                          {e.jobTitle ? ` · ${e.jobTitle}` : ""}
                         </SelectItem>
                       ))}
-                  </SelectContent>
-                </Select>
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input
+                    placeholder="Assignee name"
+                    value={draft.assignee}
+                    onChange={(e) =>
+                      setDraft({ ...draft, assignee: e.target.value })
+                    }
+                  />
+                )}
               </div>
               <div>
                 <Label>Priority</Label>

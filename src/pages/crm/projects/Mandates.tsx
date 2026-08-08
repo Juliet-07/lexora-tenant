@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -30,9 +31,39 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { Plus, Search, ShieldCheck, ArrowRight, CheckCircle2 } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Plus,
+  Search,
+  ShieldCheck,
+  ArrowRight,
+  CheckCircle2,
+  Send,
+  Trash2,
+  Folder,
+  FolderOpen,
+  ChevronLeft,
+  Upload,
+  Inbox,
+  FileText,
+} from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { CommentThread, ActivityLog } from "@/components/crm/CommentThread";
+import { ClientSelect } from "@/components/ClientDropdown";
+import { fetchTeams } from "@/lib/hr/hr-api";
+import {
+  useMessages,
+  useNotes,
+  addMessage,
+  addNote,
+  deleteNote,
+  useDocuments,
+  getAllFolders,
+  addFolder,
+  addDocument,
+  fileClientDocument,
+  getReceivedFromClient,
+} from "@/lib/crm/mandateWorkspaceStore";
 import {
   mandates as seedMandates,
   mandateTemplates,
@@ -59,13 +90,22 @@ export default function Mandates() {
 
   const [draft, setDraft] = useState({
     name: "",
+    clientId: "",
     clientName: "",
     type: "Audit",
     template: mandateTemplates[0].id,
     manager: "Sarah Chen",
+    teamId: "",
+    teamName: "",
     budget: 0,
     feeStructure: "Fixed fee" as Mandate["feeStructure"],
     targetDate: "",
+  });
+
+  const { data: teams = [] } = useQuery({
+    queryKey: ["hr-teams"],
+    queryFn: fetchTeams,
+    retry: false,
   });
 
   const filtered = useMemo(
@@ -98,6 +138,8 @@ export default function Mandates() {
       rag: "Green",
       manager: draft.manager,
       team: [],
+      teamId: draft.teamId || undefined,
+      teamName: draft.teamName || undefined,
       startDate: new Date().toISOString().slice(0, 10),
       targetDate: draft.targetDate || "2026-12-31",
       budget: Number(draft.budget) || 0,
@@ -271,11 +313,19 @@ export default function Mandates() {
             </div>
             <div>
               <Label>Client</Label>
-              <Input
-                value={draft.clientName}
-                onChange={(e) =>
-                  setDraft({ ...draft, clientName: e.target.value })
+              <ClientSelect
+                value={draft.clientId}
+                onValueChange={(v) => setDraft({ ...draft, clientId: v })}
+                onClientChange={(c) =>
+                  setDraft((d) => ({
+                    ...d,
+                    clientName:
+                      [c.firstName, c.lastName].filter(Boolean).join(" ") ||
+                      c.businessName ||
+                      c.email,
+                  }))
                 }
+                placeholder="Select client..."
               />
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -320,24 +370,35 @@ export default function Mandates() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label>Manager</Label>
-                <Select
-                  value={draft.manager}
-                  onValueChange={(v) => setDraft({ ...draft, manager: v })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {teamDirectory
-                      .filter((t) => t.mandates > 0)
-                      .map((t) => (
-                        <SelectItem key={t.name} value={t.name}>
+                <Label>Team</Label>
+                {teams.length > 0 ? (
+                  <Select
+                    value={draft.teamId}
+                    onValueChange={(v) => {
+                      const t = teams.find((x) => x._id === v);
+                      setDraft({ ...draft, teamId: v, teamName: t?.name ?? "" });
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select team..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {teams.map((t) => (
+                        <SelectItem key={t._id} value={t._id}>
                           {t.name}
                         </SelectItem>
                       ))}
-                  </SelectContent>
-                </Select>
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input
+                    placeholder="Team name"
+                    value={draft.teamName}
+                    onChange={(e) =>
+                      setDraft({ ...draft, teamName: e.target.value })
+                    }
+                  />
+                )}
               </div>
               <div>
                 <Label>Fee structure</Label>
@@ -433,6 +494,9 @@ export default function Mandates() {
                   <TabsTrigger value="pl">Mandate P&amp;L</TabsTrigger>
                   <TabsTrigger value="closure">Closure</TabsTrigger>
                   <TabsTrigger value="collab">Collaboration</TabsTrigger>
+                  <TabsTrigger value="comms">Communications</TabsTrigger>
+                  <TabsTrigger value="notes">Notes</TabsTrigger>
+                  <TabsTrigger value="docs">Documents</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="workspace" className="space-y-4 pt-4">
@@ -489,6 +553,11 @@ export default function Mandates() {
                     <Card>
                       <CardContent className="space-y-1 p-4 text-sm">
                         <p className="text-xs text-muted-foreground">Team</p>
+                        {selected.teamName && (
+                          <p className="text-xs text-muted-foreground">
+                            Team: {selected.teamName}
+                          </p>
+                        )}
                         <p>{selected.manager} (manager)</p>
                         {selected.team.map((t) => (
                           <p key={t}>{t}</p>
@@ -634,11 +703,353 @@ export default function Mandates() {
                 <TabsContent value="collab" className="pt-4">
                   <CommentThread subject={selected.id} />
                 </TabsContent>
+
+                <TabsContent value="comms" className="pt-4">
+                  <MandateComms mandate={selected} />
+                </TabsContent>
+
+                <TabsContent value="notes" className="pt-4">
+                  <MandateNotes mandate={selected} />
+                </TabsContent>
+
+                <TabsContent value="docs" className="pt-4">
+                  <MandateDocuments mandate={selected} />
+                </TabsContent>
               </Tabs>
             </>
           )}
         </SheetContent>
       </Sheet>
+    </div>
+  );
+}
+
+// ── Communications ──────────────────────────────────────────
+
+function MandateComms({ mandate }: { mandate: Mandate }) {
+  const messages = useMessages(mandate.id);
+  const [text, setText] = useState("");
+  const { toast } = useToast();
+
+  const send = () => {
+    if (!text.trim()) return;
+    addMessage(mandate.id, "tenant", "You", text.trim());
+    setText("");
+    toast({ title: "Message sent", description: `Sent to ${mandate.clientName}` });
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="max-h-96 space-y-3 overflow-y-auto rounded border p-3">
+        {messages.length === 0 && (
+          <p className="text-sm text-muted-foreground">No messages yet.</p>
+        )}
+        {messages.map((m) => (
+          <div
+            key={m.id}
+            className={`flex gap-2 ${m.direction === "tenant" ? "flex-row-reverse" : ""}`}
+          >
+            <div className="flex h-7 w-7 flex-none items-center justify-center rounded-full bg-muted text-xs font-medium">
+              {m.author
+                .split(" ")
+                .map((p) => p[0])
+                .slice(0, 2)
+                .join("")}
+            </div>
+            <div
+              className={`max-w-[75%] rounded-lg px-3 py-2 text-sm ${
+                m.direction === "tenant"
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted"
+              }`}
+            >
+              <p className="mb-0.5 text-[11px] font-medium opacity-80">
+                {m.author}
+              </p>
+              <p>{m.body}</p>
+              <p className="mt-1 text-[10px] opacity-70">
+                {new Date(m.at).toLocaleString()}
+              </p>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="flex gap-2">
+        <Textarea
+          placeholder={`Message ${mandate.clientName}…`}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          className="min-h-[60px]"
+        />
+        <Button onClick={send} className="self-end">
+          <Send className="mr-2 h-4 w-4" /> Send
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// ── Notes ───────────────────────────────────────────────────
+
+function MandateNotes({ mandate }: { mandate: Mandate }) {
+  const notes = useNotes(mandate.id);
+  const [text, setText] = useState("");
+  const { toast } = useToast();
+
+  const add = () => {
+    if (!text.trim()) return;
+    addNote(mandate.id, "You", text.trim());
+    setText("");
+    toast({ title: "Note added" });
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex gap-2">
+        <Textarea
+          placeholder="Add an internal note…"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          className="min-h-[60px]"
+        />
+        <Button onClick={add} className="self-end">
+          Add note
+        </Button>
+      </div>
+      <div className="space-y-2">
+        {notes.length === 0 && (
+          <p className="text-sm text-muted-foreground">No notes yet.</p>
+        )}
+        {notes.map((n) => (
+          <Card key={n.id}>
+            <CardContent className="flex items-start justify-between gap-3 p-3">
+              <div>
+                <p className="text-sm">{n.body}</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {n.author} · {new Date(n.at).toLocaleString()}
+                </p>
+              </div>
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={() => {
+                  deleteNote(n.id);
+                  toast({ title: "Note deleted" });
+                }}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Documents ───────────────────────────────────────────────
+
+function MandateDocuments({ mandate }: { mandate: Mandate }) {
+  const allDocs = useDocuments(mandate.id);
+  const [folder, setFolder] = useState<string | null>(null);
+  const [openNewFolder, setOpenNewFolder] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
+  const [openUpload, setOpenUpload] = useState(false);
+  const [uploadName, setUploadName] = useState("");
+  const [uploadFolder, setUploadFolder] = useState("");
+  const { toast } = useToast();
+
+  const folders = getAllFolders(mandate.id);
+  const received = getReceivedFromClient(mandate.id);
+
+  const filesIn = (f: string) => allDocs.filter((d) => d.folder === f && !(d.fromClient && d.status === "pending"));
+
+  if (folder) {
+    const files = filesIn(folder);
+    return (
+      <div className="space-y-3">
+        <Button variant="ghost" size="sm" onClick={() => setFolder(null)}>
+          <ChevronLeft className="mr-1 h-4 w-4" /> All folders
+        </Button>
+        <p className="text-sm font-medium">{folder}</p>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Name</TableHead>
+              <TableHead>Size</TableHead>
+              <TableHead>Uploaded by</TableHead>
+              <TableHead>Date</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {files.map((d) => (
+              <TableRow key={d.id}>
+                <TableCell className="flex items-center gap-2 text-sm">
+                  <FileText className="h-4 w-4 text-muted-foreground" /> {d.name}
+                </TableCell>
+                <TableCell className="text-xs text-muted-foreground">{d.size}</TableCell>
+                <TableCell className="text-xs text-muted-foreground">{d.uploadedBy}</TableCell>
+                <TableCell className="text-xs text-muted-foreground">{d.at}</TableCell>
+              </TableRow>
+            ))}
+            {files.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={4} className="text-center text-sm text-muted-foreground">
+                  No documents in this folder yet.
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap justify-end gap-2">
+        <Button size="sm" variant="outline" onClick={() => setOpenNewFolder(true)}>
+          <Folder className="mr-2 h-4 w-4" /> New folder
+        </Button>
+        <Button size="sm" onClick={() => setOpenUpload(true)}>
+          <Upload className="mr-2 h-4 w-4" /> Upload document
+        </Button>
+      </div>
+
+      {received.length > 0 && (
+        <Card className="border-primary/40">
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <Inbox className="h-4 w-4" /> Received from client
+              <Badge className="bg-primary/10 text-primary">{received.length} pending</Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {received.map((d) => (
+              <div
+                key={d.id}
+                className="flex items-center justify-between rounded border p-2 text-sm"
+              >
+                <div>
+                  <p className="font-medium">{d.name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {d.uploadedBy} · {d.at} · {d.size}
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    fileClientDocument(d.id, "Client submissions");
+                    toast({ title: "Filed", description: `${d.name} filed into Client submissions.` });
+                  }}
+                >
+                  Accept &amp; file
+                </Button>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {folders.map((f) => (
+          <Card
+            key={f}
+            className="cursor-pointer transition hover:shadow-md"
+            onClick={() => setFolder(f)}
+          >
+            <CardContent className="flex items-center gap-3 p-4">
+              <FolderOpen className="h-6 w-6 text-primary" />
+              <div>
+                <p className="text-sm font-medium">{f}</p>
+                <p className="text-xs text-muted-foreground">
+                  {filesIn(f).length} document{filesIn(f).length === 1 ? "" : "s"}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      <Dialog open={openNewFolder} onOpenChange={setOpenNewFolder}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>New folder</DialogTitle>
+          </DialogHeader>
+          <Input
+            placeholder="Folder name"
+            value={newFolderName}
+            onChange={(e) => setNewFolderName(e.target.value)}
+          />
+          <DialogFooter>
+            <Button
+              onClick={() => {
+                if (!newFolderName.trim()) return;
+                addFolder(mandate.id, newFolderName.trim());
+                setNewFolderName("");
+                setOpenNewFolder(false);
+                toast({ title: "Folder created" });
+              }}
+            >
+              Create
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={openUpload} onOpenChange={setOpenUpload}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Upload document</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-3">
+            <div>
+              <Label>File name</Label>
+              <Input
+                placeholder="e.g. Signed_Engagement_Letter.pdf"
+                value={uploadName}
+                onChange={(e) => setUploadName(e.target.value)}
+              />
+            </div>
+            <div>
+              <Label>Folder</Label>
+              <Select value={uploadFolder} onValueChange={setUploadFolder}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select folder..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {folders.map((f) => (
+                    <SelectItem key={f} value={f}>
+                      {f}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              onClick={() => {
+                if (!uploadName.trim() || !uploadFolder) return;
+                addDocument({
+                  mandateId: mandate.id,
+                  folder: uploadFolder,
+                  name: uploadName.trim(),
+                  size: "—",
+                  uploadedBy: "You",
+                });
+                setUploadName("");
+                setUploadFolder("");
+                setOpenUpload(false);
+                toast({ title: "Document uploaded (mock)" });
+              }}
+            >
+              Upload
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
