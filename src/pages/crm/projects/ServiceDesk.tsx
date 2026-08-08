@@ -38,17 +38,37 @@ import {
   MessageSquare,
   BookOpen,
   AlertTriangle,
+  Search,
+  Eye,
+  ThumbsUp,
+  ThumbsDown,
+  FileText,
+  Trash2,
+  Link2,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { MentionText } from "@/components/crm/CommentThread";
+import { RichTextEditor } from "@/components/RichTextEditor";
 import {
   tickets as seed,
   Ticket,
   TicketStatus,
   TICKET_STATUSES,
-  knowledgeBase,
   teamDirectory,
 } from "@/data/crmPmMockData";
+import {
+  useKbArticles,
+  useKbCategories,
+  addCategory,
+  saveArticle,
+  deleteArticle,
+  setArticleStatus,
+  recordView,
+  voteArticle,
+  newArticleId,
+  KbArticle,
+  KbAudience,
+} from "@/lib/crm/knowledgeBaseStore";
 
 const priorityClass: Record<string, string> = {
   Low: "bg-muted text-muted-foreground",
