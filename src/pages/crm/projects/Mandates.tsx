@@ -138,6 +138,8 @@ export default function Mandates() {
       rag: "Green",
       manager: draft.manager,
       team: [],
+      teamId: draft.teamId || undefined,
+      teamName: draft.teamName || undefined,
       startDate: new Date().toISOString().slice(0, 10),
       targetDate: draft.targetDate || "2026-12-31",
       budget: Number(draft.budget) || 0,
