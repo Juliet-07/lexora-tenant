@@ -1,366 +1,544 @@
 import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  Play, Download, FileText, CalendarClock, Briefcase,
+  Download, FileDown, FileSpreadsheet, TrendingUp, Users, Briefcase,
+  Clock, Receipt, Wallet, LifeBuoy, Send, Contact, Search, Layers,
 } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
 import {
-  prebuiltReports, scheduledReports, mandates, timeEntries, pmInvoices,
-  tickets, pmContracts, utilisation, portfolioRisks, money, ragClass,
+  exportReportExcel, exportReportPdf, type ReportDefinition,
+} from "@/lib/grc/reportExport";
+import {
+  mandates, timeEntries, pmInvoices, tickets, utilisation, pmTasks,
+  campaigns, money, invoiceTotal,
 } from "@/data/crmPmMockData";
+import { organisations, opportunities, contacts, weightedValue, healthScore, healthBand } from "@/data/crmClientMockData";
+import { useClientCommercials } from "@/lib/crm/clientCommercialStore";
+import { fetchClients, displayName, type ApiClient } from "@/lib/client/clients-api";
 
-const mockContacts = [
-  { name: "Eleanor Pritchard", company: "Meridian Holdings Ltd", email: "e.pritchard@meridian.com", stage: "Client" },
-  { name: "Isabella Ortega", company: "Helios Renewables", email: "i.ortega@helios.com", stage: "Client" },
-  { name: "Kenji Watanabe", company: "Tanaka Enterprises", email: "k.watanabe@tanaka.jp", stage: "Prospect" },
-];
+interface CatalogueEntry {
+  def: ReportDefinition;
+  domain: string;
+  description: string;
+  icon: any;
+  tone: string;
+}
 
-const DATA_SOURCES: Record<string, { label: string; fields: string[]; rows: any[] }> = {
-  Mandates: { label: "Mandates", fields: ["ref", "name", "clientName", "stage", "rag", "budget", "progress"], rows: mandates },
-  Timesheets: { label: "Timesheets", fields: ["date", "member", "mandateName", "hours", "billable", "status"], rows: timeEntries },
-  Invoices: { label: "Invoices", fields: ["id", "clientName", "mandateName", "subtotal", "stage", "issuedOn"], rows: pmInvoices },
-  Tickets: { label: "Tickets", fields: ["id", "subject", "clientName", "status", "priority", "agent"], rows: tickets },
-  Contacts: { label: "Contacts", fields: ["name", "company", "email", "stage"], rows: mockContacts },
-  Contracts: { label: "Contracts", fields: ["id", "title", "counterparty", "stage", "value", "expiresOn"], rows: pmContracts },
-};
-
-const REPORT_GROUPS = Array.from(new Set(prebuiltReports.map((r) => r.category)));
+const daysBetween = (a: string, b: string) =>
+  Math.round((new Date(a).getTime() - new Date(b).getTime()) / 86_400_000);
 
 export default function Reports() {
-  const { toast } = useToast();
-  const [reportPreview, setReportPreview] = useState<typeof prebuiltReports[number] | null>(null);
+  const commercials = useClientCommercials();
+  const { data: kycClients = [] } = useQuery({
+    queryKey: ["clients-list-reports"],
+    queryFn: fetchClients,
+    staleTime: 5 * 60_000,
+  });
 
-  const runReport = (r: typeof prebuiltReports[number], action: string) => {
-    toast({ title: `${action} — ${r.name}`, description: "Generating from latest data…" });
-    setReportPreview(r);
+  const [query, setQuery] = useState("");
+  const [preview, setPreview] = useState<ReportDefinition | null>(null);
+  const [rangeFrom, setRangeFrom] = useState("2026-01-01");
+  const [rangeTo, setRangeTo] = useState(new Date().toISOString().slice(0, 10));
+
+  const periodLabel = `${rangeFrom} to ${rangeTo}`;
+  const today = new Date().toISOString().slice(0, 10);
+
+  const catalogue: CatalogueEntry[] = useMemo(() => {
+    const entries: CatalogueEntry[] = [];
+
+    // ── 1. Pipeline & deal conversion ──────────────────────
+    const openOpps = opportunities.filter((o) => !o.stage.startsWith("Closed"));
+    const won = opportunities.filter((o) => o.stage === "Closed Won");
+    const lost = opportunities.filter((o) => o.stage === "Closed Lost");
+    const winRate = won.length + lost.length
+      ? Math.round((won.length / (won.length + lost.length)) * 100)
+      : 0;
+    entries.push({
+      domain: "Pipeline",
+      description: "Opportunities by stage, weighted pipeline value and win/loss conversion.",
+      icon: TrendingUp,
+      tone: "from-indigo-500 to-violet-500",
+      def: {
+        id: "crm-pipeline",
+        title: "Pipeline & Deal Conversion Report",
+        subtitle: `CRM · Period ${periodLabel}`,
+        summary: [
+          { label: "Open opportunities", value: openOpps.length },
+          { label: "Pipeline value", value: money(openOpps.reduce((s, o) => s + o.value, 0)) },
+          { label: "Win rate", value: `${winRate}%` },
+          { label: "Closed won (value)", value: money(won.reduce((s, o) => s + o.value, 0)) },
+        ],
+        sections: [
+          {
+            heading: "Opportunity pipeline",
+            columns: ["Opportunity", "Client", "Stage", "Service line", "Value", "Weighted value", "Owner", "Expected close"],
+            rows: opportunities.map((o) => [
+              o.name, o.orgName, o.stage, o.serviceLine,
+              money(o.value, o.currency), money(weightedValue(o), o.currency),
+              o.owner, o.expectedClose,
+            ]),
+          },
+          {
+            heading: "Win / loss summary",
+            columns: ["Outcome", "Count", "Total value"],
+            rows: [
+              ["Closed Won", won.length, money(won.reduce((s, o) => s + o.value, 0))],
+              ["Closed Lost", lost.length, money(lost.reduce((s, o) => s + o.value, 0))],
+            ],
+          },
+        ],
+      },
+    });
+
+    // ── 2. Client portfolio & relationship ─────────────────
+    const kycRows = kycClients.map((c: ApiClient) => ({
+      client: c,
+      name: displayName(c),
+      commercial: commercials[c._id],
+    }));
+    const commercialList = Object.values(commercials);
+    entries.push({
+      domain: "Clients",
+      description: "Relationship managers, service lines, revenue/cost, CSAT and risk across the portfolio.",
+      icon: Users,
+      tone: "from-emerald-500 to-teal-500",
+      def: {
+        id: "crm-clients",
+        title: "Client Portfolio & Relationship Report",
+        subtitle: `CRM · Period ${periodLabel}`,
+        summary: [
+          { label: "KYC clients", value: kycClients.length },
+          { label: "Assigned RM", value: commercialList.filter((c) => c.relationshipManager).length },
+          { label: "Total revenue YTD", value: money(commercialList.reduce((s, c) => s + c.revenueYtd, 0)) },
+          { label: "At-risk clients", value: commercialList.filter((c) => healthScore ? false : false).length || commercialList.filter((c) => c.riskRating === "High").length },
+        ],
+        sections: [
+          {
+            heading: "Client relationship register",
+            columns: ["Client", "RM", "Service lines", "Risk", "Revenue YTD", "Cost YTD", "CSAT", "Open tickets"],
+            rows: kycRows.map((r) => [
+              r.name,
+              r.commercial?.relationshipManager || "Unassigned",
+              (r.commercial?.serviceLines ?? []).join(", ") || "—",
+              r.commercial?.riskRating ?? "—",
+              money(r.commercial?.revenueYtd ?? 0, r.commercial?.currency ?? "USD"),
+              money(r.commercial?.costYtd ?? 0, r.commercial?.currency ?? "USD"),
+              r.commercial?.satisfaction ? `${r.commercial.satisfaction}/5` : "—",
+              r.commercial?.openTickets ?? 0,
+            ]),
+          },
+          {
+            heading: "Legacy organisation book (reference data)",
+            columns: ["Organisation", "RM", "Fee tier", "Revenue YTD", "Margin", "Satisfaction"],
+            rows: organisations.map((o) => [
+              o.name, o.relationshipManager, o.feeTier,
+              money(o.revenueYtd), money(o.revenueYtd - o.costYtd), o.satisfaction ? `${o.satisfaction}/5` : "—",
+            ]),
+          },
+        ],
+      },
+    });
+
+    // ── 3. Mandates & project delivery ─────────────────────
+    entries.push({
+      domain: "Mandates",
+      description: "Delivery stage, RAG status, budget vs actual and progress across active mandates.",
+      icon: Briefcase,
+      tone: "from-amber-500 to-orange-500",
+      def: {
+        id: "crm-mandates",
+        title: "Mandates & Project Delivery Report",
+        subtitle: `CRM · Period ${periodLabel}`,
+        summary: [
+          { label: "Active mandates", value: mandates.length },
+          { label: "At risk (Amber/Red)", value: mandates.filter((m) => m.rag !== "Green").length },
+          { label: "Total budget", value: money(mandates.reduce((s, m) => s + m.budget, 0)) },
+          { label: "Total actual cost", value: money(mandates.reduce((s, m) => s + m.actualCost, 0)) },
+        ],
+        sections: [
+          {
+            heading: "Mandate register",
+            columns: ["Ref", "Mandate", "Client", "Stage", "RAG", "Budget", "Actual cost", "Variance", "Progress %"],
+            rows: mandates.map((m) => [
+              m.ref, m.name, m.clientName, m.stage, m.rag,
+              money(m.budget, m.currency), money(m.actualCost, m.currency),
+              money(m.budget - m.actualCost, m.currency), `${m.progress}%`,
+            ]),
+          },
+          {
+            heading: "Milestone / closure readiness",
+            columns: ["Mandate", "Checklist items", "Completed"],
+            rows: mandates.map((m) => [
+              m.name, m.closureChecklist.length, m.closureChecklist.filter((c) => c.done).length,
+            ]),
+          },
+        ],
+      },
+    });
+
+    // ── 4. Task & workload / resource utilisation ──────────
+    entries.push({
+      domain: "Workload",
+      description: "Task status by assignee and billable utilisation vs target across the team.",
+      icon: Layers,
+      tone: "from-sky-500 to-blue-500",
+      def: {
+        id: "crm-workload",
+        title: "Task & Workload / Resource Utilisation Report",
+        subtitle: `CRM · Period ${periodLabel}`,
+        summary: [
+          { label: "Open tasks", value: pmTasks.filter((t) => t.status !== "Done").length },
+          { label: "Overdue tasks", value: pmTasks.filter((t) => t.status !== "Done" && t.dueDate < today).length },
+          { label: "Avg. utilisation", value: `${Math.round(utilisation.reduce((s, u) => s + u.billable / u.available, 0) / (utilisation.length || 1) * 100)}%` },
+          { label: "Team members tracked", value: utilisation.length },
+        ],
+        sections: [
+          {
+            heading: "Task register",
+            columns: ["Task", "Mandate", "Assignee", "Status", "Priority", "Due", "Estimate hrs", "Logged hrs"],
+            rows: pmTasks.map((t) => [
+              t.title, t.mandateName, t.assignee, t.status, t.priority, t.dueDate, t.estimateHrs, t.loggedHrs,
+            ]),
+          },
+          {
+            heading: "Resource utilisation",
+            columns: ["Team member", "Billable hrs", "Available hrs", "Utilisation %", "Target %"],
+            rows: utilisation.map((u) => [
+              u.member, u.billable, u.available, Math.round((u.billable / u.available) * 100), u.target,
+            ]),
+          },
+        ],
+      },
+    });
+
+    // ── 5. Time & billing ───────────────────────────────────
+    const billable = timeEntries.filter((t) => t.billable);
+    const nonBillable = timeEntries.filter((t) => !t.billable);
+    entries.push({
+      domain: "Time & billing",
+      description: "Timesheet entries, billable vs non-billable split and approval status.",
+      icon: Clock,
+      tone: "from-fuchsia-500 to-pink-500",
+      def: {
+        id: "crm-time-billing",
+        title: "Time & Billing Report",
+        subtitle: `CRM · Period ${periodLabel}`,
+        summary: [
+          { label: "Billable hours", value: billable.reduce((s, t) => s + t.hours, 0) },
+          { label: "Non-billable hours", value: nonBillable.reduce((s, t) => s + t.hours, 0) },
+          { label: "Billable value", value: money(billable.reduce((s, t) => s + t.hours * t.rate, 0)) },
+          { label: "Entries pending approval", value: timeEntries.filter((t) => t.status === "Submitted").length },
+        ],
+        sections: [
+          {
+            heading: "Timesheet entries",
+            columns: ["Date", "Member", "Mandate", "Task", "Hours", "Billable", "Rate", "Status"],
+            rows: timeEntries.map((t) => [
+              t.date, t.member, t.mandateName, t.taskTitle, t.hours, t.billable ? "Yes" : "No", money(t.rate), t.status,
+            ]),
+          },
+        ],
+      },
+    });
+
+    // ── 6. Invoicing & receivables ageing ──────────────────
+    const outstanding = pmInvoices.filter((i) => !["Paid", "Written Off"].includes(i.stage));
+    entries.push({
+      domain: "Receivables",
+      description: "Invoice register, ageing of outstanding receivables and collections status.",
+      icon: Receipt,
+      tone: "from-rose-500 to-red-500",
+      def: {
+        id: "crm-invoicing",
+        title: "Invoicing & Receivables Ageing Report",
+        subtitle: `CRM · Period ${periodLabel}`,
+        summary: [
+          { label: "Invoices issued", value: pmInvoices.length },
+          { label: "Outstanding", value: outstanding.length },
+          { label: "Outstanding value", value: money(outstanding.reduce((s, i) => s + (invoiceTotal(i).payable - i.paidAmount), 0)) },
+          { label: "Overdue invoices", value: pmInvoices.filter((i) => i.stage === "Overdue").length },
+        ],
+        sections: [
+          {
+            heading: "Invoice register",
+            columns: ["Invoice", "Client", "Mandate", "Issued", "Due", "Gross", "Paid", "Balance", "Stage", "Age (days)"],
+            rows: pmInvoices.map((i) => {
+              const tot = invoiceTotal(i);
+              return [
+                i.id, i.clientName, i.mandateName, i.issuedOn, i.dueOn,
+                money(tot.gross, i.currency), money(i.paidAmount, i.currency),
+                money(tot.payable - i.paidAmount, i.currency), i.stage,
+                Math.max(0, daysBetween(today, i.dueOn)),
+              ];
+            }),
+          },
+        ],
+      },
+    });
+
+    // ── 7. Service desk & SLA performance ──────────────────
+    const openTickets = tickets.filter((t) => !["Resolved", "Closed"].includes(t.status));
+    const breached = tickets.filter((t) => t.slaElapsedHrs > t.slaTargetHrs);
+    entries.push({
+      domain: "Service desk",
+      description: "Ticket volumes, SLA performance and resolution times.",
+      icon: LifeBuoy,
+      tone: "from-cyan-500 to-teal-500",
+      def: {
+        id: "crm-service-desk",
+        title: "Service Desk & SLA Performance Report",
+        subtitle: `CRM · Period ${periodLabel}`,
+        summary: [
+          { label: "Open tickets", value: openTickets.length },
+          { label: "SLA breaches", value: breached.length },
+          { label: "Avg. logged hrs / ticket", value: (tickets.reduce((s, t) => s + t.loggedHrs, 0) / (tickets.length || 1)).toFixed(1) },
+          { label: "Rated tickets", value: tickets.filter((t) => t.rating).length },
+        ],
+        sections: [
+          {
+            heading: "Ticket register",
+            columns: ["Ticket", "Client", "Subject", "Priority", "Agent", "Status", "SLA target hrs", "SLA elapsed hrs", "Breached"],
+            rows: tickets.map((t) => [
+              t.id, t.clientName, t.subject, t.priority, t.agent, t.status,
+              t.slaTargetHrs, t.slaElapsedHrs, t.slaElapsedHrs > t.slaTargetHrs ? "Yes" : "No",
+            ]),
+          },
+        ],
+      },
+    });
+
+    // ── 8. Communications & campaign engagement ────────────
+    entries.push({
+      domain: "Communications",
+      description: "Campaign reach, open/click rates and engagement by channel.",
+      icon: Send,
+      tone: "from-purple-500 to-indigo-500",
+      def: {
+        id: "crm-communications",
+        title: "Communications & Campaign Engagement Report",
+        subtitle: `CRM · Period ${periodLabel}`,
+        summary: [
+          { label: "Campaigns", value: campaigns.length },
+          { label: "Total recipients", value: campaigns.reduce((s, c) => s + c.recipients, 0) },
+          { label: "Total opened", value: campaigns.reduce((s, c) => s + c.opened, 0) },
+          { label: "Total clicked", value: campaigns.reduce((s, c) => s + c.clicked, 0) },
+        ],
+        sections: [
+          {
+            heading: "Campaign performance",
+            columns: ["Campaign", "Channel", "Segment", "Status", "Recipients", "Opened", "Clicked", "Unsubscribed"],
+            rows: campaigns.map((c) => [
+              c.name, c.channel, c.segment, c.status, c.recipients, c.opened, c.clicked, c.unsubscribed,
+            ]),
+          },
+        ],
+      },
+    });
+
+    // ── 9. Contacts repository summary ─────────────────────
+    entries.push({
+      domain: "Contacts",
+      description: "Contact repository across organisations, sources and last-contacted dates.",
+      icon: Contact,
+      tone: "from-slate-500 to-gray-500",
+      def: {
+        id: "crm-contacts",
+        title: "Contacts Repository Summary",
+        subtitle: `CRM · Period ${periodLabel}`,
+        summary: [
+          { label: "Contacts", value: contacts.length },
+          { label: "Organisations covered", value: new Set(contacts.map((c) => c.orgId)).size },
+          { label: "Referral-sourced", value: contacts.filter((c) => c.source === "Referral").length },
+        ],
+        sections: [
+          {
+            heading: "Contact directory",
+            columns: ["Contact", "Title", "Organisation", "Email", "Phone", "Source", "Last contact"],
+            rows: contacts.map((c) => [
+              c.name, c.title, c.orgName, c.email, c.phone, c.source, c.lastContact,
+            ]),
+          },
+        ],
+      },
+    });
+
+    return entries;
+  }, [kycClients, commercials, periodLabel, today]);
+
+  const filtered = catalogue.filter(
+    (c) =>
+      c.def.title.toLowerCase().includes(query.toLowerCase()) ||
+      c.domain.toLowerCase().includes(query.toLowerCase()),
+  );
+
+  const kpis = [
+    { l: "Reports available", v: catalogue.length, icon: Layers },
+    { l: "Open pipeline value", v: money(opportunities.filter((o) => !o.stage.startsWith("Closed")).reduce((s, o) => s + o.value, 0)), icon: TrendingUp },
+    { l: "Active mandates", v: mandates.length, icon: Briefcase },
+    { l: "Outstanding receivables", v: money(pmInvoices.filter((i) => !["Paid", "Written Off"].includes(i.stage)).reduce((s, i) => s + (invoiceTotal(i).payable - i.paidAmount), 0)), icon: Receipt },
+  ];
+
+  const fullReport: ReportDefinition = {
+    id: "crm-full-report",
+    title: "Full CRM Report",
+    subtitle: `All CRM domains · Period ${periodLabel}`,
+    summary: kpis.map((k) => ({ label: k.l, value: k.v })),
+    sections: catalogue.flatMap((c) => c.def.sections.map((s) => ({ ...s, heading: `${c.def.title} — ${s.heading}` }))),
   };
-
-  // Custom builder
-  const [source, setSource] = useState("Mandates");
-  const src = DATA_SOURCES[source];
-  const [selectedFields, setSelectedFields] = useState<string[]>(src.fields.slice(0, 4));
-  const [filterField, setFilterField] = useState("");
-  const [filterValue, setFilterValue] = useState("");
-  const [groupBy, setGroupBy] = useState("none");
-  const [sortBy, setSortBy] = useState("none");
-  const [calcField, setCalcField] = useState("");
-
-  const changeSource = (v: string) => {
-    setSource(v);
-    setSelectedFields(DATA_SOURCES[v].fields.slice(0, 4));
-  };
-
-  const toggleField = (f: string) =>
-    setSelectedFields((cur) => (cur.includes(f) ? cur.filter((x) => x !== f) : [...cur, f]));
-
-  const previewRows = useMemo(() => {
-    let rows = [...src.rows];
-    if (filterField && filterValue) {
-      rows = rows.filter((r) => String(r[filterField] ?? "").toLowerCase().includes(filterValue.toLowerCase()));
-    }
-    if (sortBy !== "none") {
-      rows = rows.sort((a, b) => String(a[sortBy] ?? "").localeCompare(String(b[sortBy] ?? "")));
-    }
-    return rows.slice(0, 8);
-  }, [src, filterField, filterValue, sortBy]);
-
-  // Scheduled reports
-  const [schedules, setSchedules] = useState(scheduledReports);
-  const [schOpen, setSchOpen] = useState(false);
-  const [schDraft, setSchDraft] = useState({ report: prebuiltReports[0].name, frequency: "Weekly (Mon 07:00)", recipients: "", format: "PDF", role: "Partners" });
-
-  const addSchedule = () => {
-    setSchedules((s) => [...s, { id: `SCH-${s.length + 1}`, report: schDraft.report, frequency: schDraft.frequency, recipients: schDraft.recipients || "Partners", format: schDraft.format }]);
-    setSchOpen(false);
-    toast({ title: "Schedule created", description: `${schDraft.report} · ${schDraft.frequency}` });
-  };
-
-  // Executive pack
-  const [pack, setPack] = useState(false);
-  const totalBudget = mandates.reduce((s, m) => s + m.budget, 0);
-  const totalActual = mandates.reduce((s, m) => s + m.actualCost, 0);
-  const avgUtil = Math.round(utilisation.reduce((s, u) => s + u.billable / u.available, 0) / utilisation.length * 100);
-  const atRisk = mandates.filter((m) => m.rag !== "Green").length;
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Reports</h1>
-        <p className="text-sm text-muted-foreground">
-          Pre-built and custom reporting across mandates, finance, people and service desk.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold">CRM Reports</h1>
+          <p className="text-sm text-muted-foreground">
+            Reporting across pipeline, clients, mandates, workload, finance, service desk and communications.
+          </p>
+        </div>
+        <Button onClick={() => exportReportPdf(fullReport)}>
+          <FileDown className="mr-2 h-4 w-4" /> Download full CRM report
+        </Button>
       </div>
 
-      <Tabs defaultValue="prebuilt">
-        <TabsList className="flex-wrap">
-          <TabsTrigger value="prebuilt">Pre-built</TabsTrigger>
-          <TabsTrigger value="custom">Custom builder</TabsTrigger>
-          <TabsTrigger value="scheduled">Scheduled</TabsTrigger>
-          <TabsTrigger value="exec">Executive pack</TabsTrigger>
-        </TabsList>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {kpis.map((k) => (
+          <Card key={k.l}>
+            <CardContent className="flex items-center justify-between p-4">
+              <div>
+                <p className="text-xs text-muted-foreground">{k.l}</p>
+                <p className="mt-1 text-xl font-bold">{k.v}</p>
+              </div>
+              <k.icon className="h-6 w-6 text-muted-foreground" />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
 
-        <TabsContent value="prebuilt" className="space-y-6 pt-4">
-          {REPORT_GROUPS.map((g) => (
-            <div key={g} className="space-y-2">
-              <h3 className="text-sm font-semibold text-muted-foreground">{g}</h3>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {prebuiltReports.filter((r) => r.category === g).map((r) => (
-                  <Card key={r.id}>
-                    <CardHeader className="pb-2"><CardTitle className="text-sm">{r.name}</CardTitle></CardHeader>
-                    <CardContent className="space-y-3">
-                      <p className="text-xs text-muted-foreground">Last run: {r.lastRun}</p>
-                      <div className="flex flex-wrap gap-2">
-                        <Button size="sm" onClick={() => runReport(r, "Run")}><Play className="mr-1 h-3.5 w-3.5" /> Run</Button>
-                        <Button size="sm" variant="outline" onClick={() => runReport(r, "Export PDF")}><Download className="mr-1 h-3.5 w-3.5" /> PDF</Button>
-                        <Button size="sm" variant="outline" onClick={() => runReport(r, "Export Excel")}><Download className="mr-1 h-3.5 w-3.5" /> Excel</Button>
-                      </div>
-                    </CardContent>
-                  </Card>
+      <Card>
+        <CardContent className="flex flex-wrap items-end gap-3 p-4">
+          <div className="relative min-w-[220px] flex-1">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input className="pl-9" placeholder="Search reports…" value={query} onChange={(e) => setQuery(e.target.value)} />
+          </div>
+          <div>
+            <Label className="text-xs">Period from</Label>
+            <Input type="date" value={rangeFrom} onChange={(e) => setRangeFrom(e.target.value)} className="w-40" />
+          </div>
+          <div>
+            <Label className="text-xs">Period to</Label>
+            <Input type="date" value={rangeTo} onChange={(e) => setRangeTo(e.target.value)} className="w-40" />
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {filtered.map((c) => (
+          <Card key={c.def.id}>
+            <CardHeader className="pb-2">
+              <div className="flex items-start justify-between">
+                <CardTitle className="text-sm">{c.def.title}</CardTitle>
+                <Badge variant="outline" className="text-xs">{c.domain}</Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-xs text-muted-foreground">{c.description}</p>
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" variant="outline" onClick={() => setPreview(c.def)}>
+                  Preview
+                </Button>
+                <Button size="sm" onClick={() => exportReportPdf(c.def)}>
+                  <Download className="mr-1 h-3.5 w-3.5" /> PDF
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => exportReportExcel(c.def)}>
+                  <FileSpreadsheet className="mr-1 h-3.5 w-3.5" /> Excel
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+        {filtered.length === 0 && (
+          <Card className="sm:col-span-2 lg:col-span-3">
+            <CardContent className="p-8 text-center text-sm text-muted-foreground">
+              No reports match this search.
+            </CardContent>
+          </Card>
+        )}
+      </div>
+
+      {preview && (
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <div>
+              <CardTitle className="text-base">{preview.title}</CardTitle>
+              <p className="text-xs text-muted-foreground">{preview.subtitle}</p>
+            </div>
+            <div className="flex gap-2">
+              <Button size="sm" onClick={() => exportReportPdf(preview)}>
+                <Download className="mr-1 h-3.5 w-3.5" /> Download PDF
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => exportReportExcel(preview)}>
+                <FileSpreadsheet className="mr-1 h-3.5 w-3.5" /> Download Excel
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setPreview(null)}>Close</Button>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {preview.summary && (
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                {preview.summary.map((s) => (
+                  <div key={s.label} className="rounded-md border p-3">
+                    <p className="text-xs text-muted-foreground">{s.label}</p>
+                    <p className="text-lg font-semibold">{s.value}</p>
+                  </div>
                 ))}
               </div>
-            </div>
-          ))}
-        </TabsContent>
-
-        <TabsContent value="custom" className="pt-4">
-          <div className="grid gap-4 lg:grid-cols-4">
-            <Card className="lg:col-span-1">
-              <CardHeader className="pb-2"><CardTitle className="text-sm">Data source</CardTitle></CardHeader>
-              <CardContent className="space-y-3">
-                <Select value={source} onValueChange={changeSource}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>{Object.keys(DATA_SOURCES).map((k) => <SelectItem key={k} value={k}>{DATA_SOURCES[k].label}</SelectItem>)}</SelectContent>
-                </Select>
-                <div className="space-y-1">
-                  <Label className="text-xs">Fields</Label>
-                  {src.fields.map((f) => (
-                    <label key={f} className="flex items-center gap-2 text-sm">
-                      <Checkbox checked={selectedFields.includes(f)} onCheckedChange={() => toggleField(f)} /> {f}
-                    </label>
-                  ))}
-                </div>
-                <div>
-                  <Label className="text-xs">Filter field</Label>
-                  <Input placeholder="field name" value={filterField} onChange={(e) => setFilterField(e.target.value)} />
-                </div>
-                <div>
-                  <Label className="text-xs">Filter value contains</Label>
-                  <Input value={filterValue} onChange={(e) => setFilterValue(e.target.value)} />
-                </div>
-                <div>
-                  <Label className="text-xs">Group by</Label>
-                  <Select value={groupBy} onValueChange={setGroupBy}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">None</SelectItem>
-                      {src.fields.map((f) => <SelectItem key={f} value={f}>{f}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label className="text-xs">Sort by</Label>
-                  <Select value={sortBy} onValueChange={setSortBy}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">None</SelectItem>
-                      {src.fields.map((f) => <SelectItem key={f} value={f}>{f}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label className="text-xs">Calculated field</Label>
-                  <Input placeholder="e.g. margin = budget - actualCost" value={calcField} onChange={(e) => setCalcField(e.target.value)} />
-                </div>
-              </CardContent>
-            </Card>
-            <Card className="lg:col-span-3">
-              <CardHeader className="pb-2"><CardTitle className="text-sm">Live preview — {src.label}{groupBy !== "none" && ` (grouped by ${groupBy})`}</CardTitle></CardHeader>
-              <CardContent>
-                <div className="overflow-x-auto">
+            )}
+            {preview.sections.map((section) => (
+              <div key={section.heading} className="space-y-2">
+                <h4 className="text-sm font-semibold">{section.heading}</h4>
+                {section.note && <p className="text-xs text-muted-foreground">{section.note}</p>}
+                <div className="overflow-x-auto rounded-md border">
                   <Table>
                     <TableHeader>
-                      <TableRow>{selectedFields.map((f) => <TableHead key={f}>{f}</TableHead>)}</TableRow>
+                      <TableRow>{section.columns.map((c) => <TableHead key={c}>{c}</TableHead>)}</TableRow>
                     </TableHeader>
                     <TableBody>
-                      {previewRows.map((r, i) => (
-                        <TableRow key={i}>
-                          {selectedFields.map((f) => (
-                            <TableCell key={f} className="text-sm">{String(r[f] ?? "—")}</TableCell>
-                          ))}
+                      {section.rows.length ? (
+                        section.rows.slice(0, 10).map((row, i) => (
+                          <TableRow key={i}>
+                            {row.map((cell, j) => <TableCell key={j} className="text-sm">{String(cell)}</TableCell>)}
+                          </TableRow>
+                        ))
+                      ) : (
+                        <TableRow>
+                          <TableCell colSpan={section.columns.length} className="text-center text-sm text-muted-foreground">
+                            No records for this period.
+                          </TableCell>
                         </TableRow>
-                      ))}
-                      {previewRows.length === 0 && (
-                        <TableRow><TableCell colSpan={selectedFields.length || 1} className="text-center text-sm text-muted-foreground">No rows match this filter.</TableCell></TableRow>
                       )}
                     </TableBody>
                   </Table>
                 </div>
-                {calcField && <p className="mt-3 rounded bg-muted p-2 text-xs text-muted-foreground">Calculated field defined: {calcField}</p>}
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="scheduled" className="pt-4">
-          <Card>
-            <CardContent className="space-y-4 p-4">
-              <div className="flex justify-end">
-                <Button size="sm" onClick={() => setSchOpen(true)}><CalendarClock className="mr-2 h-4 w-4" /> Schedule report</Button>
+                {section.rows.length > 10 && (
+                  <p className="text-xs text-muted-foreground">
+                    Showing first 10 of {section.rows.length} rows — full data included in the download.
+                  </p>
+                )}
               </div>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Report</TableHead><TableHead>Frequency</TableHead><TableHead>Recipients</TableHead><TableHead>Format</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {schedules.map((s) => (
-                    <TableRow key={s.id}>
-                      <TableCell className="font-medium">{s.report}</TableCell>
-                      <TableCell className="text-sm">{s.frequency}</TableCell>
-                      <TableCell className="text-sm">{s.recipients}</TableCell>
-                      <TableCell><Badge variant="outline">{s.format}</Badge></TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="exec" className="pt-4">
-          <Card>
-            <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><Briefcase className="h-4 w-4 text-muted-foreground" /> Executive pack</CardTitle></CardHeader>
-            <CardContent className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Assembles portfolio health, financial summary, utilisation and risk summary into a single board-ready pack.
-              </p>
-              <Button onClick={() => setPack(true)}><FileText className="mr-2 h-4 w-4" /> Generate executive pack</Button>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
-
-      {/* Report preview */}
-      <Dialog open={!!reportPreview} onOpenChange={(o) => !o && setReportPreview(null)}>
-        <DialogContent className="max-w-2xl">
-          {reportPreview && (
-            <>
-              <DialogHeader><DialogTitle>{reportPreview.name}</DialogTitle></DialogHeader>
-              <Table>
-                <TableHeader><TableRow><TableHead>Ref</TableHead><TableHead>Client</TableHead><TableHead>Stage</TableHead><TableHead className="text-right">Budget</TableHead></TableRow></TableHeader>
-                <TableBody>
-                  {mandates.slice(0, 5).map((m) => (
-                    <TableRow key={m.id}>
-                      <TableCell className="font-mono text-xs">{m.ref}</TableCell>
-                      <TableCell className="text-sm">{m.clientName}</TableCell>
-                      <TableCell><Badge variant="outline">{m.stage}</Badge></TableCell>
-                      <TableCell className="text-right text-sm">{money(m.budget, m.currency)}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setReportPreview(null)}>Close</Button>
-              </DialogFooter>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* Schedule dialog */}
-      <Dialog open={schOpen} onOpenChange={setSchOpen}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Schedule report</DialogTitle></DialogHeader>
-          <div className="grid gap-3">
-            <div>
-              <Label>Report</Label>
-              <Select value={schDraft.report} onValueChange={(v) => setSchDraft({ ...schDraft, report: v })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>{prebuiltReports.map((r) => <SelectItem key={r.id} value={r.name}>{r.name}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Frequency</Label>
-              <Select value={schDraft.frequency} onValueChange={(v) => setSchDraft({ ...schDraft, frequency: v })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {["Daily", "Weekly (Mon 07:00)", "Monthly (1st)", "Quarterly"].map((f) => <SelectItem key={f} value={f}>{f}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Recipients</Label>
-              <Input placeholder="e.g. Finance, Partners" value={schDraft.recipients} onChange={(e) => setSchDraft({ ...schDraft, recipients: e.target.value })} />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label>Format</Label>
-                <Select value={schDraft.format} onValueChange={(v) => setSchDraft({ ...schDraft, format: v })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>{["PDF", "Excel"].map((f) => <SelectItem key={f} value={f}>{f}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Role visibility</Label>
-                <Select value={schDraft.role} onValueChange={(v) => setSchDraft({ ...schDraft, role: v })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>{["Partners", "PMO", "Finance", "All staff"].map((f) => <SelectItem key={f} value={f}>{f}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-            </div>
-          </div>
-          <DialogFooter><Button onClick={addSchedule}>Save schedule</Button></DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Executive pack preview */}
-      <Dialog open={pack} onOpenChange={setPack}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader><DialogTitle>Executive pack — {new Date().toLocaleDateString()}</DialogTitle></DialogHeader>
-          <div className="space-y-4 text-sm">
-            <div>
-              <p className="font-semibold">Portfolio health</p>
-              <p className="text-muted-foreground">{mandates.length} active mandates · {atRisk} at risk (Amber/Red)</p>
-            </div>
-            <div>
-              <p className="font-semibold">Financial summary</p>
-              <p className="text-muted-foreground">Total budget {money(totalBudget)} · Actual cost {money(totalActual)}</p>
-            </div>
-            <div>
-              <p className="font-semibold">Utilisation</p>
-              <p className="text-muted-foreground">Average billable utilisation: {avgUtil}%</p>
-            </div>
-            <div>
-              <p className="font-semibold">Risk summary</p>
-              <ul className="list-disc pl-5 text-muted-foreground">
-                {portfolioRisks.slice(0, 4).map((r) => (
-                  <li key={r.id}>{r.title} — <Badge className={ragClass[r.severity === "Critical" ? "Red" : r.severity === "High" ? "Amber" : "Green"]}>{r.severity}</Badge></li>
-                ))}
-              </ul>
-            </div>
-          </div>
-          <DialogFooter className="gap-2">
-            <Button variant="outline"><Download className="mr-2 h-4 w-4" /> Export PDF</Button>
-            <Button variant="outline"><Download className="mr-2 h-4 w-4" /> Export PowerPoint</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            ))}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
