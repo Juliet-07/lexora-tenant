@@ -380,11 +380,33 @@ export default function Clients() {
             <div className="grid gap-4">
               <div className="grid gap-3 sm:grid-cols-2">
                 <div>
-                  <Label>Relationship manager</Label>
-                  <Select value={draft.relationshipManager} onValueChange={(v) => setDraft({ ...draft, relationshipManager: v })}>
-                    <SelectTrigger><SelectValue placeholder="Select RM" /></SelectTrigger>
-                    <SelectContent>{RELATIONSHIP_MANAGERS.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
-                  </Select>
+                  <Label>Relationship manager (RM)</Label>
+                  {hasEmployees ? (
+                    <Select
+                      value={draft.relationshipManager}
+                      onValueChange={(v) => setDraft({ ...draft, relationshipManager: v })}
+                    >
+                      <SelectTrigger><SelectValue placeholder="Select RM" /></SelectTrigger>
+                      <SelectContent>
+                        {employeeOptions.map((e) => (
+                          <SelectItem key={e.id} value={e.name}>
+                            {e.name}{e.jobTitle ? ` — ${e.jobTitle}` : ""}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Input
+                      placeholder="Type relationship manager's name"
+                      value={draft.relationshipManager}
+                      onChange={(e) => setDraft({ ...draft, relationshipManager: e.target.value })}
+                    />
+                  )}
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {hasEmployees
+                      ? "Selected from employees in HR."
+                      : "No employees found in HR — type the RM's name directly."}
+                  </p>
                 </div>
                 <div>
                   <Label>SLA profile</Label>

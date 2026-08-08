@@ -20,7 +20,6 @@ import {
   CalendarDays,
   Wallet,
   GraduationCap,
-  FileBarChart,
   LifeBuoy,
   Briefcase,
   ClipboardList,
