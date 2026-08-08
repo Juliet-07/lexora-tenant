@@ -313,11 +313,19 @@ export default function Mandates() {
             </div>
             <div>
               <Label>Client</Label>
-              <Input
-                value={draft.clientName}
-                onChange={(e) =>
-                  setDraft({ ...draft, clientName: e.target.value })
+              <ClientSelect
+                value={draft.clientId}
+                onValueChange={(v) => setDraft({ ...draft, clientId: v })}
+                onClientChange={(c) =>
+                  setDraft((d) => ({
+                    ...d,
+                    clientName:
+                      [c.firstName, c.lastName].filter(Boolean).join(" ") ||
+                      c.businessName ||
+                      c.email,
+                  }))
                 }
+                placeholder="Select client..."
               />
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -362,24 +370,35 @@ export default function Mandates() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label>Manager</Label>
-                <Select
-                  value={draft.manager}
-                  onValueChange={(v) => setDraft({ ...draft, manager: v })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {teamDirectory
-                      .filter((t) => t.mandates > 0)
-                      .map((t) => (
-                        <SelectItem key={t.name} value={t.name}>
+                <Label>Team</Label>
+                {teams.length > 0 ? (
+                  <Select
+                    value={draft.teamId}
+                    onValueChange={(v) => {
+                      const t = teams.find((x) => x._id === v);
+                      setDraft({ ...draft, teamId: v, teamName: t?.name ?? "" });
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select team..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {teams.map((t) => (
+                        <SelectItem key={t._id} value={t._id}>
                           {t.name}
                         </SelectItem>
                       ))}
-                  </SelectContent>
-                </Select>
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input
+                    placeholder="Team name"
+                    value={draft.teamName}
+                    onChange={(e) =>
+                      setDraft({ ...draft, teamName: e.target.value })
+                    }
+                  />
+                )}
               </div>
               <div>
                 <Label>Fee structure</Label>
