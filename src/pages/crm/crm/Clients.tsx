@@ -65,6 +65,19 @@ export default function Clients() {
     staleTime: 5 * 60_000,
   });
 
+  const { data: employeesPage, isError: employeesError } = useQuery({
+    queryKey: ["hr-employees", "rm-dropdown"],
+    queryFn: () => fetchEmployees({ limit: 200 }),
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+  const employeeOptions = (employeesPage?.items ?? []).map((e) => ({
+    id: e._id,
+    name: `${e.firstName} ${e.lastName}`.trim(),
+    jobTitle: e.jobTitle,
+  }));
+  const hasEmployees = employeeOptions.length > 0 && !employeesError;
+
   const [q, setQ] = useState("");
   const [serviceFilter, setServiceFilter] = useState("all");
   const [rmFilter, setRmFilter] = useState("all");

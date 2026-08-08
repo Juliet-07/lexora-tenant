@@ -494,6 +494,9 @@ export default function Mandates() {
                   <TabsTrigger value="pl">Mandate P&amp;L</TabsTrigger>
                   <TabsTrigger value="closure">Closure</TabsTrigger>
                   <TabsTrigger value="collab">Collaboration</TabsTrigger>
+                  <TabsTrigger value="comms">Communications</TabsTrigger>
+                  <TabsTrigger value="notes">Notes</TabsTrigger>
+                  <TabsTrigger value="docs">Documents</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="workspace" className="space-y-4 pt-4">
@@ -550,6 +553,11 @@ export default function Mandates() {
                     <Card>
                       <CardContent className="space-y-1 p-4 text-sm">
                         <p className="text-xs text-muted-foreground">Team</p>
+                        {selected.teamName && (
+                          <p className="text-xs text-muted-foreground">
+                            Team: {selected.teamName}
+                          </p>
+                        )}
                         <p>{selected.manager} (manager)</p>
                         {selected.team.map((t) => (
                           <p key={t}>{t}</p>
@@ -694,6 +702,18 @@ export default function Mandates() {
 
                 <TabsContent value="collab" className="pt-4">
                   <CommentThread subject={selected.id} />
+                </TabsContent>
+
+                <TabsContent value="comms" className="pt-4">
+                  <MandateComms mandate={selected} />
+                </TabsContent>
+
+                <TabsContent value="notes" className="pt-4">
+                  <MandateNotes mandate={selected} />
+                </TabsContent>
+
+                <TabsContent value="docs" className="pt-4">
+                  <MandateDocuments mandate={selected} />
                 </TabsContent>
               </Tabs>
             </>
