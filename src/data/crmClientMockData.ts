@@ -185,46 +185,23 @@ export interface CrmContact {
   orgName: string;
   email: string;
   phone: string;
-  roleTags: string[];
-  consent: "Granted" | "Withdrawn" | "Pending";
   source: "Referral" | "Event" | "Web form" | "Cold outreach" | "Partner";
   tags: string[];
+  notes?: string;
   lastContact: string;
-  owner: string;
-  duplicateOf?: string;
 }
 
 export const contacts: CrmContact[] = [
-  { id: "CT-001", name: "Amara Nsengimana", title: "Chief Executive Officer", orgId: "ORG-001", orgName: "Meridian Holdings Ltd", email: "amara@meridian.rw", phone: "+250 788 100 221", roleTags: ["Director", "UBO"], consent: "Granted", source: "Referral", tags: ["Decision maker", "Board"], lastContact: "2026-07-29", owner: "Sarah Chen" },
-  { id: "CT-002", name: "Jean-Luc Habimana", title: "Group CFO", orgId: "ORG-001", orgName: "Meridian Holdings Ltd", email: "jl.habimana@meridian.rw", phone: "+250 788 100 244", roleTags: ["Finance contact"], consent: "Granted", source: "Referral", tags: ["Billing"], lastContact: "2026-07-24", owner: "Sarah Chen" },
-  { id: "CT-003", name: "Priya Shah", title: "Managing Partner", orgId: "ORG-002", orgName: "Greenfield Capital Partners", email: "priya@greenfieldcap.co.ke", phone: "+254 711 553 900", roleTags: ["Director", "Shareholder"], consent: "Granted", source: "Event", tags: ["Decision maker"], lastContact: "2026-07-27", owner: "Michael Torres" },
-  { id: "CT-004", name: "Kenji Tanaka", title: "Chairman", orgId: "ORG-003", orgName: "Tanaka Enterprises", email: "k.tanaka@tanaka.co.tz", phone: "+255 764 220 118", roleTags: ["Director", "UBO"], consent: "Granted", source: "Partner", tags: ["Board"], lastContact: "2026-07-30", owner: "David Park" },
-  { id: "CT-005", name: "Ines Uwase", title: "Head of Compliance", orgId: "ORG-004", orgName: "Helios Renewables", email: "ines@heliosrenew.rw", phone: "+250 782 445 019", roleTags: ["Compliance contact"], consent: "Pending", source: "Web form", tags: ["Operational"], lastContact: "2026-07-22", owner: "Sarah Chen" },
-  { id: "CT-006", name: "Robert Okello", title: "Operations Director", orgId: "ORG-005", orgName: "Northwind Logistics", email: "r.okello@northwind.ug", phone: "+256 772 880 341", roleTags: ["Advisor"], consent: "Granted", source: "Cold outreach", tags: ["Prospect"], lastContact: "2026-07-30", owner: "Michael Torres" },
-  { id: "CT-007", name: "Robert Okelo", title: "Ops Director", orgId: "ORG-005", orgName: "Northwind Logistics", email: "robert.okelo@northwind.ug", phone: "+256 772 880 341", roleTags: [], consent: "Pending", source: "Web form", tags: [], lastContact: "2026-07-18", owner: "Michael Torres", duplicateOf: "CT-006" },
-  { id: "CT-008", name: "Grace Mutoni", title: "Former FD", orgId: "ORG-006", orgName: "Apex Industries", email: "g.mutoni@apex.rw", phone: "+250 788 663 018", roleTags: ["Finance contact"], consent: "Withdrawn", source: "Referral", tags: ["Dormant"], lastContact: "2026-03-14", owner: "David Park" },
+  { id: "CT-001", name: "Amara Nsengimana", title: "Chief Executive Officer", orgId: "ORG-001", orgName: "Meridian Holdings Ltd", email: "amara@meridian.rw", phone: "+250 788 100 221", source: "Referral", tags: ["Decision maker", "Board"], lastContact: "2026-07-29" },
+  { id: "CT-002", name: "Jean-Luc Habimana", title: "Group CFO", orgId: "ORG-001", orgName: "Meridian Holdings Ltd", email: "jl.habimana@meridian.rw", phone: "+250 788 100 244", source: "Referral", tags: ["Billing"], lastContact: "2026-07-24" },
+  { id: "CT-003", name: "Priya Shah", title: "Managing Partner", orgId: "ORG-002", orgName: "Greenfield Capital Partners", email: "priya@greenfieldcap.co.ke", phone: "+254 711 553 900", source: "Event", tags: ["Decision maker"], lastContact: "2026-07-27" },
+  { id: "CT-004", name: "Kenji Tanaka", title: "Chairman", orgId: "ORG-003", orgName: "Tanaka Enterprises", email: "k.tanaka@tanaka.co.tz", phone: "+255 764 220 118", source: "Partner", tags: ["Board"], lastContact: "2026-07-30" },
+  { id: "CT-005", name: "Ines Uwase", title: "Head of Compliance", orgId: "ORG-004", orgName: "Helios Renewables", email: "ines@heliosrenew.rw", phone: "+250 782 445 019", source: "Web form", tags: ["Operational"], lastContact: "2026-07-22" },
+  { id: "CT-006", name: "Robert Okello", title: "Operations Director", orgId: "ORG-005", orgName: "Northwind Logistics", email: "r.okello@northwind.ug", phone: "+256 772 880 341", source: "Cold outreach", tags: ["Prospect"], lastContact: "2026-07-30" },
+  { id: "CT-008", name: "Grace Mutoni", title: "Former FD", orgId: "ORG-006", orgName: "Apex Industries", email: "g.mutoni@apex.rw", phone: "+250 788 663 018", source: "Referral", tags: ["Dormant"], lastContact: "2026-03-14" },
 ];
 
-export interface TimelineEvent {
-  id: string;
-  contactId: string;
-  at: string;
-  type: "Email" | "Call" | "Meeting" | "Document" | "Mandate" | "Invoice" | "Portal";
-  summary: string;
-  by: string;
-}
 
-export const contactTimeline: TimelineEvent[] = [
-  { id: "TL-01", contactId: "CT-001", at: "2026-07-29 14:20", type: "Meeting", summary: "Audit status call — FY26 fieldwork progress reviewed", by: "Sarah Chen" },
-  { id: "TL-02", contactId: "CT-001", at: "2026-07-24 09:05", type: "Invoice", summary: "INV-2026-041 sent via client portal", by: "Finance" },
-  { id: "TL-03", contactId: "CT-001", at: "2026-07-12 16:40", type: "Document", summary: "Shared draft management letter", by: "David Park" },
-  { id: "TL-04", contactId: "CT-001", at: "2026-06-30 11:00", type: "Mandate", summary: "Mandate MND-001 moved to Deliver", by: "System" },
-  { id: "TL-05", contactId: "CT-003", at: "2026-07-27 10:15", type: "Call", summary: "Discussed restructuring step plan delay", by: "Michael Torres" },
-  { id: "TL-06", contactId: "CT-003", at: "2026-07-15 08:30", type: "Email", summary: "Sent governance review scoping note", by: "Michael Torres" },
-  { id: "TL-07", contactId: "CT-004", at: "2026-07-30 12:00", type: "Portal", summary: "Client uploaded FY27 board approval", by: "Kenji Tanaka" },
-  { id: "TL-08", contactId: "CT-005", at: "2026-07-22 15:45", type: "Email", summary: "Requested outstanding KYC refresh documents", by: "Sarah Chen" },
-  { id: "TL-09", contactId: "CT-006", at: "2026-07-30 09:10", type: "Meeting", summary: "Discovery call — TCSP administration scope", by: "Michael Torres" },
-];
 
 // ── Leads & opportunity pipeline ────────────────────────────
 

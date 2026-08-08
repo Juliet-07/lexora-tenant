@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -30,9 +31,39 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { Plus, Search, ShieldCheck, ArrowRight, CheckCircle2 } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Plus,
+  Search,
+  ShieldCheck,
+  ArrowRight,
+  CheckCircle2,
+  Send,
+  Trash2,
+  Folder,
+  FolderOpen,
+  ChevronLeft,
+  Upload,
+  Inbox,
+  FileText,
+} from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { CommentThread, ActivityLog } from "@/components/crm/CommentThread";
+import { ClientSelect } from "@/components/ClientDropdown";
+import { fetchTeams } from "@/lib/hr/hr-api";
+import {
+  useMessages,
+  useNotes,
+  addMessage,
+  addNote,
+  deleteNote,
+  useDocuments,
+  getAllFolders,
+  addFolder,
+  addDocument,
+  fileClientDocument,
+  getReceivedFromClient,
+} from "@/lib/crm/mandateWorkspaceStore";
 import {
   mandates as seedMandates,
   mandateTemplates,
@@ -59,13 +90,22 @@ export default function Mandates() {
 
   const [draft, setDraft] = useState({
     name: "",
+    clientId: "",
     clientName: "",
     type: "Audit",
     template: mandateTemplates[0].id,
     manager: "Sarah Chen",
+    teamId: "",
+    teamName: "",
     budget: 0,
     feeStructure: "Fixed fee" as Mandate["feeStructure"],
     targetDate: "",
+  });
+
+  const { data: teams = [] } = useQuery({
+    queryKey: ["hr-teams"],
+    queryFn: fetchTeams,
+    retry: false,
   });
 
   const filtered = useMemo(

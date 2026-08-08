@@ -69,6 +69,8 @@ export interface Mandate {
   rag: Rag;
   manager: string;
   team: string[];
+  teamId?: string;
+  teamName?: string;
   startDate: string;
   targetDate: string;
   budget: number;
@@ -92,6 +94,8 @@ export const mandates: Mandate[] = [
     stage: "Deliver",
     rag: "Green",
     manager: "Sarah Chen",
+    teamId: "TEAM-AUD",
+    teamName: "Audit Team",
     team: ["David Park", "Chris Evans"],
     startDate: "2026-02-01",
     targetDate: "2026-09-30",
@@ -120,6 +124,8 @@ export const mandates: Mandate[] = [
     stage: "Review",
     rag: "Amber",
     manager: "Michael Torres",
+    teamId: "TEAM-ADV",
+    teamName: "Advisory Team",
     team: ["Ana Rodriguez", "Sarah Chen"],
     startDate: "2026-01-15",
     targetDate: "2026-08-15",
@@ -148,6 +154,8 @@ export const mandates: Mandate[] = [
     stage: "Setup",
     rag: "Green",
     manager: "David Park",
+    teamId: "TEAM-TRX",
+    teamName: "Transactions Team",
     team: ["Chris Evans"],
     startDate: "2026-06-01",
     targetDate: "2027-01-31",
@@ -176,6 +184,8 @@ export const mandates: Mandate[] = [
     stage: "Bill",
     rag: "Green",
     manager: "Sarah Chen",
+    teamId: "TEAM-CMP",
+    teamName: "Compliance Team",
     team: ["Ana Rodriguez"],
     startDate: "2026-03-01",
     targetDate: "2027-02-28",
@@ -204,6 +214,8 @@ export const mandates: Mandate[] = [
     stage: "Close",
     rag: "Green",
     manager: "Sarah Chen",
+    teamId: "TEAM-AUD",
+    teamName: "Audit Team",
     team: ["David Park"],
     startDate: "2025-04-01",
     targetDate: "2026-05-31",
@@ -232,6 +244,8 @@ export const mandates: Mandate[] = [
     stage: "Create",
     rag: "Red",
     manager: "Michael Torres",
+    teamId: "TEAM-ONB",
+    teamName: "Onboarding Team",
     team: [],
     startDate: "2026-07-01",
     targetDate: "2026-10-31",
