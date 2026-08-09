@@ -97,7 +97,17 @@ let documents: WorkspaceDocument[] = [
 ];
 
 const listeners = new Set<() => void>();
+
+// Snapshot caches — useSyncExternalStore requires getSnapshot to return a
+// referentially stable value between emits, otherwise React loops forever.
+let msgCache: Record<string, WorkspaceMessage[]> = {};
+let noteCache: Record<string, WorkspaceNote[]> = {};
+let docCache: Record<string, WorkspaceDocument[]> = {};
+
 function emit() {
+  msgCache = {};
+  noteCache = {};
+  docCache = {};
   listeners.forEach((l) => l());
 }
 export function subscribe(cb: () => void) {
@@ -107,9 +117,12 @@ export function subscribe(cb: () => void) {
 
 // ── Messages ────────────────────────────────────────────────
 export function getMessages(mandateId: string): WorkspaceMessage[] {
-  return messages
-    .filter((m) => m.mandateId === mandateId)
-    .sort((a, b) => a.at.localeCompare(b.at));
+  if (!msgCache[mandateId]) {
+    msgCache[mandateId] = messages
+      .filter((m) => m.mandateId === mandateId)
+      .sort((a, b) => a.at.localeCompare(b.at));
+  }
+  return msgCache[mandateId];
 }
 export function useMessages(mandateId: string): WorkspaceMessage[] {
   return useSyncExternalStore(
@@ -140,9 +153,12 @@ export function addMessage(
 
 // ── Notes ───────────────────────────────────────────────────
 export function getNotes(mandateId: string): WorkspaceNote[] {
-  return notes
-    .filter((n) => n.mandateId === mandateId)
-    .sort((a, b) => b.at.localeCompare(a.at));
+  if (!noteCache[mandateId]) {
+    noteCache[mandateId] = notes
+      .filter((n) => n.mandateId === mandateId)
+      .sort((a, b) => b.at.localeCompare(a.at));
+  }
+  return noteCache[mandateId];
 }
 export function useNotes(mandateId: string): WorkspaceNote[] {
   return useSyncExternalStore(
@@ -178,11 +194,17 @@ export function getReceivedFromClient(mandateId: string): WorkspaceDocument[] {
     (d) => d.mandateId === mandateId && d.fromClient && d.status === "pending",
   );
 }
+export function getMandateDocuments(mandateId: string): WorkspaceDocument[] {
+  if (!docCache[mandateId]) {
+    docCache[mandateId] = documents.filter((d) => d.mandateId === mandateId);
+  }
+  return docCache[mandateId];
+}
 export function useDocuments(mandateId: string): WorkspaceDocument[] {
   return useSyncExternalStore(
     subscribe,
-    () => documents.filter((d) => d.mandateId === mandateId),
-    () => documents.filter((d) => d.mandateId === mandateId),
+    () => getMandateDocuments(mandateId),
+    () => getMandateDocuments(mandateId),
   );
 }
 export function addFolder(mandateId: string, folder: string) {
