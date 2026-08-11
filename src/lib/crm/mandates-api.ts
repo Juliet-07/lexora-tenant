@@ -204,6 +204,45 @@ export const closeMandate = async (id: string): Promise<Mandate> => {
   return unwrap(res);
 };
 
+// ── Messages (tenant ↔ a specific employee) ─────────────────────
+// Distinct from WorkspaceMessage (that's tenant↔client). Powers the
+// Collaboration tab: tenant @mentions a team member, gets a
+// dedicated thread with them.
+
+export interface EmployeeMessage {
+  _id: string;
+  mandateId: string;
+  employeeUserId: string;
+  direction: "tenant" | "employee";
+  author: string;
+  body: string;
+  createdAt: string;
+}
+
+export const fetchEmployeeMessages = async (
+  mandateId: string,
+  employeeUserId: string,
+): Promise<EmployeeMessage[]> => {
+  const res = await api.get(
+    `/crm/mandates/${mandateId}/employee-messages/${employeeUserId}`,
+  );
+  const d = unwrap(res);
+  return Array.isArray(d) ? d : [];
+};
+
+export const sendEmployeeMessage = async (
+  mandateId: string,
+  employeeUserId: string,
+  author: string,
+  body: string,
+): Promise<EmployeeMessage> => {
+  const res = await api.post(
+    `/crm/mandates/${mandateId}/employee-messages/${employeeUserId}`,
+    { author, body },
+  );
+  return unwrap(res);
+};
+
 export const addMilestone = async (
   mandateId: string,
   name: string,
@@ -415,4 +454,27 @@ export const fetchMandateDocumentsForEmployee = async (
   const res = await api.get(`/crm/my-mandates/${mandateId}/documents`);
   const d = unwrap(res);
   return Array.isArray(d) ? d : [];
+};
+
+// The employee's own side of the tenant↔employee thread — always
+// their own thread, resolved server-side, no employeeUserId needed
+// in the URL.
+export const fetchMyCollabMessages = async (
+  mandateId: string,
+): Promise<EmployeeMessage[]> => {
+  const res = await api.get(`/crm/my-mandates/${mandateId}/messages`);
+  const d = unwrap(res);
+  return Array.isArray(d) ? d : [];
+};
+
+export const sendMyCollabMessage = async (
+  mandateId: string,
+  author: string,
+  body: string,
+): Promise<EmployeeMessage> => {
+  const res = await api.post(`/crm/my-mandates/${mandateId}/messages`, {
+    author,
+    body,
+  });
+  return unwrap(res);
 };

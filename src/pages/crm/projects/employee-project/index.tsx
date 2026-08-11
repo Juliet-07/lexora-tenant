@@ -38,6 +38,7 @@ import { MilestonesTab } from "./MilestonesTab";
 import { TimeTab } from "./TimeTab";
 import { FilesTab } from "./FilesTab";
 import { ActivityTab } from "./ActivityTab";
+import { CollaborationTab } from "./CollaborationTab";
 
 const stageColor: Record<MandateStage, string> = {
   Create: "bg-info/10 text-info",
@@ -407,6 +408,7 @@ export function MyProjectDetail() {
           <TabsTrigger value="time">Time</TabsTrigger>
           <TabsTrigger value="files">Files</TabsTrigger>
           <TabsTrigger value="activity">Activity</TabsTrigger>
+          <TabsTrigger value="collaboration">Collaboration</TabsTrigger>
         </TabsList>
 
         <TabsContent value="my-tasks" className="mt-4">
@@ -426,6 +428,9 @@ export function MyProjectDetail() {
         </TabsContent>
         <TabsContent value="activity" className="mt-4">
           <ActivityTab mandateId={mandate._id} />
+        </TabsContent>
+        <TabsContent value="collaboration" className="mt-4">
+          <CollaborationTab mandateId={mandate._id} />
         </TabsContent>
       </Tabs>
     </div>
