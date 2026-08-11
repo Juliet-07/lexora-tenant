@@ -6,7 +6,7 @@ import Pipeline from "@/pages/crm/crm/Pipeline";
 import Contacts from "@/pages/crm/crm/Contacts";
 import CrmClients from "@/pages/crm/crm/Clients";
 import Sla from "@/pages/crm/crm/Sla";
-import Mandates from "@/pages/crm/projects/Mandates";
+import Mandates from "@/pages/crm/projects/mandate";
 import Tasks from "@/pages/crm/projects/Tasks";
 import GanttPlanning from "@/pages/crm/projects/GanttPlanning";
 import TimeTracking from "@/pages/crm/projects/TimeTracking";
@@ -23,7 +23,7 @@ import Reports from "@/pages/crm/tools/Reports";
 import Pmo from "@/pages/crm/projects/Pmo";
 import Notifications from "@/pages/crm/Notifications";
 import Billing from "@/pages/Billing";
-import { MyProjectsList, MyProjectDetail } from "@/pages/MyProjects";
+import { MyProjectsList, MyProjectDetail } from "@/pages/crm/projects/employee-project";
 
 /**
  * CRM & Project Management — Module 2.

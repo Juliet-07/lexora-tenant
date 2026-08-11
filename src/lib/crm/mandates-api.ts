@@ -1,4 +1,5 @@
 import { api } from "../api";
+import { Task, TaskStatus } from "./tasks-api";
 
 export type MandateType =
   | "Audit"
@@ -80,6 +81,15 @@ export interface ClosureChecklistItem {
   done: boolean;
 }
 
+export type MilestoneStatus = "pending" | "in_progress" | "completed";
+
+export interface Milestone {
+  _id: string;
+  name: string;
+  status: MilestoneStatus;
+  date: string;
+}
+
 export interface Mandate {
   _id: string;
   ref: string;
@@ -104,6 +114,7 @@ export interface Mandate {
   conflictCheck: ConflictCheckStatus;
   currency: string;
   closureChecklist: ClosureChecklistItem[];
+  milestones: Milestone[];
   customFolders: string[];
   createdAt: string;
   updatedAt: string;
@@ -189,6 +200,40 @@ export const setClosureItem = async (
 
 export const closeMandate = async (id: string): Promise<Mandate> => {
   const res = await api.post(`/crm/mandates/${id}/close`);
+  return unwrap(res);
+};
+
+export const addMilestone = async (
+  mandateId: string,
+  name: string,
+  date: string,
+): Promise<Mandate> => {
+  const res = await api.post(`/crm/mandates/${mandateId}/milestones`, {
+    name,
+    date,
+  });
+  return unwrap(res);
+};
+
+export const updateMilestone = async (
+  mandateId: string,
+  milestoneId: string,
+  dto: { name?: string; date?: string; status?: MilestoneStatus },
+): Promise<Mandate> => {
+  const res = await api.patch(
+    `/crm/mandates/${mandateId}/milestones/${milestoneId}`,
+    dto,
+  );
+  return unwrap(res);
+};
+
+export const deleteMilestone = async (
+  mandateId: string,
+  milestoneId: string,
+): Promise<Mandate> => {
+  const res = await api.delete(
+    `/crm/mandates/${mandateId}/milestones/${milestoneId}`,
+  );
   return unwrap(res);
 };
 
@@ -321,4 +366,52 @@ export const fileClientDocument = async (
     { folder },
   );
   return unwrap(res);
+};
+
+// EMPLOYEE PROJECTS APIS
+export const fetchMyMandates = async (): Promise<Mandate[]> => {
+  const res = await api.get("/crm/my-mandates");
+  const d = unwrap(res);
+  return Array.isArray(d) ? d : [];
+};
+
+export const fetchMyMandate = async (id: string): Promise<Mandate> => {
+  const res = await api.get(`/crm/my-mandates/${id}`);
+  return unwrap(res);
+};
+
+// All tasks on the mandate, any assignee — the Board view.
+export const fetchMandateBoardTasks = async (
+  mandateId: string,
+): Promise<Task[]> => {
+  const res = await api.get(`/crm/my-mandates/${mandateId}/tasks`);
+  const d = unwrap(res);
+  return Array.isArray(d) ? d : [];
+};
+
+// Just the employee's own tasks, across everything or one mandate.
+export const fetchMyTasks = async (mandateId?: string): Promise<Task[]> => {
+  const res = await api.get("/crm/my-tasks", {
+    params: mandateId ? { mandateId } : undefined,
+  });
+  const d = unwrap(res);
+  return Array.isArray(d) ? d : [];
+};
+
+// Status and logged hours only — everything else about a task is
+// the tenant's to change, not the employee's.
+export const updateMyTask = async (
+  id: string,
+  dto: { status?: TaskStatus; loggedHrs?: number },
+): Promise<Task> => {
+  const res = await api.patch(`/crm/my-tasks/${id}`, dto);
+  return unwrap(res);
+};
+
+export const fetchMandateDocumentsForEmployee = async (
+  mandateId: string,
+): Promise<WorkspaceDocument[]> => {
+  const res = await api.get(`/crm/my-mandates/${mandateId}/documents`);
+  const d = unwrap(res);
+  return Array.isArray(d) ? d : [];
 };

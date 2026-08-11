@@ -10,7 +10,7 @@ import ClientOnboarding from "@/pages/kyc/ClientOnboarding";
 import OnboardingDetail from "@/pages/kyc/OnboardingDetail";
 import Settings from "@/pages/settings/Index";
 import MySettings from "@/pages/hr/employee/MySettings";
-import { MyProjectsList, MyProjectDetail } from "@/pages/MyProjects";
+import { MyProjectsList, MyProjectDetail } from "@/pages/crm/projects/employee-project";
 
 /**
  * Core routes shared across modules: dashboard root, client management,
