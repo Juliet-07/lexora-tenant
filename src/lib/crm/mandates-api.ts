@@ -94,6 +94,7 @@ export interface Mandate {
   _id: string;
   ref: string;
   name: string;
+  description?: string;
   clientUserId: string;
   clientName: string;
   type: MandateType;
