@@ -336,7 +336,7 @@ export function MyProjectDetail() {
         </div>
       </div>
 
-      {mandate?.description && (
+      {mandate.description && (
         <Card>
           <CardContent className="p-5">
             <p className="text-sm text-muted-foreground">

@@ -35,7 +35,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { Plus, Repeat, LayoutGrid } from "lucide-react";
+import { Plus, Repeat, LayoutGrid, TriangleAlert } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { CommentThread } from "@/components/crm/CommentThread";
 import { fetchEmployees } from "@/lib/hr/hr-api";
@@ -88,11 +88,12 @@ export default function Tasks() {
   });
 
   const draftMandate = mandates.find((m) => m._id === draft.mandateId);
+  // Always offer real employees to assign to — a mandate having no
+  // formal team shouldn't block picking a real person, same lesson
+  // as the mandate-visibility fix.
   const { data: employeesPage } = useQuery({
-    queryKey: ["hr-employees-by-team", draftMandate?.teamId],
-    queryFn: () =>
-      fetchEmployees({ teamId: draftMandate!.teamId as string, limit: 100 }),
-    enabled: !!draftMandate?.teamId,
+    queryKey: ["hr-employees-all"],
+    queryFn: () => fetchEmployees({ limit: 500 }),
     retry: false,
   });
   const eligibleAssignees = employeesPage?.items ?? [];
@@ -148,6 +149,23 @@ export default function Tasks() {
     mutationFn: ({ id, status }: { id: string; status: TaskStatus }) =>
       updateTask(id, { status }),
     onSuccess: invalidate,
+  });
+
+  const reassignMut = useMutation({
+    mutationFn: ({
+      id,
+      assigneeUserId,
+      assignee,
+    }: {
+      id: string;
+      assigneeUserId: string;
+      assignee: string;
+    }) => updateTask(id, { assigneeUserId, assignee }),
+    onSuccess: () => {
+      invalidate();
+      toast({ title: "Task reassigned" });
+    },
+    onError: onErr("Failed to reassign task"),
   });
 
   if (isLoading) {
@@ -246,7 +264,15 @@ export default function Tasks() {
                             )}
                           </div>
                           <div className="flex justify-between text-xs text-muted-foreground">
-                            <span>{t.assignee}</span>
+                            <span className="inline-flex items-center gap-1">
+                              {t.assignee}
+                              {!t.assigneeUserId && (
+                                <TriangleAlert
+                                  className="h-3 w-3 text-warning"
+                                  aria-label="Not linked to a real employee"
+                                />
+                              )}
+                            </span>
                             <span>{t.dueDate?.slice(0, 10)}</span>
                           </div>
                           <Progress
@@ -295,7 +321,17 @@ export default function Tasks() {
                         {t.title}
                       </TableCell>
                       <TableCell className="text-sm">{t.mandateName}</TableCell>
-                      <TableCell className="text-sm">{t.assignee}</TableCell>
+                      <TableCell className="text-sm">
+                        <span className="inline-flex items-center gap-1.5">
+                          {t.assignee}
+                          {!t.assigneeUserId && (
+                            <TriangleAlert
+                              className="h-3.5 w-3.5 text-warning shrink-0"
+                              aria-label="Not linked to a real employee"
+                            />
+                          )}
+                        </span>
+                      </TableCell>
                       <TableCell>
                         <Badge className={priorityClass[t.priority]}>
                           {t.priority}
@@ -402,12 +438,7 @@ export default function Tasks() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label>Assignee</Label>
-                {!draftMandate?.teamId ? (
-                  <p className="rounded border border-dashed p-2 text-xs text-muted-foreground">
-                    Pick a mandate with a team assigned to see eligible
-                    assignees.
-                  </p>
-                ) : eligibleAssignees.length > 0 ? (
+                {eligibleAssignees.length > 0 ? (
                   <Select
                     value={draft.assigneeUserId}
                     onValueChange={(v) => {
@@ -542,7 +573,38 @@ export default function Tasks() {
                   </div>
                   <div>
                     <Label className="text-xs">Assignee</Label>
-                    <p className="pt-2">{selected.assignee}</p>
+                    <Select
+                      value={selected.assigneeUserId ?? ""}
+                      onValueChange={(v) => {
+                        const e = eligibleAssignees.find((x) => x._id === v);
+                        if (!e) return;
+                        reassignMut.mutate({
+                          id: selected._id,
+                          assigneeUserId: v,
+                          assignee: `${e.firstName} ${e.lastName}`,
+                        });
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue
+                          placeholder={selected.assignee || "Unassigned"}
+                        />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {eligibleAssignees.map((e) => (
+                          <SelectItem key={e._id} value={e._id}>
+                            {e.firstName} {e.lastName}
+                            {e.jobTitle ? ` · ${e.jobTitle}` : ""}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {!selected.assigneeUserId && (
+                      <p className="mt-1 text-[11px] text-warning">
+                        Shows "{selected.assignee}" but isn't linked to a real
+                        employee — reassign here to fix it.
+                      </p>
+                    )}
                   </div>
                   <div>
                     <Label className="text-xs">Due</Label>
