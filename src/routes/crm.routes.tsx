@@ -15,6 +15,13 @@ import Adr from "@/pages/crm/projects/Adr";
 import Resources from "@/pages/crm/Resources";
 import Invoicing from "@/pages/crm/finance/Invoicing";
 import TrustAccounting from "@/pages/crm/finance/TrustAccounting";
+import Sales from "@/pages/crm/finance/Sales";
+import Purchases from "@/pages/crm/finance/Purchases";
+import Banking from "@/pages/crm/finance/Banking";
+import TaxPage from "@/pages/crm/finance/Tax";
+import Accounting from "@/pages/crm/finance/Accounting";
+import Financials from "@/pages/crm/finance/Financials";
+import FundAccounting from "@/pages/crm/finance/FundAccounting";
 import Documents from "@/pages/crm/Documents";
 import Contracts from "@/pages/crm/tools/Contracts";
 import Forms from "@/pages/crm/Forms";
@@ -104,6 +111,13 @@ export const crmRoutes = ({ isAdmin, accessibleModules }: RouteContext) => {
         path="/crm/invoicing"
         element={layout(<Invoicing />)}
       />,
+      <Route key="crm-sales" path="/crm/sales" element={layout(<Sales />)} />,
+      <Route key="crm-purchases" path="/crm/purchases" element={layout(<Purchases />)} />,
+      <Route key="crm-banking" path="/crm/banking" element={layout(<Banking />)} />,
+      <Route key="crm-tax" path="/crm/tax" element={layout(<TaxPage />)} />,
+      <Route key="crm-accounting" path="/crm/accounting" element={layout(<Accounting />)} />,
+      <Route key="crm-financials" path="/crm/financials" element={layout(<Financials />)} />,
+      <Route key="crm-funds" path="/crm/funds" element={layout(<FundAccounting />)} />,
       <Route
         key="crm-trust"
         path="/crm/trust"
