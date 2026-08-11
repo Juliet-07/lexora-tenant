@@ -111,6 +111,13 @@ export const crmRoutes = ({ isAdmin, accessibleModules }: RouteContext) => {
         path="/crm/invoicing"
         element={layout(<Invoicing />)}
       />,
+      <Route key="crm-sales" path="/crm/sales" element={layout(<Sales />)} />,
+      <Route key="crm-purchases" path="/crm/purchases" element={layout(<Purchases />)} />,
+      <Route key="crm-banking" path="/crm/banking" element={layout(<Banking />)} />,
+      <Route key="crm-tax" path="/crm/tax" element={layout(<TaxPage />)} />,
+      <Route key="crm-accounting" path="/crm/accounting" element={layout(<Accounting />)} />,
+      <Route key="crm-financials" path="/crm/financials" element={layout(<Financials />)} />,
+      <Route key="crm-funds" path="/crm/funds" element={layout(<FundAccounting />)} />,
       <Route
         key="crm-trust"
         path="/crm/trust"
