@@ -5,7 +5,6 @@ import CrmOverview from "@/pages/crm/Overview";
 import Pipeline from "@/pages/crm/crm/Pipeline";
 import Contacts from "@/pages/crm/crm/Contacts";
 import CrmClients from "@/pages/crm/crm/Clients";
-import Newsletter from "@/pages/crm/tools/Newsletter";
 import Sla from "@/pages/crm/crm/Sla";
 import Mandates from "@/pages/crm/projects/Mandates";
 import Tasks from "@/pages/crm/projects/Tasks";
@@ -97,11 +96,6 @@ export const crmRoutes = ({ isAdmin, accessibleModules }: RouteContext) => {
         key="crm-clients"
         path="/crm/clients"
         element={layout(<CrmClients />)}
-      />,
-      <Route
-        key="crm-newsletter"
-        path="/crm/newsletter"
-        element={layout(<Newsletter />)}
       />,
       <Route key="crm-sla" path="/crm/sla" element={layout(<Sla />)} />,
       // ── Finance ──────────────────────────────────────────

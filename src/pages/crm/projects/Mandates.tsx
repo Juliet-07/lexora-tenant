@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -30,7 +30,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Plus,
@@ -46,67 +51,85 @@ import {
   Upload,
   Inbox,
   FileText,
+  MessageSquare,
+  StickyNote,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { CommentThread, ActivityLog } from "@/components/crm/CommentThread";
+import { CommentThread } from "@/components/crm/CommentThread";
 import { ClientSelect } from "@/components/ClientDropdown";
 import { fetchTeams } from "@/lib/hr/hr-api";
 import {
-  useMessages,
-  useNotes,
-  addMessage,
-  addNote,
-  deleteNote,
-  useDocuments,
-  getAllFolders,
+  fetchMandates,
+  createMandate,
+  updateMandate,
+  advanceMandateStage,
+  clearConflictCheck,
+  setClosureItem,
+  closeMandate,
+  fetchMessages,
+  sendMessage,
+  fetchNotes,
+  addWorkspaceNote,
+  deleteWorkspaceNote,
+  fetchFolders,
   addFolder,
-  addDocument,
+  fetchDocuments,
+  fetchReceivedDocuments,
+  uploadDocument,
   fileClientDocument,
-  getReceivedFromClient,
-} from "@/lib/crm/mandateWorkspaceStore";
-import {
-  mandates as seedMandates,
-  mandateTemplates,
   MANDATE_STAGES,
   MANDATE_STAGE_META,
-  Mandate,
-  MandateStage,
-  Rag,
   ragClass,
   money,
-  pmTasks,
-  wipEntries,
-  activityStream,
-  teamDirectory,
-} from "@/data/crmPmMockData";
+  type Mandate,
+  type MandateStage,
+  type Rag,
+  type FeeStructure,
+} from "@/lib/crm/mandates-api";
+import { mandateTemplates } from "@/data/crmPmMockData";
+import { fetchTasks, type Task } from "@/lib/crm/tasks-api";
 
 export default function Mandates() {
-  const [list, setList] = useState<Mandate[]>(seedMandates);
-  const [q, setQ] = useState("");
-  const [stageFilter, setStageFilter] = useState("all");
-  const [openNew, setOpenNew] = useState(false);
-  const [selected, setSelected] = useState<Mandate | null>(null);
+  const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  const [draft, setDraft] = useState({
-    name: "",
-    clientId: "",
-    clientName: "",
-    type: "Audit",
-    template: mandateTemplates[0].id,
-    manager: "Sarah Chen",
-    teamId: "",
-    teamName: "",
-    budget: 0,
-    feeStructure: "Fixed fee" as Mandate["feeStructure"],
-    targetDate: "",
+  const { data: list = [], isLoading } = useQuery({
+    queryKey: ["mandates"],
+    queryFn: fetchMandates,
   });
-
   const { data: teams = [] } = useQuery({
     queryKey: ["hr-teams"],
     queryFn: fetchTeams,
     retry: false,
   });
+
+  const [q, setQ] = useState("");
+  const [stageFilter, setStageFilter] = useState("all");
+  const [openNew, setOpenNew] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selected = list.find((m) => m._id === selectedId) ?? null;
+
+  const [draft, setDraft] = useState({
+    name: "",
+    clientId: "",
+    clientName: "",
+    type: "Audit" as Mandate["type"],
+    template: mandateTemplates[0].id,
+    teamId: "",
+    teamName: "",
+    budget: 0,
+    feeStructure: "Fixed fee" as FeeStructure,
+    targetDate: "",
+  });
+
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: ["mandates"] });
+  const onErr = (title: string) => (err: any) =>
+    toast({
+      title,
+      description: err?.response?.data?.message,
+      variant: "destructive",
+    });
 
   const filtered = useMemo(
     () =>
@@ -120,67 +143,83 @@ export default function Mandates() {
     [list, q, stageFilter],
   );
 
-  const update = (id: string, patch: Partial<Mandate>) => {
-    setList((p) => p.map((m) => (m.id === id ? { ...m, ...patch } : m)));
-    setSelected((s) => (s && s.id === id ? { ...s, ...patch } : s));
-  };
-
-  const create = () => {
-    if (!draft.name || !draft.clientName) return;
-    const tpl = mandateTemplates.find((t) => t.id === draft.template);
-    const m: Mandate = {
-      id: `MND-${String(list.length + 1).padStart(3, "0")}`,
-      ref: `M-2026-${String(list.length + 1).padStart(3, "0")}`,
-      name: draft.name,
-      clientName: draft.clientName,
-      type: draft.type,
-      stage: "Create",
-      rag: "Green",
-      manager: draft.manager,
-      team: [],
-      teamId: draft.teamId || undefined,
-      teamName: draft.teamName || undefined,
-      startDate: new Date().toISOString().slice(0, 10),
-      targetDate: draft.targetDate || "2026-12-31",
-      budget: Number(draft.budget) || 0,
-      actualCost: 0,
-      billed: 0,
-      wip: 0,
-      feeStructure: draft.feeStructure,
-      progress: 0,
-      conflictCheck: "Pending",
-      currency: "USD",
-      closureChecklist: seedMandates[0].closureChecklist.map((c) => ({
-        ...c,
-        done: false,
-      })),
-    };
-    setList([m, ...list]);
-    setOpenNew(false);
-    toast({
-      title: "Mandate created",
-      description: `${m.ref} · ${tpl?.name} template applied (${tpl?.tasks} tasks, ${tpl?.phases} phases). Conflict check queued.`,
-    });
-  };
-
-  const advance = (m: Mandate) => {
-    const idx = MANDATE_STAGES.indexOf(m.stage);
-    if (idx === MANDATE_STAGES.length - 1) return;
-    const next = MANDATE_STAGES[idx + 1];
-    if (next === "Setup" && m.conflictCheck !== "Cleared") {
-      toast({
-        title: "Blocked — conflict check",
-        description: "Clear the conflict check before moving to Setup.",
-        variant: "destructive",
+  const createMut = useMutation({
+    mutationFn: () => {
+      const tpl = mandateTemplates.find((t) => t.id === draft.template);
+      return createMandate({
+        name: draft.name,
+        clientUserId: draft.clientId,
+        clientName: draft.clientName,
+        type: draft.type,
+        teamId: draft.teamId || undefined,
+        teamName: draft.teamName || undefined,
+        budget: Number(draft.budget) || 0,
+        feeStructure: draft.feeStructure,
+        targetDate: draft.targetDate || "2026-12-31",
+        templateName: tpl?.name,
+        templateTaskCount: tpl?.tasks,
       });
-      return;
-    }
-    update(m.id, { stage: next });
-    toast({
-      title: `Moved to ${next}`,
-      description: MANDATE_STAGE_META[next].trigger,
-    });
-  };
+    },
+    onSuccess: (m) => {
+      invalidate();
+      setOpenNew(false);
+      const tpl = mandateTemplates.find((t) => t.id === draft.template);
+      toast({
+        title: "Mandate created",
+        description: `${m.ref} · ${tpl?.name} template applied (${tpl?.tasks} tasks, ${tpl?.phases} phases). Conflict check queued.`,
+      });
+    },
+    onError: onErr("Failed to create mandate"),
+  });
+
+  const advanceMut = useMutation({
+    mutationFn: (id: string) => advanceMandateStage(id),
+    onSuccess: (m) => {
+      invalidate();
+      toast({ title: `Moved to ${m.stage}`, description: m.stageTrigger });
+    },
+    onError: onErr("Couldn't advance stage"),
+  });
+
+  const clearConflictMut = useMutation({
+    mutationFn: (id: string) => clearConflictCheck(id),
+    onSuccess: () => {
+      invalidate();
+      toast({ title: "Conflict check cleared" });
+    },
+  });
+
+  const ragMut = useMutation({
+    mutationFn: ({ id, rag }: { id: string; rag: Rag }) =>
+      updateMandate(id, { rag }),
+    onSuccess: invalidate,
+  });
+
+  const closureMut = useMutation({
+    mutationFn: ({
+      mandateId,
+      itemId,
+      done,
+    }: {
+      mandateId: string;
+      itemId: string;
+      done: boolean;
+    }) => setClosureItem(mandateId, itemId, done),
+    onSuccess: invalidate,
+  });
+
+  const closeMut = useMutation({
+    mutationFn: (id: string) => closeMandate(id),
+    onSuccess: () => {
+      invalidate();
+      toast({
+        title: "Mandate closed",
+        description:
+          "Documents archived and satisfaction survey sent to the client.",
+      });
+    },
+    onError: onErr("Couldn't close mandate"),
+  });
 
   const totals = {
     budget: list.reduce((s, m) => s + m.budget, 0),
@@ -188,6 +227,14 @@ export default function Mandates() {
     billed: list.reduce((s, m) => s + m.billed, 0),
     wip: list.reduce((s, m) => s + m.wip, 0),
   };
+
+  if (isLoading) {
+    return (
+      <div className="py-16 text-center text-sm text-muted-foreground">
+        Loading mandates…
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -262,9 +309,9 @@ export default function Mandates() {
             <TableBody>
               {filtered.map((m) => (
                 <TableRow
-                  key={m.id}
+                  key={m._id}
                   className="cursor-pointer"
-                  onClick={() => setSelected(m)}
+                  onClick={() => setSelectedId(m._id)}
                 >
                   <TableCell className="font-mono text-xs">{m.ref}</TableCell>
                   <TableCell>
@@ -280,7 +327,7 @@ export default function Mandates() {
                   <TableCell>
                     <Badge className={ragClass[m.rag]}>{m.rag}</Badge>
                   </TableCell>
-                  <TableCell className="text-sm">{m.manager}</TableCell>
+                  <TableCell className="text-sm">{m.manager || "—"}</TableCell>
                   <TableCell>
                     <Progress value={m.progress} className="h-2" />
                   </TableCell>
@@ -292,6 +339,16 @@ export default function Mandates() {
                   </TableCell>
                 </TableRow>
               ))}
+              {!filtered.length && (
+                <TableRow>
+                  <TableCell
+                    colSpan={8}
+                    className="py-8 text-center text-sm text-muted-foreground"
+                  >
+                    No mandates match your filters.
+                  </TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
         </CardContent>
@@ -333,19 +390,26 @@ export default function Mandates() {
                 <Label>Type</Label>
                 <Select
                   value={draft.type}
-                  onValueChange={(v) => setDraft({ ...draft, type: v })}
+                  onValueChange={(v) =>
+                    setDraft({ ...draft, type: v as Mandate["type"] })
+                  }
                 >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {["Audit", "Advisory", "Transaction", "Compliance", "Onboarding", "Litigation"].map(
-                      (t) => (
-                        <SelectItem key={t} value={t}>
-                          {t}
-                        </SelectItem>
-                      ),
-                    )}
+                    {[
+                      "Audit",
+                      "Advisory",
+                      "Transaction",
+                      "Compliance",
+                      "Onboarding",
+                      "Litigation",
+                    ].map((t) => (
+                      <SelectItem key={t} value={t}>
+                        {t}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -376,7 +440,11 @@ export default function Mandates() {
                     value={draft.teamId}
                     onValueChange={(v) => {
                       const t = teams.find((x) => x._id === v);
-                      setDraft({ ...draft, teamId: v, teamName: t?.name ?? "" });
+                      setDraft({
+                        ...draft,
+                        teamId: v,
+                        teamName: t?.name ?? "",
+                      });
                     }}
                   >
                     <SelectTrigger>
@@ -405,20 +473,23 @@ export default function Mandates() {
                 <Select
                   value={draft.feeStructure}
                   onValueChange={(v) =>
-                    setDraft({ ...draft, feeStructure: v as Mandate["feeStructure"] })
+                    setDraft({ ...draft, feeStructure: v as FeeStructure })
                   }
                 >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {["Fixed fee", "Time & materials", "Retainer", "Capped fee"].map(
-                      (f) => (
-                        <SelectItem key={f} value={f}>
-                          {f}
-                        </SelectItem>
-                      ),
-                    )}
+                    {[
+                      "Fixed fee",
+                      "Time & materials",
+                      "Retainer",
+                      "Capped fee",
+                    ].map((f) => (
+                      <SelectItem key={f} value={f}>
+                        {f}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -451,20 +522,26 @@ export default function Mandates() {
             </p>
           </div>
           <DialogFooter>
-            <Button onClick={create}>Create mandate</Button>
+            <Button
+              disabled={createMut.isPending || !draft.name || !draft.clientId}
+              onClick={() => createMut.mutate()}
+            >
+              {createMut.isPending ? "Creating…" : "Create mandate"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Mandate workspace */}
-      <Sheet open={!!selected} onOpenChange={(o) => !o && setSelected(null)}>
+      <Sheet open={!!selected} onOpenChange={(o) => !o && setSelectedId(null)}>
         <SheetContent className="w-full overflow-y-auto sm:max-w-3xl">
           {selected && (
             <>
               <SheetHeader>
                 <SheetTitle>{selected.name}</SheetTitle>
                 <p className="text-sm text-muted-foreground">
-                  {selected.ref} · {selected.clientName} · {selected.feeStructure}
+                  {selected.ref} · {selected.clientName} ·{" "}
+                  {selected.feeStructure}
                 </p>
               </SheetHeader>
 
@@ -512,17 +589,23 @@ export default function Mandates() {
                         {MANDATE_STAGE_META[selected.stage].trigger}
                       </p>
                       <div className="flex flex-wrap gap-2">
-                        <Button size="sm" onClick={() => advance(selected)}>
+                        <Button
+                          size="sm"
+                          disabled={
+                            advanceMut.isPending || selected.stage === "Close"
+                          }
+                          onClick={() => advanceMut.mutate(selected._id)}
+                        >
                           Advance stage
                         </Button>
                         {selected.conflictCheck !== "Cleared" && (
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => {
-                              update(selected.id, { conflictCheck: "Cleared" });
-                              toast({ title: "Conflict check cleared" });
-                            }}
+                            disabled={clearConflictMut.isPending}
+                            onClick={() =>
+                              clearConflictMut.mutate(selected._id)
+                            }
                           >
                             <ShieldCheck className="mr-2 h-4 w-4" /> Clear
                             conflict check
@@ -531,7 +614,7 @@ export default function Mandates() {
                         <Select
                           value={selected.rag}
                           onValueChange={(v) =>
-                            update(selected.id, { rag: v as Rag })
+                            ragMut.mutate({ id: selected._id, rag: v as Rag })
                           }
                         >
                           <SelectTrigger className="w-36">
@@ -558,11 +641,13 @@ export default function Mandates() {
                             Team: {selected.teamName}
                           </p>
                         )}
-                        <p>{selected.manager} (manager)</p>
+                        {selected.manager && (
+                          <p>{selected.manager} (manager)</p>
+                        )}
                         {selected.team.map((t) => (
                           <p key={t}>{t}</p>
                         ))}
-                        {!selected.team.length && (
+                        {!selected.team.length && !selected.manager && (
                           <p className="text-muted-foreground">
                             No team assigned yet
                           </p>
@@ -572,8 +657,8 @@ export default function Mandates() {
                     <Card>
                       <CardContent className="space-y-1 p-4 text-sm">
                         <p className="text-xs text-muted-foreground">Dates</p>
-                        <p>Start: {selected.startDate}</p>
-                        <p>Target: {selected.targetDate}</p>
+                        <p>Start: {selected.startDate?.slice(0, 10)}</p>
+                        <p>Target: {selected.targetDate?.slice(0, 10)}</p>
                         <p>
                           Conflict check:{" "}
                           <Badge variant="outline">
@@ -584,69 +669,53 @@ export default function Mandates() {
                     </Card>
                   </div>
 
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm">Activity log</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <ActivityLog entries={activityStream.slice(0, 5)} />
-                    </CardContent>
-                  </Card>
+                  <MandateActivity mandate={selected} />
                 </TabsContent>
 
-                <TabsContent value="tasks" className="pt-4">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Task</TableHead>
-                        <TableHead>Assignee</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Due</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {pmTasks
-                        .filter((t) => t.mandateId === selected.id)
-                        .map((t) => (
-                          <TableRow key={t.id}>
-                            <TableCell className="text-sm">{t.title}</TableCell>
-                            <TableCell className="text-sm">
-                              {t.assignee}
-                            </TableCell>
-                            <TableCell>
-                              <Badge variant="outline">{t.status}</Badge>
-                            </TableCell>
-                            <TableCell className="text-sm">
-                              {t.dueDate}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                    </TableBody>
-                  </Table>
+                <TabsContent value="tasks" className="pt-4 space-y-2">
+                  <MandateTasks mandateId={selected._id} />
                 </TabsContent>
 
                 <TabsContent value="pl" className="space-y-3 pt-4">
                   {(() => {
-                    const wip =
-                      wipEntries.find((w) => w.mandateId === selected.id)
-                        ?.value ?? selected.wip;
                     const margin =
-                      selected.billed + wip - selected.actualCost;
-                    const marginPct = selected.billed + wip
-                      ? Math.round((margin / (selected.billed + wip)) * 100)
-                      : 0;
+                      selected.billed + selected.wip - selected.actualCost;
+                    const marginPct =
+                      selected.billed + selected.wip
+                        ? Math.round(
+                            (margin / (selected.billed + selected.wip)) * 100,
+                          )
+                        : 0;
                     return (
                       <Table>
                         <TableBody>
                           {[
-                            ["Budget", money(selected.budget, selected.currency)],
-                            ["Billed to date", money(selected.billed, selected.currency)],
-                            ["Unbilled WIP", money(wip, selected.currency)],
-                            ["Actual cost", money(selected.actualCost, selected.currency)],
-                            ["Margin", `${money(margin, selected.currency)} (${marginPct}%)`],
+                            [
+                              "Budget",
+                              money(selected.budget, selected.currency),
+                            ],
+                            [
+                              "Billed to date",
+                              money(selected.billed, selected.currency),
+                            ],
+                            [
+                              "Unbilled WIP",
+                              money(selected.wip, selected.currency),
+                            ],
+                            [
+                              "Actual cost",
+                              money(selected.actualCost, selected.currency),
+                            ],
+                            [
+                              "Margin",
+                              `${money(margin, selected.currency)} (${marginPct}%)`,
+                            ],
                             [
                               "Budget variance",
-                              money(selected.budget - selected.actualCost, selected.currency),
+                              money(
+                                selected.budget - selected.actualCost,
+                                selected.currency,
+                              ),
                             ],
                           ].map(([l, v]) => (
                             <TableRow key={l}>
@@ -668,40 +737,41 @@ export default function Mandates() {
                   <p className="text-sm text-muted-foreground">
                     All items must be complete before the mandate can be closed.
                   </p>
-                  {selected.closureChecklist.map((c, i) => (
+                  {selected.closureChecklist.map((c) => (
                     <label
-                      key={c.label}
+                      key={c._id}
                       className="flex items-center gap-3 rounded border p-3 text-sm"
                     >
                       <Checkbox
                         checked={c.done}
-                        onCheckedChange={(v) => {
-                          const next = selected.closureChecklist.map((x, j) =>
-                            j === i ? { ...x, done: !!v } : x,
-                          );
-                          update(selected.id, { closureChecklist: next });
-                        }}
+                        onCheckedChange={(v) =>
+                          closureMut.mutate({
+                            mandateId: selected._id,
+                            itemId: c._id,
+                            done: !!v,
+                          })
+                        }
                       />
                       {c.label}
                     </label>
                   ))}
                   <Button
-                    disabled={!selected.closureChecklist.every((c) => c.done)}
-                    onClick={() => {
-                      update(selected.id, { stage: "Close", progress: 100 });
-                      toast({
-                        title: "Mandate closed",
-                        description:
-                          "Documents archived and satisfaction survey sent to the client.",
-                      });
-                    }}
+                    disabled={
+                      !selected.closureChecklist.every((c) => c.done) ||
+                      closeMut.isPending
+                    }
+                    onClick={() => closeMut.mutate(selected._id)}
                   >
                     <CheckCircle2 className="mr-2 h-4 w-4" /> Close mandate
                   </Button>
                 </TabsContent>
 
                 <TabsContent value="collab" className="pt-4">
-                  <CommentThread subject={selected.id} />
+                  <p className="text-xs text-muted-foreground mb-3">
+                    Comment threads aren't wired to a real backend yet — coming
+                    with a later pass.
+                  </p>
+                  <CommentThread subject={selected._id} />
                 </TabsContent>
 
                 <TabsContent value="comms" className="pt-4">
@@ -724,29 +794,140 @@ export default function Mandates() {
   );
 }
 
+// ── Activity (derived from real messages + notes) ────────────
+
+function MandateActivity({ mandate }: { mandate: Mandate }) {
+  const { data: messages = [] } = useQuery({
+    queryKey: ["mandateMessages", mandate._id],
+    queryFn: () => fetchMessages(mandate._id),
+  });
+  const { data: notes = [] } = useQuery({
+    queryKey: ["mandateNotes", mandate._id],
+    queryFn: () => fetchNotes(mandate._id),
+  });
+
+  const entries = [
+    ...messages.map((m) => ({
+      at: m.createdAt,
+      icon: MessageSquare,
+      text:
+        m.direction === "tenant"
+          ? `${m.author} messaged the client`
+          : `${m.author} sent a message`,
+    })),
+    ...notes.map((n) => ({
+      at: n.createdAt,
+      icon: StickyNote,
+      text: `${n.author} added a note`,
+    })),
+  ]
+    .sort((a, b) => b.at.localeCompare(a.at))
+    .slice(0, 5);
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm">Activity log</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {entries.map((e, i) => (
+          <div key={i} className="flex items-center gap-2 text-sm">
+            <e.icon className="h-3.5 w-3.5 text-muted-foreground" />
+            <span>{e.text}</span>
+            <span className="text-xs text-muted-foreground">
+              · {new Date(e.at).toLocaleString()}
+            </span>
+          </div>
+        ))}
+        {!entries.length && (
+          <p className="text-sm text-muted-foreground">No activity yet.</p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── Tasks (real, filtered to this mandate) ───────────────────
+
+function MandateTasks({ mandateId }: { mandateId: string }) {
+  const { data: tasks = [], isLoading } = useQuery({
+    queryKey: ["tasks", { mandateId }],
+    queryFn: () => fetchTasks({ mandateId }),
+  });
+
+  if (isLoading)
+    return <p className="text-sm text-muted-foreground py-6">Loading tasks…</p>;
+
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Task</TableHead>
+          <TableHead>Assignee</TableHead>
+          <TableHead>Status</TableHead>
+          <TableHead>Due</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {tasks.map((t: Task) => (
+          <TableRow key={t._id}>
+            <TableCell className="text-sm">{t.title}</TableCell>
+            <TableCell className="text-sm">{t.assignee}</TableCell>
+            <TableCell>
+              <Badge variant="outline">{t.status}</Badge>
+            </TableCell>
+            <TableCell className="text-sm">{t.dueDate?.slice(0, 10)}</TableCell>
+          </TableRow>
+        ))}
+        {!tasks.length && (
+          <TableRow>
+            <TableCell
+              colSpan={4}
+              className="text-center text-sm text-muted-foreground py-6"
+            >
+              No tasks yet — add one from the Tasks page.
+            </TableCell>
+          </TableRow>
+        )}
+      </TableBody>
+    </Table>
+  );
+}
+
 // ── Communications ──────────────────────────────────────────
 
 function MandateComms({ mandate }: { mandate: Mandate }) {
-  const messages = useMessages(mandate.id);
-  const [text, setText] = useState("");
+  const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { data: messages = [] } = useQuery({
+    queryKey: ["mandateMessages", mandate._id],
+    queryFn: () => fetchMessages(mandate._id),
+  });
+  const [text, setText] = useState("");
 
-  const send = () => {
-    if (!text.trim()) return;
-    addMessage(mandate.id, "tenant", "You", text.trim());
-    setText("");
-    toast({ title: "Message sent", description: `Sent to ${mandate.clientName}` });
-  };
+  const sendMut = useMutation({
+    mutationFn: () => sendMessage(mandate._id, "You", text.trim()),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["mandateMessages", mandate._id],
+      });
+      setText("");
+      toast({
+        title: "Message sent",
+        description: `Sent to ${mandate.clientName}`,
+      });
+    },
+  });
 
   return (
     <div className="space-y-3">
       <div className="max-h-96 space-y-3 overflow-y-auto rounded border p-3">
-        {messages.length === 0 && (
+        {!messages.length && (
           <p className="text-sm text-muted-foreground">No messages yet.</p>
         )}
         {messages.map((m) => (
           <div
-            key={m.id}
+            key={m._id}
             className={`flex gap-2 ${m.direction === "tenant" ? "flex-row-reverse" : ""}`}
           >
             <div className="flex h-7 w-7 flex-none items-center justify-center rounded-full bg-muted text-xs font-medium">
@@ -757,18 +938,14 @@ function MandateComms({ mandate }: { mandate: Mandate }) {
                 .join("")}
             </div>
             <div
-              className={`max-w-[75%] rounded-lg px-3 py-2 text-sm ${
-                m.direction === "tenant"
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-muted"
-              }`}
+              className={`max-w-[75%] rounded-lg px-3 py-2 text-sm ${m.direction === "tenant" ? "bg-primary text-primary-foreground" : "bg-muted"}`}
             >
               <p className="mb-0.5 text-[11px] font-medium opacity-80">
                 {m.author}
               </p>
               <p>{m.body}</p>
               <p className="mt-1 text-[10px] opacity-70">
-                {new Date(m.at).toLocaleString()}
+                {new Date(m.createdAt).toLocaleString()}
               </p>
             </div>
           </div>
@@ -781,7 +958,11 @@ function MandateComms({ mandate }: { mandate: Mandate }) {
           onChange={(e) => setText(e.target.value)}
           className="min-h-[60px]"
         />
-        <Button onClick={send} className="self-end">
+        <Button
+          disabled={sendMut.isPending || !text.trim()}
+          onClick={() => sendMut.mutate()}
+          className="self-end"
+        >
           <Send className="mr-2 h-4 w-4" /> Send
         </Button>
       </div>
@@ -792,16 +973,32 @@ function MandateComms({ mandate }: { mandate: Mandate }) {
 // ── Notes ───────────────────────────────────────────────────
 
 function MandateNotes({ mandate }: { mandate: Mandate }) {
-  const notes = useNotes(mandate.id);
-  const [text, setText] = useState("");
+  const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { data: notes = [] } = useQuery({
+    queryKey: ["mandateNotes", mandate._id],
+    queryFn: () => fetchNotes(mandate._id),
+  });
+  const [text, setText] = useState("");
 
-  const add = () => {
-    if (!text.trim()) return;
-    addNote(mandate.id, "You", text.trim());
-    setText("");
-    toast({ title: "Note added" });
-  };
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: ["mandateNotes", mandate._id] });
+
+  const addMut = useMutation({
+    mutationFn: () => addWorkspaceNote(mandate._id, "You", text.trim()),
+    onSuccess: () => {
+      invalidate();
+      setText("");
+      toast({ title: "Note added" });
+    },
+  });
+  const deleteMut = useMutation({
+    mutationFn: (noteId: string) => deleteWorkspaceNote(mandate._id, noteId),
+    onSuccess: () => {
+      invalidate();
+      toast({ title: "Note deleted" });
+    },
+  });
 
   return (
     <div className="space-y-3">
@@ -812,30 +1009,31 @@ function MandateNotes({ mandate }: { mandate: Mandate }) {
           onChange={(e) => setText(e.target.value)}
           className="min-h-[60px]"
         />
-        <Button onClick={add} className="self-end">
+        <Button
+          disabled={addMut.isPending || !text.trim()}
+          onClick={() => addMut.mutate()}
+          className="self-end"
+        >
           Add note
         </Button>
       </div>
       <div className="space-y-2">
-        {notes.length === 0 && (
+        {!notes.length && (
           <p className="text-sm text-muted-foreground">No notes yet.</p>
         )}
         {notes.map((n) => (
-          <Card key={n.id}>
+          <Card key={n._id}>
             <CardContent className="flex items-start justify-between gap-3 p-3">
               <div>
                 <p className="text-sm">{n.body}</p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  {n.author} · {new Date(n.at).toLocaleString()}
+                  {n.author} · {new Date(n.createdAt).toLocaleString()}
                 </p>
               </div>
               <Button
                 size="icon"
                 variant="ghost"
-                onClick={() => {
-                  deleteNote(n.id);
-                  toast({ title: "Note deleted" });
-                }}
+                onClick={() => deleteMut.mutate(n._id)}
               >
                 <Trash2 className="h-4 w-4" />
               </Button>
@@ -850,22 +1048,86 @@ function MandateNotes({ mandate }: { mandate: Mandate }) {
 // ── Documents ───────────────────────────────────────────────
 
 function MandateDocuments({ mandate }: { mandate: Mandate }) {
-  const allDocs = useDocuments(mandate.id);
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
   const [folder, setFolder] = useState<string | null>(null);
   const [openNewFolder, setOpenNewFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
   const [openUpload, setOpenUpload] = useState(false);
-  const [uploadName, setUploadName] = useState("");
   const [uploadFolder, setUploadFolder] = useState("");
-  const { toast } = useToast();
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
 
-  const folders = getAllFolders(mandate.id);
-  const received = getReceivedFromClient(mandate.id);
+  const { data: folders = [] } = useQuery({
+    queryKey: ["mandateFolders", mandate._id],
+    queryFn: () => fetchFolders(mandate._id),
+  });
+  const { data: received = [] } = useQuery({
+    queryKey: ["mandateReceived", mandate._id],
+    queryFn: () => fetchReceivedDocuments(mandate._id),
+  });
+  const { data: filesInFolder = [] } = useQuery({
+    queryKey: ["mandateDocuments", mandate._id, folder],
+    queryFn: () => fetchDocuments(mandate._id, folder ?? undefined),
+    enabled: !!folder,
+  });
+  const { data: allDocs = [] } = useQuery({
+    queryKey: ["mandateDocuments", mandate._id, "all"],
+    queryFn: () => fetchDocuments(mandate._id),
+  });
 
-  const filesIn = (f: string) => allDocs.filter((d) => d.folder === f && !(d.fromClient && d.status === "pending"));
+  const invalidateAll = () => {
+    queryClient.invalidateQueries({
+      queryKey: ["mandateFolders", mandate._id],
+    });
+    queryClient.invalidateQueries({
+      queryKey: ["mandateReceived", mandate._id],
+    });
+    queryClient.invalidateQueries({
+      queryKey: ["mandateDocuments", mandate._id],
+    });
+  };
+
+  const folderMut = useMutation({
+    mutationFn: () => addFolder(mandate._id, newFolderName.trim()),
+    onSuccess: () => {
+      invalidateAll();
+      setNewFolderName("");
+      setOpenNewFolder(false);
+      toast({ title: "Folder created" });
+    },
+  });
+  const uploadMut = useMutation({
+    mutationFn: () =>
+      uploadDocument(mandate._id, uploadFolder, uploadFile as File),
+    onSuccess: () => {
+      invalidateAll();
+      setUploadFile(null);
+      setUploadFolder("");
+      setOpenUpload(false);
+      toast({ title: "Document uploaded" });
+    },
+    onError: (err: any) =>
+      toast({
+        title: "Upload failed",
+        description: err?.response?.data?.message,
+        variant: "destructive",
+      }),
+  });
+  const fileMut = useMutation({
+    mutationFn: (docId: string) =>
+      fileClientDocument(mandate._id, docId, "Client submissions"),
+    onSuccess: (doc) => {
+      invalidateAll();
+      toast({
+        title: "Filed",
+        description: `${doc.name} filed into Client submissions.`,
+      });
+    },
+  });
+
+  const countIn = (f: string) => allDocs.filter((d) => d.folder === f).length;
 
   if (folder) {
-    const files = filesIn(folder);
     return (
       <div className="space-y-3">
         <Button variant="ghost" size="sm" onClick={() => setFolder(null)}>
@@ -882,19 +1144,36 @@ function MandateDocuments({ mandate }: { mandate: Mandate }) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {files.map((d) => (
-              <TableRow key={d.id}>
+            {filesInFolder.map((d) => (
+              <TableRow key={d._id}>
                 <TableCell className="flex items-center gap-2 text-sm">
-                  <FileText className="h-4 w-4 text-muted-foreground" /> {d.name}
+                  <FileText className="h-4 w-4 text-muted-foreground" />
+                  <a
+                    href={d.fileUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="hover:underline"
+                  >
+                    {d.name}
+                  </a>
                 </TableCell>
-                <TableCell className="text-xs text-muted-foreground">{d.size}</TableCell>
-                <TableCell className="text-xs text-muted-foreground">{d.uploadedBy}</TableCell>
-                <TableCell className="text-xs text-muted-foreground">{d.at}</TableCell>
+                <TableCell className="text-xs text-muted-foreground">
+                  {(d.size / 1024).toFixed(0)} KB
+                </TableCell>
+                <TableCell className="text-xs text-muted-foreground">
+                  {d.uploadedBy}
+                </TableCell>
+                <TableCell className="text-xs text-muted-foreground">
+                  {d.createdAt?.slice(0, 10)}
+                </TableCell>
               </TableRow>
             ))}
-            {files.length === 0 && (
+            {!filesInFolder.length && (
               <TableRow>
-                <TableCell colSpan={4} className="text-center text-sm text-muted-foreground">
+                <TableCell
+                  colSpan={4}
+                  className="text-center text-sm text-muted-foreground"
+                >
                   No documents in this folder yet.
                 </TableCell>
               </TableRow>
@@ -908,7 +1187,11 @@ function MandateDocuments({ mandate }: { mandate: Mandate }) {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap justify-end gap-2">
-        <Button size="sm" variant="outline" onClick={() => setOpenNewFolder(true)}>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => setOpenNewFolder(true)}
+        >
           <Folder className="mr-2 h-4 w-4" /> New folder
         </Button>
         <Button size="sm" onClick={() => setOpenUpload(true)}>
@@ -921,28 +1204,29 @@ function MandateDocuments({ mandate }: { mandate: Mandate }) {
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-2 text-sm">
               <Inbox className="h-4 w-4" /> Received from client
-              <Badge className="bg-primary/10 text-primary">{received.length} pending</Badge>
+              <Badge className="bg-primary/10 text-primary">
+                {received.length} pending
+              </Badge>
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
             {received.map((d) => (
               <div
-                key={d.id}
+                key={d._id}
                 className="flex items-center justify-between rounded border p-2 text-sm"
               >
                 <div>
                   <p className="font-medium">{d.name}</p>
                   <p className="text-xs text-muted-foreground">
-                    {d.uploadedBy} · {d.at} · {d.size}
+                    {d.uploadedBy} · {d.createdAt?.slice(0, 10)} ·{" "}
+                    {(d.size / 1024).toFixed(0)} KB
                   </p>
                 </div>
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => {
-                    fileClientDocument(d.id, "Client submissions");
-                    toast({ title: "Filed", description: `${d.name} filed into Client submissions.` });
-                  }}
+                  disabled={fileMut.isPending}
+                  onClick={() => fileMut.mutate(d._id)}
                 >
                   Accept &amp; file
                 </Button>
@@ -964,7 +1248,7 @@ function MandateDocuments({ mandate }: { mandate: Mandate }) {
               <div>
                 <p className="text-sm font-medium">{f}</p>
                 <p className="text-xs text-muted-foreground">
-                  {filesIn(f).length} document{filesIn(f).length === 1 ? "" : "s"}
+                  {countIn(f)} document{countIn(f) === 1 ? "" : "s"}
                 </p>
               </div>
             </CardContent>
@@ -984,13 +1268,8 @@ function MandateDocuments({ mandate }: { mandate: Mandate }) {
           />
           <DialogFooter>
             <Button
-              onClick={() => {
-                if (!newFolderName.trim()) return;
-                addFolder(mandate.id, newFolderName.trim());
-                setNewFolderName("");
-                setOpenNewFolder(false);
-                toast({ title: "Folder created" });
-              }}
+              disabled={folderMut.isPending || !newFolderName.trim()}
+              onClick={() => folderMut.mutate()}
             >
               Create
             </Button>
@@ -1005,11 +1284,10 @@ function MandateDocuments({ mandate }: { mandate: Mandate }) {
           </DialogHeader>
           <div className="grid gap-3">
             <div>
-              <Label>File name</Label>
+              <Label>File</Label>
               <Input
-                placeholder="e.g. Signed_Engagement_Letter.pdf"
-                value={uploadName}
-                onChange={(e) => setUploadName(e.target.value)}
+                type="file"
+                onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)}
               />
             </div>
             <div>
@@ -1030,22 +1308,10 @@ function MandateDocuments({ mandate }: { mandate: Mandate }) {
           </div>
           <DialogFooter>
             <Button
-              onClick={() => {
-                if (!uploadName.trim() || !uploadFolder) return;
-                addDocument({
-                  mandateId: mandate.id,
-                  folder: uploadFolder,
-                  name: uploadName.trim(),
-                  size: "—",
-                  uploadedBy: "You",
-                });
-                setUploadName("");
-                setUploadFolder("");
-                setOpenUpload(false);
-                toast({ title: "Document uploaded (mock)" });
-              }}
+              disabled={uploadMut.isPending || !uploadFile || !uploadFolder}
+              onClick={() => uploadMut.mutate()}
             >
-              Upload
+              {uploadMut.isPending ? "Uploading…" : "Upload"}
             </Button>
           </DialogFooter>
         </DialogContent>

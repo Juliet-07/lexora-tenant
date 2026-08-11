@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -29,20 +29,27 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { Plus, Repeat, LayoutGrid } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { CommentThread } from "@/components/crm/CommentThread";
 import { fetchEmployees } from "@/lib/hr/hr-api";
+import { fetchMandates } from "@/lib/crm/mandates-api";
 import {
-  pmTasks as seedTasks,
-  PmTask,
-  TaskStatus,
+  fetchTasks,
+  createTask,
+  updateTask,
   TASK_STATUSES,
-  taskTemplates,
-  mandates,
-  teamDirectory,
-} from "@/data/crmPmMockData";
+  type Task,
+  type TaskStatus,
+  type TaskPriority,
+} from "@/lib/crm/tasks-api";
+import { taskTemplates } from "@/data/crmPmMockData";
 
 const priorityClass: Record<string, string> = {
   Low: "bg-muted text-muted-foreground",
@@ -52,30 +59,57 @@ const priorityClass: Record<string, string> = {
 };
 
 export default function Tasks() {
-  const [list, setList] = useState<PmTask[]>(seedTasks);
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  const { data: list = [], isLoading } = useQuery({
+    queryKey: ["tasks"],
+    queryFn: () => fetchTasks(),
+  });
+  const { data: mandates = [] } = useQuery({
+    queryKey: ["mandates"],
+    queryFn: fetchMandates,
+  });
+
   const [mandateFilter, setMandateFilter] = useState("all");
   const [assigneeFilter, setAssigneeFilter] = useState("all");
-  const [selected, setSelected] = useState<PmTask | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selected = list.find((t) => t._id === selectedId) ?? null;
   const [openNew, setOpenNew] = useState(false);
+
   const [draft, setDraft] = useState({
     title: "",
-    mandateId: mandates[0].id,
-    assignee: "Chris Evans",
-    priority: "Medium" as PmTask["priority"],
+    mandateId: "",
+    assignee: "",
+    assigneeUserId: "",
+    priority: "Medium" as TaskPriority,
     dueDate: "",
     estimateHrs: 4,
   });
-  const { toast } = useToast();
 
-  const draftMandate = mandates.find((m) => m.id === draft.mandateId);
+  const draftMandate = mandates.find((m) => m._id === draft.mandateId);
   const { data: employeesPage } = useQuery({
     queryKey: ["hr-employees-by-team", draftMandate?.teamId],
-    queryFn: () => fetchEmployees({ teamId: draftMandate!.teamId, limit: 100 }),
+    queryFn: () =>
+      fetchEmployees({ teamId: draftMandate!.teamId as string, limit: 100 }),
     enabled: !!draftMandate?.teamId,
     retry: false,
   });
-  const teamEmployees = employeesPage?.items ?? [];
-  const eligibleAssignees = Array.isArray(teamEmployees) ? teamEmployees : [];
+  const eligibleAssignees = employeesPage?.items ?? [];
+
+  const assigneeOptions = useMemo(
+    () => Array.from(new Set(list.map((t) => t.assignee))).sort(),
+    [list],
+  );
+
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: ["tasks"] });
+  const onErr = (title: string) => (err: any) =>
+    toast({
+      title,
+      description: err?.response?.data?.message,
+      variant: "destructive",
+    });
 
   const filtered = useMemo(
     () =>
@@ -87,34 +121,42 @@ export default function Tasks() {
     [list, mandateFilter, assigneeFilter],
   );
 
-  const move = (id: string, status: TaskStatus) => {
-    setList((p) => p.map((t) => (t.id === id ? { ...t, status } : t)));
-    setSelected((s) => (s && s.id === id ? { ...s, status } : s));
-  };
-
-  const create = () => {
-    if (!draft.title) return;
-    const m = mandates.find((x) => x.id === draft.mandateId)!;
-    setList([
-      {
-        id: `TSK-${String(list.length + 101).padStart(3, "0")}`,
+  const createMut = useMutation({
+    mutationFn: () =>
+      createTask({
         title: draft.title,
-        mandateId: m.id,
-        mandateName: m.name,
+        mandateId: draft.mandateId,
         assignee: draft.assignee,
-        status: "Backlog",
+        assigneeUserId: draft.assigneeUserId || undefined,
         priority: draft.priority,
-        dueDate: draft.dueDate || m.targetDate,
+        dueDate: draft.dueDate || draftMandate!.targetDate,
         estimateHrs: Number(draft.estimateHrs) || 0,
-        loggedHrs: 0,
-        phase: "Delivery",
-      },
-      ...list,
-    ]);
-    setOpenNew(false);
-    setDraft({ ...draft, title: "" });
-    toast({ title: "Task created", description: `Assigned to ${draft.assignee}` });
-  };
+      }),
+    onSuccess: (t) => {
+      invalidate();
+      setOpenNew(false);
+      setDraft({ ...draft, title: "" });
+      toast({
+        title: "Task created",
+        description: `Assigned to ${t.assignee}`,
+      });
+    },
+    onError: onErr("Failed to create task"),
+  });
+
+  const moveMut = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: TaskStatus }) =>
+      updateTask(id, { status }),
+    onSuccess: invalidate,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="py-16 text-center text-sm text-muted-foreground">
+        Loading tasks…
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -138,7 +180,7 @@ export default function Tasks() {
           <SelectContent>
             <SelectItem value="all">All mandates</SelectItem>
             {mandates.map((m) => (
-              <SelectItem key={m.id} value={m.id}>
+              <SelectItem key={m._id} value={m._id}>
                 {m.name}
               </SelectItem>
             ))}
@@ -150,13 +192,11 @@ export default function Tasks() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All assignees</SelectItem>
-            {teamDirectory
-              .filter((t) => t.mandates > 0)
-              .map((t) => (
-                <SelectItem key={t.name} value={t.name}>
-                  {t.name}
-                </SelectItem>
-              ))}
+            {assigneeOptions.map((a) => (
+              <SelectItem key={a} value={a}>
+                {a}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>
@@ -185,9 +225,9 @@ export default function Tasks() {
                     .filter((t) => t.status === s)
                     .map((t) => (
                       <Card
-                        key={t.id}
+                        key={t._id}
                         className="cursor-pointer transition hover:shadow-md"
-                        onClick={() => setSelected(t)}
+                        onClick={() => setSelectedId(t._id)}
                       >
                         <CardContent className="space-y-2 p-3">
                           <p className="text-sm font-medium">{t.title}</p>
@@ -207,7 +247,7 @@ export default function Tasks() {
                           </div>
                           <div className="flex justify-between text-xs text-muted-foreground">
                             <span>{t.assignee}</span>
-                            <span>{t.dueDate}</span>
+                            <span>{t.dueDate?.slice(0, 10)}</span>
                           </div>
                           <Progress
                             value={
@@ -237,28 +277,24 @@ export default function Tasks() {
                   <TableRow>
                     <TableHead>Task</TableHead>
                     <TableHead>Mandate</TableHead>
-                    <TableHead>Phase</TableHead>
                     <TableHead>Assignee</TableHead>
                     <TableHead>Priority</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Due</TableHead>
-                    <TableHead className="text-right">Hrs</TableHead>
+                    <TableHead className="text-right">Time</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filtered.map((t) => (
                     <TableRow
-                      key={t.id}
+                      key={t._id}
                       className="cursor-pointer"
-                      onClick={() => setSelected(t)}
+                      onClick={() => setSelectedId(t._id)}
                     >
                       <TableCell className="text-sm font-medium">
                         {t.title}
                       </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        {t.mandateName}
-                      </TableCell>
-                      <TableCell className="text-sm">{t.phase}</TableCell>
+                      <TableCell className="text-sm">{t.mandateName}</TableCell>
                       <TableCell className="text-sm">{t.assignee}</TableCell>
                       <TableCell>
                         <Badge className={priorityClass[t.priority]}>
@@ -268,12 +304,24 @@ export default function Tasks() {
                       <TableCell>
                         <Badge variant="outline">{t.status}</Badge>
                       </TableCell>
-                      <TableCell className="text-sm">{t.dueDate}</TableCell>
+                      <TableCell className="text-sm">
+                        {t.dueDate?.slice(0, 10)}
+                      </TableCell>
                       <TableCell className="text-right text-sm">
                         {t.loggedHrs}/{t.estimateHrs}
                       </TableCell>
                     </TableRow>
                   ))}
+                  {!filtered.length && (
+                    <TableRow>
+                      <TableCell
+                        colSpan={7}
+                        className="py-8 text-center text-sm text-muted-foreground"
+                      >
+                        No tasks match your filters.
+                      </TableCell>
+                    </TableRow>
+                  )}
                 </TableBody>
               </Table>
             </CardContent>
@@ -330,14 +378,21 @@ export default function Tasks() {
               <Label>Mandate</Label>
               <Select
                 value={draft.mandateId}
-                onValueChange={(v) => setDraft({ ...draft, mandateId: v })}
+                onValueChange={(v) =>
+                  setDraft({
+                    ...draft,
+                    mandateId: v,
+                    assignee: "",
+                    assigneeUserId: "",
+                  })
+                }
               >
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue placeholder="Select mandate..." />
                 </SelectTrigger>
                 <SelectContent>
                   {mandates.map((m) => (
-                    <SelectItem key={m.id} value={m.id}>
+                    <SelectItem key={m._id} value={m._id}>
                       {m.name}
                     </SelectItem>
                   ))}
@@ -349,22 +404,27 @@ export default function Tasks() {
                 <Label>Assignee</Label>
                 {!draftMandate?.teamId ? (
                   <p className="rounded border border-dashed p-2 text-xs text-muted-foreground">
-                    Pick a mandate with a team assigned to see eligible assignees.
+                    Pick a mandate with a team assigned to see eligible
+                    assignees.
                   </p>
                 ) : eligibleAssignees.length > 0 ? (
                   <Select
-                    value={draft.assignee}
-                    onValueChange={(v) => setDraft({ ...draft, assignee: v })}
+                    value={draft.assigneeUserId}
+                    onValueChange={(v) => {
+                      const e = eligibleAssignees.find((x) => x._id === v);
+                      setDraft({
+                        ...draft,
+                        assigneeUserId: v,
+                        assignee: e ? `${e.firstName} ${e.lastName}` : "",
+                      });
+                    }}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Select assignee..." />
                     </SelectTrigger>
                     <SelectContent>
                       {eligibleAssignees.map((e) => (
-                        <SelectItem
-                          key={e._id}
-                          value={`${e.firstName} ${e.lastName}`}
-                        >
+                        <SelectItem key={e._id} value={e._id}>
                           {e.firstName} {e.lastName}
                           {e.jobTitle ? ` · ${e.jobTitle}` : ""}
                         </SelectItem>
@@ -376,7 +436,11 @@ export default function Tasks() {
                     placeholder="Assignee name"
                     value={draft.assignee}
                     onChange={(e) =>
-                      setDraft({ ...draft, assignee: e.target.value })
+                      setDraft({
+                        ...draft,
+                        assignee: e.target.value,
+                        assigneeUserId: "",
+                      })
                     }
                   />
                 )}
@@ -386,7 +450,7 @@ export default function Tasks() {
                 <Select
                   value={draft.priority}
                   onValueChange={(v) =>
-                    setDraft({ ...draft, priority: v as PmTask["priority"] })
+                    setDraft({ ...draft, priority: v as TaskPriority })
                   }
                 >
                   <SelectTrigger>
@@ -426,12 +490,22 @@ export default function Tasks() {
             </div>
           </div>
           <DialogFooter>
-            <Button onClick={create}>Create task</Button>
+            <Button
+              disabled={
+                createMut.isPending ||
+                !draft.title ||
+                !draft.mandateId ||
+                !draft.assignee
+              }
+              onClick={() => createMut.mutate()}
+            >
+              {createMut.isPending ? "Creating…" : "Create task"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <Sheet open={!!selected} onOpenChange={(o) => !o && setSelected(null)}>
+      <Sheet open={!!selected} onOpenChange={(o) => !o && setSelectedId(null)}>
         <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">
           {selected && (
             <>
@@ -447,7 +521,12 @@ export default function Tasks() {
                     <Label className="text-xs">Status</Label>
                     <Select
                       value={selected.status}
-                      onValueChange={(v) => move(selected.id, v as TaskStatus)}
+                      onValueChange={(v) =>
+                        moveMut.mutate({
+                          id: selected._id,
+                          status: v as TaskStatus,
+                        })
+                      }
                     >
                       <SelectTrigger>
                         <SelectValue />
@@ -467,7 +546,7 @@ export default function Tasks() {
                   </div>
                   <div>
                     <Label className="text-xs">Due</Label>
-                    <p className="pt-2">{selected.dueDate}</p>
+                    <p className="pt-2">{selected.dueDate?.slice(0, 10)}</p>
                   </div>
                   <div>
                     <Label className="text-xs">Time</Label>
@@ -476,7 +555,11 @@ export default function Tasks() {
                     </p>
                   </div>
                 </div>
-                <CommentThread subject={selected.id} />
+                <p className="text-xs text-muted-foreground">
+                  Comment threads aren't wired to a real backend yet — coming
+                  with a later pass.
+                </p>
+                <CommentThread subject={selected._id} />
               </div>
             </>
           )}

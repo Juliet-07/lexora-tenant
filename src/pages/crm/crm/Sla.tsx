@@ -1,34 +1,64 @@
 import { useMemo, useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from "@/components/ui/select";
 import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
 } from "@/components/ui/dialog";
 import {
-  Timer, ShieldAlert, ClipboardCheck, BarChart3, Pause, Play, Pencil,
+  Timer,
+  ShieldAlert,
+  ClipboardCheck,
+  BarChart3,
+  Pause,
+  Play,
+  Pencil,
+  Plus,
+  Link2,
 } from "lucide-react";
+import { Link } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import {
-  slaProfiles as seedProfiles, slaCompliance, slaTrend, SlaProfile,
-} from "@/data/crmClientMockData";
+  fetchSlaProfiles,
+  createSlaProfile,
+  updateSlaProfile,
+  deleteSlaProfile,
+  type SlaProfile,
+  type SlaTier,
+  type SlaPriority,
+} from "@/lib/crm/sla-profiles-api";
+import { fetchClientCommercials } from "@/lib/crm/client-commercial-api";
+import { fetchClients, displayName } from "@/lib/client/clients-api";
+import { slaCompliance, slaTrend } from "@/data/crmClientMockData";
 import { tickets } from "@/data/crmPmMockData";
-import { useClientCommercials } from "@/lib/crm/clientCommercialStore";
-import { Link } from "react-router-dom";
-import { Link2 } from "lucide-react";
 
-const PRIORITIES: ("Critical" | "High" | "Medium" | "Low")[] = ["Critical", "High", "Medium", "Low"];
+const PRIORITIES: SlaPriority[] = ["Critical", "High", "Medium", "Low"];
+const TIERS: SlaTier[] = ["Premium", "Standard", "Basic"];
 
 const tierClass: Record<string, string> = {
   Premium: "bg-primary/15 text-primary border-primary/30",
@@ -41,45 +71,133 @@ const pctClass = (pct: number) =>
 const barClass = (pct: number) =>
   pct >= 90 ? "bg-destructive" : pct >= 75 ? "bg-warning" : "bg-success";
 
+const emptyDraft = (): SlaProfile => ({
+  _id: "",
+  tier: "Standard",
+  serviceType: "",
+  responseHrs: { Critical: 2, High: 4, Medium: 16, Low: 48 },
+  resolutionHrs: { Critical: 16, High: 48, Medium: 120, Low: 240 },
+  escalations: "",
+  createdAt: "",
+  updatedAt: "",
+});
+
 export default function Sla() {
   const { toast } = useToast();
-  const commercials = useClientCommercials();
+  const queryClient = useQueryClient();
+
+  const { data: profiles = [], isLoading } = useQuery({
+    queryKey: ["slaProfiles"],
+    queryFn: fetchSlaProfiles,
+  });
+  const { data: commercials = {} } = useQuery({
+    queryKey: ["clientCommercials"],
+    queryFn: fetchClientCommercials,
+  });
+  const { data: kycClients = [] } = useQuery({
+    queryKey: ["clients-list"],
+    queryFn: fetchClients,
+  });
+
   const assignedClients = (profileId: string) =>
     Object.values(commercials)
       .filter((c) => c.slaProfileId === profileId)
-      .map((c) => c.clientName);
-  const [profiles, setProfiles] = useState<SlaProfile[]>(seedProfiles);
-  const [editing, setEditing] = useState<SlaProfile | null>(null);
-  const [editDraft, setEditDraft] = useState<SlaProfile | null>(null);
+      .map((c) => {
+        const client = kycClients.find((k: any) => k._id === c.clientUserId);
+        return client ? displayName(client) : c.clientUserId;
+      });
 
+  const [formOpen, setFormOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draft, setDraft] = useState<SlaProfile>(emptyDraft());
+
+  // ── Deferred to when Service Desk is real: tickets, breach
+  // notifications and the compliance trend all read from mock
+  // ticket data (crmPmMockData.ts) since there's no real Service
+  // Desk backend yet. ──────────────────────────────────────────
   const [timers, setTimers] = useState(
-    tickets.map((t) => ({
+    tickets.map((t: any) => ({
       ...t,
       paused: t.status === "Pending Client",
       pct: Math.min(100, Math.round((t.slaElapsedHrs / t.slaTargetHrs) * 100)),
     })),
   );
-
-  const [thresholds, setThresholds] = useState({ t75: true, t90: true, t100: true });
+  const [thresholds, setThresholds] = useState({
+    t75: true,
+    t90: true,
+    t100: true,
+  });
   const [scopeFilter, setScopeFilter] = useState("all");
 
   const togglePause = (id: string) => {
-    setTimers((p) => p.map((t) => (t.id === id ? { ...t, paused: !t.paused } : t)));
-    toast({ title: "Timer updated", description: "SLA clock paused/resumed for ticket." });
+    setTimers((p) =>
+      p.map((t) => (t.id === id ? { ...t, paused: !t.paused } : t)),
+    );
+    toast({
+      title: "Timer updated",
+      description: "SLA clock paused/resumed for ticket.",
+    });
   };
 
-  const openEdit = (p: SlaProfile) => { setEditing(p); setEditDraft({ ...p, responseHrs: { ...p.responseHrs }, resolutionHrs: { ...p.resolutionHrs } }); };
-  const saveEdit = () => {
-    if (!editDraft) return;
-    setProfiles((p) => p.map((pr) => (pr.id === editDraft.id ? editDraft : pr)));
-    setEditing(null);
-    toast({ title: "SLA profile updated", description: `${editDraft.tier} tier matrix saved.` });
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: ["slaProfiles"] });
+  const onErr = (title: string) => (err: any) =>
+    toast({
+      title,
+      description: err?.response?.data?.message,
+      variant: "destructive",
+    });
+
+  const saveMut = useMutation({
+    mutationFn: () =>
+      editingId ? updateSlaProfile(editingId, draft) : createSlaProfile(draft),
+    onSuccess: (saved) => {
+      invalidate();
+      toast({
+        title: editingId ? "SLA profile updated" : "SLA profile created",
+        description: `${saved.tier} tier matrix saved.`,
+      });
+      setFormOpen(false);
+    },
+    onError: onErr("Failed to save SLA profile"),
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: (id: string) => deleteSlaProfile(id),
+    onSuccess: () => {
+      invalidate();
+      toast({ title: "SLA profile deleted" });
+    },
+    onError: onErr("Failed to delete profile"),
+  });
+
+  const openCreate = () => {
+    setEditingId(null);
+    setDraft(emptyDraft());
+    setFormOpen(true);
+  };
+  const openEdit = (p: SlaProfile) => {
+    setEditingId(p._id);
+    setDraft({
+      ...p,
+      responseHrs: { ...p.responseHrs },
+      resolutionHrs: { ...p.resolutionHrs },
+    });
+    setFormOpen(true);
   };
 
-  const filteredCompliance = slaCompliance.filter((c) => scopeFilter === "all" || c.type === scopeFilter);
+  const filteredCompliance = useMemo(
+    () =>
+      slaCompliance.filter(
+        (c) => scopeFilter === "all" || c.type === scopeFilter,
+      ),
+    [scopeFilter],
+  );
 
   const breachedCount = timers.filter((t) => t.pct >= 100).length;
-  const avgCompliance = Math.round(slaCompliance.reduce((s, c) => s + c.actual, 0) / slaCompliance.length);
+  const avgCompliance = Math.round(
+    slaCompliance.reduce((s, c) => s + c.actual, 0) / slaCompliance.length,
+  );
   const kpis = [
     { l: "SLA profiles", v: profiles.length, icon: ClipboardCheck },
     { l: "Active timers", v: timers.length, icon: Timer },
@@ -91,9 +209,15 @@ export default function Sla() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">SLA Management</h1>
-        <p className="text-sm text-muted-foreground">Service level profiles, live timers, escalation and compliance reporting.</p>
+        <p className="text-sm text-muted-foreground">
+          Service level profiles, live timers, escalation and compliance
+          reporting.
+        </p>
         <Button asChild size="sm" variant="outline" className="mt-3">
-          <Link to="/crm/clients"><Link2 className="mr-1 h-3 w-3" />Assign clients to SLA profiles</Link>
+          <Link to="/crm/clients">
+            <Link2 className="mr-1 h-3 w-3" />
+            Assign clients to SLA profiles
+          </Link>
         </Button>
       </div>
 
@@ -101,7 +225,10 @@ export default function Sla() {
         {kpis.map((k) => (
           <Card key={k.l}>
             <CardContent className="flex items-center justify-between p-4">
-              <div><p className="text-xs text-muted-foreground">{k.l}</p><p className="mt-1 text-xl font-bold">{k.v}</p></div>
+              <div>
+                <p className="text-xs text-muted-foreground">{k.l}</p>
+                <p className="mt-1 text-xl font-bold">{k.v}</p>
+              </div>
               <k.icon className="h-6 w-6 text-muted-foreground" />
             </CardContent>
           </Card>
@@ -116,47 +243,108 @@ export default function Sla() {
           <TabsTrigger value="reporting">Reporting</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="profiles" className="pt-4">
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {profiles.map((p) => (
-              <Card key={p.id}>
-                <CardHeader className="pb-2">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-base">{p.tier}</CardTitle>
-                    <Badge variant="outline" className={tierClass[p.tier]}>{p.serviceType}</Badge>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <Table>
-                    <TableHeader>
-                      <TableRow><TableHead className="text-xs">Priority</TableHead><TableHead className="text-xs">Response</TableHead><TableHead className="text-xs">Resolution</TableHead></TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {PRIORITIES.map((pr) => (
-                        <TableRow key={pr}>
-                          <TableCell className="py-1.5 text-xs">{pr}</TableCell>
-                          <TableCell className="py-1.5 text-xs">{p.responseHrs[pr]}h</TableCell>
-                          <TableCell className="py-1.5 text-xs">{p.resolutionHrs[pr]}h</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Clients covered (assigned in Client Management)</p>
-                    <div className="mt-1 flex flex-wrap gap-1">
-                      {assignedClients(p.id).length ? (
-                        assignedClients(p.id).map((c) => <Badge key={c} variant="secondary" className="text-xs">{c}</Badge>)
-                      ) : (
-                        <span className="text-xs text-muted-foreground">No clients assigned yet.</span>
-                      )}
-                    </div>
-                  </div>
-                  <p className="text-xs text-muted-foreground">{p.escalations}</p>
-                  <Button size="sm" variant="outline" onClick={() => openEdit(p)}><Pencil className="mr-1 h-3 w-3" />Edit</Button>
-                </CardContent>
-              </Card>
-            ))}
+        <TabsContent value="profiles" className="pt-4 space-y-3">
+          <div className="flex justify-end">
+            <Button size="sm" onClick={openCreate}>
+              <Plus className="mr-1 h-3.5 w-3.5" />
+              New profile
+            </Button>
           </div>
+          {isLoading ? (
+            <p className="text-sm text-muted-foreground">
+              Loading SLA profiles…
+            </p>
+          ) : (
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {profiles.map((p) => (
+                <Card key={p._id}>
+                  <CardHeader className="pb-2">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-base">{p.tier}</CardTitle>
+                      <Badge variant="outline" className={tierClass[p.tier]}>
+                        {p.serviceType}
+                      </Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="text-xs">Priority</TableHead>
+                          <TableHead className="text-xs">Response</TableHead>
+                          <TableHead className="text-xs">Resolution</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {PRIORITIES.map((pr) => (
+                          <TableRow key={pr}>
+                            <TableCell className="py-1.5 text-xs">
+                              {pr}
+                            </TableCell>
+                            <TableCell className="py-1.5 text-xs">
+                              {p.responseHrs[pr]}h
+                            </TableCell>
+                            <TableCell className="py-1.5 text-xs">
+                              {p.resolutionHrs[pr]}h
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                    <div>
+                      <p className="text-xs text-muted-foreground">
+                        Clients covered (assigned in Client Management)
+                      </p>
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {assignedClients(p._id).length ? (
+                          assignedClients(p._id).map((c) => (
+                            <Badge
+                              key={c}
+                              variant="secondary"
+                              className="text-xs"
+                            >
+                              {c}
+                            </Badge>
+                          ))
+                        ) : (
+                          <span className="text-xs text-muted-foreground">
+                            No clients assigned yet.
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {p.escalations}
+                    </p>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => openEdit(p)}
+                      >
+                        <Pencil className="mr-1 h-3 w-3" />
+                        Edit
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-destructive"
+                        disabled={deleteMut.isPending}
+                        onClick={() => deleteMut.mutate(p._id)}
+                      >
+                        Delete
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+              {!profiles.length && (
+                <p className="col-span-full py-8 text-center text-sm text-muted-foreground">
+                  No SLA profiles yet — create one to start assigning clients.
+                </p>
+              )}
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="timers" className="pt-4">
@@ -175,18 +363,40 @@ export default function Sla() {
                 <TableBody>
                   {timers.map((t) => (
                     <TableRow key={t.id}>
-                      <TableCell><p className="text-sm font-medium">{t.subject}</p><p className="text-xs text-muted-foreground">{t.id} · {t.clientName}</p></TableCell>
-                      <TableCell className="text-sm">{t.priority}</TableCell>
-                      <TableCell><Badge variant="outline">{t.status}</Badge></TableCell>
                       <TableCell>
-                        <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-                          <div className={`h-full ${barClass(t.pct)}`} style={{ width: `${t.pct}%` }} />
-                        </div>
-                        <p className={`mt-1 text-xs font-medium ${pctClass(t.pct)}`}>{t.pct}%{t.paused ? " (paused)" : ""}</p>
+                        <p className="text-sm font-medium">{t.subject}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {t.id} · {t.clientName}
+                        </p>
+                      </TableCell>
+                      <TableCell className="text-sm">{t.priority}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{t.status}</Badge>
                       </TableCell>
                       <TableCell>
-                        <Button size="sm" variant="outline" onClick={() => togglePause(t.id)}>
-                          {t.paused ? <Play className="mr-1 h-3 w-3" /> : <Pause className="mr-1 h-3 w-3" />}
+                        <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                          <div
+                            className={`h-full ${barClass(t.pct)}`}
+                            style={{ width: `${t.pct}%` }}
+                          />
+                        </div>
+                        <p
+                          className={`mt-1 text-xs font-medium ${pctClass(t.pct)}`}
+                        >
+                          {t.pct}%{t.paused ? " (paused)" : ""}
+                        </p>
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => togglePause(t.id)}
+                        >
+                          {t.paused ? (
+                            <Play className="mr-1 h-3 w-3" />
+                          ) : (
+                            <Pause className="mr-1 h-3 w-3" />
+                          )}
                           {t.paused ? "Resume" : "Pending Client"}
                         </Button>
                       </TableCell>
@@ -194,25 +404,52 @@ export default function Sla() {
                   ))}
                 </TableBody>
               </Table>
+              <p className="mt-3 text-xs text-muted-foreground">
+                Illustrative — real ticket timers go live once Service Desk is
+                built.
+              </p>
             </CardContent>
           </Card>
         </TabsContent>
 
         <TabsContent value="breach" className="space-y-4 pt-4">
           <Card>
-            <CardHeader className="pb-2"><CardTitle className="text-base">Escalation thresholds</CardTitle></CardHeader>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Escalation thresholds</CardTitle>
+            </CardHeader>
             <CardContent className="space-y-4">
               {[
-                { key: "t75" as const, label: "75% elapsed — notify team lead" },
-                { key: "t90" as const, label: "90% elapsed — notify client manager" },
-                { key: "t100" as const, label: "100% elapsed (breach) — notify partner" },
+                {
+                  key: "t75" as const,
+                  label: "75% elapsed — notify team lead",
+                },
+                {
+                  key: "t90" as const,
+                  label: "90% elapsed — notify client manager",
+                },
+                {
+                  key: "t100" as const,
+                  label: "100% elapsed (breach) — notify partner",
+                },
               ].map((r) => (
-                <div key={r.key} className="flex items-center justify-between rounded border p-3">
+                <div
+                  key={r.key}
+                  className="flex items-center justify-between rounded border p-3"
+                >
                   <span className="text-sm">{r.label}</span>
-                  <Switch checked={thresholds[r.key]} onCheckedChange={(v) => setThresholds({ ...thresholds, [r.key]: v })} />
+                  <Switch
+                    checked={thresholds[r.key]}
+                    onCheckedChange={(v) =>
+                      setThresholds({ ...thresholds, [r.key]: v })
+                    }
+                  />
                 </div>
               ))}
-              <p className="text-xs text-muted-foreground">Escalation recipients: Team leads, client relationship managers, and partners as configured per SLA profile.</p>
+              <p className="text-xs text-muted-foreground">
+                Escalation recipients: Team leads, client relationship managers,
+                and partners as configured per SLA profile. Notifications go
+                live once Service Desk is built.
+              </p>
             </CardContent>
           </Card>
         </TabsContent>
@@ -220,10 +457,16 @@ export default function Sla() {
         <TabsContent value="reporting" className="space-y-4 pt-4">
           <div className="flex justify-end">
             <Select value={scopeFilter} onValueChange={setScopeFilter}>
-              <SelectTrigger className="w-40"><SelectValue placeholder="Scope" /></SelectTrigger>
+              <SelectTrigger className="w-40">
+                <SelectValue placeholder="Scope" />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All scopes</SelectItem>
-                {["Client", "Service", "Agent"].map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                {["Client", "Service", "Agent"].map((s) => (
+                  <SelectItem key={s} value={s}>
+                    {s}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -231,18 +474,40 @@ export default function Sla() {
             <CardContent className="p-4">
               <Table>
                 <TableHeader>
-                  <TableRow><TableHead>Scope</TableHead><TableHead>Type</TableHead><TableHead className="text-right">Target</TableHead><TableHead className="text-right">Actual</TableHead><TableHead className="text-right">Breaches</TableHead><TableHead>Result</TableHead></TableRow>
+                  <TableRow>
+                    <TableHead>Scope</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead className="text-right">Target</TableHead>
+                    <TableHead className="text-right">Actual</TableHead>
+                    <TableHead className="text-right">Breaches</TableHead>
+                    <TableHead>Result</TableHead>
+                  </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredCompliance.map((c) => (
                     <TableRow key={c.scope}>
-                      <TableCell className="text-sm font-medium">{c.scope}</TableCell>
+                      <TableCell className="text-sm font-medium">
+                        {c.scope}
+                      </TableCell>
                       <TableCell className="text-sm">{c.type}</TableCell>
-                      <TableCell className="text-right text-sm">{c.target}%</TableCell>
-                      <TableCell className="text-right text-sm">{c.actual}%</TableCell>
-                      <TableCell className="text-right text-sm">{c.breaches}</TableCell>
+                      <TableCell className="text-right text-sm">
+                        {c.target}%
+                      </TableCell>
+                      <TableCell className="text-right text-sm">
+                        {c.actual}%
+                      </TableCell>
+                      <TableCell className="text-right text-sm">
+                        {c.breaches}
+                      </TableCell>
                       <TableCell>
-                        <Badge variant="outline" className={c.actual >= c.target ? "bg-success/15 text-success border-success/30" : "bg-destructive/15 text-destructive border-destructive/30"}>
+                        <Badge
+                          variant="outline"
+                          className={
+                            c.actual >= c.target
+                              ? "bg-success/15 text-success border-success/30"
+                              : "bg-destructive/15 text-destructive border-destructive/30"
+                          }
+                        >
                           {c.actual >= c.target ? "Pass" : "Fail"}
                         </Badge>
                       </TableCell>
@@ -250,16 +515,30 @@ export default function Sla() {
                   ))}
                 </TableBody>
               </Table>
+              <p className="mt-3 text-xs text-muted-foreground">
+                Illustrative — real compliance reporting goes live once Service
+                Desk is built.
+              </p>
             </CardContent>
           </Card>
           <Card>
-            <CardHeader className="pb-2"><CardTitle className="text-base">Compliance trend (6 months)</CardTitle></CardHeader>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">
+                Compliance trend (6 months)
+              </CardTitle>
+            </CardHeader>
             <CardContent>
               <div className="flex h-32 items-end gap-3">
                 {slaTrend.map((m) => (
-                  <div key={m.month} className="flex flex-1 flex-col items-center gap-1">
+                  <div
+                    key={m.month}
+                    className="flex flex-1 flex-col items-center gap-1"
+                  >
                     <div className="flex w-full flex-1 items-end">
-                      <div className={`w-full rounded-t ${m.pct >= 90 ? "bg-success" : "bg-warning"}`} style={{ height: `${m.pct}%` }} />
+                      <div
+                        className={`w-full rounded-t ${m.pct >= 90 ? "bg-success" : "bg-warning"}`}
+                        style={{ height: `${m.pct}%` }}
+                      />
                     </div>
                     <p className="text-xs text-muted-foreground">{m.month}</p>
                     <p className="text-xs font-medium">{m.pct}%</p>
@@ -271,39 +550,115 @@ export default function Sla() {
         </TabsContent>
       </Tabs>
 
-      <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader><DialogTitle>Edit SLA profile — {editing?.tier}</DialogTitle></DialogHeader>
-          {editDraft && (
-            <div className="space-y-3">
+      <Dialog open={formOpen} onOpenChange={setFormOpen}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {editingId
+                ? `Edit SLA profile — ${draft.tier}`
+                : "New SLA profile"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Tier</Label>
+                <Select
+                  value={draft.tier}
+                  onValueChange={(v) =>
+                    setDraft({ ...draft, tier: v as SlaTier })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TIERS.map((t) => (
+                      <SelectItem key={t} value={t}>
+                        {t}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <div>
                 <Label>Service type</Label>
-                <Input value={editDraft.serviceType} onChange={(e) => setEditDraft({ ...editDraft, serviceType: e.target.value })} />
+                <Input
+                  value={draft.serviceType}
+                  onChange={(e) =>
+                    setDraft({ ...draft, serviceType: e.target.value })
+                  }
+                />
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <p className="mb-1 text-xs font-medium text-muted-foreground">Response hrs</p>
-                  {PRIORITIES.map((pr) => (
-                    <div key={pr} className="mb-1 flex items-center gap-2">
-                      <span className="w-16 text-xs">{pr}</span>
-                      <Input type="number" className="h-8" value={editDraft.responseHrs[pr]} onChange={(e) => setEditDraft({ ...editDraft, responseHrs: { ...editDraft.responseHrs, [pr]: Number(e.target.value) } })} />
-                    </div>
-                  ))}
-                </div>
-                <div>
-                  <p className="mb-1 text-xs font-medium text-muted-foreground">Resolution hrs</p>
-                  {PRIORITIES.map((pr) => (
-                    <div key={pr} className="mb-1 flex items-center gap-2">
-                      <span className="w-16 text-xs">{pr}</span>
-                      <Input type="number" className="h-8" value={editDraft.resolutionHrs[pr]} onChange={(e) => setEditDraft({ ...editDraft, resolutionHrs: { ...editDraft.resolutionHrs, [pr]: Number(e.target.value) } })} />
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div><Label>Escalation rules</Label><Input value={editDraft.escalations} onChange={(e) => setEditDraft({ ...editDraft, escalations: e.target.value })} /></div>
             </div>
-          )}
-          <DialogFooter><Button onClick={saveEdit}>Save changes</Button></DialogFooter>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <p className="mb-1 text-xs font-medium text-muted-foreground">
+                  Response hrs
+                </p>
+                {PRIORITIES.map((pr) => (
+                  <div key={pr} className="mb-1 flex items-center gap-2">
+                    <span className="w-16 text-xs">{pr}</span>
+                    <Input
+                      type="number"
+                      className="h-8"
+                      value={draft.responseHrs[pr]}
+                      onChange={(e) =>
+                        setDraft({
+                          ...draft,
+                          responseHrs: {
+                            ...draft.responseHrs,
+                            [pr]: Number(e.target.value),
+                          },
+                        })
+                      }
+                    />
+                  </div>
+                ))}
+              </div>
+              <div>
+                <p className="mb-1 text-xs font-medium text-muted-foreground">
+                  Resolution hrs
+                </p>
+                {PRIORITIES.map((pr) => (
+                  <div key={pr} className="mb-1 flex items-center gap-2">
+                    <span className="w-16 text-xs">{pr}</span>
+                    <Input
+                      type="number"
+                      className="h-8"
+                      value={draft.resolutionHrs[pr]}
+                      onChange={(e) =>
+                        setDraft({
+                          ...draft,
+                          resolutionHrs: {
+                            ...draft.resolutionHrs,
+                            [pr]: Number(e.target.value),
+                          },
+                        })
+                      }
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div>
+              <Label>Escalation rules</Label>
+              <Input
+                value={draft.escalations}
+                onChange={(e) =>
+                  setDraft({ ...draft, escalations: e.target.value })
+                }
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              disabled={saveMut.isPending}
+              onClick={() => saveMut.mutate()}
+            >
+              {saveMut.isPending ? "Saving…" : "Save changes"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
