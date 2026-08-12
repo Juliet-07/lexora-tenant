@@ -9,7 +9,7 @@ import Sla from "@/pages/crm/crm/Sla";
 import Mandates from "@/pages/crm/projects/mandate";
 import Tasks from "@/pages/crm/projects/Tasks";
 import GanttPlanning from "@/pages/crm/projects/GanttPlanning";
-import TimeTracking from "@/pages/crm/projects/TimeTracking";
+import TimeTracking from "@/pages/crm/projects/time-tracking";
 import ServiceDesk from "@/pages/crm/projects/ServiceDesk";
 import Adr from "@/pages/crm/projects/Adr";
 import Resources from "@/pages/crm/Resources";

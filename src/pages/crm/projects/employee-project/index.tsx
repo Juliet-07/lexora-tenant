@@ -421,7 +421,7 @@ export function MyProjectDetail() {
           <MilestonesTab mandate={mandate} />
         </TabsContent>
         <TabsContent value="time" className="mt-4">
-          <TimeTab />
+          <TimeTab mandateId={mandate._id} />
         </TabsContent>
         <TabsContent value="files" className="mt-4">
           <FilesTab mandateId={mandate._id} />

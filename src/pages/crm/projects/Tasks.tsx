@@ -35,19 +35,26 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { Plus, Repeat, LayoutGrid, TriangleAlert } from "lucide-react";
+import { Plus, Repeat, LayoutGrid, TriangleAlert, Send } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { CommentThread } from "@/components/crm/CommentThread";
+import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import { fetchEmployees } from "@/lib/hr/hr-api";
-import { fetchMandates } from "@/lib/crm/mandates-api";
+import {
+  fetchMandates,
+  fetchEmployeeMessages,
+  sendEmployeeMessage,
+} from "@/lib/crm/mandates-api";
 import {
   fetchTasks,
   createTask,
   updateTask,
   TASK_STATUSES,
+  DEPENDENCY_TYPES,
   type Task,
   type TaskStatus,
   type TaskPriority,
+  type DependencyType,
 } from "@/lib/crm/tasks-api";
 import { taskTemplates } from "@/data/crmPmMockData";
 
@@ -83,8 +90,13 @@ export default function Tasks() {
     assignee: "",
     assigneeUserId: "",
     priority: "Medium" as TaskPriority,
+    startDate: "",
     dueDate: "",
     estimateHrs: 4,
+    parentTaskId: "",
+    dependsOnTaskId: "",
+    depType: "FS" as DependencyType,
+    critical: false,
   });
 
   const draftMandate = mandates.find((m) => m._id === draft.mandateId);
@@ -101,6 +113,13 @@ export default function Tasks() {
   const assigneeOptions = useMemo(
     () => Array.from(new Set(list.map((t) => t.assignee))).sort(),
     [list],
+  );
+
+  // Other tasks on the same mandate — the only sensible scope for a
+  // parent task or a dependency.
+  const mandateTaskOptions = useMemo(
+    () => list.filter((t) => t.mandateId === draft.mandateId),
+    [list, draft.mandateId],
   );
 
   const invalidate = () =>
@@ -130,8 +149,13 @@ export default function Tasks() {
         assignee: draft.assignee,
         assigneeUserId: draft.assigneeUserId || undefined,
         priority: draft.priority,
+        startDate: draft.startDate || undefined,
         dueDate: draft.dueDate || draftMandate!.targetDate,
         estimateHrs: Number(draft.estimateHrs) || 0,
+        parentTaskId: draft.parentTaskId || undefined,
+        dependsOnTaskId: draft.dependsOnTaskId || undefined,
+        depType: draft.dependsOnTaskId ? draft.depType : undefined,
+        critical: draft.critical || undefined,
       }),
     onSuccess: (t) => {
       invalidate();
@@ -398,7 +422,7 @@ export default function Tasks() {
       </Tabs>
 
       <Dialog open={openNew} onOpenChange={setOpenNew}>
-        <DialogContent>
+        <DialogContent className="max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>New task</DialogTitle>
           </DialogHeader>
@@ -497,7 +521,17 @@ export default function Tasks() {
                 </Select>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <Label>Start date</Label>
+                <Input
+                  type="date"
+                  value={draft.startDate}
+                  onChange={(e) =>
+                    setDraft({ ...draft, startDate: e.target.value })
+                  }
+                />
+              </div>
               <div>
                 <Label>Due date</Label>
                 <Input
@@ -518,6 +552,83 @@ export default function Tasks() {
                   }
                 />
               </div>
+            </div>
+
+            <div className="space-y-3 rounded border p-3">
+              <p className="text-xs font-medium text-muted-foreground">
+                WBS &amp; scheduling (optional — powers Gantt &amp; Planning)
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label>Parent task</Label>
+                  <Select
+                    value={draft.parentTaskId}
+                    onValueChange={(v) =>
+                      setDraft({ ...draft, parentTaskId: v })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="None (top level)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {mandateTaskOptions.map((t) => (
+                        <SelectItem key={t._id} value={t._id}>
+                          {t.title}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Depends on</Label>
+                  <Select
+                    value={draft.dependsOnTaskId}
+                    onValueChange={(v) =>
+                      setDraft({ ...draft, dependsOnTaskId: v })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="No dependency" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {mandateTaskOptions.map((t) => (
+                        <SelectItem key={t._id} value={t._id}>
+                          {t.title}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              {draft.dependsOnTaskId && (
+                <div>
+                  <Label>Dependency type</Label>
+                  <Select
+                    value={draft.depType}
+                    onValueChange={(v) =>
+                      setDraft({ ...draft, depType: v as DependencyType })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {DEPENDENCY_TYPES.map((d) => (
+                        <SelectItem key={d.value} value={d.value}>
+                          {d.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              <label className="flex items-center gap-2 text-sm">
+                <Checkbox
+                  checked={draft.critical}
+                  onCheckedChange={(v) => setDraft({ ...draft, critical: !!v })}
+                />
+                On the critical path
+              </label>
             </div>
           </div>
           <DialogFooter>
@@ -617,16 +728,133 @@ export default function Tasks() {
                     </p>
                   </div>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Comment threads aren't wired to a real backend yet — coming
-                  with a later pass.
-                </p>
-                <CommentThread subject={selected._id} />
+                <TaskDiscussion
+                  mandateId={selected.mandateId}
+                  assigneeUserId={selected.assigneeUserId}
+                  assignee={selected.assignee}
+                />
               </div>
             </>
           )}
         </SheetContent>
       </Sheet>
+    </div>
+  );
+}
+
+// ── Discussion (real — reuses the same tenant↔employee thread the
+// Mandate's Collaboration tab shows). A task's discussion is just
+// the ongoing conversation with whoever's assigned to it, scoped to
+// this mandate — not a separate thread per task. Mentioning the same
+// person from the Mandate workspace shows the identical messages.
+
+function TaskDiscussion({
+  mandateId,
+  assigneeUserId,
+  assignee,
+}: {
+  mandateId: string;
+  assigneeUserId: string | null;
+  assignee: string;
+}) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const [text, setText] = useState("");
+
+  const { data: thread = [], isLoading } = useQuery({
+    queryKey: ["employeeMessages", mandateId, assigneeUserId],
+    queryFn: () => fetchEmployeeMessages(mandateId, assigneeUserId as string),
+    enabled: !!assigneeUserId,
+  });
+
+  const sendMut = useMutation({
+    mutationFn: () =>
+      sendEmployeeMessage(
+        mandateId,
+        assigneeUserId as string,
+        "You",
+        text.trim(),
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["employeeMessages", mandateId, assigneeUserId],
+      });
+      setText("");
+    },
+    onError: (err: any) =>
+      toast({
+        title: "Failed to send",
+        description: err?.response?.data?.message,
+        variant: "destructive",
+      }),
+  });
+
+  if (!assigneeUserId) {
+    return (
+      <div>
+        <p className="mb-2 text-sm font-medium">Discussion</p>
+        <p className="rounded border border-dashed p-3 text-xs text-muted-foreground">
+          This task isn't linked to a real employee — reassign it above to
+          enable discussion.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <p className="text-sm font-medium">Discussion with {assignee}</p>
+      {isLoading ? (
+        <p className="text-sm text-muted-foreground">Loading…</p>
+      ) : (
+        <div className="max-h-72 space-y-3 overflow-y-auto rounded border p-3">
+          {!thread.length && (
+            <p className="text-sm text-muted-foreground">
+              No messages yet — say hello.
+            </p>
+          )}
+          {thread.map((m) => (
+            <div
+              key={m._id}
+              className={`flex gap-2 ${m.direction === "tenant" ? "flex-row-reverse" : ""}`}
+            >
+              <div className="flex h-7 w-7 flex-none items-center justify-center rounded-full bg-muted text-xs font-medium">
+                {m.author
+                  .split(" ")
+                  .map((p) => p[0])
+                  .slice(0, 2)
+                  .join("")}
+              </div>
+              <div
+                className={`max-w-[75%] rounded-lg px-3 py-2 text-sm ${m.direction === "tenant" ? "bg-primary text-primary-foreground" : "bg-muted"}`}
+              >
+                <p className="mb-0.5 text-[11px] font-medium opacity-80">
+                  {m.author}
+                </p>
+                <p>{m.body}</p>
+                <p className="mt-1 text-[10px] opacity-70">
+                  {new Date(m.createdAt).toLocaleString()}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="flex gap-2">
+        <Textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder={`Message ${assignee}…`}
+          className="min-h-[50px]"
+        />
+        <Button
+          disabled={sendMut.isPending || !text.trim()}
+          onClick={() => sendMut.mutate()}
+          className="self-end"
+        >
+          <Send className="mr-2 h-4 w-4" />
+        </Button>
+      </div>
     </div>
   );
 }

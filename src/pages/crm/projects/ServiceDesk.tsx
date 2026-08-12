@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -23,7 +24,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import {
   Dialog,
   DialogContent,
@@ -32,7 +38,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  Plus,
   Star,
   Briefcase,
   MessageSquare,
@@ -43,33 +48,32 @@ import {
   ThumbsUp,
   ThumbsDown,
   FileText,
-  Trash2,
   Link2,
+  Plus,
+  Trash2,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { MentionText } from "@/components/crm/CommentThread";
+import { fetchEmployees } from "@/lib/hr/hr-api";
 import { RichTextEditor } from "@/components/RichTextEditor";
 import {
-  tickets as seed,
-  Ticket,
-  TicketStatus,
+  fetchTickets,
+  assignTicket,
+  setTicketStatus,
+  addTicketNote,
   TICKET_STATUSES,
-  teamDirectory,
-} from "@/data/crmPmMockData";
-import {
-  useKbArticles,
-  useKbCategories,
-  addCategory,
-  saveArticle,
-  deleteArticle,
-  setArticleStatus,
-  recordView,
-  voteArticle,
-  newArticleId,
-  KbArticle,
-  KbAudience,
-  KbStatus,
-} from "@/lib/crm/knowledgeBaseStore";
+  TICKET_CATEGORIES,
+  type Ticket,
+  type TicketStatus,
+  fetchKbArticles,
+  createKbArticle,
+  updateKbArticle,
+  deleteKbArticle,
+  recordKbView,
+  voteKbArticle,
+  type KbArticle,
+  type KbAudience,
+  type KbStatus,
+} from "@/lib/crm/service-desk-api";
 
 const priorityClass: Record<string, string> = {
   Low: "bg-muted text-muted-foreground",
@@ -81,57 +85,62 @@ const priorityClass: Record<string, string> = {
 const slaState = (t: Ticket) => {
   const pct = Math.min((t.slaElapsedHrs / t.slaTargetHrs) * 100, 100);
   if (t.status === "Pending Client")
-    return { pct, label: "Paused (pending client)", tone: "text-muted-foreground" };
+    return {
+      pct,
+      label: "Paused (pending client)",
+      tone: "text-muted-foreground",
+    };
   if (pct >= 100) return { pct, label: "Breached", tone: "text-destructive" };
-  if (pct >= 90) return { pct, label: "90% escalation", tone: "text-destructive" };
+  if (pct >= 90)
+    return { pct, label: "90% escalation", tone: "text-destructive" };
   if (pct >= 75) return { pct, label: "75% warning", tone: "text-warning" };
   return { pct, label: "On track", tone: "text-success" };
 };
 
-const emptyArticleDraft = (): KbArticle => ({
-  id: "",
+const emptyKbDraft = () => ({
   title: "",
-  category: "Portal access",
-  audience: "Internal",
-  status: "Draft",
-  tags: [],
+  category: TICKET_CATEGORIES[0],
+  audience: "Internal" as KbAudience,
+  status: "Draft" as KbStatus,
+  tags: [] as string[],
   body: "",
-  author: "Sarah Chen",
-  createdAt: new Date().toISOString(),
-  updatedAt: new Date().toISOString(),
-  views: 0,
-  helpful: 0,
-  notHelpful: 0,
+  linkedTicketId: undefined as string | undefined,
 });
 
 export default function ServiceDesk() {
-  const [list, setList] = useState<Ticket[]>(seed);
-  const [selected, setSelected] = useState<Ticket | null>(null);
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [openNew, setOpenNew] = useState(false);
-  const [note, setNote] = useState("");
-  const [internal, setInternal] = useState(true);
-  const [draft, setDraft] = useState({
-    subject: "",
-    clientName: "",
-    priority: "Medium" as Ticket["priority"],
-    category: "Portal access",
-    channel: "Portal" as Ticket["channel"],
-    description: "",
-  });
+  const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  // Knowledge base state
-  const kbArticles = useKbArticles();
-  const kbCategories = useKbCategories();
+  const { data: list = [], isLoading } = useQuery({
+    queryKey: ["tickets"],
+    queryFn: () => fetchTickets(),
+  });
+  const { data: employeesPage } = useQuery({
+    queryKey: ["hr-employees-all"],
+    queryFn: () => fetchEmployees({ limit: 500 }),
+    retry: false,
+  });
+  const employees = employeesPage?.items ?? [];
+
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selected = list.find((t) => t._id === selectedId) ?? null;
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [note, setNote] = useState("");
+  const [internal, setInternal] = useState(true);
+
+  // ── Knowledge base — now real ──────────────────────────────
+  const { data: kbArticles = [] } = useQuery({
+    queryKey: ["kbArticles"],
+    queryFn: () => fetchKbArticles(),
+  });
   const [kbSearch, setKbSearch] = useState("");
   const [kbCategoryFilter, setKbCategoryFilter] = useState("all");
-  const [kbSelected, setKbSelected] = useState<KbArticle | null>(null);
+  const [kbSelectedId, setKbSelectedId] = useState<string | null>(null);
+  const kbSelected = kbArticles.find((a) => a._id === kbSelectedId) ?? null;
   const [kbEditorOpen, setKbEditorOpen] = useState(false);
-  const [kbEditing, setKbEditing] = useState(false);
-  const [kbDraft, setKbDraft] = useState<KbArticle>(emptyArticleDraft());
+  const [kbEditingId, setKbEditingId] = useState<string | null>(null);
+  const [kbDraft, setKbDraft] = useState(emptyKbDraft());
   const [kbTagsInput, setKbTagsInput] = useState("");
-  const [kbNewCategory, setKbNewCategory] = useState("");
 
   const kbFiltered = kbArticles.filter((a) => {
     const matchesSearch =
@@ -142,7 +151,6 @@ export default function ServiceDesk() {
       kbCategoryFilter === "all" || a.category === kbCategoryFilter;
     return matchesSearch && matchesCategory;
   });
-
   const kbGroups = Object.entries(
     kbFiltered.reduce<Record<string, KbArticle[]>>((acc, a) => {
       (acc[a.category] ||= []).push(a);
@@ -150,69 +158,159 @@ export default function ServiceDesk() {
     }, {}),
   );
 
-  const openArticleEditor = (prefill?: Partial<KbArticle>) => {
-    setKbEditing(false);
-    setKbDraft({ ...emptyArticleDraft(), ...prefill });
+  const kbInvalidate = () =>
+    queryClient.invalidateQueries({ queryKey: ["kbArticles"] });
+
+  const openArticleEditor = (
+    prefill?: Partial<ReturnType<typeof emptyKbDraft>>,
+  ) => {
+    setKbEditingId(null);
+    setKbDraft({ ...emptyKbDraft(), ...prefill });
     setKbTagsInput("");
     setKbEditorOpen(true);
   };
-
   const openArticleForEdit = (a: KbArticle) => {
-    setKbEditing(true);
-    setKbDraft(a);
+    setKbEditingId(a._id);
+    setKbDraft({
+      title: a.title,
+      category: a.category,
+      audience: a.audience,
+      status: a.status,
+      tags: a.tags,
+      body: a.body,
+      linkedTicketId: a.linkedTicketId ?? undefined,
+    });
     setKbTagsInput(a.tags.join(", "));
     setKbEditorOpen(true);
   };
 
-  const saveKbDraft = () => {
-    if (!kbDraft.title.trim()) return;
-    const tags = kbTagsInput
-      .split(",")
-      .map((t) => t.trim())
-      .filter(Boolean);
-    const toSave: KbArticle = {
-      ...kbDraft,
-      id: kbEditing ? kbDraft.id : newArticleId(),
-      tags,
-    };
-    saveArticle(toSave);
-    setKbEditorOpen(false);
-    toast({
-      title: kbEditing ? "Article updated" : "Article created",
-      description: toSave.title,
-    });
-  };
+  const saveKbMut = useMutation({
+    mutationFn: () => {
+      const tags = kbTagsInput
+        .split(",")
+        .map((t) => t.trim())
+        .filter(Boolean);
+      const payload = { ...kbDraft, tags, author: "You" };
+      return kbEditingId
+        ? updateKbArticle(kbEditingId, payload)
+        : createKbArticle(payload);
+    },
+    onSuccess: (a) => {
+      kbInvalidate();
+      setKbEditorOpen(false);
+      toast({
+        title: kbEditingId ? "Article updated" : "Article created",
+        description: a.title,
+      });
+    },
+    onError: (err: any) =>
+      toast({
+        title: "Failed to save article",
+        description: err?.response?.data?.message,
+        variant: "destructive",
+      }),
+  });
+  const deleteKbMut = useMutation({
+    mutationFn: (id: string) => deleteKbArticle(id),
+    onSuccess: () => {
+      kbInvalidate();
+      setKbSelectedId(null);
+      toast({ title: "Article deleted" });
+    },
+  });
+  const viewKbMut = useMutation({
+    mutationFn: (id: string) => recordKbView(id),
+    onSuccess: kbInvalidate,
+  });
+  const voteKbMut = useMutation({
+    mutationFn: ({ id, helpful }: { id: string; helpful: boolean }) =>
+      voteKbArticle(id, helpful),
+    onSuccess: kbInvalidate,
+  });
 
+  // ── Tickets ─────────────────────────────────────────────────
   const filtered = list.filter(
     (t) => statusFilter === "all" || t.status === statusFilter,
   );
+  const breached = list.filter(
+    (t) => slaState(t).pct >= 100 && !["Resolved", "Closed"].includes(t.status),
+  ).length;
 
-  const patch = (id: string, p: Partial<Ticket>) => {
-    setList((l) => l.map((t) => (t.id === id ? { ...t, ...p } : t)));
-    setSelected((s) => (s && s.id === id ? { ...s, ...p } : s));
-  };
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: ["tickets"] });
+  const onErr = (title: string) => (err: any) =>
+    toast({
+      title,
+      description: err?.response?.data?.message,
+      variant: "destructive",
+    });
 
-  const breached = list.filter((t) => slaState(t).pct >= 100).length;
+  const assignMut = useMutation({
+    mutationFn: ({
+      id,
+      agentUserId,
+      agentName,
+    }: {
+      id: string;
+      agentUserId: string;
+      agentName: string;
+    }) => assignTicket(id, agentUserId, agentName),
+    onSuccess: invalidate,
+    onError: onErr("Failed to assign"),
+  });
+  const statusMut = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: TicketStatus }) =>
+      setTicketStatus(id, status),
+    onSuccess: (t) => {
+      invalidate();
+      if (t.status === "Closed") {
+        toast({
+          title: "Satisfaction survey sent",
+          description: "The client can now rate this ticket.",
+        });
+      }
+    },
+    onError: onErr("Failed to update status"),
+  });
+  const noteMut = useMutation({
+    mutationFn: () => addTicketNote(selected!._id, "You", note, internal),
+    onSuccess: () => {
+      invalidate();
+      setNote("");
+    },
+    onError: onErr("Failed to post note"),
+  });
+
+  if (isLoading) {
+    return (
+      <div className="py-16 text-center text-sm text-muted-foreground">
+        Loading tickets…
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold">Service Desk</h1>
-          <p className="text-sm text-muted-foreground">
-            Client tickets from portal, email and WhatsApp with SLA tracking
-          </p>
-        </div>
-        <Button onClick={() => setOpenNew(true)}>
-          <Plus className="mr-2 h-4 w-4" /> New ticket
-        </Button>
+      <div>
+        <h1 className="text-2xl font-bold">Service Desk</h1>
+        <p className="text-sm text-muted-foreground">
+          Client tickets with SLA tracking — raised by clients, assigned and
+          resolved here
+        </p>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {[
-          { l: "Open tickets", v: list.filter((t) => !["Resolved", "Closed"].includes(t.status)).length },
+          {
+            l: "Open tickets",
+            v: list.filter((t) => !["Resolved", "Closed"].includes(t.status))
+              .length,
+          },
           { l: "SLA breaches", v: breached },
-          { l: "Pending client", v: list.filter((t) => t.status === "Pending Client").length },
+          {
+            l: "Pending client",
+            v: list.filter((t) => t.status === "Pending Client").length,
+          },
           {
             l: "Avg satisfaction",
             v: (() => {
@@ -275,24 +373,28 @@ export default function ServiceDesk() {
                     const sla = slaState(t);
                     return (
                       <TableRow
-                        key={t.id}
+                        key={t._id}
                         className="cursor-pointer"
-                        onClick={() => setSelected(t)}
+                        onClick={() => setSelectedId(t._id)}
                       >
                         <TableCell>
                           <p className="text-sm font-medium">{t.subject}</p>
                           <p className="font-mono text-xs text-muted-foreground">
-                            {t.id}
+                            {t.ref}
                           </p>
                         </TableCell>
-                        <TableCell className="text-sm">{t.clientName}</TableCell>
+                        <TableCell className="text-sm">
+                          {t.clientName}
+                        </TableCell>
                         <TableCell className="text-sm">{t.channel}</TableCell>
                         <TableCell>
                           <Badge className={priorityClass[t.priority]}>
                             {t.priority}
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-sm">{t.agent}</TableCell>
+                        <TableCell className="text-sm">
+                          {t.agent || "Unassigned"}
+                        </TableCell>
                         <TableCell>
                           <Badge variant="outline">{t.status}</Badge>
                         </TableCell>
@@ -305,6 +407,16 @@ export default function ServiceDesk() {
                       </TableRow>
                     );
                   })}
+                  {!filtered.length && (
+                    <TableRow>
+                      <TableCell
+                        colSpan={7}
+                        className="py-8 text-center text-sm text-muted-foreground"
+                      >
+                        No tickets match this filter.
+                      </TableCell>
+                    </TableRow>
+                  )}
                 </TableBody>
               </Table>
             </CardContent>
@@ -323,13 +435,16 @@ export default function ServiceDesk() {
                   onChange={(e) => setKbSearch(e.target.value)}
                 />
               </div>
-              <Select value={kbCategoryFilter} onValueChange={setKbCategoryFilter}>
+              <Select
+                value={kbCategoryFilter}
+                onValueChange={setKbCategoryFilter}
+              >
                 <SelectTrigger className="w-48">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All categories</SelectItem>
-                  {kbCategories.map((c) => (
+                  {TICKET_CATEGORIES.map((c) => (
                     <SelectItem key={c} value={c}>
                       {c}
                     </SelectItem>
@@ -341,14 +456,16 @@ export default function ServiceDesk() {
               <Plus className="mr-2 h-4 w-4" /> New article
             </Button>
           </div>
-
           {kbGroups.length === 0 && (
-            <p className="text-sm text-muted-foreground">No articles match your filters.</p>
+            <p className="text-sm text-muted-foreground">
+              No articles match your filters.
+            </p>
           )}
-
           {kbGroups.map(([category, arts]) => (
             <div key={category} className="space-y-2">
-              <h3 className="text-sm font-semibold text-muted-foreground">{category}</h3>
+              <h3 className="text-sm font-semibold text-muted-foreground">
+                {category}
+              </h3>
               <Card>
                 <CardContent className="p-0">
                   <Table>
@@ -364,11 +481,11 @@ export default function ServiceDesk() {
                     <TableBody>
                       {arts.map((a) => (
                         <TableRow
-                          key={a.id}
+                          key={a._id}
                           className="cursor-pointer"
                           onClick={() => {
-                            recordView(a.id);
-                            setKbSelected(a);
+                            viewKbMut.mutate(a._id);
+                            setKbSelectedId(a._id);
                           }}
                         >
                           <TableCell className="text-sm font-medium">
@@ -376,7 +493,11 @@ export default function ServiceDesk() {
                             {a.tags.length > 0 && (
                               <div className="mt-1 flex flex-wrap gap-1">
                                 {a.tags.map((t) => (
-                                  <Badge key={t} variant="outline" className="text-[10px]">
+                                  <Badge
+                                    key={t}
+                                    variant="outline"
+                                    className="text-[10px]"
+                                  >
                                     {t}
                                   </Badge>
                                 ))}
@@ -423,180 +544,43 @@ export default function ServiceDesk() {
               {list
                 .filter((t) => t.rating)
                 .map((t) => (
-                  <div key={t.id} className="rounded border p-3">
+                  <div key={t._id} className="rounded border p-3">
                     <div className="flex items-center justify-between">
                       <p className="text-sm font-medium">{t.subject}</p>
                       <span className="text-sm">
                         {"★".repeat(t.rating ?? 0)}
-                        <span className="text-muted-foreground">
-                          {"★".repeat(5 - (t.rating ?? 0))}
-                        </span>
+                        {"☆".repeat(5 - (t.rating ?? 0))}
                       </span>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      {t.clientName} · {t.ratingComment}
+                      {t.clientName} · {t.ref}
                     </p>
+                    {t.ratingComment && (
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        {t.ratingComment}
+                      </p>
+                    )}
                   </div>
                 ))}
-              <p className="text-xs text-muted-foreground">
-                Surveys are sent automatically when a ticket is closed and feed
-                the client satisfaction KPI.
-              </p>
+              {!list.some((t) => t.rating) && (
+                <p className="text-sm text-muted-foreground">No ratings yet.</p>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
 
-      {/* New ticket */}
-      <Dialog open={openNew} onOpenChange={setOpenNew}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>New ticket</DialogTitle>
-          </DialogHeader>
-          <div className="grid gap-3">
-            <div>
-              <Label>Subject</Label>
-              <Input
-                value={draft.subject}
-                onChange={(e) => setDraft({ ...draft, subject: e.target.value })}
-              />
-            </div>
-            <div>
-              <Label>Client</Label>
-              <Input
-                value={draft.clientName}
-                onChange={(e) =>
-                  setDraft({ ...draft, clientName: e.target.value })
-                }
-              />
-            </div>
-            <div className="grid grid-cols-3 gap-3">
-              <div>
-                <Label>Channel</Label>
-                <Select
-                  value={draft.channel}
-                  onValueChange={(v) =>
-                    setDraft({ ...draft, channel: v as Ticket["channel"] })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {["Portal", "Email", "WhatsApp"].map((c) => (
-                      <SelectItem key={c} value={c}>
-                        {c}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Priority</Label>
-                <Select
-                  value={draft.priority}
-                  onValueChange={(v) =>
-                    setDraft({ ...draft, priority: v as Ticket["priority"] })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {["Low", "Medium", "High", "Urgent"].map((p) => (
-                      <SelectItem key={p} value={p}>
-                        {p}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Category</Label>
-                <Select
-                  value={draft.category}
-                  onValueChange={(v) => setDraft({ ...draft, category: v })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {["Portal access", "Billing", "Advisory", "New work", "Other"].map(
-                      (c) => (
-                        <SelectItem key={c} value={c}>
-                          {c}
-                        </SelectItem>
-                      ),
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div>
-              <Label>Description</Label>
-              <Textarea
-                rows={3}
-                value={draft.description}
-                onChange={(e) =>
-                  setDraft({ ...draft, description: e.target.value })
-                }
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button
-              onClick={() => {
-                if (!draft.subject) return;
-                const slaTarget =
-                  draft.priority === "Urgent"
-                    ? 4
-                    : draft.priority === "High"
-                      ? 8
-                      : draft.priority === "Medium"
-                        ? 24
-                        : 48;
-                setList([
-                  {
-                    id: `TCK-${list.length + 106}`,
-                    subject: draft.subject,
-                    description: draft.description,
-                    clientName: draft.clientName || "Unassigned client",
-                    channel: draft.channel,
-                    priority: draft.priority,
-                    category: draft.category,
-                    agent: "Unassigned",
-                    status: "New",
-                    createdAt: new Date().toISOString(),
-                    slaTargetHrs: slaTarget,
-                    slaElapsedHrs: 0,
-                    loggedHrs: 0,
-                    notes: [],
-                  },
-                  ...list,
-                ]);
-                setOpenNew(false);
-                setDraft({ ...draft, subject: "", description: "" });
-                toast({ title: "Ticket created", description: `SLA target ${slaTarget}h` });
-              }}
-            >
-              Create ticket
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       {/* Ticket detail */}
-      <Sheet open={!!selected} onOpenChange={(o) => !o && setSelected(null)}>
+      <Sheet open={!!selected} onOpenChange={(o) => !o && setSelectedId(null)}>
         <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">
           {selected && (
             <>
               <SheetHeader>
                 <SheetTitle>{selected.subject}</SheetTitle>
                 <p className="text-sm text-muted-foreground">
-                  {selected.id} · {selected.clientName} · via {selected.channel}
+                  {selected.ref} · {selected.clientName} · {selected.category}
                 </p>
               </SheetHeader>
-
               <div className="mt-4 space-y-4">
                 <p className="text-sm">{selected.description}</p>
 
@@ -605,14 +589,12 @@ export default function ServiceDesk() {
                     <Label className="text-xs">Status</Label>
                     <Select
                       value={selected.status}
-                      onValueChange={(v) => {
-                        patch(selected.id, { status: v as TicketStatus });
-                        if (v === "Closed")
-                          toast({
-                            title: "Satisfaction survey sent",
-                            description: "1–5 star rating requested from client.",
-                          });
-                      }}
+                      onValueChange={(v) =>
+                        statusMut.mutate({
+                          id: selected._id,
+                          status: v as TicketStatus,
+                        })
+                      }
                     >
                       <SelectTrigger>
                         <SelectValue />
@@ -629,22 +611,29 @@ export default function ServiceDesk() {
                   <div>
                     <Label className="text-xs">Assigned agent</Label>
                     <Select
-                      value={selected.agent}
-                      onValueChange={(v) =>
-                        patch(selected.id, { agent: v, status: "Assigned" })
-                      }
+                      value={selected.agentUserId ?? ""}
+                      onValueChange={(v) => {
+                        const e = employees.find((x: any) => x._id === v);
+                        if (!e) return;
+                        assignMut.mutate({
+                          id: selected._id,
+                          agentUserId: v,
+                          agentName: `${e.firstName} ${e.lastName}`,
+                        });
+                      }}
                     >
                       <SelectTrigger>
-                        <SelectValue />
+                        <SelectValue
+                          placeholder={selected.agent || "Unassigned"}
+                        />
                       </SelectTrigger>
                       <SelectContent>
-                        {teamDirectory
-                          .filter((t) => t.mandates > 0)
-                          .map((t) => (
-                            <SelectItem key={t.name} value={t.name}>
-                              {t.name}
-                            </SelectItem>
-                          ))}
+                        {employees.map((e: any) => (
+                          <SelectItem key={e._id} value={e._id}>
+                            {e.firstName} {e.lastName}
+                            {e.jobTitle ? ` · ${e.jobTitle}` : ""}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -658,8 +647,8 @@ export default function ServiceDesk() {
                         <div className="flex justify-between text-sm">
                           <span>SLA countdown</span>
                           <span className={sla.tone}>
-                            {selected.slaElapsedHrs}h of {selected.slaTargetHrs}h
-                            · {sla.label}
+                            {selected.slaElapsedHrs.toFixed(1)}h of{" "}
+                            {selected.slaTargetHrs}h · {sla.label}
                           </span>
                         </div>
                         <Progress value={sla.pct} className="h-2" />
@@ -679,8 +668,9 @@ export default function ServiceDesk() {
                     variant="outline"
                     onClick={() =>
                       toast({
-                        title: "Converted to mandate",
-                        description: `New mandate pre-populated from ${selected.id}; ${selected.loggedHrs}h of logged time transferred.`,
+                        title: "Not built yet",
+                        description:
+                          "Convert to mandate is a deferred feature — coming in a later pass.",
                       })
                     }
                   >
@@ -696,11 +686,12 @@ export default function ServiceDesk() {
                         body: selected.description
                           ? `<p>${selected.description}</p>`
                           : "",
-                        linkedTicketId: selected.id,
+                        linkedTicketId: selected._id,
                       })
                     }
                   >
-                    <Link2 className="mr-2 h-4 w-4" /> Create article from this ticket
+                    <Link2 className="mr-2 h-4 w-4" /> Create article from this
+                    ticket
                   </Button>
                 </div>
 
@@ -708,12 +699,10 @@ export default function ServiceDesk() {
                   <h4 className="flex items-center gap-2 text-sm font-semibold">
                     <MessageSquare className="h-4 w-4" /> Conversation
                   </h4>
-                  {selected.notes.map((n, i) => (
+                  {selected.notes.map((n) => (
                     <div
-                      key={i}
-                      className={`rounded border p-3 ${
-                        n.internal ? "border-warning/40 bg-warning/5" : ""
-                      }`}
+                      key={n._id}
+                      className={`rounded border p-3 ${n.internal ? "border-warning/40 bg-warning/5" : ""}`}
                     >
                       <div className="flex items-center justify-between">
                         <span className="text-sm font-medium">{n.author}</span>
@@ -721,7 +710,7 @@ export default function ServiceDesk() {
                           {n.internal ? "Internal note" : "Client-facing"}
                         </Badge>
                       </div>
-                      <MentionText body={n.body} />
+                      <p className="text-sm">{n.body}</p>
                       <p className="text-xs text-muted-foreground">
                         {new Date(n.at).toLocaleString()}
                       </p>
@@ -729,34 +718,24 @@ export default function ServiceDesk() {
                   ))}
                   <Textarea
                     rows={3}
-                    placeholder="Add a note… type @ to loop in a specialist"
+                    placeholder="Add a note…"
                     value={note}
                     onChange={(e) => setNote(e.target.value)}
                   />
                   <div className="flex items-center gap-3">
                     <div className="flex items-center gap-2">
-                      <Switch checked={internal} onCheckedChange={setInternal} />
+                      <Switch
+                        checked={internal}
+                        onCheckedChange={setInternal}
+                      />
                       <Label className="text-xs">
                         {internal ? "Internal note" : "Send to client"}
                       </Label>
                     </div>
                     <Button
                       size="sm"
-                      disabled={!note.trim()}
-                      onClick={() => {
-                        patch(selected.id, {
-                          notes: [
-                            ...selected.notes,
-                            {
-                              author: "Sarah Chen",
-                              internal,
-                              at: new Date().toISOString(),
-                              body: note,
-                            },
-                          ],
-                        });
-                        setNote("");
-                      }}
+                      disabled={!note.trim() || noteMut.isPending}
+                      onClick={() => noteMut.mutate()}
                     >
                       Post
                     </Button>
@@ -765,8 +744,11 @@ export default function ServiceDesk() {
 
                 {selected.rating && (
                   <p className="flex items-center gap-2 text-sm">
-                    <Star className="h-4 w-4 text-warning" />
-                    {selected.rating}/5 — {selected.ratingComment}
+                    <Star className="h-4 w-4 text-warning" /> {selected.rating}
+                    /5
+                    {selected.ratingComment
+                      ? ` — ${selected.ratingComment}`
+                      : ""}
                   </p>
                 )}
               </div>
@@ -779,57 +761,38 @@ export default function ServiceDesk() {
       <Dialog open={kbEditorOpen} onOpenChange={setKbEditorOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>{kbEditing ? "Edit article" : "New article"}</DialogTitle>
+            <DialogTitle>
+              {kbEditingId ? "Edit article" : "New article"}
+            </DialogTitle>
           </DialogHeader>
           <div className="grid max-h-[70vh] gap-3 overflow-y-auto pr-1">
             <div>
               <Label>Title</Label>
               <Input
                 value={kbDraft.title}
-                onChange={(e) => setKbDraft({ ...kbDraft, title: e.target.value })}
+                onChange={(e) =>
+                  setKbDraft({ ...kbDraft, title: e.target.value })
+                }
               />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label>Category</Label>
-                <div className="flex gap-2">
-                  <Select
-                    value={kbDraft.category}
-                    onValueChange={(v) => setKbDraft({ ...kbDraft, category: v })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {kbCategories.map((c) => (
-                        <SelectItem key={c} value={c}>
-                          {c}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="mt-1 flex gap-2">
-                  <Input
-                    placeholder="Add new category…"
-                    value={kbNewCategory}
-                    onChange={(e) => setKbNewCategory(e.target.value)}
-                    className="h-8 text-xs"
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      if (!kbNewCategory.trim()) return;
-                      addCategory(kbNewCategory.trim());
-                      setKbDraft({ ...kbDraft, category: kbNewCategory.trim() });
-                      setKbNewCategory("");
-                    }}
-                  >
-                    Add
-                  </Button>
-                </div>
+                <Select
+                  value={kbDraft.category}
+                  onValueChange={(v) => setKbDraft({ ...kbDraft, category: v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TICKET_CATEGORIES.map((c) => (
+                      <SelectItem key={c} value={c}>
+                        {c}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div>
                 <Label>Audience</Label>
@@ -854,26 +817,25 @@ export default function ServiceDesk() {
               <Input
                 value={kbTagsInput}
                 onChange={(e) => setKbTagsInput(e.target.value)}
-                placeholder="portal, access, login"
               />
             </div>
             <div>
-              <Label>Content</Label>
+              <Label>Body</Label>
               <RichTextEditor
                 value={kbDraft.body}
                 onChange={(html) => setKbDraft({ ...kbDraft, body: html })}
-                placeholder="Write the article…"
+                minHeight={180}
               />
             </div>
-            <div className="flex items-center gap-2">
-              <Label className="text-xs">Status</Label>
+            <div>
+              <Label>Status</Label>
               <Select
                 value={kbDraft.status}
                 onValueChange={(v) =>
-                  setKbDraft({ ...kbDraft, status: v as KbArticle["status"] })
+                  setKbDraft({ ...kbDraft, status: v as KbStatus })
                 }
               >
-                <SelectTrigger className="w-40">
+                <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -884,15 +846,21 @@ export default function ServiceDesk() {
             </div>
           </div>
           <DialogFooter>
-            <Button onClick={saveKbDraft} disabled={!kbDraft.title.trim()}>
-              {kbEditing ? "Save changes" : "Create article"}
+            <Button
+              disabled={saveKbMut.isPending || !kbDraft.title.trim()}
+              onClick={() => saveKbMut.mutate()}
+            >
+              {saveKbMut.isPending ? "Saving…" : "Save"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Article detail */}
-      <Sheet open={!!kbSelected} onOpenChange={(o) => !o && setKbSelected(null)}>
+      <Sheet
+        open={!!kbSelected}
+        onOpenChange={(o) => !o && setKbSelectedId(null)}
+      >
         <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">
           {kbSelected && (
             <>
@@ -901,94 +869,59 @@ export default function ServiceDesk() {
                   <FileText className="h-5 w-5" /> {kbSelected.title}
                 </SheetTitle>
                 <p className="text-sm text-muted-foreground">
-                  {kbSelected.category} · {kbSelected.audience} · by{" "}
+                  {kbSelected.ref} · {kbSelected.category} · by{" "}
                   {kbSelected.author}
                 </p>
               </SheetHeader>
               <div className="mt-4 space-y-4">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge
-                    className={
-                      kbSelected.status === "Published"
-                        ? "bg-success/10 text-success"
-                        : "bg-muted text-muted-foreground"
-                    }
-                  >
-                    {kbSelected.status}
-                  </Badge>
+                <div className="flex flex-wrap gap-1">
                   {kbSelected.tags.map((t) => (
                     <Badge key={t} variant="outline">
                       {t}
                     </Badge>
                   ))}
-                  {kbSelected.linkedTicketId && (
-                    <Badge variant="outline">From {kbSelected.linkedTicketId}</Badge>
-                  )}
                 </div>
-
                 <div
+                  dangerouslySetInnerHTML={{ __html: kbSelected.body }}
                   className="prose prose-sm max-w-none rounded border p-3 text-sm [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5"
-                  dangerouslySetInnerHTML={{ __html: kbSelected.body || "<p class='text-muted-foreground'>No content yet.</p>" }}
                 />
-
-                <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
-                  <span className="inline-flex items-center gap-1">
-                    <Eye className="h-3.5 w-3.5" /> {kbSelected.views} views
-                  </span>
-                  <span>
-                    Updated {new Date(kbSelected.updatedAt).toLocaleDateString()}
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-2">
+                <p className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <Eye className="h-3.5 w-3.5" /> {kbSelected.views} views
+                </p>
+                <div className="flex flex-wrap items-center gap-2">
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => {
-                      voteArticle(kbSelected.id, true);
-                      setKbSelected({ ...kbSelected, helpful: kbSelected.helpful + 1 });
-                    }}
+                    onClick={() =>
+                      voteKbMut.mutate({ id: kbSelected._id, helpful: true })
+                    }
                   >
-                    <ThumbsUp className="mr-2 h-4 w-4" /> Helpful ({kbSelected.helpful})
+                    <ThumbsUp className="mr-2 h-4 w-4" /> Helpful (
+                    {kbSelected.helpful})
                   </Button>
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => {
-                      voteArticle(kbSelected.id, false);
-                      setKbSelected({
-                        ...kbSelected,
-                        notHelpful: kbSelected.notHelpful + 1,
-                      });
-                    }}
+                    onClick={() =>
+                      voteKbMut.mutate({ id: kbSelected._id, helpful: false })
+                    }
                   >
-                    <ThumbsDown className="mr-2 h-4 w-4" /> Not helpful ({kbSelected.notHelpful})
+                    <ThumbsDown className="mr-2 h-4 w-4" /> Not helpful (
+                    {kbSelected.notHelpful})
                   </Button>
-                </div>
-
-                <div className="flex flex-wrap gap-2 border-t pt-4">
-                  <Button variant="outline" onClick={() => openArticleForEdit(kbSelected)}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => openArticleForEdit(kbSelected)}
+                  >
                     Edit
                   </Button>
                   <Button
                     variant="outline"
-                    onClick={() => {
-                      const next: KbStatus =
-                        kbSelected.status === "Published" ? "Draft" : "Published";
-                      setArticleStatus(kbSelected.id, next);
-                      setKbSelected({ ...kbSelected, status: next });
-                    }}
-                  >
-                    {kbSelected.status === "Published" ? "Unpublish" : "Publish"}
-                  </Button>
-                  <Button
-                    variant="outline"
+                    size="sm"
                     className="text-destructive"
-                    onClick={() => {
-                      deleteArticle(kbSelected.id);
-                      setKbSelected(null);
-                      toast({ title: "Article deleted" });
-                    }}
+                    disabled={deleteKbMut.isPending}
+                    onClick={() => deleteKbMut.mutate(kbSelected._id)}
                   >
                     <Trash2 className="mr-2 h-4 w-4" /> Delete
                   </Button>

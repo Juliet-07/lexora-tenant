@@ -2,12 +2,20 @@ import { api } from "../api";
 
 export type TaskStatus = "Backlog" | "In Progress" | "In Review" | "Done";
 export type TaskPriority = "Low" | "Medium" | "High" | "Critical";
+export type DependencyType = "FS" | "SS" | "FF" | "SF";
 
 export const TASK_STATUSES: TaskStatus[] = [
   "Backlog",
   "In Progress",
   "In Review",
   "Done",
+];
+
+export const DEPENDENCY_TYPES: { value: DependencyType; label: string }[] = [
+  { value: "FS", label: "Finish → Start" },
+  { value: "SS", label: "Start → Start" },
+  { value: "FF", label: "Finish → Finish" },
+  { value: "SF", label: "Start → Finish" },
 ];
 
 export interface Task {
@@ -19,9 +27,16 @@ export interface Task {
   assigneeUserId: string | null;
   status: TaskStatus;
   priority: TaskPriority;
+  startDate: string;
   dueDate: string;
   estimateHrs: number;
   loggedHrs: number;
+  // Server-computed from loggedHrs/estimateHrs — never sent, always present.
+  progress: number;
+  parentTaskId: string | null;
+  dependsOnTaskId: string | null;
+  depType: DependencyType | null;
+  critical: boolean;
   phase: string;
   recurring: string | null;
   createdAt: string;
@@ -34,8 +49,13 @@ export interface CreateTaskPayload {
   assignee: string;
   assigneeUserId?: string;
   priority: TaskPriority;
+  startDate?: string;
   dueDate: string;
   estimateHrs: number;
+  parentTaskId?: string;
+  dependsOnTaskId?: string;
+  depType?: DependencyType;
+  critical?: boolean;
   phase?: string;
   recurring?: string;
 }
@@ -46,9 +66,13 @@ export interface UpdateTaskPayload {
   assigneeUserId?: string;
   status?: TaskStatus;
   priority?: TaskPriority;
+  startDate?: string;
   dueDate?: string;
   estimateHrs?: number;
-  loggedHrs?: number;
+  parentTaskId?: string;
+  dependsOnTaskId?: string;
+  depType?: DependencyType;
+  critical?: boolean;
   phase?: string;
 }
 

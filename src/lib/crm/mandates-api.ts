@@ -109,6 +109,7 @@ export interface Mandate {
   budget: number;
   actualCost: number;
   billed: number;
+  // Server-computed from Approved, billable time entries — never sent, always present.
   wip: number;
   feeStructure: FeeStructure;
   progress: number;
@@ -148,7 +149,6 @@ export interface UpdateMandatePayload {
   budget?: number;
   actualCost?: number;
   billed?: number;
-  wip?: number;
   feeStructure?: FeeStructure;
   progress?: number;
 }
@@ -438,11 +438,13 @@ export const fetchMyTasks = async (mandateId?: string): Promise<Task[]> => {
   return Array.isArray(d) ? d : [];
 };
 
-// Status and logged hours only — everything else about a task is
-// the tenant's to change, not the employee's.
+// Status only now — logged hours used to be directly editable here,
+// but loggedHrs is derived from Approved time entries. An employee
+// logs time through Timesheets, which needs approval before it
+// counts, rather than bumping this number directly.
 export const updateMyTask = async (
   id: string,
-  dto: { status?: TaskStatus; loggedHrs?: number },
+  dto: { status?: TaskStatus },
 ): Promise<Task> => {
   const res = await api.patch(`/crm/my-tasks/${id}`, dto);
   return unwrap(res);
