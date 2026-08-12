@@ -5,6 +5,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { WorkflowTable } from "@/components/finance/WorkflowTable";
 import { useToast } from "@/hooks/use-toast";
 import {
   taxCalendar, vatLines, whtRegister, ebmStatus, payrollPayments, fmoney,
@@ -16,6 +17,15 @@ const statusClass = (s: string) =>
     : s === "Error"
       ? "bg-destructive/10 text-destructive"
       : "bg-warning/10 text-warning";
+
+const taxWorkflow = [
+  { action: "Review tax calendar", detail: "Upcoming RRA and RSSB obligations with due dates and amounts", owner: "Finance manager", trigger: "Start of month" },
+  { action: "Prepare VAT return", detail: "Output and input VAT reconciled to the ledger and EBM receipts", owner: "Accountant", trigger: "By the 10th" },
+  { action: "Prepare PAYE & RSSB", detail: "Payroll declarations agreed to the authorised payroll run", owner: "Accountant", trigger: "After payroll" },
+  { action: "Calculate WHT", detail: "15% on non-resident payments; gross / WHT / net computed and certificate generated", owner: "Tax module (single source)", trigger: "Invoice or fund distribution" },
+  { action: "File and remit", detail: "Return filed, payment made, acknowledgement filed against the obligation", owner: "Finance manager", trigger: "By the 15th" },
+  { action: "Provision CIT", detail: "Quarterly provisional CIT computed at 28% of profit before tax", owner: "Finance manager", trigger: "Quarter end" },
+];
 
 export default function Tax() {
   const { toast } = useToast();
@@ -39,6 +49,7 @@ export default function Tax() {
           <TabsTrigger value="cit">CIT</TabsTrigger>
           <TabsTrigger value="wht">WHT</TabsTrigger>
           <TabsTrigger value="ebm">EBM</TabsTrigger>
+          <TabsTrigger value="workflow">Workflow</TabsTrigger>
         </TabsList>
 
         <TabsContent value="calendar" className="mt-4">
@@ -166,7 +177,12 @@ export default function Tax() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="wht" className="mt-4">
+        <TabsContent value="wht" className="mt-4 space-y-2">
+          <p className="text-sm text-muted-foreground">
+            Single source of truth for withholding tax: 15% on non-resident payments, gross / WHT / net,
+            with certificate generation. Invoicing and fund distributions call this register — they do not
+            recalculate WHT themselves.
+          </p>
           <Card>
             <CardContent className="p-4 overflow-x-auto">
               <Table>
@@ -227,6 +243,10 @@ export default function Tax() {
             </CardContent>
           </Card>
         </TabsContent>
+        <TabsContent value="workflow" className="mt-4">
+          <WorkflowTable title="How tax compliance is used" steps={taxWorkflow} />
+        </TabsContent>
+
       </Tabs>
     </div>
   );

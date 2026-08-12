@@ -151,7 +151,10 @@ export default function FundAccounting() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="dist" className="mt-4">
+        <TabsContent value="dist" className="mt-4 space-y-2">
+          <p className="text-sm text-muted-foreground">
+            Withholding on non-resident LP distributions is calculated and certificated by the Tax module.
+          </p>
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Distributions</CardTitle>

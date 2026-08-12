@@ -5,11 +5,21 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { WorkflowTable } from "@/components/finance/WorkflowTable";
 import { useToast } from "@/hooks/use-toast";
 import {
   bankAccounts, bankFeed, bankRules, cashForecast, transfers, fmoney,
 } from "@/data/financeMockData";
 import { Landmark } from "lucide-react";
+
+const bankingWorkflow = [
+  { action: "Sync feed", detail: "Bank feeds import transactions each morning", owner: "System", trigger: "Daily 06:00" },
+  { action: "Apply bank rules", detail: "Recurring patterns auto-coded to the ledger account", owner: "System", trigger: "Transaction imported" },
+  { action: "Match transactions", detail: "Unmatched receipts allocated to invoices, payments to bills", owner: "Accountant", trigger: "Unmatched item" },
+  { action: "Reconcile account", detail: "Statement balance agreed to ledger; differences investigated", owner: "Accountant", trigger: "Month-end close" },
+  { action: "Authorise transfer", detail: "Inter-account and trust-to-office transfers dual-authorised", owner: "Partner + Finance", trigger: "Drawdown or FX funding" },
+  { action: "Refresh cash forecast", detail: "30/60/90-day forecast rebuilt from receivables, payables, payroll, fixed costs and tax", owner: "Finance manager", trigger: "Weekly" },
+];
 
 export default function Banking() {
   const { toast } = useToast();
@@ -49,6 +59,7 @@ export default function Banking() {
           <TabsTrigger value="rules">Bank rules</TabsTrigger>
           <TabsTrigger value="forecast">Cash forecast</TabsTrigger>
           <TabsTrigger value="transfers">Transfers</TabsTrigger>
+          <TabsTrigger value="workflow">Workflow</TabsTrigger>
         </TabsList>
 
         <TabsContent value="feed" className="mt-4">
@@ -185,6 +196,10 @@ export default function Banking() {
             </CardContent>
           </Card>
         </TabsContent>
+        <TabsContent value="workflow" className="mt-4">
+          <WorkflowTable title="How banking is used" steps={bankingWorkflow} />
+        </TabsContent>
+
       </Tabs>
     </div>
   );

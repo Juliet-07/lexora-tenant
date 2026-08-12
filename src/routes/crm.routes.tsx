@@ -20,6 +20,7 @@ import Purchases from "@/pages/crm/finance/Purchases";
 import Banking from "@/pages/crm/finance/Banking";
 import TaxPage from "@/pages/crm/finance/Tax";
 import Accounting from "@/pages/crm/finance/Accounting";
+import AssetRegister from "@/pages/crm/finance/AssetRegister";
 import Financials from "@/pages/crm/finance/Financials";
 import FundAccounting from "@/pages/crm/finance/FundAccounting";
 import Documents from "@/pages/crm/Documents";
@@ -116,6 +117,7 @@ export const crmRoutes = ({ isAdmin, accessibleModules }: RouteContext) => {
       <Route key="crm-banking" path="/crm/banking" element={layout(<Banking />)} />,
       <Route key="crm-tax" path="/crm/tax" element={layout(<TaxPage />)} />,
       <Route key="crm-accounting" path="/crm/accounting" element={layout(<Accounting />)} />,
+      <Route key="crm-assets" path="/crm/assets" element={layout(<AssetRegister />)} />,
       <Route key="crm-financials" path="/crm/financials" element={layout(<Financials />)} />,
       <Route key="crm-funds" path="/crm/funds" element={layout(<FundAccounting />)} />,
       <Route

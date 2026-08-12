@@ -1,12 +1,23 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Link } from "react-router-dom";
+import { ArrowUpRight } from "lucide-react";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  chartOfAccounts, journals, assets, maintenanceLog, fmoney,
+  chartOfAccounts, journals, recodeCandidates, fmoney,
 } from "@/data/financeMockData";
+
+const workflow = [
+  { action: "Maintain chart of accounts", detail: "Add, rename or archive accounts; codes stay stable for reporting", owner: "Finance manager", trigger: "New account need" },
+  { action: "Raise manual journal", detail: "Debit / credit lines with narration and supporting document", owner: "Accountant", trigger: "Accrual, provision, reclass" },
+  { action: "Approve journal", detail: "Second pair of eyes before posting to the ledger", owner: "Finance manager", trigger: "Journal submitted" },
+  { action: "Find & recode", detail: "Search miscoded transactions and reassign them in bulk", owner: "Accountant", trigger: "Month-end review" },
+  { action: "Close the period", detail: "Lock the ledger once reconciliations and journals are posted", owner: "Finance manager", trigger: "Month-end close" },
+];
 
 export default function Accounting() {
   return (
@@ -14,16 +25,27 @@ export default function Accounting() {
       <div>
         <h1 className="text-2xl font-bold">Accounting</h1>
         <p className="text-sm text-muted-foreground">
-          Chart of accounts, manual journals and asset management
+          Core bookkeeping — chart of accounts, manual journals and find &amp; recode
         </p>
       </div>
+
+      <Card>
+        <CardContent className="p-4 flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-muted-foreground">
+            Assets, depreciation, insurance and maintenance now live in their own Asset Register.
+          </p>
+          <Button asChild size="sm" variant="outline">
+            <Link to="/crm/assets">Open Asset Register <ArrowUpRight className="ml-1 h-4 w-4" /></Link>
+          </Button>
+        </CardContent>
+      </Card>
 
       <Tabs defaultValue="coa">
         <TabsList className="flex-wrap h-auto">
           <TabsTrigger value="coa">Chart of accounts</TabsTrigger>
           <TabsTrigger value="journals">Manual journals</TabsTrigger>
-          <TabsTrigger value="assets">Assets & depreciation</TabsTrigger>
-          <TabsTrigger value="maintenance">Insurance & maintenance</TabsTrigger>
+          <TabsTrigger value="recode">Find &amp; recode</TabsTrigger>
+          <TabsTrigger value="workflow">Workflow</TabsTrigger>
         </TabsList>
 
         <TabsContent value="coa" className="mt-4">
@@ -81,32 +103,36 @@ export default function Accounting() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="assets" className="mt-4">
+        <TabsContent value="recode" className="mt-4">
           <Card>
-            <CardHeader><CardTitle className="text-base">Asset register</CardTitle></CardHeader>
+            <CardHeader>
+              <CardTitle className="text-base">Find &amp; recode</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Transactions flagged as miscoded during month-end review, with a suggested account.
+              </p>
+            </CardHeader>
             <CardContent className="p-4 pt-0 overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>ID</TableHead><TableHead>Asset</TableHead>
-                    <TableHead>Class</TableHead><TableHead>Category</TableHead>
-                    <TableHead>Cost</TableHead><TableHead>Useful life</TableHead>
-                    <TableHead>NBV</TableHead><TableHead>Assigned to</TableHead>
-                    <TableHead>Status</TableHead>
+                    <TableHead>Reference</TableHead><TableHead>Date</TableHead>
+                    <TableHead>Description</TableHead><TableHead className="text-right">Amount</TableHead>
+                    <TableHead>Current account</TableHead><TableHead>Suggested account</TableHead>
+                    <TableHead className="text-right">Action</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {assets.map(a => (
-                    <TableRow key={a.id}>
-                      <TableCell className="text-sm font-medium">{a.id}</TableCell>
-                      <TableCell className="text-sm">{a.name}</TableCell>
-                      <TableCell><Badge variant="outline" className="text-xs">{a.kind}</Badge></TableCell>
-                      <TableCell className="text-sm">{a.category}</TableCell>
-                      <TableCell className="text-sm">{fmoney(a.cost)}</TableCell>
-                      <TableCell className="text-sm">{a.usefulLife} yrs</TableCell>
-                      <TableCell className="text-sm font-semibold">{fmoney(a.nbv)}</TableCell>
-                      <TableCell className="text-sm">{a.assignedTo ?? "—"}</TableCell>
-                      <TableCell className="text-sm">{a.status}</TableCell>
+                  {recodeCandidates.map(r => (
+                    <TableRow key={r.id}>
+                      <TableCell className="text-sm font-medium">{r.id}</TableCell>
+                      <TableCell className="text-sm">{r.date}</TableCell>
+                      <TableCell className="text-sm">{r.description}</TableCell>
+                      <TableCell className="text-sm text-right">{fmoney(r.amount)}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{r.currentAccount}</TableCell>
+                      <TableCell className="text-sm">{r.suggested}</TableCell>
+                      <TableCell className="text-right">
+                        <Button size="sm" variant="outline">Recode</Button>
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -115,30 +141,28 @@ export default function Accounting() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="maintenance" className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <TabsContent value="workflow" className="mt-4">
           <Card>
-            <CardHeader><CardTitle className="text-base">Insurance coverage</CardTitle></CardHeader>
-            <CardContent className="space-y-2">
-              {assets.filter(a => a.insurer).map(a => (
-                <div key={a.id} className="flex items-center justify-between border-b pb-2 text-sm">
-                  <div><p className="font-medium">{a.name}</p><p className="text-xs text-muted-foreground">{a.insurer}</p></div>
-                  <span className="text-xs text-muted-foreground">Renews {a.renewal}</span>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader><CardTitle className="text-base">Maintenance log</CardTitle></CardHeader>
-            <CardContent className="space-y-2">
-              {maintenanceLog.map(m => (
-                <div key={m.asset + m.date} className="flex items-center justify-between border-b pb-2 text-sm">
-                  <div>
-                    <p className="font-medium">{m.description}</p>
-                    <p className="text-xs text-muted-foreground">{m.asset} · {m.vendor} · {m.date}</p>
-                  </div>
-                  <span className="font-medium">{fmoney(m.cost)}</span>
-                </div>
-              ))}
+            <CardHeader><CardTitle className="text-base">How accounting is used</CardTitle></CardHeader>
+            <CardContent className="p-4 pt-0 overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Action</TableHead><TableHead>Detail</TableHead>
+                    <TableHead>Owner</TableHead><TableHead>Trigger</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {workflow.map(w => (
+                    <TableRow key={w.action}>
+                      <TableCell className="text-sm font-medium">{w.action}</TableCell>
+                      <TableCell className="text-sm">{w.detail}</TableCell>
+                      <TableCell className="text-sm">{w.owner}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{w.trigger}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             </CardContent>
           </Card>
         </TabsContent>

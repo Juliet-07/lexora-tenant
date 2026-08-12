@@ -206,60 +206,16 @@ export default function Invoicing() {
         ))}
       </div>
 
+      <p className="text-sm text-muted-foreground">
+        WIP review, aged receivables and credit control live in Sales — this page is the invoice list and
+        creation flow. Billing model is set on the mandate; invoice branding lives in Finance settings.
+      </p>
+
       <Tabs defaultValue="invoices">
         <TabsList className="flex-wrap">
-          <TabsTrigger value="wip">WIP</TabsTrigger>
           <TabsTrigger value="invoices">Invoices</TabsTrigger>
           <TabsTrigger value="payments">Payments</TabsTrigger>
-          <TabsTrigger value="aged">Aged receivables</TabsTrigger>
-          <TabsTrigger value="dunning">Dunning</TabsTrigger>
         </TabsList>
-
-        <TabsContent value="wip" className="pt-4">
-          <Card>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Mandate</TableHead>
-                    <TableHead>Source</TableHead>
-                    <TableHead className="text-right">Hours</TableHead>
-                    <TableHead className="text-right">Value</TableHead>
-                    <TableHead className="text-right">Age</TableHead>
-                    <TableHead />
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {wipEntries.map((w) => (
-                    <TableRow key={w.id}>
-                      <TableCell>
-                        <p className="text-sm font-medium">{w.mandateName}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {w.clientName}
-                        </p>
-                      </TableCell>
-                      <TableCell className="text-sm">{w.source}</TableCell>
-                      <TableCell className="text-right text-sm">
-                        {w.hours}
-                      </TableCell>
-                      <TableCell className="text-right text-sm">
-                        {money(w.value)}
-                      </TableCell>
-                      <TableCell className="text-right text-sm">
-                        {w.ageDays}d
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button size="sm" onClick={() => createFromWip(w.id)}>
-                          Raise invoice
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
 
         <TabsContent value="invoices" className="pt-4">
           <Card>
@@ -355,67 +311,6 @@ export default function Invoicing() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="aged" className="pt-4">
-          <Card>
-            <CardContent className="space-y-4 p-4">
-              {aged.map((a) => (
-                <div key={a.bucket} className="space-y-1">
-                  <div className="flex justify-between text-sm">
-                    <span>{a.bucket}</span>
-                    <span className="font-medium">{money(a.value)}</span>
-                  </div>
-                  <Progress
-                    value={
-                      receivables ? (a.value / receivables) * 100 : 0
-                    }
-                    className="h-2"
-                  />
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="dunning" className="pt-4">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">
-                Reminders at 30 / 60 / 90 days
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {dunningLog.map((d, i) => (
-                <div
-                  key={i}
-                  className="flex items-center justify-between rounded border p-3 text-sm"
-                >
-                  <div>
-                    <p className="font-medium">
-                      {d.invoiceId} — {d.action}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {d.at} · by {d.by}
-                    </p>
-                  </div>
-                  <Badge variant="outline">{d.stage}</Badge>
-                </div>
-              ))}
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() =>
-                  toast({
-                    title: "Escalated to partner",
-                    description:
-                      "INV-2026-039 flagged at 60 days; bad debt review scheduled at 90 days.",
-                  })
-                }
-              >
-                <Bell className="mr-2 h-4 w-4" /> Run dunning cycle
-              </Button>
-            </CardContent>
-          </Card>
-        </TabsContent>
       </Tabs>
 
       {/* Create invoice */}

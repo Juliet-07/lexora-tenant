@@ -5,6 +5,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { WorkflowTable } from "@/components/finance/WorkflowTable";
 import { useToast } from "@/hooks/use-toast";
 import {
   bills, expenseClaims, expensePolicies, payrollPayments, vendors, fmoney,
@@ -17,6 +18,16 @@ const badge = (s: string) => {
   if (["Rejected"].includes(s)) return "bg-destructive/10 text-destructive";
   return "bg-muted text-muted-foreground";
 };
+
+const purchasesWorkflow = [
+  { action: "Capture bill", detail: "Vendor invoice logged with category, due date and supporting document", owner: "Accounts payable", trigger: "Bill received" },
+  { action: "Approve bill", detail: "Budget holder approves; second approval above RWF 5m", owner: "Finance manager", trigger: "Bill captured" },
+  { action: "Submit expense claim", detail: "Employee claims with receipt; rechargeable claims tagged to a mandate", owner: "Employee", trigger: "Expense incurred" },
+  { action: "Recharge to WIP", detail: "Approved rechargeable claims post to mandate WIP for billing", owner: "Finance", trigger: "Claim approved" },
+  { action: "Schedule payment run", detail: "Approved bills and claims batched by due date and currency", owner: "Finance manager", trigger: "Weekly payment run" },
+  { action: "Withhold tax", detail: "Non-resident vendors flagged; WHT calculated by the Tax module", owner: "Finance", trigger: "Payment prepared" },
+  { action: "Review aged payables", detail: "Ageing bands reviewed and vendor terms renegotiated where needed", owner: "Finance manager", trigger: "Month-end" },
+];
 
 export default function Purchases() {
   const { toast } = useToast();
@@ -53,6 +64,7 @@ export default function Purchases() {
           <TabsTrigger value="claims">Expense claims</TabsTrigger>
           <TabsTrigger value="payroll">Payroll payments</TabsTrigger>
           <TabsTrigger value="payables">Aged payables & vendors</TabsTrigger>
+          <TabsTrigger value="workflow">Workflow</TabsTrigger>
         </TabsList>
 
         <TabsContent value="bills" className="mt-4">
@@ -224,6 +236,10 @@ export default function Purchases() {
             </CardContent>
           </Card>
         </TabsContent>
+        <TabsContent value="workflow" className="mt-4">
+          <WorkflowTable title="How purchasing is used" steps={purchasesWorkflow} />
+        </TabsContent>
+
       </Tabs>
     </div>
   );
