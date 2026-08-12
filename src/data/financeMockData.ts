@@ -481,3 +481,100 @@ export const fundLifecycle = [
   "Distributions & waterfall",
   "Wind-down & final accounting",
 ];
+
+/* ── 9. Budget vs actual (Reporting) ────────────────────── */
+
+export const REPORTING_PERIOD = "Year to date, 31 July 2026 (7 months)";
+
+export interface MonthlyBudgetActual {
+  month: string;
+  actual: number;
+  budget: number;
+}
+
+/** Revenue actual vs budget by month, FY2026. */
+export const monthlyRevenue: MonthlyBudgetActual[] = [
+  { month: "Jan", actual: 58200000, budget: 61000000 },
+  { month: "Feb", actual: 63400000, budget: 61000000 },
+  { month: "Mar", actual: 71900000, budget: 66000000 },
+  { month: "Apr", actual: 59800000, budget: 64000000 },
+  { month: "May", actual: 68300000, budget: 63000000 },
+  { month: "Jun", actual: 66100000, budget: 64000000 },
+  { month: "Jul", actual: 68700000, budget: 64000000 },
+  { month: "Aug", actual: 0, budget: 64000000 },
+  { month: "Sep", actual: 0, budget: 66000000 },
+  { month: "Oct", actual: 0, budget: 68000000 },
+  { month: "Nov", actual: 0, budget: 68000000 },
+  { month: "Dec", actual: 0, budget: 70000000 },
+];
+
+export const monthlyExpenses: MonthlyBudgetActual[] = [
+  { month: "Jan", actual: 41200000, budget: 40000000 },
+  { month: "Feb", actual: 43800000, budget: 41000000 },
+  { month: "Mar", actual: 46100000, budget: 44000000 },
+  { month: "Apr", actual: 42400000, budget: 43000000 },
+  { month: "May", actual: 45700000, budget: 44000000 },
+  { month: "Jun", actual: 44900000, budget: 44000000 },
+  { month: "Jul", actual: 48300000, budget: 45000000 },
+  { month: "Aug", actual: 0, budget: 45000000 },
+  { month: "Sep", actual: 0, budget: 45000000 },
+  { month: "Oct", actual: 0, budget: 46000000 },
+  { month: "Nov", actual: 0, budget: 46000000 },
+  { month: "Dec", actual: 0, budget: 47000000 },
+];
+
+export interface VarianceLine {
+  group: "Revenue" | "Expenses";
+  line: string;
+  actual: number;
+  budget: number;
+  /** true when actual above budget is good (revenue), false for cost lines */
+  higherIsBetter: boolean;
+}
+
+export const budgetVsActualLines: VarianceLine[] = [
+  { group: "Revenue", line: "Corporate & Commercial", actual: 218400000, budget: 205000000, higherIsBetter: true },
+  { group: "Revenue", line: "Regulatory & Compliance", actual: 96700000, budget: 110000000, higherIsBetter: true },
+  { group: "Revenue", line: "Transactions & Funds", actual: 141300000, budget: 128000000, higherIsBetter: true },
+  { group: "Revenue", line: "Recovered disbursements", actual: 20000000, budget: 18000000, higherIsBetter: true },
+  { group: "Expenses", line: "Fee earner salaries", actual: 186200000, budget: 180000000, higherIsBetter: false },
+  { group: "Expenses", line: "Disbursements", actual: 18400000, budget: 16000000, higherIsBetter: false },
+  { group: "Expenses", line: "Premises", actual: 50400000, budget: 50400000, higherIsBetter: false },
+  { group: "Expenses", line: "Technology", actual: 22800000, budget: 21000000, higherIsBetter: false },
+  { group: "Expenses", line: "Admin & other", actual: 34600000, budget: 32000000, higherIsBetter: false },
+];
+
+export const forecastAccuracyPct = 96.4;
+export const forecastAccuracyTargetPct = 5;
+
+/* ── 10. Write-downs & write-offs (single lifecycle) ────── */
+
+export interface WriteOff {
+  id: string;
+  stage: "WIP write-down" | "Credit note" | "Bad debt write-off";
+  reference: string;
+  client: string;
+  mandate: string;
+  amount: number;
+  reason: string;
+  date: string;
+  approvedBy: string;
+  status: "Pending approval" | "Approved" | "Posted";
+}
+
+export const writeOffs: WriteOff[] = [
+  { id: "WO-001", stage: "WIP write-down", reference: "WIP-005", client: "Sasa Foods Group", mandate: "Group Restructure", amount: 1800000, reason: "Time overrun not recoverable from client", date: "2026-05-04", approvedBy: "Partner — J. Karake", status: "Approved" },
+  { id: "WO-002", stage: "WIP write-down", reference: "WIP-003", client: "Umoja Capital", mandate: "BNR Licence Renewal", amount: 855000, reason: "Scope creep absorbed as relationship investment", date: "2026-06-02", approvedBy: "Partner — A. Ndayisaba", status: "Pending approval" },
+  { id: "WO-003", stage: "Credit note", reference: "CN-2026-003", client: "Umoja Capital", mandate: "BNR Licence Renewal", amount: 1200000, reason: "Duplicate line item billed", date: "2026-06-30", approvedBy: "Partner — J. Karake", status: "Posted" },
+  { id: "WO-004", stage: "Credit note", reference: "CN-2026-004", client: "Sasa Foods Group", mandate: "Group Restructure", amount: 2500000, reason: "Goodwill write-down after fee review", date: "2026-07-18", approvedBy: "Partner — J. Karake", status: "Approved" },
+  { id: "WO-005", stage: "Bad debt write-off", reference: "INV-2025-088", client: "Kivu Agro Ltd", mandate: "Supply contracts", amount: 4300000, reason: "Client in liquidation — 210 days overdue", date: "2026-04-15", approvedBy: "Partner — J. Karake", status: "Posted" },
+  { id: "WO-006", stage: "Bad debt write-off", reference: "INV-2026-101", client: "Sasa Foods Group", mandate: "Group Restructure", amount: 5133334, reason: "Final instalment doubtful — provision 100%", date: "2026-07-28", approvedBy: "Partner — A. Ndayisaba", status: "Pending approval" },
+];
+
+/* ── 11. Find & recode (Accounting) ─────────────────────── */
+
+export const recodeCandidates = [
+  { id: "TX-9002", date: "2026-07-28", description: "MOMO PAYMENT 0788***221", amount: 450000, currentAccount: "9999 · Suspense", suggested: "4000 · Fee income — corporate" },
+  { id: "JNL-2026-079", date: "2026-07-12", description: "Courier — client filing", amount: 68000, currentAccount: "6900 · Bad debt expense", suggested: "6300 · Disbursements" },
+  { id: "BILL-2026-070", date: "2026-07-06", description: "Zoom subscription", amount: 145000, currentAccount: "6100 · Rent", suggested: "6250 · Communications" },
+];
