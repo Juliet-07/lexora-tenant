@@ -180,7 +180,11 @@ export default function Sales() {
         </TabsContent>
 
         {/* Credit notes */}
-        <TabsContent value="credit" className="mt-4">
+        <TabsContent value="credit" className="mt-4 space-y-2">
+          <p className="text-sm text-muted-foreground">
+            Credit notes are checkpoint two of the write-down lifecycle. The full audit trail across WIP
+            write-downs, credit notes and bad debt sits in Reporting → Write-offs.
+          </p>
           <Card>
             <CardContent className="p-4 overflow-x-auto">
               <Table>

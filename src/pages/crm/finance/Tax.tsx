@@ -177,7 +177,12 @@ export default function Tax() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="wht" className="mt-4">
+        <TabsContent value="wht" className="mt-4 space-y-2">
+          <p className="text-sm text-muted-foreground">
+            Single source of truth for withholding tax: 15% on non-resident payments, gross / WHT / net,
+            with certificate generation. Invoicing and fund distributions call this register — they do not
+            recalculate WHT themselves.
+          </p>
           <Card>
             <CardContent className="p-4 overflow-x-auto">
               <Table>
