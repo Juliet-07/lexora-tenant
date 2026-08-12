@@ -4,7 +4,7 @@
  * table with inline variance bars. Reused by Budget vs actual, P&L,
  * Service line P&L and Client profitability.
  */
-import { ReactNode } from "react";
+import { Fragment, ReactNode } from "react";
 import {
   Bar, BarChart, CartesianGrid, Cell, ComposedChart, Legend, ResponsiveContainer,
   Tooltip, XAxis, YAxis,
@@ -181,7 +181,7 @@ export function VarianceTable({
             lastGroup = r.group ?? lastGroup;
             const tone = r.favourable ? "text-success" : "text-destructive";
             return (
-              <>
+              <Fragment key={r.label}>
                 {header && (
                   <TableRow key={`g-${header}`} className="bg-muted/50 hover:bg-muted/50">
                     <TableCell colSpan={extraHeader ? 7 : 6} className="py-2 text-xs font-semibold uppercase tracking-wide">
@@ -204,7 +204,7 @@ export function VarianceTable({
                   </TableCell>
                   {extraHeader && <TableCell className="text-right text-sm">{r.extra}</TableCell>}
                 </TableRow>
-              </>
+              </Fragment>
             );
           })}
         </TableBody>
