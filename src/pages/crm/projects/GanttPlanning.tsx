@@ -22,11 +22,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Diamond, TriangleAlert } from "lucide-react";
 import { fetchMandates, type Milestone } from "@/lib/crm/mandates-api";
 import { fetchTasks, DEPENDENCY_TYPES, type Task } from "@/lib/crm/tasks-api";
-import {
-  fetchTimeEntries,
-  ASSUMED_AVAILABLE_HRS,
-  UTILISATION_TARGET_PCT,
-} from "@/lib/crm/time-tracking-api";
+import { useResourceAllocation } from "@/hooks/use-resource-allocation";
 
 const day = 86400000;
 
@@ -85,41 +81,9 @@ export default function GanttPlanning() {
   const nodes = useMemo(() => buildHierarchy(tasks), [tasks]);
 
   // Resource Allocation is deliberately firm-wide, not scoped to the
-  // selected mandate — whether someone's overloaded depends on
-  // everything on their plate, not just the one mandate currently
-  // open in Gantt. Same reasoning the original "workload across all
-  // mandates" framing had.
-  const { data: allTasks = [] } = useQuery({
-    queryKey: ["tasks", "all"],
-    queryFn: () => fetchTasks(),
-  });
-  const { data: allEntries = [] } = useQuery({
-    queryKey: ["timeEntries", "all"],
-    queryFn: () => fetchTimeEntries(),
-  });
-
-  const allocation = useMemo(() => {
-    const members = new Set<string>([
-      ...allTasks.map((t) => t.assignee),
-      ...allEntries.map((e) => e.member),
-    ]);
-    return Array.from(members)
-      .map((member) => {
-        // Already real, already approved — this is actual worked time.
-        const billable = allEntries
-          .filter(
-            (e) => e.member === member && e.status === "Approved" && e.billable,
-          )
-          .reduce((s, e) => s + e.hours, 0);
-        // What's left on their open tasks — estimate minus what's
-        // actually been approved against it so far, never negative.
-        const remaining = allTasks
-          .filter((t) => t.assignee === member && t.status !== "Done")
-          .reduce((s, t) => s + Math.max(0, t.estimateHrs - t.loggedHrs), 0);
-        return { member, billable, remaining, allocated: billable + remaining };
-      })
-      .sort((a, b) => b.allocated - a.allocated);
-  }, [allTasks, allEntries]);
+  // selected mandate — same shared computation PMO's Resources tab
+  // uses now, not a second copy that could drift.
+  const { allocation, ASSUMED_AVAILABLE_HRS } = useResourceAllocation();
   const tasksById = useMemo(
     () => new Map(tasks.map((t) => [t._id, t])),
     [tasks],

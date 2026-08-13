@@ -21,12 +21,16 @@ import {
 } from "lucide-react";
 import { fetchDeals } from "@/lib/grc/deals-api";
 import {
-  mandates,
+  fetchMandates,
+  ragClass as realRagClass,
+  money as realMoney,
+} from "@/lib/crm/mandates-api";
+import { fetchTickets } from "@/lib/crm/service-desk-api";
+import {
   pmInvoices,
   invoiceTotal,
   money,
   ragClass,
-  tickets,
 } from "@/data/crmPmMockData";
 import {
   useClientCommercials,
@@ -144,18 +148,31 @@ export function ClientDealsPanel({ clientId, clientName }: Props) {
 // ─────────────────────────── Projects / mandates ──
 
 export function ClientProjectsPanel({ clientId, clientName }: Props) {
-  const rows = pick(
-    mandates,
-    (m) => norm(m.clientName) === norm(clientName),
-    clientId,
+  const { data: allMandates = [], isLoading: mandatesLoading } = useQuery({
+    queryKey: ["mandates"],
+    queryFn: fetchMandates,
+  });
+  const { data: allTickets = [], isLoading: ticketsLoading } = useQuery({
+    queryKey: ["tickets"],
+    queryFn: () => fetchTickets(),
+  });
+
+  const rows = useMemo(
+    () => allMandates.filter((m) => m.clientUserId === clientId),
+    [allMandates, clientId],
   );
-  const clientTickets = pick(
-    tickets,
-    (t: any) => norm(t.clientName ?? "") === norm(clientName),
-    clientId,
+  const clientTickets = useMemo(
+    () =>
+      allTickets.filter(
+        (t) => t.clientUserId === clientId && t.status !== "Closed",
+      ),
+    [allTickets, clientId],
   );
 
-  if (!rows.length) return <Empty text="No projects for this client." />;
+  if (mandatesLoading || ticketsLoading)
+    return <Empty text="Loading projects…" />;
+  if (!rows.length)
+    return <Empty text={`No projects for ${clientName} yet.`} />;
 
   return (
     <div className="space-y-4">
@@ -163,7 +180,7 @@ export function ClientProjectsPanel({ clientId, clientName }: Props) {
         <Kpi label="Mandates" value={String(rows.length)} icon={FolderKanban} />
         <Kpi
           label="Budget"
-          value={money(rows.reduce((s, m) => s + m.budget, 0))}
+          value={realMoney(rows.reduce((s, m) => s + m.budget, 0))}
           icon={Receipt}
         />
         <Kpi
@@ -188,15 +205,15 @@ export function ClientProjectsPanel({ clientId, clientName }: Props) {
             </TableHeader>
             <TableBody>
               {rows.map((m) => (
-                <TableRow key={m.id}>
+                <TableRow key={m._id}>
                   <TableCell className="font-medium">{m.name}</TableCell>
                   <TableCell>{m.type}</TableCell>
                   <TableCell>
                     <Badge variant="outline">{m.stage}</Badge>
                   </TableCell>
-                  <TableCell>{m.manager}</TableCell>
+                  <TableCell>{m.manager || "—"}</TableCell>
                   <TableCell>
-                    <Badge className={ragClass[m.rag]} variant="secondary">
+                    <Badge className={realRagClass[m.rag]} variant="secondary">
                       {m.rag}
                     </Badge>
                   </TableCell>
@@ -207,7 +224,7 @@ export function ClientProjectsPanel({ clientId, clientName }: Props) {
                     </div>
                   </TableCell>
                   <TableCell className="text-right">
-                    {money(m.budget, m.currency)}
+                    {realMoney(m.budget, m.currency)}
                   </TableCell>
                 </TableRow>
               ))}

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -21,7 +22,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import {
   Dialog,
   DialogContent,
@@ -32,41 +38,152 @@ import {
 import { Plus, ArrowRight, Gavel, Handshake } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { CommentThread } from "@/components/crm/CommentThread";
+import { fetchEmployees } from "@/lib/hr/hr-api";
 import {
-  adrCases as seed,
-  AdrCase,
-  AdrStage,
+  fetchAdrCases,
+  createAdrCase,
+  setAdrStage,
+  addAdrSession,
+  recordAdrSettlement,
+  recordAdrOutcome,
   ADR_STAGES,
-  money,
-  teamDirectory,
-} from "@/data/crmPmMockData";
+  ADR_TYPES,
+  type AdrCase,
+  type AdrStage,
+  type SessionMode,
+} from "@/lib/crm/adr-api";
+
+const money = (n: number, c = "USD") =>
+  n.toLocaleString(undefined, {
+    style: "currency",
+    currency: c,
+    maximumFractionDigits: 0,
+  });
 
 export default function Adr() {
-  const [list, setList] = useState<AdrCase[]>(seed);
-  const [selected, setSelected] = useState<AdrCase | null>(null);
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  const { data: list = [], isLoading } = useQuery({
+    queryKey: ["adrCases"],
+    queryFn: fetchAdrCases,
+  });
+  const { data: employeesPage } = useQuery({
+    queryKey: ["hr-employees-all"],
+    queryFn: () => fetchEmployees({ limit: 500 }),
+    retry: false,
+  });
+  const employees = employeesPage?.items ?? [];
+
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selected = list.find((c) => c._id === selectedId) ?? null;
   const [openNew, setOpenNew] = useState(false);
   const [session, setSession] = useState({
     date: "",
-    mode: "Physical" as "Physical" | "Virtual",
+    mode: "Physical" as SessionMode,
     venue: "",
     outcome: "",
   });
   const [draft, setDraft] = useState({
     title: "",
-    type: "Mediation" as AdrCase["type"],
+    type: ADR_TYPES[0],
     partyA: "",
     partyB: "",
-    neutral: "Sarah Chen",
+    neutralUserId: "",
+    neutral: "",
     claimValue: 0,
   });
-  const { toast } = useToast();
+  const [settlementOpen, setSettlementOpen] = useState(false);
+  const [settlementDraft, setSettlementDraft] = useState({
+    amount: 0,
+    terms: "",
+  });
+  const [outcomeOpen, setOutcomeOpen] = useState(false);
+  const [outcomeDraft, setOutcomeDraft] = useState("");
 
-  const patch = (id: string, p: Partial<AdrCase>) => {
-    setList((l) => l.map((c) => (c.id === id ? { ...c, ...p } : c)));
-    setSelected((s) => (s && s.id === id ? { ...s, ...p } : s));
-  };
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: ["adrCases"] });
+  const onErr = (title: string) => (err: any) =>
+    toast({
+      title,
+      description: err?.response?.data?.message,
+      variant: "destructive",
+    });
 
   const settled = list.filter((c) => c.settlement).length;
+
+  const createMut = useMutation({
+    mutationFn: () =>
+      createAdrCase({
+        title: draft.title,
+        type: draft.type,
+        parties: [draft.partyA, draft.partyB].filter(Boolean),
+        neutralUserId: draft.neutralUserId || undefined,
+        neutral: draft.neutral,
+        claimValue: Number(draft.claimValue) || 0,
+      }),
+    onSuccess: (c) => {
+      invalidate();
+      setOpenNew(false);
+      toast({ title: "Case filed", description: `${c.ref} · Stage: Intake` });
+    },
+    onError: onErr("Failed to file case"),
+  });
+
+  const stageMut = useMutation({
+    mutationFn: ({ id, stage }: { id: string; stage: AdrStage }) =>
+      setAdrStage(id, stage),
+    onSuccess: invalidate,
+    onError: onErr("Failed to update stage"),
+  });
+
+  const sessionMut = useMutation({
+    mutationFn: () => addAdrSession(selected!._id, session),
+    onSuccess: () => {
+      invalidate();
+      setSession({ date: "", mode: "Physical", venue: "", outcome: "" });
+      toast({
+        title: "Session scheduled",
+        description: "Added to the case file.",
+      });
+    },
+    onError: onErr("Failed to add session"),
+  });
+
+  const settlementMut = useMutation({
+    mutationFn: () =>
+      recordAdrSettlement(
+        selected!._id,
+        Number(settlementDraft.amount),
+        settlementDraft.terms,
+      ),
+    onSuccess: () => {
+      invalidate();
+      setSettlementOpen(false);
+      setSettlementDraft({ amount: 0, terms: "" });
+      toast({ title: "Settlement recorded" });
+    },
+    onError: onErr("Failed to record settlement"),
+  });
+
+  const outcomeMut = useMutation({
+    mutationFn: () => recordAdrOutcome(selected!._id, outcomeDraft),
+    onSuccess: () => {
+      invalidate();
+      setOutcomeOpen(false);
+      setOutcomeDraft("");
+      toast({ title: "Outcome recorded" });
+    },
+    onError: onErr("Failed to record outcome"),
+  });
+
+  if (isLoading) {
+    return (
+      <div className="py-16 text-center text-sm text-muted-foreground">
+        Loading cases…
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -84,12 +201,20 @@ export default function Adr() {
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {[
-          { l: "Active cases", v: list.filter((c) => c.stage !== "Closed").length },
-          { l: "Total claim value", v: money(list.reduce((s, c) => s + c.claimValue, 0)) },
+          {
+            l: "Active cases",
+            v: list.filter((c) => c.stage !== "Closed").length,
+          },
+          {
+            l: "Total claim value",
+            v: money(list.reduce((s, c) => s + c.claimValue, 0)),
+          },
           { l: "Settled", v: settled },
           {
             l: "Settlement rate",
-            v: `${Math.round((settled / list.length) * 100)}%`,
+            v: list.length
+              ? `${Math.round((settled / list.length) * 100)}%`
+              : "—",
           },
         ].map((k) => (
           <Card key={k.l}>
@@ -125,14 +250,14 @@ export default function Adr() {
                 <TableBody>
                   {list.map((c) => (
                     <TableRow
-                      key={c.id}
+                      key={c._id}
                       className="cursor-pointer"
-                      onClick={() => setSelected(c)}
+                      onClick={() => setSelectedId(c._id)}
                     >
                       <TableCell>
                         <p className="text-sm font-medium">{c.title}</p>
                         <p className="font-mono text-xs text-muted-foreground">
-                          {c.id} · filed {c.filedOn}
+                          {c.ref} · filed {c.filedOn?.slice(0, 10)}
                         </p>
                       </TableCell>
                       <TableCell className="text-sm">{c.type}</TableCell>
@@ -144,10 +269,20 @@ export default function Adr() {
                         <Badge variant="outline">{c.stage}</Badge>
                       </TableCell>
                       <TableCell className="text-right text-sm">
-                        {money(c.claimValue)}
+                        {money(c.claimValue, c.currency)}
                       </TableCell>
                     </TableRow>
                   ))}
+                  {!list.length && (
+                    <TableRow>
+                      <TableCell
+                        colSpan={6}
+                        className="py-8 text-center text-sm text-muted-foreground"
+                      >
+                        No cases filed yet.
+                      </TableCell>
+                    </TableRow>
+                  )}
                 </TableBody>
               </Table>
             </CardContent>
@@ -173,8 +308,12 @@ export default function Adr() {
                     .sort((a, b) => a.date.localeCompare(b.date))
                     .map((s, i) => (
                       <TableRow key={i}>
-                        <TableCell className="text-sm">{s.date}</TableCell>
-                        <TableCell className="text-sm">{s.case.title}</TableCell>
+                        <TableCell className="text-sm">
+                          {s.date?.slice(0, 10)}
+                        </TableCell>
+                        <TableCell className="text-sm">
+                          {s.case.title}
+                        </TableCell>
                         <TableCell>
                           <Badge variant="outline">{s.mode}</Badge>
                         </TableCell>
@@ -196,12 +335,12 @@ export default function Adr() {
               </CardHeader>
               <CardContent className="space-y-2 text-sm">
                 {list.map((c) => (
-                  <div key={c.id} className="rounded border p-3">
+                  <div key={c._id} className="rounded border p-3">
                     <p className="font-medium">{c.title}</p>
                     <p className="text-xs text-muted-foreground">
                       {c.settlement
-                        ? `Settled at ${money(c.settlement.amount)} on ${c.settlement.date} — ${c.settlement.terms}`
-                        : c.outcome ?? "In progress"}
+                        ? `Settled at ${money(c.settlement.amount, c.currency)} on ${c.settlement.date?.slice(0, 10)} — ${c.settlement.terms}`
+                        : (c.outcome ?? "In progress")}
                     </p>
                   </div>
                 ))}
@@ -218,7 +357,10 @@ export default function Adr() {
                     return a;
                   }, {}),
                 ).map(([t, n]) => (
-                  <div key={t} className="flex justify-between rounded border p-2">
+                  <div
+                    key={t}
+                    className="flex justify-between rounded border p-2"
+                  >
                     <span>{t}</span>
                     <span className="font-medium">{n}</span>
                   </div>
@@ -229,6 +371,7 @@ export default function Adr() {
         </TabsContent>
       </Tabs>
 
+      {/* New case */}
       <Dialog open={openNew} onOpenChange={setOpenNew}>
         <DialogContent>
           <DialogHeader>
@@ -247,14 +390,18 @@ export default function Adr() {
                 <Label>Party A</Label>
                 <Input
                   value={draft.partyA}
-                  onChange={(e) => setDraft({ ...draft, partyA: e.target.value })}
+                  onChange={(e) =>
+                    setDraft({ ...draft, partyA: e.target.value })
+                  }
                 />
               </div>
               <div>
                 <Label>Party B</Label>
                 <Input
                   value={draft.partyB}
-                  onChange={(e) => setDraft({ ...draft, partyB: e.target.value })}
+                  onChange={(e) =>
+                    setDraft({ ...draft, partyB: e.target.value })
+                  }
                 />
               </div>
             </div>
@@ -263,43 +410,59 @@ export default function Adr() {
                 <Label>Type</Label>
                 <Select
                   value={draft.type}
-                  onValueChange={(v) =>
-                    setDraft({ ...draft, type: v as AdrCase["type"] })
-                  }
+                  onValueChange={(v) => setDraft({ ...draft, type: v as any })}
                 >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {["Mediation", "Arbitration", "Conciliation", "Expert determination"].map(
-                      (t) => (
-                        <SelectItem key={t} value={t}>
-                          {t}
-                        </SelectItem>
-                      ),
-                    )}
+                    {ADR_TYPES.map((t) => (
+                      <SelectItem key={t} value={t}>
+                        {t}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
               <div>
                 <Label>Neutral</Label>
-                <Select
-                  value={draft.neutral}
-                  onValueChange={(v) => setDraft({ ...draft, neutral: v })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {teamDirectory
-                      .filter((t) => t.mandates > 0)
-                      .map((t) => (
-                        <SelectItem key={t.name} value={t.name}>
-                          {t.name}
+                {employees.length > 0 ? (
+                  <Select
+                    value={draft.neutralUserId}
+                    onValueChange={(v) => {
+                      const e = employees.find((x: any) => x._id === v);
+                      setDraft({
+                        ...draft,
+                        neutralUserId: v,
+                        neutral: e ? `${e.firstName} ${e.lastName}` : "",
+                      });
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select neutral..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {employees.map((e: any) => (
+                        <SelectItem key={e._id} value={e._id}>
+                          {e.firstName} {e.lastName}
+                          {e.jobTitle ? ` · ${e.jobTitle}` : ""}
                         </SelectItem>
                       ))}
-                  </SelectContent>
-                </Select>
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input
+                    placeholder="Neutral's name"
+                    value={draft.neutral}
+                    onChange={(e) =>
+                      setDraft({
+                        ...draft,
+                        neutral: e.target.value,
+                        neutralUserId: "",
+                      })
+                    }
+                  />
+                )}
               </div>
             </div>
             <div>
@@ -315,40 +478,24 @@ export default function Adr() {
           </div>
           <DialogFooter>
             <Button
-              onClick={() => {
-                if (!draft.title) return;
-                setList([
-                  {
-                    id: `ADR-${String(list.length + 1).padStart(3, "0")}`,
-                    title: draft.title,
-                    type: draft.type,
-                    parties: [draft.partyA, draft.partyB].filter(Boolean),
-                    neutral: draft.neutral,
-                    stage: "Intake",
-                    claimValue: Number(draft.claimValue) || 0,
-                    filedOn: new Date().toISOString().slice(0, 10),
-                    sessions: [],
-                  },
-                  ...list,
-                ]);
-                setOpenNew(false);
-                toast({ title: "Case filed", description: "Stage: Intake" });
-              }}
+              disabled={createMut.isPending || !draft.title || !draft.neutral}
+              onClick={() => createMut.mutate()}
             >
-              File case
+              {createMut.isPending ? "Filing…" : "File case"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <Sheet open={!!selected} onOpenChange={(o) => !o && setSelected(null)}>
+      {/* Case detail */}
+      <Sheet open={!!selected} onOpenChange={(o) => !o && setSelectedId(null)}>
         <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">
           {selected && (
             <>
               <SheetHeader>
                 <SheetTitle>{selected.title}</SheetTitle>
                 <p className="text-sm text-muted-foreground">
-                  {selected.id} · {selected.type} · neutral {selected.neutral}
+                  {selected.ref} · {selected.type} · neutral {selected.neutral}
                 </p>
               </SheetHeader>
 
@@ -377,7 +524,10 @@ export default function Adr() {
                   <Select
                     value={selected.stage}
                     onValueChange={(v) =>
-                      patch(selected.id, { stage: v as AdrStage })
+                      stageMut.mutate({
+                        id: selected._id,
+                        stage: v as AdrStage,
+                      })
                     }
                   >
                     <SelectTrigger className="w-52">
@@ -394,15 +544,8 @@ export default function Adr() {
                   <Button
                     variant="outline"
                     onClick={() => {
-                      patch(selected.id, {
-                        stage: "Settlement",
-                        settlement: {
-                          amount: Math.round(selected.claimValue * 0.55),
-                          date: new Date().toISOString().slice(0, 10),
-                          terms: "Payment within 60 days",
-                        },
-                      });
-                      toast({ title: "Settlement recorded" });
+                      setSettlementDraft({ amount: 0, terms: "" });
+                      setSettlementOpen(true);
                     }}
                   >
                     <Handshake className="mr-2 h-4 w-4" /> Record settlement
@@ -410,16 +553,27 @@ export default function Adr() {
                   <Button
                     variant="outline"
                     onClick={() => {
-                      patch(selected.id, {
-                        stage: "Award / Outcome",
-                        outcome: "Award issued — see case file",
-                      });
-                      toast({ title: "Outcome recorded" });
+                      setOutcomeDraft("");
+                      setOutcomeOpen(true);
                     }}
                   >
                     <Gavel className="mr-2 h-4 w-4" /> Record award
                   </Button>
                 </div>
+
+                {selected.settlement && (
+                  <p className="rounded border border-success/30 bg-success/5 p-3 text-sm">
+                    Settled at{" "}
+                    {money(selected.settlement.amount, selected.currency)} on{" "}
+                    {selected.settlement.date?.slice(0, 10)} —{" "}
+                    {selected.settlement.terms}
+                  </p>
+                )}
+                {selected.outcome && (
+                  <p className="rounded border p-3 text-sm">
+                    {selected.outcome}
+                  </p>
+                )}
 
                 <Card>
                   <CardHeader className="pb-2">
@@ -429,7 +583,9 @@ export default function Adr() {
                     {selected.sessions.map((s, i) => (
                       <div key={i} className="rounded border p-3 text-sm">
                         <div className="flex justify-between">
-                          <span className="font-medium">{s.date}</span>
+                          <span className="font-medium">
+                            {s.date?.slice(0, 10)}
+                          </span>
                           <Badge variant="outline">{s.mode}</Badge>
                         </div>
                         <p className="text-xs text-muted-foreground">
@@ -448,7 +604,7 @@ export default function Adr() {
                       <Select
                         value={session.mode}
                         onValueChange={(v) =>
-                          setSession({ ...session, mode: v as "Physical" | "Virtual" })
+                          setSession({ ...session, mode: v as SessionMode })
                         }
                       >
                         <SelectTrigger>
@@ -476,30 +632,91 @@ export default function Adr() {
                     </div>
                     <Button
                       size="sm"
-                      disabled={!session.date}
-                      onClick={() => {
-                        patch(selected.id, {
-                          sessions: [...selected.sessions, session],
-                          stage: "Sessions",
-                        });
-                        setSession({ date: "", mode: "Physical", venue: "", outcome: "" });
-                        toast({
-                          title: "Session scheduled",
-                          description: "Added to the shared calendar (ADR layer).",
-                        });
-                      }}
+                      disabled={!session.date || sessionMut.isPending}
+                      onClick={() => sessionMut.mutate()}
                     >
                       Add session
                     </Button>
                   </CardContent>
                 </Card>
 
-                <CommentThread subject={selected.id} />
+                <p className="text-xs text-muted-foreground">
+                  Comment threads aren't wired to a real backend yet — coming
+                  with a later pass.
+                </p>
+                <CommentThread subject={selected._id} />
               </div>
             </>
           )}
         </SheetContent>
       </Sheet>
+
+      {/* Settlement dialog */}
+      <Dialog open={settlementOpen} onOpenChange={setSettlementOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Record settlement</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-3">
+            <div>
+              <Label>Amount ({selected?.currency ?? "USD"})</Label>
+              <Input
+                type="number"
+                value={settlementDraft.amount}
+                onChange={(e) =>
+                  setSettlementDraft({
+                    ...settlementDraft,
+                    amount: Number(e.target.value),
+                  })
+                }
+              />
+            </div>
+            <div>
+              <Label>Terms</Label>
+              <Textarea
+                value={settlementDraft.terms}
+                onChange={(e) =>
+                  setSettlementDraft({
+                    ...settlementDraft,
+                    terms: e.target.value,
+                  })
+                }
+                placeholder="e.g. Payment within 60 days"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              disabled={!settlementDraft.amount || settlementMut.isPending}
+              onClick={() => settlementMut.mutate()}
+            >
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Outcome dialog */}
+      <Dialog open={outcomeOpen} onOpenChange={setOutcomeOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Record award / outcome</DialogTitle>
+          </DialogHeader>
+          <Textarea
+            value={outcomeDraft}
+            onChange={(e) => setOutcomeDraft(e.target.value)}
+            placeholder="e.g. Award issued in favour of claimant — USD 780,000"
+          />
+          <DialogFooter>
+            <Button
+              disabled={!outcomeDraft.trim() || outcomeMut.isPending}
+              onClick={() => outcomeMut.mutate()}
+            >
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
