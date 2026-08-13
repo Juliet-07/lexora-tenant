@@ -1,10 +1,11 @@
 import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Progress } from "@/components/ui/progress";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -21,7 +22,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import {
   Dialog,
   DialogContent,
@@ -35,21 +41,32 @@ import {
   CheckCircle2,
   Eye,
   Banknote,
-  Bell,
   ArrowRight,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { fetchMandates, money } from "@/lib/crm/mandates-api";
 import {
-  pmInvoices as seed,
-  PmInvoice,
-  InvoiceStage,
-  invoiceTotal,
-  wipEntries,
-  dunningLog,
-  paymentsReceived,
-  mandates,
-  money,
-} from "@/data/crmPmMockData";
+  fetchInvoices,
+  fetchWipRegister,
+  wipValue,
+  createInvoice,
+  submitInvoice,
+  approveInvoice,
+  sendInvoice,
+  recordPayment,
+  writeOffInvoice,
+  fetchPayments,
+  ageBucket,
+  daysOverdue,
+  createCreditNote,
+  INVOICE_STAGES,
+  BILLING_MODELS,
+  PAYMENT_METHODS,
+  type Invoice,
+  type InvoiceStage,
+  type BillingModel,
+  type PaymentMethod,
+} from "@/lib/crm/finance-api";
 
 const STEPS = [
   "WIP accumulation",
@@ -71,87 +88,177 @@ const stageClass: Record<InvoiceStage, string> = {
   "Written Off": "bg-muted text-muted-foreground",
 };
 
-const ageBucket = (dueOn: string) => {
-  const days = Math.floor(
-    (new Date("2026-07-30").getTime() - new Date(dueOn).getTime()) / 86400000,
-  );
-  if (days <= 0) return "Current";
-  if (days <= 30) return "1–30 days";
-  if (days <= 60) return "31–60 days";
-  if (days <= 90) return "61–90 days";
-  return "90+ days";
-};
-
 export default function Invoicing() {
-  const [list, setList] = useState<PmInvoice[]>(seed);
-  const [selected, setSelected] = useState<PmInvoice | null>(null);
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const { data: list = [], isLoading } = useQuery({
+    queryKey: ["invoices"],
+    queryFn: () => fetchInvoices(),
+  });
+  const { data: wipList = [] } = useQuery({
+    queryKey: ["wipRegister"],
+    queryFn: () => fetchWipRegister(),
+  });
+  const { data: mandates = [] } = useQuery({
+    queryKey: ["mandates"],
+    queryFn: fetchMandates,
+  });
+  const { data: payments = [] } = useQuery({
+    queryKey: ["payments"],
+    queryFn: () => fetchPayments(),
+  });
+
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selected = list.find((i) => i._id === selectedId) ?? null;
   const [openNew, setOpenNew] = useState(false);
-  const [payments, setPayments] = useState(paymentsReceived);
   const [draft, setDraft] = useState({
-    mandateId: mandates[0].id,
-    model: "Time & materials" as PmInvoice["model"],
-    currency: "USD" as PmInvoice["currency"],
+    mandateId: "",
+    model: "Time & materials" as BillingModel,
+    currency: "USD",
     subtotal: 0,
     vatRate: 18,
-    whtRate: 5,
+    whtRate: 0,
     discount: 0,
     dueOn: "",
     proforma: false,
   });
-  const { toast } = useToast();
+  const [payMethod, setPayMethod] = useState<PaymentMethod>("Bank feed");
+  const [payAmount, setPayAmount] = useState<number | "">("");
+  const [woReason, setWoReason] = useState("");
+  const [woApprover, setWoApprover] = useState("");
+  const [woOpen, setWoOpen] = useState(false);
+  const [cnOpen, setCnOpen] = useState(false);
+  const [cnAmount, setCnAmount] = useState(0);
+  const [cnReason, setCnReason] = useState("");
+  const [cnApprover, setCnApprover] = useState("");
 
-  const patch = (id: string, p: Partial<PmInvoice>) => {
-    setList((l) => l.map((i) => (i.id === id ? { ...i, ...p } : i)));
-    setSelected((s) => (s && s.id === id ? { ...s, ...p } : s));
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ["invoices"] });
+    queryClient.invalidateQueries({ queryKey: ["payments"] });
   };
+  const invalidateSel = (inv: Invoice) => {
+    invalidate();
+    setSelectedId(inv._id);
+  };
+  const onErr = (title: string) => (err: any) =>
+    toast({
+      title,
+      description: err?.response?.data?.message,
+      variant: "destructive",
+    });
 
-  const totalWip = wipEntries.reduce((s, w) => s + w.value, 0);
+  const totalWip = wipList.reduce((s, w) => s + wipValue(w), 0);
   const receivables = list
     .filter((i) => !["Paid", "Draft", "Written Off"].includes(i.stage))
-    .reduce((s, i) => s + invoiceTotal(i).payable - i.paidAmount, 0);
+    .reduce((s, i) => s + (i.payable - i.paidAmount), 0);
   const collected = list.reduce((s, i) => s + i.paidAmount, 0);
+  const overdueTotal = list
+    .filter(
+      (i) =>
+        !["Paid", "Draft", "Written Off"].includes(i.stage) &&
+        daysOverdue(i.dueOn) > 0,
+    )
+    .reduce((s, i) => s + (i.payable - i.paidAmount), 0);
 
-  const aged = ["Current", "1–30 days", "31–60 days", "61–90 days", "90+ days"].map(
-    (b) => ({
-      bucket: b,
-      value: list
-        .filter(
-          (i) =>
-            !["Paid", "Draft", "Written Off"].includes(i.stage) &&
-            ageBucket(i.dueOn) === b,
-        )
-        .reduce((s, i) => s + invoiceTotal(i).payable - i.paidAmount, 0),
-    }),
-  );
+  const createMut = useMutation({
+    mutationFn: () => {
+      const m = mandates.find((x) => x._id === draft.mandateId)!;
+      return createInvoice({
+        mandateId: draft.mandateId,
+        model: draft.model,
+        currency: draft.currency,
+        vatRate: draft.vatRate,
+        whtRate: draft.whtRate,
+        discount: draft.discount,
+        dueOn: draft.dueOn,
+        proforma: draft.proforma,
+        lines: [
+          {
+            description: `${draft.model} fees — ${m.name}`,
+            qty: 1,
+            unit: Number(draft.subtotal),
+          },
+        ],
+      });
+    },
+    onSuccess: (inv) => {
+      invalidate();
+      setOpenNew(false);
+      toast({ title: "Draft invoice created", description: inv.ref });
+    },
+    onError: onErr("Failed to create invoice"),
+  });
 
-  const createFromWip = (wipId: string) => {
-    const w = wipEntries.find((x) => x.id === wipId)!;
-    const inv: PmInvoice = {
-      id: `INV-2026-${String(50 + list.length)}`,
-      clientName: w.clientName,
-      mandateId: w.mandateId,
-      mandateName: w.mandateName,
-      currency: "USD",
-      subtotal: w.value,
-      vatRate: 18,
-      whtRate: 5,
-      discount: 0,
-      stage: "Draft",
-      issuedOn: new Date().toISOString().slice(0, 10),
-      dueOn: "2026-08-30",
-      paidAmount: 0,
-      openedByClient: false,
-      model: "Time & materials",
-      lines: [
-        { description: `${w.hours} hrs from approved timesheets`, qty: 1, unit: w.value },
-      ],
-    };
-    setList([inv, ...list]);
-    toast({
-      title: "Invoice drafted from WIP",
-      description: `${inv.id} · ${money(w.value)} · VAT and WHT calculated.`,
-    });
-  };
+  const submitMut = useMutation({
+    mutationFn: (id: string) => submitInvoice(id),
+    onSuccess: invalidateSel,
+    onError: onErr("Failed"),
+  });
+  const approveMut = useMutation({
+    mutationFn: (id: string) => approveInvoice(id),
+    onSuccess: invalidateSel,
+    onError: onErr("Failed"),
+  });
+  const sendMut = useMutation({
+    mutationFn: (id: string) => sendInvoice(id),
+    onSuccess: (inv) => {
+      invalidateSel(inv);
+      toast({
+        title: "Invoice delivered",
+        description: "Sent via client portal and email.",
+      });
+    },
+    onError: onErr("Failed"),
+  });
+  const payMut = useMutation({
+    mutationFn: () =>
+      recordPayment(
+        selected!._id,
+        payMethod,
+        payAmount === "" ? undefined : Number(payAmount),
+      ),
+    onSuccess: () => {
+      invalidate();
+      setPayAmount("");
+      toast({
+        title: "Payment recorded",
+        description: "Allocated and posted.",
+      });
+    },
+    onError: onErr("Failed to record payment"),
+  });
+  const writeOffMut = useMutation({
+    mutationFn: () => writeOffInvoice(selected!._id, woReason, woApprover),
+    onSuccess: (inv) => {
+      invalidateSel(inv);
+      setWoOpen(false);
+      toast({ title: "Written off after bad debt review" });
+    },
+    onError: onErr("Failed"),
+  });
+  const creditNoteMut = useMutation({
+    mutationFn: () =>
+      createCreditNote({
+        invoiceId: selected!._id,
+        amount: cnAmount,
+        reason: cnReason,
+        approvedBy: cnApprover,
+      }),
+    onSuccess: () => {
+      invalidate();
+      setCnOpen(false);
+      toast({ title: "Credit note issued" });
+    },
+    onError: onErr("Failed to issue credit note"),
+  });
+
+  if (isLoading)
+    return (
+      <div className="py-16 text-center text-sm text-muted-foreground">
+        Loading…
+      </div>
+    );
 
   return (
     <div className="space-y-6">
@@ -187,15 +294,8 @@ export default function Invoicing() {
         {[
           { l: "Unbilled WIP", v: money(totalWip) },
           { l: "Outstanding receivables", v: money(receivables) },
-          { l: "Collected (period)", v: money(collected) },
-          {
-            l: "Overdue",
-            v: money(
-              list
-                .filter((i) => i.stage === "Overdue")
-                .reduce((s, i) => s + invoiceTotal(i).payable, 0),
-            ),
-          },
+          { l: "Collected (total)", v: money(collected) },
+          { l: "Overdue", v: money(overdueTotal) },
         ].map((k) => (
           <Card key={k.l}>
             <CardContent className="p-4">
@@ -207,8 +307,10 @@ export default function Invoicing() {
       </div>
 
       <p className="text-sm text-muted-foreground">
-        WIP review, aged receivables and credit control live in Sales — this page is the invoice list and
-        creation flow. Billing model is set on the mandate; invoice branding lives in Finance settings.
+        WIP review, aged receivables and credit control live in Sales — generate
+        invoices directly from approved WIP there. This page is the invoice
+        list, manual creation, and payment ledger. Billing model is set per
+        invoice; branding lives in Finance settings.
       </p>
 
       <Tabs defaultValue="invoices">
@@ -232,44 +334,53 @@ export default function Invoicing() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {list.map((i) => {
-                    const t = invoiceTotal(i);
-                    return (
-                      <TableRow
-                        key={i.id}
-                        className="cursor-pointer"
-                        onClick={() => setSelected(i)}
+                  {list.map((i) => (
+                    <TableRow
+                      key={i._id}
+                      className="cursor-pointer"
+                      onClick={() => setSelectedId(i._id)}
+                    >
+                      <TableCell>
+                        <p className="font-mono text-sm">{i.ref}</p>
+                        {i.proforma && (
+                          <Badge variant="outline" className="text-[10px]">
+                            Proforma
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <p className="text-sm">{i.clientName}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {i.mandateName}
+                        </p>
+                      </TableCell>
+                      <TableCell className="text-sm">{i.model}</TableCell>
+                      <TableCell>
+                        <Badge className={stageClass[i.stage]}>{i.stage}</Badge>
+                        {i.openedByClient && i.stage === "Sent" && (
+                          <span className="ml-2 inline-flex items-center text-[11px] text-muted-foreground">
+                            <Eye className="mr-1 h-3 w-3" /> opened
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {i.dueOn?.slice(0, 10)}
+                      </TableCell>
+                      <TableCell className="text-right text-sm font-medium">
+                        {money(i.payable, i.currency)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {!list.length && (
+                    <TableRow>
+                      <TableCell
+                        colSpan={6}
+                        className="py-8 text-center text-sm text-muted-foreground"
                       >
-                        <TableCell>
-                          <p className="font-mono text-sm">{i.id}</p>
-                          {i.proforma && (
-                            <Badge variant="outline" className="text-[10px]">
-                              Proforma
-                            </Badge>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <p className="text-sm">{i.clientName}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {i.mandateName}
-                          </p>
-                        </TableCell>
-                        <TableCell className="text-sm">{i.model}</TableCell>
-                        <TableCell>
-                          <Badge className={stageClass[i.stage]}>{i.stage}</Badge>
-                          {i.openedByClient && i.stage === "Sent" && (
-                            <span className="ml-2 inline-flex items-center text-[11px] text-muted-foreground">
-                              <Eye className="mr-1 h-3 w-3" /> opened
-                            </span>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-sm">{i.dueOn}</TableCell>
-                        <TableCell className="text-right text-sm font-medium">
-                          {money(t.payable, i.currency)}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
+                        No invoices yet.
+                      </TableCell>
+                    </TableRow>
+                  )}
                 </TableBody>
               </Table>
             </CardContent>
@@ -292,9 +403,14 @@ export default function Invoicing() {
                 </TableHeader>
                 <TableBody>
                   {payments.map((p) => (
-                    <TableRow key={p.id}>
-                      <TableCell className="font-mono text-sm">{p.id}</TableCell>
-                      <TableCell className="text-sm">{p.invoiceId}</TableCell>
+                    <TableRow key={p._id}>
+                      <TableCell className="font-mono text-sm">
+                        {p.ref}
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {list.find((i) => i._id === p.invoiceId)?.ref ??
+                          p.invoiceId}
+                      </TableCell>
                       <TableCell className="text-sm">{p.clientName}</TableCell>
                       <TableCell className="text-sm">{p.method}</TableCell>
                       <TableCell>
@@ -305,12 +421,21 @@ export default function Invoicing() {
                       </TableCell>
                     </TableRow>
                   ))}
+                  {!payments.length && (
+                    <TableRow>
+                      <TableCell
+                        colSpan={6}
+                        className="py-8 text-center text-sm text-muted-foreground"
+                      >
+                        No payments recorded yet.
+                      </TableCell>
+                    </TableRow>
+                  )}
                 </TableBody>
               </Table>
             </CardContent>
           </Card>
         </TabsContent>
-
       </Tabs>
 
       {/* Create invoice */}
@@ -327,12 +452,12 @@ export default function Invoicing() {
                 onValueChange={(v) => setDraft({ ...draft, mandateId: v })}
               >
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue placeholder="Select mandate..." />
                 </SelectTrigger>
                 <SelectContent>
                   {mandates.map((m) => (
-                    <SelectItem key={m.id} value={m.id}>
-                      {m.name}
+                    <SelectItem key={m._id} value={m._id}>
+                      {m.name} — {m.clientName}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -344,20 +469,18 @@ export default function Invoicing() {
                 <Select
                   value={draft.model}
                   onValueChange={(v) =>
-                    setDraft({ ...draft, model: v as PmInvoice["model"] })
+                    setDraft({ ...draft, model: v as BillingModel })
                   }
                 >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {["Time & materials", "Fixed fee", "Retainer", "Milestone"].map(
-                      (m) => (
-                        <SelectItem key={m} value={m}>
-                          {m}
-                        </SelectItem>
-                      ),
-                    )}
+                    {BILLING_MODELS.map((m) => (
+                      <SelectItem key={m} value={m}>
+                        {m}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -365,9 +488,7 @@ export default function Invoicing() {
                 <Label>Currency</Label>
                 <Select
                   value={draft.currency}
-                  onValueChange={(v) =>
-                    setDraft({ ...draft, currency: v as PmInvoice["currency"] })
-                  }
+                  onValueChange={(v) => setDraft({ ...draft, currency: v })}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -435,34 +556,8 @@ export default function Invoicing() {
           </div>
           <DialogFooter>
             <Button
-              onClick={() => {
-                const m = mandates.find((x) => x.id === draft.mandateId)!;
-                setList([
-                  {
-                    id: `INV-2026-${String(50 + list.length)}`,
-                    clientName: m.clientName,
-                    mandateId: m.id,
-                    mandateName: m.name,
-                    currency: draft.currency,
-                    subtotal: Number(draft.subtotal),
-                    vatRate: Number(draft.vatRate),
-                    whtRate: Number(draft.whtRate),
-                    discount: Number(draft.discount),
-                    stage: "Draft",
-                    issuedOn: new Date().toISOString().slice(0, 10),
-                    dueOn: draft.dueOn || "2026-08-31",
-                    paidAmount: 0,
-                    openedByClient: false,
-                    model: draft.model,
-                    lines: [
-                      { description: `${draft.model} fees`, qty: 1, unit: Number(draft.subtotal) },
-                    ],
-                  },
-                  ...list,
-                ]);
-                setOpenNew(false);
-                toast({ title: "Draft invoice created" });
-              }}
+              disabled={!draft.mandateId || !draft.dueOn || createMut.isPending}
+              onClick={() => createMut.mutate()}
             >
               Create draft
             </Button>
@@ -471,12 +566,12 @@ export default function Invoicing() {
       </Dialog>
 
       {/* Invoice detail */}
-      <Sheet open={!!selected} onOpenChange={(o) => !o && setSelected(null)}>
+      <Sheet open={!!selected} onOpenChange={(o) => !o && setSelectedId(null)}>
         <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">
           {selected && (
             <>
               <SheetHeader>
-                <SheetTitle>{selected.id}</SheetTitle>
+                <SheetTitle>{selected.ref}</SheetTitle>
                 <p className="text-sm text-muted-foreground">
                   {selected.clientName} · {selected.mandateName}
                 </p>
@@ -493,10 +588,14 @@ export default function Invoicing() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {selected.lines.map((l, i) => (
-                      <TableRow key={i}>
-                        <TableCell className="text-sm">{l.description}</TableCell>
-                        <TableCell className="text-right text-sm">{l.qty}</TableCell>
+                    {selected.lines.map((l) => (
+                      <TableRow key={l._id}>
+                        <TableCell className="text-sm">
+                          {l.description}
+                        </TableCell>
+                        <TableCell className="text-right text-sm">
+                          {l.qty}
+                        </TableCell>
                         <TableCell className="text-right text-sm">
                           {money(l.unit, selected.currency)}
                         </TableCell>
@@ -508,39 +607,32 @@ export default function Invoicing() {
                   </TableBody>
                 </Table>
 
-                {(() => {
-                  const t = invoiceTotal(selected);
-                  return (
-                    <div className="space-y-1 rounded border p-3 text-sm">
-                      {[
-                        ["Net of discount", t.net],
-                        [`VAT (${selected.vatRate}%)`, t.vat],
-                        [`WHT (${selected.whtRate}%)`, -t.wht],
-                        ["Payable", t.payable],
-                      ].map(([l, v]) => (
-                        <div key={String(l)} className="flex justify-between">
-                          <span className="text-muted-foreground">{l}</span>
-                          <span className="font-medium">
-                            {money(Number(v), selected.currency)}
-                          </span>
-                        </div>
-                      ))}
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Paid</span>
-                        <span>{money(selected.paidAmount, selected.currency)}</span>
-                      </div>
+                <div className="space-y-1 rounded border p-3 text-sm">
+                  {[
+                    ["Net of discount", selected.net],
+                    [`VAT (${selected.vatRate}%)`, selected.vat],
+                    [`WHT (${selected.whtRate}%)`, -selected.wht],
+                    ["Payable", selected.payable],
+                  ].map(([l, v]) => (
+                    <div key={String(l)} className="flex justify-between">
+                      <span className="text-muted-foreground">{l}</span>
+                      <span className="font-medium">
+                        {money(Number(v), selected.currency)}
+                      </span>
                     </div>
-                  );
-                })()}
+                  ))}
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Paid</span>
+                    <span>{money(selected.paidAmount, selected.currency)}</span>
+                  </div>
+                </div>
 
                 <div className="flex flex-wrap gap-2">
                   {selected.stage === "Draft" && (
                     <Button
                       size="sm"
-                      onClick={() => {
-                        patch(selected.id, { stage: "In Review" });
-                        toast({ title: "Sent for partner review" });
-                      }}
+                      disabled={submitMut.isPending}
+                      onClick={() => submitMut.mutate(selected._id)}
                     >
                       Submit for review
                     </Button>
@@ -548,10 +640,8 @@ export default function Invoicing() {
                   {selected.stage === "In Review" && (
                     <Button
                       size="sm"
-                      onClick={() => {
-                        patch(selected.id, { stage: "Approved" });
-                        toast({ title: "Approved by partner" });
-                      }}
+                      disabled={approveMut.isPending}
+                      onClick={() => approveMut.mutate(selected._id)}
                     >
                       <CheckCircle2 className="mr-2 h-4 w-4" /> Approve
                     </Button>
@@ -559,64 +649,169 @@ export default function Invoicing() {
                   {selected.stage === "Approved" && (
                     <Button
                       size="sm"
-                      onClick={() => {
-                        patch(selected.id, { stage: "Sent" });
-                        toast({
-                          title: "Invoice delivered",
-                          description: "Sent via client portal and email.",
-                        });
-                      }}
+                      disabled={sendMut.isPending}
+                      onClick={() => sendMut.mutate(selected._id)}
                     >
                       <Send className="mr-2 h-4 w-4" /> Send to client
                     </Button>
                   )}
-                  {["Sent", "Part Paid", "Overdue"].includes(selected.stage) && (
+                  {["Sent", "Part Paid", "Overdue"].includes(
+                    selected.stage,
+                  ) && (
+                    <div className="flex items-center gap-2">
+                      <Select
+                        value={payMethod}
+                        onValueChange={(v) => setPayMethod(v as PaymentMethod)}
+                      >
+                        <SelectTrigger className="h-8 w-40 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {PAYMENT_METHODS.map((m) => (
+                            <SelectItem key={m} value={m}>
+                              {m}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        type="number"
+                        placeholder="Full balance"
+                        className="h-8 w-32 text-xs"
+                        value={payAmount}
+                        onChange={(e) =>
+                          setPayAmount(
+                            e.target.value === "" ? "" : Number(e.target.value),
+                          )
+                        }
+                      />
+                      <Button
+                        size="sm"
+                        disabled={payMut.isPending}
+                        onClick={() => payMut.mutate()}
+                      >
+                        <Banknote className="mr-2 h-4 w-4" /> Record payment
+                      </Button>
+                    </div>
+                  )}
+                  {!["Draft", "Written Off", "Paid"].includes(
+                    selected.stage,
+                  ) && (
                     <Button
                       size="sm"
+                      variant="outline"
                       onClick={() => {
-                        const t = invoiceTotal(selected);
-                        patch(selected.id, {
-                          stage: "Paid",
-                          paidAmount: t.payable,
-                        });
-                        setPayments((p) => [
-                          {
-                            id: `PMT-${p.length + 101}`,
-                            invoiceId: selected.id,
-                            clientName: selected.clientName,
-                            amount: t.payable,
-                            currency: selected.currency,
-                            method: "Bank feed",
-                            matched: "Auto-matched",
-                            at: new Date().toISOString().slice(0, 10),
-                          },
-                          ...p,
-                        ]);
-                        toast({
-                          title: "Payment recorded",
-                          description: "Allocated and posted to the accounting engine.",
-                        });
+                        setCnAmount(0);
+                        setCnReason("");
+                        setCnApprover("");
+                        setCnOpen(true);
                       }}
                     >
-                      <Banknote className="mr-2 h-4 w-4" /> Record payment
+                      Issue credit note
                     </Button>
                   )}
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      patch(selected.id, { stage: "Written Off" });
-                      toast({ title: "Written off after bad debt review" });
-                    }}
-                  >
-                    Write off
-                  </Button>
+                  {selected.stage !== "Written Off" &&
+                    selected.stage !== "Paid" && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setWoReason("");
+                          setWoApprover("");
+                          setWoOpen(true);
+                        }}
+                      >
+                        Write off
+                      </Button>
+                    )}
                 </div>
+                {selected.writeOffReason && (
+                  <p className="rounded border p-2 text-xs text-muted-foreground">
+                    Written off: {selected.writeOffReason}
+                  </p>
+                )}
               </div>
             </>
           )}
         </SheetContent>
       </Sheet>
+
+      {/* Write off */}
+      <Dialog open={woOpen} onOpenChange={setWoOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Write off as bad debt</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-3">
+            <div>
+              <Label>Reason</Label>
+              <Textarea
+                value={woReason}
+                onChange={(e) => setWoReason(e.target.value)}
+              />
+            </div>
+            <div>
+              <Label>Approved by</Label>
+              <Input
+                value={woApprover}
+                onChange={(e) => setWoApprover(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="destructive"
+              disabled={!woReason || !woApprover || writeOffMut.isPending}
+              onClick={() => writeOffMut.mutate()}
+            >
+              Write off
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Credit note */}
+      <Dialog open={cnOpen} onOpenChange={setCnOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Issue credit note</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-3">
+            <div>
+              <Label>Amount</Label>
+              <Input
+                type="number"
+                value={cnAmount}
+                onChange={(e) => setCnAmount(Number(e.target.value))}
+              />
+            </div>
+            <div>
+              <Label>Reason</Label>
+              <Textarea
+                value={cnReason}
+                onChange={(e) => setCnReason(e.target.value)}
+              />
+            </div>
+            <div>
+              <Label>Approved by</Label>
+              <Input
+                value={cnApprover}
+                onChange={(e) => setCnApprover(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              disabled={
+                !cnAmount || !cnReason || !cnApprover || creditNoteMut.isPending
+              }
+              onClick={() => creditNoteMut.mutate()}
+            >
+              Issue
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
