@@ -12,9 +12,6 @@ export type WipBillingStatus =
   | "Held"
   | "Invoiced";
 
-// A WipEntry is a real TimeEntry, re-shaped for billing review —
-// not a separate entity. Same fields TimeEntry already has, plus
-// the billing-review fields layered on top.
 export interface WipEntry {
   _id: string;
   memberUserId: string;
@@ -162,7 +159,6 @@ export interface Invoice {
   dunningPaused: boolean;
   dunningLog: DunningEvent[];
   writeOffReason: string | null;
-  // Server-computed on every read — never sent, always present.
   subtotal: number;
   net: number;
   vat: number;
@@ -214,7 +210,8 @@ export const createInvoice = async (
 
 export interface CreateInvoiceFromWipPayload {
   mandateId: string;
-  timeEntryIds: string[];
+  timeEntryIds?: string[];
+  expenseClaimIds?: string[];
   currency?: string;
   vatRate?: number;
   whtRate?: number;
@@ -494,3 +491,216 @@ export const markInstalmentPaid = async (
       `/finance/payment-plans/${planId}/instalments/${instalmentId}/paid`,
     ),
   );
+
+// ── Purchases: vendors ────────────────────────────────────────
+
+export interface Vendor {
+  _id: string;
+  name: string;
+  tin: string;
+  category: string;
+  terms: string;
+  currency: string;
+  email: string;
+  wht: boolean;
+  outstanding: number;
+  band: "Current" | "31–60" | "61–90" | "90+";
+}
+export const fetchVendors = async (): Promise<Vendor[]> => {
+  const res = await api.get("/finance/vendors");
+  const d = unwrap(res);
+  return Array.isArray(d) ? d : [];
+};
+export const createVendor = async (dto: {
+  name: string;
+  tin?: string;
+  category?: string;
+  terms?: string;
+  currency?: string;
+  email?: string;
+  wht?: boolean;
+}): Promise<Vendor> => unwrap(await api.post("/finance/vendors", dto));
+
+// ── Purchases: purchase orders ────────────────────────────────
+
+export type PoStatus = "Draft" | "Issued" | "Fulfilled" | "Cancelled";
+export interface PoLine {
+  description: string;
+  qty: number;
+  unit: number;
+  discountPct?: number;
+  taxLabel?: string;
+  _id?: string;
+}
+export interface PurchaseOrder {
+  _id: string;
+  ref: string;
+  vendorId: string;
+  vendorName: string;
+  vendorTin: string;
+  currency: string;
+  status: PoStatus;
+  issuedOn: string | null;
+  expectedDelivery: string | null;
+  notes: string;
+  deliveryAddress: string;
+  deliveryAttention: string;
+  deliveryPhone: string;
+  deliveryInstructions: string;
+  lines: PoLine[];
+  total: number;
+  createdAt: string;
+}
+export const fetchPurchaseOrders = async (): Promise<PurchaseOrder[]> => {
+  const res = await api.get("/finance/purchase-orders");
+  const d = unwrap(res);
+  return Array.isArray(d) ? d : [];
+};
+export const createPurchaseOrder = async (dto: {
+  vendorId: string;
+  currency?: string;
+  expectedDelivery?: string;
+  notes?: string;
+  deliveryAddress?: string;
+  deliveryAttention?: string;
+  deliveryPhone?: string;
+  deliveryInstructions?: string;
+  lines: PoLine[];
+}): Promise<PurchaseOrder> =>
+  unwrap(await api.post("/finance/purchase-orders", dto));
+export const issuePurchaseOrder = async (id: string): Promise<PurchaseOrder> =>
+  unwrap(await api.post(`/finance/purchase-orders/${id}/issue`));
+export const fulfillPurchaseOrder = async (
+  id: string,
+): Promise<PurchaseOrder> =>
+  unwrap(await api.post(`/finance/purchase-orders/${id}/fulfill`));
+export const cancelPurchaseOrder = async (id: string): Promise<PurchaseOrder> =>
+  unwrap(await api.post(`/finance/purchase-orders/${id}/cancel`));
+export const downloadPurchaseOrderPdf = async (
+  id: string,
+  ref: string,
+): Promise<void> => {
+  const res = await api.get(`/finance/purchase-orders/${id}/pdf`, {
+    responseType: "blob",
+  });
+  const url = window.URL.createObjectURL(
+    new Blob([res.data], { type: "application/pdf" }),
+  );
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `${ref}.pdf`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
+};
+
+// ── Purchases: bills ──────────────────────────────────────────
+
+export type BillStatus =
+  | "Awaiting approval"
+  | "Approved"
+  | "Scheduled"
+  | "Paid"
+  | "Rejected";
+export interface Bill {
+  _id: string;
+  ref: string;
+  vendorId: string;
+  vendorName: string;
+  poId: string | null;
+  description: string;
+  category: string;
+  dueOn: string;
+  amount: number;
+  currency: string;
+  status: BillStatus;
+  recurring: boolean;
+  approvedBy: string | null;
+  paidAt: string | null;
+}
+export const fetchBills = async (): Promise<Bill[]> => {
+  const res = await api.get("/finance/bills");
+  const d = unwrap(res);
+  return Array.isArray(d) ? d : [];
+};
+export const createBill = async (dto: {
+  vendorId: string;
+  poId?: string;
+  description: string;
+  category?: string;
+  dueOn: string;
+  amount: number;
+  currency?: string;
+  recurring?: boolean;
+}): Promise<Bill> => unwrap(await api.post("/finance/bills", dto));
+export const approveBill = async (
+  id: string,
+  approvedBy: string,
+): Promise<Bill> =>
+  unwrap(await api.post(`/finance/bills/${id}/approve`, { approvedBy }));
+export const rejectBill = async (id: string): Promise<Bill> =>
+  unwrap(await api.post(`/finance/bills/${id}/reject`));
+export const scheduleBillPayment = async (id: string): Promise<Bill> =>
+  unwrap(await api.post(`/finance/bills/${id}/schedule-payment`));
+export const markBillPaid = async (id: string): Promise<Bill> =>
+  unwrap(await api.post(`/finance/bills/${id}/mark-paid`));
+
+// ── Purchases: expense claims ────────────────────────────────
+
+export type ClaimStatus = "Submitted" | "Approved" | "Rejected" | "Paid";
+export interface ExpenseClaim {
+  _id: string;
+  ref: string;
+  employeeUserId: string;
+  employee: string;
+  description: string;
+  mandateId: string | null;
+  mandateName: string | null;
+  amount: number;
+  currency: string;
+  rechargeable: boolean;
+  status: ClaimStatus;
+  invoiceId: string | null;
+  createdAt: string;
+}
+export const fetchExpenseClaims = async (): Promise<ExpenseClaim[]> => {
+  const res = await api.get("/finance/expense-claims");
+  const d = unwrap(res);
+  return Array.isArray(d) ? d : [];
+};
+export const createExpenseClaim = async (dto: {
+  employeeUserId: string;
+  employee: string;
+  description: string;
+  mandateId?: string;
+  mandateName?: string;
+  amount: number;
+  currency?: string;
+  rechargeable?: boolean;
+}): Promise<ExpenseClaim> =>
+  unwrap(await api.post("/finance/expense-claims", dto));
+export const approveExpenseClaim = async (id: string): Promise<ExpenseClaim> =>
+  unwrap(await api.post(`/finance/expense-claims/${id}/approve`));
+export const rejectExpenseClaim = async (id: string): Promise<ExpenseClaim> =>
+  unwrap(await api.post(`/finance/expense-claims/${id}/reject`));
+export const markExpenseClaimPaid = async (id: string): Promise<ExpenseClaim> =>
+  unwrap(await api.post(`/finance/expense-claims/${id}/mark-paid`));
+
+// ── Purchases: expense policies ──────────────────────────────
+
+export interface ExpensePolicy {
+  _id: string;
+  rule: string;
+  value: string;
+}
+export const fetchExpensePolicies = async (): Promise<ExpensePolicy[]> => {
+  const res = await api.get("/finance/expense-policies");
+  const d = unwrap(res);
+  return Array.isArray(d) ? d : [];
+};
+export const upsertExpensePolicy = async (
+  rule: string,
+  value: string,
+): Promise<ExpensePolicy> =>
+  unwrap(await api.patch("/finance/expense-policies", { rule, value }));
