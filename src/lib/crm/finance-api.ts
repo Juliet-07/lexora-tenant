@@ -704,3 +704,170 @@ export const upsertExpensePolicy = async (
   value: string,
 ): Promise<ExpensePolicy> =>
   unwrap(await api.patch("/finance/expense-policies", { rule, value }));
+
+// ── Banking ───────────────────────────────────────────────────
+
+export type BankAccountType = "Office" | "Trust" | "Special purpose";
+export interface BankAccount {
+  _id: string;
+  name: string;
+  bank: string;
+  last4: string;
+  currency: string;
+  openingBalance: number;
+  type: BankAccountType;
+  lastSyncedAt: string | null;
+  // Server-computed live from real transactions and transfers — never sent, always present.
+  balance: number;
+}
+export const fetchBankAccounts = async (): Promise<BankAccount[]> => {
+  const res = await api.get("/finance/bank-accounts");
+  const d = unwrap(res);
+  return Array.isArray(d) ? d : [];
+};
+export const createBankAccount = async (dto: {
+  name: string;
+  bank: string;
+  last4: string;
+  currency?: string;
+  openingBalance?: number;
+  type: BankAccountType;
+}): Promise<BankAccount> =>
+  unwrap(await api.post("/finance/bank-accounts", dto));
+
+export type TxStatus = "Matched" | "Unmatched";
+export type TxLinkType = "Invoice" | "Bill" | "Payroll" | "Manual";
+export interface BankTransaction {
+  _id: string;
+  accountId: string;
+  date: string;
+  description: string;
+  amount: number;
+  status: TxStatus;
+  linkType: TxLinkType | null;
+  linkId: string | null;
+  linkLabel: string;
+  suggestedAccount: string;
+}
+export const fetchBankTransactions = async (
+  accountId?: string,
+): Promise<BankTransaction[]> => {
+  const res = await api.get("/finance/bank-transactions", {
+    params: accountId ? { accountId } : undefined,
+  });
+  const d = unwrap(res);
+  return Array.isArray(d) ? d : [];
+};
+export const createBankTransaction = async (dto: {
+  accountId: string;
+  date: string;
+  description: string;
+  amount: number;
+}): Promise<BankTransaction> =>
+  unwrap(await api.post("/finance/bank-transactions", dto));
+export const matchBankTransaction = async (
+  id: string,
+  linkType: TxLinkType,
+  linkId: string,
+  linkLabel: string,
+): Promise<BankTransaction> =>
+  unwrap(
+    await api.post(`/finance/bank-transactions/${id}/match`, {
+      linkType,
+      linkId,
+      linkLabel,
+    }),
+  );
+
+export interface BankRule {
+  _id: string;
+  matchText: string;
+  account: string;
+  auto: boolean;
+}
+export const fetchBankRules = async (): Promise<BankRule[]> => {
+  const res = await api.get("/finance/bank-rules");
+  const d = unwrap(res);
+  return Array.isArray(d) ? d : [];
+};
+export const createBankRule = async (dto: {
+  matchText: string;
+  account: string;
+  auto?: boolean;
+}): Promise<BankRule> => unwrap(await api.post("/finance/bank-rules", dto));
+
+export interface Transfer {
+  _id: string;
+  ref: string;
+  date: string;
+  fromAccountId: string;
+  fromAccountName: string;
+  toAccountId: string;
+  toAccountName: string;
+  amount: number;
+  reference: string;
+  authoriser: string;
+}
+export const fetchTransfers = async (): Promise<Transfer[]> => {
+  const res = await api.get("/finance/transfers");
+  const d = unwrap(res);
+  return Array.isArray(d) ? d : [];
+};
+export const createTransfer = async (dto: {
+  fromAccountId: string;
+  toAccountId: string;
+  amount: number;
+  reference?: string;
+  authoriser: string;
+}): Promise<Transfer> => unwrap(await api.post("/finance/transfers", dto));
+
+export interface ReconciliationView {
+  accountId: string;
+  period: string;
+  systemBalance: number;
+  statementBalance: number;
+  unreconciled: number;
+  variance: number;
+  preparedBy: string | null;
+  signedOffBy: string | null;
+  signedOffAt: string | null;
+}
+export const fetchReconciliation = async (
+  accountId: string,
+  period: string,
+): Promise<ReconciliationView> =>
+  unwrap(await api.get(`/finance/reconciliation/${accountId}/${period}`));
+export const setStatementBalance = async (
+  accountId: string,
+  period: string,
+  statementBalance: number,
+  preparedBy: string,
+): Promise<ReconciliationView> =>
+  unwrap(
+    await api.post(
+      `/finance/reconciliation/${accountId}/${period}/statement-balance`,
+      { statementBalance, preparedBy },
+    ),
+  );
+export const signOffReconciliation = async (
+  accountId: string,
+  period: string,
+  signedOffBy: string,
+): Promise<ReconciliationView> =>
+  unwrap(
+    await api.post(`/finance/reconciliation/${accountId}/${period}/sign-off`, {
+      signedOffBy,
+    }),
+  );
+
+export interface CashForecastPoint {
+  horizon: string;
+  inflow: number;
+  outflow: number;
+  closing: number;
+}
+export const fetchCashForecast = async (): Promise<CashForecastPoint[]> => {
+  const res = await api.get("/finance/cash-forecast");
+  const d = unwrap(res);
+  return Array.isArray(d) ? d : [];
+};
