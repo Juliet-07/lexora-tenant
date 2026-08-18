@@ -35,8 +35,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Plus, Download, Send, CheckCircle2, XCircle } from "lucide-react";
+import {
+  Plus,
+  Download,
+  Send,
+  CheckCircle2,
+  XCircle,
+  Upload,
+  Paperclip,
+} from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { WorkflowTable } from "@/components/finance/WorkflowTable";
 import { fetchMandates } from "@/lib/crm/mandates-api";
 import { fetchEmployees, fetchAllPayrollRuns } from "@/lib/hr/hr-api";
 import {
@@ -59,6 +68,7 @@ import {
   approveExpenseClaim,
   rejectExpenseClaim,
   markExpenseClaimPaid,
+  attachExpenseReceipt,
   fetchExpensePolicies,
   upsertExpensePolicy,
   type Vendor,
@@ -67,6 +77,48 @@ import {
   type Bill,
   type ExpenseClaim,
 } from "@/lib/crm/finance-api";
+
+const purchasesWorkflow = [
+  {
+    action: "Capture",
+    detail:
+      "A vendor bill or a general expense (no vendor required) is recorded",
+    owner: "Anyone with access",
+    trigger: "On receipt of invoice/expense",
+  },
+  {
+    action: "Approve",
+    detail: "Bill is reviewed and approved for payment, or rejected",
+    owner: "Finance manager",
+    trigger: "Before due date",
+  },
+  {
+    action: "Schedule payment",
+    detail: "Approved bills are added to the next payment run",
+    owner: "Accountant",
+    trigger: "Ahead of the run",
+  },
+  {
+    action: "Pay",
+    detail: "Payment made — WHT withheld automatically for flagged vendors",
+    owner: "Finance manager",
+    trigger: "On the payment date",
+  },
+  {
+    action: "Expense claims",
+    detail:
+      "Employees submit claims with proof; rechargeable + approved claims flow to WIP",
+    owner: "Employee → approver",
+    trigger: "As incurred",
+  },
+  {
+    action: "Purchase orders",
+    detail:
+      "Formal orders issued to vendors, downloadable as PDF, tracked through fulfilment",
+    owner: "Whoever's ordering",
+    trigger: "Before the spend",
+  },
+];
 
 const money = (n: number, c = "USD") =>
   n.toLocaleString(undefined, {
@@ -247,8 +299,10 @@ export default function Purchases() {
 
   // ── Bills ──────────────────────────────────────────────────
   const [newBillOpen, setNewBillOpen] = useState(false);
+  const [billIsVendorless, setBillIsVendorless] = useState(false);
   const [billDraft, setBillDraft] = useState({
     vendorId: "",
+    vendorName: "",
     poId: "",
     description: "",
     category: "",
@@ -261,12 +315,19 @@ export default function Purchases() {
     queryClient.invalidateQueries({ queryKey: ["bills"] });
   const createBillMut = useMutation({
     mutationFn: () =>
-      createBill({ ...billDraft, poId: billDraft.poId || undefined }),
+      createBill({
+        ...billDraft,
+        vendorId: billIsVendorless ? undefined : billDraft.vendorId,
+        vendorName: billIsVendorless ? billDraft.vendorName : undefined,
+        poId: billDraft.poId || undefined,
+      }),
     onSuccess: () => {
       invalidateBills();
       setNewBillOpen(false);
+      setBillIsVendorless(false);
       setBillDraft({
         vendorId: "",
+        vendorName: "",
         poId: "",
         description: "",
         category: "",
@@ -365,6 +426,16 @@ export default function Purchases() {
     onSuccess: invalidateClaims,
     onError: onErr("Failed"),
   });
+  const [receiptTargetId, setReceiptTargetId] = useState<string | null>(null);
+  const attachReceiptMut = useMutation({
+    mutationFn: ({ id, file }: { id: string; file: File }) =>
+      attachExpenseReceipt(id, file),
+    onSuccess: () => {
+      invalidateClaims();
+      toast({ title: "Receipt attached" });
+    },
+    onError: onErr("Failed to attach receipt"),
+  });
 
   // ── Expense policies ───────────────────────────────────────
   const [policyOpen, setPolicyOpen] = useState(false);
@@ -421,6 +492,7 @@ export default function Purchases() {
           <TabsTrigger value="claims">Expense claims</TabsTrigger>
           <TabsTrigger value="payroll">Payroll payments</TabsTrigger>
           <TabsTrigger value="payables">Aged payables & vendors</TabsTrigger>
+          <TabsTrigger value="workflow">Workflow</TabsTrigger>
         </TabsList>
 
         {/* Bills */}
@@ -622,6 +694,7 @@ export default function Purchases() {
                     <TableHead>Mandate</TableHead>
                     <TableHead>Amount</TableHead>
                     <TableHead>Rechargeable</TableHead>
+                    <TableHead>Receipt</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">Action</TableHead>
                   </TableRow>
@@ -642,6 +715,47 @@ export default function Purchases() {
                       </TableCell>
                       <TableCell className="text-sm">
                         {c.rechargeable ? "Yes — to WIP" : "No"}
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {c.receiptUrl ? (
+                          <a
+                            href={c.receiptUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1 text-primary hover:underline"
+                          >
+                            <Paperclip className="h-3.5 w-3.5" />{" "}
+                            {c.receiptName ?? "View"}
+                          </a>
+                        ) : (
+                          <>
+                            <input
+                              type="file"
+                              id={`receipt-${c._id}`}
+                              accept="application/pdf,image/*"
+                              className="hidden"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file)
+                                  attachReceiptMut.mutate({ id: c._id, file });
+                                e.target.value = "";
+                              }}
+                            />
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 px-2 text-xs"
+                              disabled={attachReceiptMut.isPending}
+                              onClick={() =>
+                                document
+                                  .getElementById(`receipt-${c._id}`)
+                                  ?.click()
+                              }
+                            >
+                              <Upload className="mr-1 h-3 w-3" /> Attach
+                            </Button>
+                          </>
+                        )}
                       </TableCell>
                       <TableCell>
                         <Badge className={`text-xs ${badge(c.status)}`}>
@@ -684,7 +798,7 @@ export default function Purchases() {
                   {!claims.length && (
                     <TableRow>
                       <TableCell
-                        colSpan={8}
+                        colSpan={9}
                         className="py-8 text-center text-sm text-muted-foreground"
                       >
                         No expense claims yet.
@@ -892,6 +1006,13 @@ export default function Purchases() {
               </Table>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="workflow" className="mt-4">
+          <WorkflowTable
+            title="How purchasing is used"
+            steps={purchasesWorkflow}
+          />
         </TabsContent>
       </Tabs>
 
@@ -1321,31 +1442,67 @@ export default function Purchases() {
             <DialogTitle>Capture bill</DialogTitle>
           </DialogHeader>
           <div className="grid gap-3">
-            <div>
-              <Label>Vendor</Label>
-              <Select
-                value={billDraft.vendorId}
-                onValueChange={(v) =>
-                  setBillDraft({ ...billDraft, vendorId: v })
-                }
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className={`rounded-full border px-3 py-1 text-xs ${!billIsVendorless ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
+                onClick={() => {
+                  setBillIsVendorless(false);
+                  setBillDraft((d) => ({ ...d, vendorName: "" }));
+                }}
               >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select vendor..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {vendors.map((v) => (
-                    <SelectItem key={v._id} value={v._id}>
-                      {v.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                Vendor invoice
+              </button>
+              <button
+                type="button"
+                className={`rounded-full border px-3 py-1 text-xs ${billIsVendorless ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
+                onClick={() => {
+                  setBillIsVendorless(true);
+                  setBillDraft((d) => ({ ...d, vendorId: "", poId: "" }));
+                }}
+              >
+                General expense — no vendor
+              </button>
             </div>
+            {billIsVendorless ? (
+              <div>
+                <Label>Payee / description of who this was paid to</Label>
+                <Input
+                  value={billDraft.vendorName}
+                  onChange={(e) =>
+                    setBillDraft({ ...billDraft, vendorName: e.target.value })
+                  }
+                  placeholder="e.g. Bank charges, parking, one-off purchase"
+                />
+              </div>
+            ) : (
+              <div>
+                <Label>Vendor</Label>
+                <Select
+                  value={billDraft.vendorId}
+                  onValueChange={(v) =>
+                    setBillDraft({ ...billDraft, vendorId: v })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select vendor..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {vendors.map((v) => (
+                      <SelectItem key={v._id} value={v._id}>
+                        {v.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div>
               <Label>Linked purchase order (optional)</Label>
               <Select
                 value={billDraft.poId}
                 onValueChange={(v) => setBillDraft({ ...billDraft, poId: v })}
+                disabled={billIsVendorless}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="No PO" />
@@ -1440,7 +1597,9 @@ export default function Purchases() {
           <DialogFooter>
             <Button
               disabled={
-                !billDraft.vendorId ||
+                (billIsVendorless
+                  ? !billDraft.vendorName
+                  : !billDraft.vendorId) ||
                 !billDraft.description ||
                 !billDraft.dueOn ||
                 createBillMut.isPending

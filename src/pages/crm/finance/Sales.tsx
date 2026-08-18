@@ -45,8 +45,11 @@ import {
   RefreshCw,
   AlertTriangle,
   Send,
+  Download,
+  Link2,
 } from "lucide-react";
 import { ClientSelect } from "@/components/ClientDropdown";
+import { WorkflowTable } from "@/components/finance/WorkflowTable";
 import { fetchMandates, money } from "@/lib/crm/mandates-api";
 import {
   fetchWipRegister,
@@ -67,6 +70,8 @@ import {
   createQuote,
   setQuoteStatus,
   convertQuoteToInvoice,
+  setQuoteMandate,
+  downloadQuotePdf,
   fetchCreditNotes,
   fetchRecurringInvoices,
   createRecurringInvoice,
@@ -81,6 +86,48 @@ import {
   type QuoteKind,
   type RecurringFrequency,
 } from "@/lib/crm/finance-api";
+
+const salesWorkflow = [
+  {
+    action: "WIP accumulation",
+    detail: "Time and disbursements accrue against a mandate as work happens",
+    owner: "Team",
+    trigger: "Ongoing",
+  },
+  {
+    action: "WIP review",
+    detail:
+      "Billing partner approves, writes down, writes off, or holds entries before invoicing",
+    owner: "Billing partner",
+    trigger: "Weekly / before invoicing",
+  },
+  {
+    action: "Invoice creation",
+    detail:
+      "Selected WIP is drafted into a real invoice, or a manual invoice is raised directly",
+    owner: "Accountant",
+    trigger: "On demand",
+  },
+  {
+    action: "Approve & send",
+    detail: "Invoice reviewed, approved, and sent to the client by email",
+    owner: "Finance manager",
+    trigger: "Before due date",
+  },
+  {
+    action: "Payment received",
+    detail:
+      "Payment recorded against the invoice, balance and stage update automatically",
+    owner: "Accountant",
+    trigger: "On receipt",
+  },
+  {
+    action: "Credit control",
+    detail: "Overdue invoices are chased, escalated, or put on a payment plan",
+    owner: "Finance manager",
+    trigger: "Past due date",
+  },
+];
 
 const badge = (s: string) => {
   if (
@@ -152,6 +199,7 @@ export default function Sales() {
   );
 
   const [newQuoteOpen, setNewQuoteOpen] = useState(false);
+  const [quoteIsProspect, setQuoteIsProspect] = useState(false);
   const [quoteDraft, setQuoteDraft] = useState({
     clientId: "",
     clientName: "",
@@ -162,6 +210,10 @@ export default function Sales() {
     expires: "",
     kind: "Quote" as QuoteKind,
   });
+  const [linkMandateTarget, setLinkMandateTarget] = useState<Quote | null>(
+    null,
+  );
+  const [linkMandateId, setLinkMandateId] = useState("");
 
   const [newRecurringOpen, setNewRecurringOpen] = useState(false);
   const [recurringDraft, setRecurringDraft] = useState({
@@ -306,7 +358,7 @@ export default function Sales() {
   const createQuoteMut = useMutation({
     mutationFn: () =>
       createQuote({
-        clientUserId: quoteDraft.clientId,
+        clientUserId: quoteIsProspect ? undefined : quoteDraft.clientId,
         clientName: quoteDraft.clientName,
         mandateId: quoteDraft.mandateId || undefined,
         title: quoteDraft.title,
@@ -318,9 +370,28 @@ export default function Sales() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["quotes"] });
       setNewQuoteOpen(false);
+      setQuoteIsProspect(false);
       toast({ title: `${quoteDraft.kind} created` });
     },
     onError: onErr("Failed to create"),
+  });
+  const downloadQuoteMut = useMutation({
+    mutationFn: ({ id, ref }: { id: string; ref: string }) =>
+      downloadQuotePdf(id, ref),
+    onError: onErr("Failed to download PDF"),
+  });
+  const linkMandateMut = useMutation({
+    mutationFn: () => setQuoteMandate(linkMandateTarget!._id, linkMandateId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["quotes"] });
+      setLinkMandateTarget(null);
+      setLinkMandateId("");
+      toast({
+        title: "Mandate linked",
+        description: "This quote can now be converted to an invoice.",
+      });
+    },
+    onError: onErr("Failed to link mandate"),
   });
   const convertQuoteMut = useMutation({
     mutationFn: (id: string) =>
@@ -493,6 +564,7 @@ export default function Sales() {
           <TabsTrigger value="recurring">Recurring</TabsTrigger>
           <TabsTrigger value="ar">Aged receivables</TabsTrigger>
           <TabsTrigger value="dunning">Credit control</TabsTrigger>
+          <TabsTrigger value="workflow">Workflow</TabsTrigger>
         </TabsList>
 
         {/* WIP */}
@@ -713,6 +785,18 @@ export default function Sales() {
                             Send
                           </Button>
                         )}
+                        {!q.mandateId && !q.convertedInvoiceId && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setLinkMandateTarget(q);
+                              setLinkMandateId("");
+                            }}
+                          >
+                            <Link2 className="mr-1.5 h-3.5 w-3.5" /> Add mandate
+                          </Button>
+                        )}
                         {!q.convertedInvoiceId &&
                           q.status !== "Declined" &&
                           q.status !== "Expired" && (
@@ -730,6 +814,16 @@ export default function Sales() {
                             Converted
                           </Badge>
                         )}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={downloadQuoteMut.isPending}
+                          onClick={() =>
+                            downloadQuoteMut.mutate({ id: q._id, ref: q.ref })
+                          }
+                        >
+                          <Download className="mr-1.5 h-3.5 w-3.5" /> PDF
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -1119,6 +1213,10 @@ export default function Sales() {
             </Card>
           </div>
         </TabsContent>
+
+        <TabsContent value="workflow" className="mt-4">
+          <WorkflowTable title="How sales is used" steps={salesWorkflow} />
+        </TabsContent>
       </Tabs>
 
       {/* WIP review (write down / write off) */}
@@ -1241,21 +1339,60 @@ export default function Sales() {
             <DialogTitle>New quote / proforma</DialogTitle>
           </DialogHeader>
           <div className="grid gap-3">
-            <div>
-              <Label>Client</Label>
-              <ClientSelect
-                value={quoteDraft.clientId}
-                onValueChange={(v) =>
-                  setQuoteDraft({ ...quoteDraft, clientId: v })
-                }
-                onClientChange={(c: any) =>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className={`rounded-full border px-3 py-1 text-xs ${!quoteIsProspect ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
+                onClick={() => {
+                  setQuoteIsProspect(false);
                   setQuoteDraft((d) => ({
                     ...d,
-                    clientName: c.companyName || c.fullName || c.name,
-                  }))
-                }
-              />
+                    clientId: "",
+                    clientName: "",
+                  }));
+                }}
+              >
+                Existing client
+              </button>
+              <button
+                type="button"
+                className={`rounded-full border px-3 py-1 text-xs ${quoteIsProspect ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
+                onClick={() => {
+                  setQuoteIsProspect(true);
+                  setQuoteDraft((d) => ({ ...d, clientId: "", mandateId: "" }));
+                }}
+              >
+                Not a client yet
+              </button>
             </div>
+            {quoteIsProspect ? (
+              <div>
+                <Label>Name</Label>
+                <Input
+                  value={quoteDraft.clientName}
+                  onChange={(e) =>
+                    setQuoteDraft({ ...quoteDraft, clientName: e.target.value })
+                  }
+                  placeholder="Prospect or company name"
+                />
+              </div>
+            ) : (
+              <div>
+                <Label>Client</Label>
+                <ClientSelect
+                  value={quoteDraft.clientId}
+                  onValueChange={(v) =>
+                    setQuoteDraft({ ...quoteDraft, clientId: v })
+                  }
+                  onClientChange={(c: any) =>
+                    setQuoteDraft((d) => ({
+                      ...d,
+                      clientName: c.companyName || c.fullName || c.name,
+                    }))
+                  }
+                />
+              </div>
+            )}
             <div>
               <Label>Linked mandate (optional)</Label>
               <Select
@@ -1263,9 +1400,16 @@ export default function Sales() {
                 onValueChange={(v) =>
                   setQuoteDraft({ ...quoteDraft, mandateId: v })
                 }
+                disabled={quoteIsProspect}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="No mandate yet" />
+                  <SelectValue
+                    placeholder={
+                      quoteIsProspect
+                        ? "Add once they become a client"
+                        : "No mandate yet"
+                    }
+                  />
                 </SelectTrigger>
                 <SelectContent>
                   {mandates
@@ -1333,13 +1477,62 @@ export default function Sales() {
           <DialogFooter>
             <Button
               disabled={
-                !quoteDraft.clientId ||
+                (quoteIsProspect
+                  ? !quoteDraft.clientName
+                  : !quoteDraft.clientId) ||
                 !quoteDraft.title ||
                 createQuoteMut.isPending
               }
               onClick={() => createQuoteMut.mutate()}
             >
               Create
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Link mandate to an existing quote */}
+      <Dialog
+        open={!!linkMandateTarget}
+        onOpenChange={(o) => !o && setLinkMandateTarget(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add a mandate to {linkMandateTarget?.ref}</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-3">
+            <p className="text-sm text-muted-foreground">
+              {linkMandateTarget?.clientName} — once linked, this quote can be
+              converted to a real invoice.
+            </p>
+            <div>
+              <Label>Mandate</Label>
+              <Select value={linkMandateId} onValueChange={setLinkMandateId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select mandate..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {mandates
+                    .filter(
+                      (m) =>
+                        !linkMandateTarget?.clientUserId ||
+                        m.clientUserId === linkMandateTarget.clientUserId,
+                    )
+                    .map((m) => (
+                      <SelectItem key={m._id} value={m._id}>
+                        {m.name} — {m.clientName}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              disabled={!linkMandateId || linkMandateMut.isPending}
+              onClick={() => linkMandateMut.mutate()}
+            >
+              Link mandate
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1618,29 +1811,6 @@ export default function Sales() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <FileText className="h-4 w-4" /> Sales workflow
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="grid grid-cols-1 md:grid-cols-6 gap-2">
-          {[
-            "WIP accumulation",
-            "WIP review",
-            "Invoice creation",
-            "Approve & send",
-            "Payment received",
-            "Credit control",
-          ].map((s, i) => (
-            <div key={s} className="rounded-lg border p-3">
-              <p className="text-xs text-muted-foreground">Step {i + 1}</p>
-              <p className="text-sm font-medium">{s}</p>
-            </div>
-          ))}
-        </CardContent>
-      </Card>
     </div>
   );
 }

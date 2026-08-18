@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/dialog";
 import { Landmark, Plus, ArrowRightLeft } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { WorkflowTable } from "@/components/finance/WorkflowTable";
 import {
   fetchBankAccounts,
   createBankAccount,
@@ -58,6 +59,50 @@ const money = (n: number, c = "USD") =>
   });
 
 const currentPeriod = () => new Date().toISOString().slice(0, 7);
+
+const bankingWorkflow = [
+  {
+    action: "Add accounts",
+    detail:
+      "Register each real bank account — Office, Trust, or Special-purpose",
+    owner: "Finance manager",
+    trigger: "Once per account",
+  },
+  {
+    action: "Record transactions",
+    detail:
+      "Bank feed transactions are recorded and automatically coded by matching bank rules",
+    owner: "Accountant",
+    trigger: "As they clear",
+  },
+  {
+    action: "Match to source",
+    detail:
+      "Each transaction is matched to the real invoice, bill, or payroll run it settles",
+    owner: "Accountant",
+    trigger: "Ongoing",
+  },
+  {
+    action: "Reconcile monthly",
+    detail:
+      "System balance compared against the bank statement; zero variance required to sign off",
+    owner: "Preparer + a different signer",
+    trigger: "Month end",
+  },
+  {
+    action: "Forecast cash",
+    detail:
+      "30/60/90-day inflow and outflow projected from real AR, AP, and payroll",
+    owner: "Finance manager",
+    trigger: "Weekly",
+  },
+  {
+    action: "Transfer funds",
+    detail: "Inter-account transfers recorded with a real authoriser",
+    owner: "Finance manager",
+    trigger: "As needed",
+  },
+];
 
 export default function Banking() {
   const { toast } = useToast();
@@ -314,6 +359,7 @@ export default function Banking() {
           <TabsTrigger value="rules">Bank rules</TabsTrigger>
           <TabsTrigger value="forecast">Cash forecast</TabsTrigger>
           <TabsTrigger value="transfers">Transfers</TabsTrigger>
+          <TabsTrigger value="workflow">Workflow</TabsTrigger>
         </TabsList>
 
         {/* Bank feed */}
@@ -656,6 +702,10 @@ export default function Banking() {
               </Table>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="workflow" className="mt-4">
+          <WorkflowTable title="How banking is used" steps={bankingWorkflow} />
         </TabsContent>
       </Tabs>
 

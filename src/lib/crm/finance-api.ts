@@ -372,7 +372,7 @@ export type QuoteKind = "Quote" | "Proforma";
 export interface Quote {
   _id: string;
   ref: string;
-  clientUserId: string;
+  clientUserId: string | null;
   clientName: string;
   mandateId: string | null;
   title: string;
@@ -390,7 +390,7 @@ export const fetchQuotes = async (): Promise<Quote[]> => {
   return Array.isArray(d) ? d : [];
 };
 export const createQuote = async (dto: {
-  clientUserId: string;
+  clientUserId?: string;
   clientName: string;
   mandateId?: string;
   title: string;
@@ -409,6 +409,29 @@ export const convertQuoteToInvoice = async (
   dueOn: string,
 ): Promise<{ quote: Quote; invoice: Invoice }> =>
   unwrap(await api.post(`/finance/quotes/${id}/convert`, { dueOn }));
+export const setQuoteMandate = async (
+  id: string,
+  mandateId: string,
+): Promise<Quote> =>
+  unwrap(await api.patch(`/finance/quotes/${id}/mandate`, { mandateId }));
+export const downloadQuotePdf = async (
+  id: string,
+  ref: string,
+): Promise<void> => {
+  const res = await api.get(`/finance/quotes/${id}/pdf`, {
+    responseType: "blob",
+  });
+  const url = window.URL.createObjectURL(
+    new Blob([res.data], { type: "application/pdf" }),
+  );
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `${ref}.pdf`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
+};
 
 // ── Recurring invoices ───────────────────────────────────────
 
@@ -606,7 +629,7 @@ export type BillStatus =
 export interface Bill {
   _id: string;
   ref: string;
-  vendorId: string;
+  vendorId: string | null;
   vendorName: string;
   poId: string | null;
   description: string;
@@ -625,7 +648,8 @@ export const fetchBills = async (): Promise<Bill[]> => {
   return Array.isArray(d) ? d : [];
 };
 export const createBill = async (dto: {
-  vendorId: string;
+  vendorId?: string;
+  vendorName?: string;
   poId?: string;
   description: string;
   category?: string;
@@ -662,6 +686,8 @@ export interface ExpenseClaim {
   rechargeable: boolean;
   status: ClaimStatus;
   invoiceId: string | null;
+  receiptUrl: string | null;
+  receiptName: string | null;
   createdAt: string;
 }
 export const fetchExpenseClaims = async (): Promise<ExpenseClaim[]> => {
@@ -680,6 +706,18 @@ export const createExpenseClaim = async (dto: {
   rechargeable?: boolean;
 }): Promise<ExpenseClaim> =>
   unwrap(await api.post("/finance/expense-claims", dto));
+export const attachExpenseReceipt = async (
+  id: string,
+  file: File,
+): Promise<ExpenseClaim> => {
+  const form = new FormData();
+  form.append("file", file);
+  return unwrap(
+    await api.post(`/finance/expense-claims/${id}/receipt`, form, {
+      headers: { "Content-Type": "multipart/form-data" },
+    }),
+  );
+};
 export const approveExpenseClaim = async (id: string): Promise<ExpenseClaim> =>
   unwrap(await api.post(`/finance/expense-claims/${id}/approve`));
 export const rejectExpenseClaim = async (id: string): Promise<ExpenseClaim> =>
@@ -871,3 +909,112 @@ export const fetchCashForecast = async (): Promise<CashForecastPoint[]> => {
   const d = unwrap(res);
   return Array.isArray(d) ? d : [];
 };
+
+// ── Tax ───────────────────────────────────────────────────────
+
+export type TaxObligationType =
+  | "VAT return"
+  | "PAYE remittance"
+  | "RSSB contributions"
+  | "WHT remittance"
+  | "CIT provisional";
+export type TaxObligationStatus = "Draft" | "Filed";
+export interface TaxObligation {
+  _id: string;
+  type: TaxObligationType;
+  period: string;
+  dueOn: string;
+  amount: number;
+  status: TaxObligationStatus;
+  filedAt: string | null;
+}
+export const fetchTaxObligations = async (): Promise<TaxObligation[]> => {
+  const res = await api.get("/finance/tax-obligations");
+  const d = unwrap(res);
+  return Array.isArray(d) ? d : [];
+};
+export const createTaxObligation = async (dto: {
+  type: TaxObligationType;
+  period: string;
+  dueOn: string;
+  amount: number;
+}): Promise<TaxObligation> =>
+  unwrap(await api.post("/finance/tax-obligations", dto));
+export const fileTaxObligation = async (id: string): Promise<TaxObligation> =>
+  unwrap(await api.post(`/finance/tax-obligations/${id}/file`));
+
+export interface VatLine {
+  category: string;
+  type: "Output" | "Input";
+  base: number;
+  vat: number;
+}
+export interface VatReturn {
+  period: string;
+  outputVat: number;
+  inputVat: number;
+  netPayable: number;
+  lines: VatLine[];
+}
+export const fetchVatReturn = async (period?: string): Promise<VatReturn> =>
+  unwrap(
+    await api.get("/finance/vat", { params: period ? { period } : undefined }),
+  );
+
+export interface PayrollTaxLine {
+  period: string;
+  gross: number;
+  paye: number;
+  rssb: number;
+  status: string;
+}
+export const fetchPayrollTax = async (): Promise<PayrollTaxLine[]> => {
+  const res = await api.get("/finance/payroll-tax");
+  const d = unwrap(res);
+  return Array.isArray(d) ? d : [];
+};
+
+export interface CitProvision {
+  revenue: number;
+  expenses: number;
+  profitBeforeTax: number;
+  citRate: number;
+  citAtRate: number;
+  note: string;
+}
+export const fetchCitProvision = async (): Promise<CitProvision> =>
+  unwrap(await api.get("/finance/cit"));
+
+export type WhtDirection = "Vendor payment" | "Client receipt";
+export interface WhtCertificate {
+  _id: string;
+  certificateRef: string;
+  direction: WhtDirection;
+  counterparty: string;
+  sourceRef: string;
+  gross: number;
+  rate: number;
+  wht: number;
+  net: number;
+  date: string;
+}
+export const fetchWhtRegister = async (): Promise<WhtCertificate[]> => {
+  const res = await api.get("/finance/wht");
+  const d = unwrap(res);
+  return Array.isArray(d) ? d : [];
+};
+
+export interface EbmDocument {
+  _id: string;
+  document: string;
+  receipt: string;
+  classification: string;
+  status: "Synced" | "Pending" | "Error";
+}
+export const fetchEbmStatus = async (): Promise<EbmDocument[]> => {
+  const res = await api.get("/finance/ebm");
+  const d = unwrap(res);
+  return Array.isArray(d) ? d : [];
+};
+export const resyncEbm = async (invoiceId: string): Promise<any> =>
+  unwrap(await api.post(`/finance/ebm/${invoiceId}/resync`));
