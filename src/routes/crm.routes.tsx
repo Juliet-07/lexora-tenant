@@ -23,17 +23,18 @@ import Accounting from "@/pages/crm/finance/Accounting";
 import AssetRegister from "@/pages/crm/finance/AssetRegister";
 import Financials from "@/pages/crm/finance/Financials";
 import FundAccounting from "@/pages/crm/finance/FundAccounting";
-import Documents from "@/pages/crm/Documents";
 import Contracts from "@/pages/crm/tools/Contracts";
-import Forms from "@/pages/crm/Forms";
 import CrmCalendar from "@/pages/crm/tools/Calendar";
 import Newsletter from "@/pages/crm/tools/Newsletter";
 
-import Reports from "@/pages/crm/tools/Reports";
+import Reports from "@/pages/crm/Reports";
 import Pmo from "@/pages/crm/projects/Pmo";
 import Notifications from "@/pages/crm/Notifications";
 import Billing from "@/pages/Billing";
-import { MyProjectsList, MyProjectDetail } from "@/pages/crm/projects/employee-project";
+import {
+  MyProjectsList,
+  MyProjectDetail,
+} from "@/pages/crm/projects/employee-project";
 
 /**
  * CRM & Project Management — Module 2.
@@ -115,13 +116,37 @@ export const crmRoutes = ({ isAdmin, accessibleModules }: RouteContext) => {
         element={layout(<Invoicing />)}
       />,
       <Route key="crm-sales" path="/crm/sales" element={layout(<Sales />)} />,
-      <Route key="crm-purchases" path="/crm/purchases" element={layout(<Purchases />)} />,
-      <Route key="crm-banking" path="/crm/banking" element={layout(<Banking />)} />,
+      <Route
+        key="crm-purchases"
+        path="/crm/purchases"
+        element={layout(<Purchases />)}
+      />,
+      <Route
+        key="crm-banking"
+        path="/crm/banking"
+        element={layout(<Banking />)}
+      />,
       <Route key="crm-tax" path="/crm/tax" element={layout(<TaxPage />)} />,
-      <Route key="crm-accounting" path="/crm/accounting" element={layout(<Accounting />)} />,
-      <Route key="crm-assets" path="/crm/assets" element={layout(<AssetRegister />)} />,
-      <Route key="crm-financials" path="/crm/financials" element={layout(<Financials />)} />,
-      <Route key="crm-funds" path="/crm/funds" element={layout(<FundAccounting />)} />,
+      <Route
+        key="crm-accounting"
+        path="/crm/accounting"
+        element={layout(<Accounting />)}
+      />,
+      <Route
+        key="crm-assets"
+        path="/crm/assets"
+        element={layout(<AssetRegister />)}
+      />,
+      <Route
+        key="crm-financials"
+        path="/crm/financials"
+        element={layout(<Financials />)}
+      />,
+      <Route
+        key="crm-funds"
+        path="/crm/funds"
+        element={layout(<FundAccounting />)}
+      />,
       <Route
         key="crm-trust"
         path="/crm/trust"
@@ -129,16 +154,10 @@ export const crmRoutes = ({ isAdmin, accessibleModules }: RouteContext) => {
       />,
       // ── Tools ────────────────────────────────────────────
       <Route
-        key="crm-documents"
-        path="/crm/documents"
-        element={layout(<Documents />)}
-      />,
-      <Route
         key="crm-contracts"
         path="/crm/contracts"
         element={layout(<Contracts />)}
       />,
-      <Route key="crm-forms" path="/crm/forms" element={layout(<Forms />)} />,
       <Route
         key="crm-newsletter"
         path="/crm/newsletter"
