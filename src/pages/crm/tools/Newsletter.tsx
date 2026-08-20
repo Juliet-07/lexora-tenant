@@ -532,6 +532,34 @@ export default function Newsletter() {
                 <div className="rounded-md border p-3 text-sm" dangerouslySetInnerHTML={{ __html: detailCampaign.body || "<p class='text-muted-foreground'>No content</p>" }} />
               </div>
 
+              <div>
+                <p className="mb-1 text-sm font-medium">Client portal preview</p>
+                <p className="mb-2 text-xs text-muted-foreground">How this appears in your client's portal under Newsletters.</p>
+                <div className="rounded-xl border bg-muted/20 p-3">
+                  <div className="flex items-start gap-3 rounded-lg border bg-card p-3">
+                    <div className="rounded-lg bg-primary/10 p-2 text-primary"><Mail className="h-4 w-4" /></div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="text-[10px]">{detailCampaign.type}</Badge>
+                        {detailCampaign.status !== "Sent" && (
+                          <span className="text-[10px] font-semibold uppercase tracking-wide text-primary">New</span>
+                        )}
+                      </div>
+                      <p className="mt-1 truncate text-sm font-semibold">{detailCampaign.subject || detailCampaign.name}</p>
+                      <p className="line-clamp-2 text-xs text-muted-foreground">
+                        {detailCampaign.body.replace(/<[^>]*>/g, "").slice(0, 140) || "No content yet."}
+                      </p>
+                      <p className="mt-1 flex items-center gap-1 text-[11px] text-muted-foreground">
+                        <CalendarClock className="h-3 w-3" />
+                        {new Date(detailCampaign.sentAt ?? detailCampaign.scheduledAt ?? detailCampaign.createdAt).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <Button size="sm" variant="outline" className="shrink-0">Read</Button>
+                  </div>
+                </div>
+              </div>
+
+
               {detailCampaign.status === "Sent" && detailCampaign.metrics && (
                 <div className="space-y-3">
                   <p className="text-sm font-medium">Results</p>

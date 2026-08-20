@@ -27,6 +27,8 @@ import Documents from "@/pages/crm/Documents";
 import Contracts from "@/pages/crm/tools/Contracts";
 import Forms from "@/pages/crm/Forms";
 import CrmCalendar from "@/pages/crm/tools/Calendar";
+import Newsletter from "@/pages/crm/tools/Newsletter";
+
 import Reports from "@/pages/crm/tools/Reports";
 import Pmo from "@/pages/crm/projects/Pmo";
 import Notifications from "@/pages/crm/Notifications";
@@ -138,10 +140,16 @@ export const crmRoutes = ({ isAdmin, accessibleModules }: RouteContext) => {
       />,
       <Route key="crm-forms" path="/crm/forms" element={layout(<Forms />)} />,
       <Route
+        key="crm-newsletter"
+        path="/crm/newsletter"
+        element={layout(<Newsletter />)}
+      />,
+      <Route
         key="crm-calendar"
         path="/crm/calendar"
         element={layout(<CrmCalendar />)}
       />,
+
       <Route
         key="crm-reports"
         path="/crm/reports"
