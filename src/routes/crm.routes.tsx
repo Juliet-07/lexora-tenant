@@ -140,10 +140,16 @@ export const crmRoutes = ({ isAdmin, accessibleModules }: RouteContext) => {
       />,
       <Route key="crm-forms" path="/crm/forms" element={layout(<Forms />)} />,
       <Route
+        key="crm-newsletter"
+        path="/crm/newsletter"
+        element={layout(<Newsletter />)}
+      />,
+      <Route
         key="crm-calendar"
         path="/crm/calendar"
         element={layout(<CrmCalendar />)}
       />,
+
       <Route
         key="crm-reports"
         path="/crm/reports"
