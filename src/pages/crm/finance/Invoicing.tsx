@@ -42,6 +42,8 @@ import {
   Eye,
   Banknote,
   ArrowRight,
+  AlertTriangle,
+  X,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { fetchMandates, money } from "@/lib/crm/mandates-api";
@@ -54,6 +56,7 @@ import {
   approveInvoice,
   sendInvoice,
   recordPayment,
+  dismissClientAction,
   writeOffInvoice,
   fetchPayments,
   ageBucket,
@@ -228,6 +231,30 @@ export default function Invoicing() {
     },
     onError: onErr("Failed to record payment"),
   });
+  // Quick action for confirming a client's "I've paid" claim — goes
+  // through the exact same real payment-recording flow as any
+  // manual payment, defaulting to the full remaining balance and
+  // Bank transfer as the method, since that's what remittance-based
+  // payment actually is.
+  const markReceivedMut = useMutation({
+    mutationFn: () => recordPayment(selected!._id, "Bank transfer", undefined),
+    onSuccess: () => {
+      invalidate();
+      toast({
+        title: "Payment recorded",
+        description: "Confirmed and posted.",
+      });
+    },
+    onError: onErr("Failed to record payment"),
+  });
+  const dismissClaimMut = useMutation({
+    mutationFn: () => dismissClientAction(selected!._id),
+    onSuccess: () => {
+      invalidate();
+      toast({ title: "Claim dismissed" });
+    },
+    onError: onErr("Failed to dismiss"),
+  });
   const writeOffMut = useMutation({
     mutationFn: () => writeOffInvoice(selected!._id, woReason, woApprover),
     onSuccess: (inv) => {
@@ -361,6 +388,16 @@ export default function Invoicing() {
                           <span className="ml-2 inline-flex items-center text-[11px] text-muted-foreground">
                             <Eye className="mr-1 h-3 w-3" /> opened
                           </span>
+                        )}
+                        {i.clientAction && (
+                          <Badge
+                            className={`ml-2 text-[10px] ${i.clientAction === "Paid" ? "bg-success/10 text-success" : "bg-warning/10 text-warning"}`}
+                          >
+                            <AlertTriangle className="mr-1 h-2.5 w-2.5" />
+                            {i.clientAction === "Paid"
+                              ? "Client says paid"
+                              : "Client flagged issue"}
+                          </Badge>
                         )}
                       </TableCell>
                       <TableCell className="text-sm">
@@ -578,6 +615,61 @@ export default function Invoicing() {
               </SheetHeader>
 
               <div className="mt-4 space-y-4">
+                {selected.clientAction && (
+                  <div
+                    className={`flex items-start justify-between gap-3 rounded-lg border p-3 text-sm ${
+                      selected.clientAction === "Paid"
+                        ? "border-success/40 bg-success/5"
+                        : "border-warning/40 bg-warning/5"
+                    }`}
+                  >
+                    <div className="flex items-start gap-2">
+                      <AlertTriangle
+                        className={`mt-0.5 h-4 w-4 shrink-0 ${selected.clientAction === "Paid" ? "text-success" : "text-warning"}`}
+                      />
+                      <div>
+                        <p className="font-medium">
+                          {selected.clientAction === "Paid"
+                            ? "Client marked this as paid"
+                            : "Client flagged an issue with this invoice"}
+                        </p>
+                        {selected.clientActionNote && (
+                          <p className="text-xs text-muted-foreground">
+                            "{selected.clientActionNote}"
+                          </p>
+                        )}
+                        <p className="text-xs text-muted-foreground">
+                          {selected.clientActionAt &&
+                            new Date(
+                              selected.clientActionAt,
+                            ).toLocaleString()}{" "}
+                          — this is the client's claim, not a confirmed payment
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex shrink-0 gap-2">
+                      {selected.clientAction === "Paid" && (
+                        <Button
+                          size="sm"
+                          disabled={markReceivedMut.isPending}
+                          onClick={() => markReceivedMut.mutate()}
+                        >
+                          <Banknote className="mr-2 h-3.5 w-3.5" /> Mark
+                          received
+                        </Button>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled={dismissClaimMut.isPending}
+                        onClick={() => dismissClaimMut.mutate()}
+                      >
+                        <X className="mr-2 h-3.5 w-3.5" /> Dismiss
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
                 <Table>
                   <TableHeader>
                     <TableRow>

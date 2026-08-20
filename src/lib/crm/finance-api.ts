@@ -159,6 +159,12 @@ export interface Invoice {
   dunningPaused: boolean;
   dunningLog: DunningEvent[];
   writeOffReason: string | null;
+  // A claim, not a fact — the client saying they paid or flagging
+  // an issue. Never implies the invoice is actually settled; only
+  // a real recorded payment (which clears this automatically) does.
+  clientAction: "Paid" | "Cancelled" | null;
+  clientActionAt: string | null;
+  clientActionNote: string | null;
   subtotal: number;
   net: number;
   vat: number;
@@ -301,6 +307,16 @@ export const recordPayment = async (
       method,
       amount,
     }),
+  );
+
+// Clears a client's "I've paid"/"there's an issue" claim without
+// recording a payment — the claim was premature, mistaken, or
+// already resolved another way.
+export const dismissClientAction = async (
+  invoiceId: string,
+): Promise<Invoice> =>
+  unwrap(
+    await api.post(`/finance/invoices/${invoiceId}/dismiss-client-action`),
   );
 
 // ── Credit notes ──────────────────────────────────────────────
@@ -755,7 +771,6 @@ export interface BankAccount {
   openingBalance: number;
   type: BankAccountType;
   lastSyncedAt: string | null;
-  // Server-computed live from real transactions and transfers — never sent, always present.
   balance: number;
 }
 export const fetchBankAccounts = async (): Promise<BankAccount[]> => {
@@ -1151,10 +1166,6 @@ export const fetchGeneralLedger = async (filters?: {
   return Array.isArray(d) ? d : [];
 };
 
-// Real client-side export of whatever GL entries are passed in —
-// no server round trip needed since the data's already real and
-// already fetched. Proper CSV escaping for commas/quotes in
-// descriptions, since ledger narrations regularly contain both.
 const csvEscape = (val: string | number) => {
   const s = String(val ?? "");
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
@@ -1371,3 +1382,187 @@ export const createMaintenanceLog = async (dto: {
   cost: number;
 }): Promise<MaintenanceLogEntry> =>
   unwrap(await api.post("/finance/asset-maintenance", dto));
+
+// ── Financials: P&L, Balance Sheet, Cash Flow ────────────────
+
+export interface PlRow {
+  code: string;
+  name: string;
+  subGroup: string;
+  amount: number;
+}
+export interface ProfitAndLoss {
+  from: string;
+  to: string;
+  revenueRows: PlRow[];
+  expenseRows: PlRow[];
+  totalRevenue: number;
+  totalExpenses: number;
+  profitBeforeTax: number;
+}
+export const fetchProfitAndLoss = async (
+  from: string,
+  to: string,
+): Promise<ProfitAndLoss> =>
+  unwrap(await api.get("/finance/financials/pl", { params: { from, to } }));
+
+export interface BalanceSheetRow {
+  code: string;
+  name: string;
+  subGroup: string;
+  amount: number;
+}
+export interface BalanceSheet {
+  asOf: string;
+  assets: BalanceSheetRow[];
+  liabilities: BalanceSheetRow[];
+  equity: BalanceSheetRow[];
+  totalAssets: number;
+  totalLiabilities: number;
+  totalEquity: number;
+  balanced: boolean;
+}
+export const fetchBalanceSheet = async (asOf: string): Promise<BalanceSheet> =>
+  unwrap(
+    await api.get("/finance/financials/balance-sheet", { params: { asOf } }),
+  );
+
+export interface CashFlowLine {
+  source: GlSource;
+  inflow: number;
+  outflow: number;
+  netMovement: number;
+}
+export interface CashFlowStatement {
+  from: string;
+  to: string;
+  lines: CashFlowLine[];
+  netMovement: number;
+}
+export const fetchCashFlow = async (
+  from: string,
+  to: string,
+): Promise<CashFlowStatement> =>
+  unwrap(
+    await api.get("/finance/financials/cash-flow", { params: { from, to } }),
+  );
+
+// ── Financials: Service line P&L ─────────────────────────────
+
+export interface ServiceLineRow {
+  serviceLine: string;
+  revenue: number;
+  directExpenses: number;
+  contribution: number;
+  contributionMargin: number;
+}
+export interface ServiceLineReport {
+  from: string;
+  to: string;
+  rows: ServiceLineRow[];
+  note: string;
+}
+export const fetchServiceLineReport = async (
+  from: string,
+  to: string,
+): Promise<ServiceLineReport> =>
+  unwrap(
+    await api.get("/finance/financials/service-line", { params: { from, to } }),
+  );
+
+// ── Financials: Client profitability ─────────────────────────
+
+export interface ClientProfitabilityRow {
+  clientName: string;
+  revenue: number;
+  directExpenses: number;
+  contribution: number;
+  contributionMargin: number;
+}
+export interface ClientProfitabilityReport {
+  from: string;
+  to: string;
+  rows: ClientProfitabilityRow[];
+  note: string;
+}
+export const fetchClientProfitability = async (
+  from: string,
+  to: string,
+): Promise<ClientProfitabilityReport> =>
+  unwrap(
+    await api.get("/finance/financials/client-profitability", {
+      params: { from, to },
+    }),
+  );
+
+// ── Financials: KPI dashboard ────────────────────────────────
+
+export interface KpiDashboard {
+  from: string;
+  to: string;
+  totalRevenue: number;
+  grossMargin: number;
+  netMargin: number;
+  activeEmployees: number;
+  revenuePerEmployee: number;
+  lockupDays: number;
+  wipDays: number;
+  arDays: number;
+  realizationRate: number;
+  collectionRate: number;
+  grossMarginNote: string;
+}
+export const fetchKpiDashboard = async (
+  from: string,
+  to: string,
+): Promise<KpiDashboard> =>
+  unwrap(await api.get("/finance/financials/kpis", { params: { from, to } }));
+
+// ── Remittance accounts ──────────────────────────────────────
+
+export interface RemittanceAccount {
+  _id: string;
+  accountName: string;
+  bankName: string;
+  accountNumber: string;
+  currency: string;
+  branchCode: string;
+  swiftCode: string;
+  active: boolean;
+  createdAt: string;
+}
+export const fetchRemittanceAccounts = async (): Promise<
+  RemittanceAccount[]
+> => {
+  const res = await api.get("/finance/remittance-accounts");
+  const d = unwrap(res);
+  return Array.isArray(d) ? d : [];
+};
+export const createRemittanceAccount = async (dto: {
+  accountName: string;
+  bankName: string;
+  accountNumber: string;
+  currency: string;
+  branchCode?: string;
+  swiftCode?: string;
+}): Promise<RemittanceAccount> =>
+  unwrap(await api.post("/finance/remittance-accounts", dto));
+export const updateRemittanceAccount = async (
+  id: string,
+  dto: Partial<{
+    accountName: string;
+    bankName: string;
+    accountNumber: string;
+    currency: string;
+    branchCode: string;
+    swiftCode: string;
+  }>,
+): Promise<RemittanceAccount> =>
+  unwrap(await api.patch(`/finance/remittance-accounts/${id}`, dto));
+export const setRemittanceAccountActive = async (
+  id: string,
+  active: boolean,
+): Promise<RemittanceAccount> =>
+  unwrap(
+    await api.post(`/finance/remittance-accounts/${id}/active`, { active }),
+  );

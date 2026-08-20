@@ -1,18 +1,26 @@
 import { useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { User as UserIcon, Lock, Crown, FileText } from "lucide-react";
+import {
+  User as UserIcon,
+  Lock,
+  Crown,
+  FileText,
+  Landmark,
+} from "lucide-react";
 
 import ProfileTab from "./Profile";
 import SecurityTab from "./Security";
 import PlanTab from "./Plan";
 import EngagementTab from "./EngagementDocument";
+import PaymentDetailsTab from "./PaymentDetails";
 
 export default function Settings() {
   const [params, setParams] = useSearchParams();
   const tab = params.get("tab") ?? "profile";
   const validTabs = useMemo(
-    () => new Set(["profile", "security", "plan", "engagement"]),
+    () =>
+      new Set(["profile", "security", "plan", "engagement", "payment-details"]),
     [],
   );
   const active = validTabs.has(tab) ? tab : "profile";
@@ -46,6 +54,9 @@ export default function Settings() {
           <TabsTrigger value="engagement">
             <FileText className="h-4 w-4 mr-2" /> Engagement
           </TabsTrigger>
+          <TabsTrigger value="payment-details">
+            <Landmark className="h-4 w-4 mr-2" /> Payment details
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="profile">
@@ -60,9 +71,10 @@ export default function Settings() {
         <TabsContent value="engagement">
           <EngagementTab />
         </TabsContent>
+        <TabsContent value="payment-details">
+          <PaymentDetailsTab />
+        </TabsContent>
       </Tabs>
     </div>
   );
 }
-
-
