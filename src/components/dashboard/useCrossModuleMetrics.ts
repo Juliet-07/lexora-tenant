@@ -59,13 +59,13 @@ export function useCrossModuleMetrics() {
     : 0;
 
   // ── CRM / Delivery ──────────────────────────────────────────
-  const activeMandates = mandates.filter((m) => m.stage !== "Closed").length;
+  const activeMandates = mandates.filter((m) => m.stage !== "Close").length;
   const atRiskMandates = mandates.filter((m) => m.rag !== "Green").length;
   const openTasks = pmTasks.filter((t) => t.status !== "Done").length;
   const overdueInvoices = pmInvoices.filter((i) => i.stage === "Overdue");
   const receivables = pmInvoices
     .filter((i) => i.stage !== "Paid" && i.stage !== "Draft")
-    .reduce((s, i) => s + invoiceTotal(i) - i.paidAmount, 0);
+    .reduce((s, i) => s + invoiceTotal(i).payable - i.paidAmount, 0);
   const openTickets = tickets.filter(
     (t) => t.status !== "Resolved" && t.status !== "Closed",
   ).length;
@@ -221,7 +221,7 @@ export function useCrossModuleMetrics() {
       id: `inv-${i.id}`,
       module: "CRM",
       title: `${i.id} — ${i.clientName}`,
-      detail: `Overdue since ${i.dueOn} · ${i.currency} ${Math.round(invoiceTotal(i) - i.paidAmount).toLocaleString()}`,
+      detail: `Overdue since ${i.dueOn} · ${i.currency} ${Math.round(invoiceTotal(i).payable - i.paidAmount).toLocaleString()}`,
       severity: "critical",
       to: "/crm/invoicing",
     }),
