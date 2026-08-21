@@ -1566,3 +1566,115 @@ export const setRemittanceAccountActive = async (
   unwrap(
     await api.post(`/finance/remittance-accounts/${id}/active`, { active }),
   );
+
+// ── Trust accounting ──────────────────────────────────────────
+
+export type InterestTreatment = "Client retained" | "Firm retained" | "Pooled";
+export type TrustMovementType = "Deposit" | "Drawdown" | "Interest";
+export type TrustMovementStatus =
+  | "Recorded"
+  | "Awaiting authorisation"
+  | "Approved"
+  | "Rejected";
+
+export interface TrustLedger {
+  _id: string;
+  bankAccountId: string;
+  clientUserId: string;
+  clientName: string;
+  mandateId: string | null;
+  mandateName: string;
+  currency: string;
+  interestTreatment: InterestTreatment;
+  lastReconciledAt: string | null;
+  // Server-computed live from real movements — never sent, always present.
+  balance: number;
+}
+export const fetchTrustLedgers = async (): Promise<TrustLedger[]> => {
+  const res = await api.get("/finance/trust-ledgers");
+  const d = unwrap(res);
+  return Array.isArray(d) ? d : [];
+};
+export const fetchTrustLedger = async (id: string): Promise<TrustLedger> =>
+  unwrap(await api.get(`/finance/trust-ledgers/${id}`));
+export const createTrustLedger = async (dto: {
+  bankAccountId: string;
+  clientUserId: string;
+  clientName: string;
+  mandateId?: string;
+  mandateName?: string;
+  currency?: string;
+  interestTreatment?: InterestTreatment;
+}): Promise<TrustLedger> =>
+  unwrap(await api.post("/finance/trust-ledgers", dto));
+export const markTrustLedgerReconciled = async (
+  id: string,
+): Promise<TrustLedger> =>
+  unwrap(await api.post(`/finance/trust-ledgers/${id}/reconcile`));
+
+export interface TrustIntegrityCheck {
+  bankBalance: number;
+  ledgerTotal: number;
+  ledgerCount: number;
+  variance: number;
+  matched: boolean;
+}
+export const fetchTrustIntegrityCheck = async (
+  bankAccountId: string,
+): Promise<TrustIntegrityCheck> =>
+  unwrap(await api.get(`/finance/trust-ledgers/integrity/${bankAccountId}`));
+
+export interface TrustMovement {
+  _id: string;
+  ref: string;
+  ledgerId: string;
+  type: TrustMovementType;
+  amount: number;
+  reference: string;
+  date: string;
+  status: TrustMovementStatus;
+  preparedBy: string;
+  authorisedBy: string | null;
+  authorisedAt: string | null;
+  linkedInvoiceId: string | null;
+  rejectedReason: string | null;
+  createdAt: string;
+}
+export const fetchTrustMovements = async (
+  ledgerId?: string,
+): Promise<TrustMovement[]> => {
+  const res = await api.get("/finance/trust-movements", {
+    params: ledgerId ? { ledgerId } : undefined,
+  });
+  const d = unwrap(res);
+  return Array.isArray(d) ? d : [];
+};
+export const recordTrustDeposit = async (dto: {
+  ledgerId: string;
+  amount: number;
+  reference?: string;
+  date: string;
+  preparedBy: string;
+}): Promise<TrustMovement> =>
+  unwrap(await api.post("/finance/trust-movements/deposit", dto));
+export const requestTrustDrawdown = async (dto: {
+  ledgerId: string;
+  amount: number;
+  linkedInvoiceId?: string;
+  preparedBy: string;
+}): Promise<TrustMovement> =>
+  unwrap(await api.post("/finance/trust-movements/drawdown", dto));
+export const authoriseTrustDrawdown = async (
+  id: string,
+  authorisedBy: string,
+): Promise<TrustMovement> =>
+  unwrap(
+    await api.post(`/finance/trust-movements/${id}/authorise`, {
+      authorisedBy,
+    }),
+  );
+export const rejectTrustDrawdown = async (
+  id: string,
+  reason?: string,
+): Promise<TrustMovement> =>
+  unwrap(await api.post(`/finance/trust-movements/${id}/reject`, { reason }));
