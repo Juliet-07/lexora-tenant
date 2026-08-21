@@ -54,7 +54,7 @@ const GRC_LINKS: QuickLink[] = [
 ];
 
 const AML_LINKS: QuickLink[] = [
-  { label: "Onboarding", to: "/kyc/onboarding", icon: ClipboardCheck },
+  { label: "Onboarding", to: "/clients/onboarding", icon: ClipboardCheck },
   { label: "Clients", to: "/clients", icon: Users },
   { label: "Risk engine", to: "/aml/risk", icon: Shield },
   { label: "Transactions", to: "/aml/transactions", icon: Activity },
