@@ -782,7 +782,7 @@ export default function Banking() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {["Office", "Trust", "Special purpose"].map((t) => (
+                    {["Office", "Trust", "Fund", "Special purpose"].map((t) => (
                       <SelectItem key={t} value={t}>
                         {t}
                       </SelectItem>

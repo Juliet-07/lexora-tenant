@@ -1678,3 +1678,920 @@ export const rejectTrustDrawdown = async (
   reason?: string,
 ): Promise<TrustMovement> =>
   unwrap(await api.post(`/finance/trust-movements/${id}/reject`, { reason }));
+
+// ══════════════════════════════════════════════════════════════
+// Fund accounting
+// ══════════════════════════════════════════════════════════════
+
+export type WaterfallType = "Whole-fund (European)" | "Deal-by-deal (American)";
+export type FundStatus =
+  | "Fundraising"
+  | "Investing"
+  | "Harvesting"
+  | "Wound down";
+
+export interface Fund {
+  _id: string;
+  name: string;
+  structure: string;
+  jurisdiction: string;
+  strategy: string;
+  targetSize: number;
+  vintage: number;
+  currency: string;
+  status: FundStatus;
+  bankAccountId: string | null;
+  mgmtFeePct: number;
+  carryPct: number;
+  hurdlePct: number;
+  waterfallType: WaterfallType;
+  defaultInterestPct: number;
+  curePeriodDays: number;
+  forfeiturePct: number;
+  equalisationInterestPct: number;
+  carryEscrowPct: number;
+  investmentPeriodEndDate: string | null;
+  orgCostsCapAmount: number;
+  recyclingPermitted: boolean;
+  recyclingCapPct: number;
+  maxSingleInvestmentPct: number;
+  maxSectorConcentrationPct: number;
+  maxCountryConcentrationPct: number;
+  excludedSectors: string[];
+  allowedGeography: string[];
+  investmentPeriodSuspended: boolean;
+  committed: number;
+  called: number;
+  unfunded: number;
+  lpCount: number;
+}
+export interface FundTermsInput {
+  name?: string;
+  structure?: string;
+  jurisdiction?: string;
+  strategy?: string;
+  targetSize?: number;
+  vintage?: number;
+  currency?: string;
+  bankAccountId?: string;
+  mgmtFeePct?: number;
+  carryPct?: number;
+  hurdlePct?: number;
+  waterfallType?: WaterfallType;
+  defaultInterestPct?: number;
+  curePeriodDays?: number;
+  forfeiturePct?: number;
+  equalisationInterestPct?: number;
+  carryEscrowPct?: number;
+  investmentPeriodEndDate?: string;
+  orgCostsCapAmount?: number;
+  recyclingPermitted?: boolean;
+  recyclingCapPct?: number;
+}
+export const fetchFunds = async (): Promise<Fund[]> => {
+  const res = await api.get("/finance/funds");
+  const d = unwrap(res);
+  return Array.isArray(d) ? d : [];
+};
+export const fetchFund = async (fundId: string): Promise<Fund> =>
+  unwrap(await api.get(`/finance/funds/${fundId}`));
+export const createFund = async (
+  dto: FundTermsInput & { name: string },
+): Promise<Fund> => unwrap(await api.post("/finance/funds", dto));
+export const setFundStatus = async (
+  fundId: string,
+  status: FundStatus,
+): Promise<Fund> =>
+  unwrap(await api.post(`/finance/funds/${fundId}/status`, { status }));
+export const updateFundTerms = async (
+  fundId: string,
+  dto: FundTermsInput,
+): Promise<Fund> =>
+  unwrap(await api.patch(`/finance/funds/${fundId}/terms`, dto));
+
+// ── Capital commitments ─────────────────────────────────────────
+
+export type CommitmentType =
+  | "Institutional"
+  | "DFI"
+  | "Pension"
+  | "Family office"
+  | "Corporate"
+  | "HNW"
+  | "Trust"
+  | "GP commit";
+
+export interface CapitalCommitment {
+  _id: string;
+  fundId: string;
+  lpUserId: string;
+  lpName: string;
+  commitment: number;
+  type: CommitmentType;
+  closeLabel: string;
+  closeDate: string | null;
+  isGpCommitment: boolean;
+  hasSideLetter: boolean;
+  mgmtFeePctOverride: number | null;
+  sideLetterNotes: string;
+  equalisationApplied: boolean;
+}
+export const fetchCommitments = async (
+  fundId: string,
+): Promise<CapitalCommitment[]> => {
+  const res = await api.get(`/finance/funds/${fundId}/commitments`);
+  const d = unwrap(res);
+  return Array.isArray(d) ? d : [];
+};
+export const createCommitment = async (
+  fundId: string,
+  dto: {
+    lpUserId: string;
+    lpName: string;
+    commitment: number;
+    type?: CommitmentType;
+    closeLabel?: string;
+    closeDate?: string;
+    isGpCommitment?: boolean;
+    hasSideLetter?: boolean;
+    mgmtFeePctOverride?: number;
+    sideLetterNotes?: string;
+  },
+): Promise<CapitalCommitment> =>
+  unwrap(await api.post(`/finance/funds/${fundId}/commitments`, dto));
+
+export interface EqualisationCalc {
+  commitmentId: string;
+  lpName: string;
+  closeDate: string;
+  firstCloseDate: string;
+  daysAfterFirstClose: number;
+  calledPctAtClose: number;
+  catchUpCall: number;
+  eqInterest: number;
+  totalEqualisationPaid: number;
+  earlierLpCount: number;
+}
+export const computeEqualisation = async (
+  fundId: string,
+  commitmentId: string,
+): Promise<EqualisationCalc> =>
+  unwrap(
+    await api.get(
+      `/finance/funds/${fundId}/commitments/${commitmentId}/equalisation`,
+    ),
+  );
+export const applyEqualisation = async (
+  fundId: string,
+  commitmentId: string,
+): Promise<EqualisationCalc> =>
+  unwrap(
+    await api.post(
+      `/finance/funds/${fundId}/commitments/${commitmentId}/equalisation/apply`,
+    ),
+  );
+
+// ── Capital calls ────────────────────────────────────────────────
+
+export type CapitalCallAllocationStatus =
+  | "Unfunded"
+  | "Partially funded"
+  | "Funded"
+  | "Defaulted";
+
+export interface CapitalCallAllocation {
+  _id: string;
+  commitmentId: string;
+  lpName: string;
+  amount: number;
+  fundedAmount: number;
+  status: CapitalCallAllocationStatus;
+  fundedAt: string | null;
+  defaultDeclaredAt: string | null;
+  cureDeadline: string | null;
+  forfeitedAmount: number;
+  cured: boolean;
+}
+export interface CapitalCall {
+  _id: string;
+  fundId: string;
+  ref: string;
+  purpose: string;
+  totalAmount: number;
+  issuedOn: string;
+  dueOn: string;
+  allocations: CapitalCallAllocation[];
+}
+export const fetchCapitalCalls = async (
+  fundId: string,
+): Promise<CapitalCall[]> => {
+  const res = await api.get(`/finance/funds/${fundId}/capital-calls`);
+  const d = unwrap(res);
+  return Array.isArray(d) ? d : [];
+};
+export const createCapitalCall = async (
+  fundId: string,
+  dto: {
+    purpose: string;
+    totalAmount: number;
+    issuedOn: string;
+    dueOn: string;
+  },
+): Promise<CapitalCall> =>
+  unwrap(await api.post(`/finance/funds/${fundId}/capital-calls`, dto));
+export const recordCallFunding = async (
+  fundId: string,
+  callId: string,
+  allocationId: string,
+  amount: number,
+): Promise<CapitalCall> =>
+  unwrap(
+    await api.post(
+      `/finance/funds/${fundId}/capital-calls/${callId}/allocations/${allocationId}/fund`,
+      { amount },
+    ),
+  );
+export const declareDefault = async (
+  fundId: string,
+  callId: string,
+  allocationId: string,
+): Promise<CapitalCall> =>
+  unwrap(
+    await api.post(
+      `/finance/funds/${fundId}/capital-calls/${callId}/allocations/${allocationId}/default`,
+    ),
+  );
+export const cureDefault = async (
+  fundId: string,
+  callId: string,
+  allocationId: string,
+  amount: number,
+): Promise<{ call: CapitalCall; defaultInterestCharged: number }> =>
+  unwrap(
+    await api.post(
+      `/finance/funds/${fundId}/capital-calls/${callId}/allocations/${allocationId}/cure`,
+      { amount },
+    ),
+  );
+export const forfeitDefault = async (
+  fundId: string,
+  callId: string,
+  allocationId: string,
+): Promise<{ call: CapitalCall; forfeited: number }> =>
+  unwrap(
+    await api.post(
+      `/finance/funds/${fundId}/capital-calls/${callId}/allocations/${allocationId}/forfeit`,
+    ),
+  );
+
+// ── Capital accounts ─────────────────────────────────────────────
+
+export interface CapitalAccountRow {
+  commitmentId: string;
+  lpName: string;
+  type: CommitmentType;
+  closeLabel: string;
+  isGpCommitment: boolean;
+  hasSideLetter: boolean;
+  equalisationApplied: boolean;
+  commitment: number;
+  commitmentPct: number;
+  called: number;
+  incomeAlloc: number;
+  expenseAlloc: number;
+  gainLoss: number;
+  distributions: number;
+  balance: number;
+}
+export interface CapitalAccountRegister {
+  rows: CapitalAccountRow[];
+  totalCommitment: number;
+  totalCalled: number;
+  totalBalance: number;
+}
+export const fetchCapitalAccounts = async (
+  fundId: string,
+): Promise<CapitalAccountRegister> =>
+  unwrap(await api.get(`/finance/funds/${fundId}/capital-accounts`));
+export interface CapitalAccountEntry {
+  _id: string;
+  commitmentId: string;
+  type: string;
+  amount: number;
+  date: string;
+  description: string;
+  sourceId: string | null;
+}
+export const fetchCapitalAccountEntries = async (
+  fundId: string,
+  commitmentId: string,
+): Promise<CapitalAccountEntry[]> => {
+  const res = await api.get(
+    `/finance/funds/${fundId}/capital-accounts/${commitmentId}/entries`,
+  );
+  const d = unwrap(res);
+  return Array.isArray(d) ? d : [];
+};
+
+// ── Distributions & waterfall ─────────────────────────────────────
+
+export type DistributionSource =
+  | "Exit"
+  | "Dividend"
+  | "Interest income"
+  | "Recapitalisation"
+  | "Other";
+
+export interface Distribution {
+  _id: string;
+  fundId: string;
+  ref: string;
+  date: string;
+  source: DistributionSource;
+  sourceDescription: string;
+  totalAmount: number;
+  tier1Amount: number;
+  tier2Amount: number;
+  tier3Amount: number;
+  tier4LpAmount: number;
+  tier4GpAmount: number;
+  totalToLps: number;
+  totalToGpGross: number;
+  carryHeldInEscrow: number;
+  carryPaidToGp: number;
+  allocations: { commitmentId: string; lpName: string; amount: number }[];
+}
+export interface WaterfallTier {
+  target: number;
+  paid: number;
+  remaining: number;
+  complete: boolean;
+}
+export interface WaterfallState {
+  waterfallType: WaterfallType;
+  totalDistributed: number;
+  totalToLps: number;
+  totalToGpGross: number;
+  carryHeldInEscrow: number;
+  carryPaidNet: number;
+  tier1: WaterfallTier;
+  tier2: WaterfallTier;
+  tier3: WaterfallTier;
+  tier4: { lpPaid: number; gpPaid: number };
+  hurdleStatusPct: number;
+  distributionEventCount: number;
+}
+export interface GpCarryPosition {
+  carryReceivedToDate: number;
+  carryEntitled: number;
+  carryPaidNet: number;
+  carryHeldInEscrow: number;
+  clawbackObligation: number;
+  noClawback: boolean;
+}
+export interface AccruedCarryOnNav {
+  hypotheticalNav: number;
+  accruedCarryGross: number;
+  accruedCarryNote: string;
+}
+
+export const fetchDistributions = async (
+  fundId: string,
+): Promise<Distribution[]> => {
+  const res = await api.get(`/finance/funds/${fundId}/distributions`);
+  const d = unwrap(res);
+  return Array.isArray(d) ? d : [];
+};
+export const fetchWaterfallState = async (
+  fundId: string,
+): Promise<WaterfallState> =>
+  unwrap(await api.get(`/finance/funds/${fundId}/distributions/waterfall`));
+export const fetchGpCarryPosition = async (
+  fundId: string,
+): Promise<GpCarryPosition> =>
+  unwrap(
+    await api.get(`/finance/funds/${fundId}/distributions/gp-carry-position`),
+  );
+export const fetchAccruedCarryOnNav = async (
+  fundId: string,
+): Promise<AccruedCarryOnNav> =>
+  unwrap(await api.get(`/finance/funds/${fundId}/distributions/accrued-carry`));
+export const recordDistribution = async (
+  fundId: string,
+  dto: {
+    totalAmount: number;
+    date: string;
+    source?: DistributionSource;
+    sourceDescription?: string;
+  },
+): Promise<Distribution> =>
+  unwrap(await api.post(`/finance/funds/${fundId}/distributions`, dto));
+
+// ── Portfolio holdings & NAV valuation ────────────────────────────
+
+export type HoldingStatus = "Active" | "Exited";
+export type ValuationMethod =
+  | "Last round"
+  | "DCF"
+  | "Earnings multiple"
+  | "At cost (<12mo)"
+  | "Precedent transaction"
+  | "Market price";
+export type IfrsLevel = "Level 1" | "Level 2" | "Level 3";
+export type HoldingValuationStatus = "Proposed" | "Reviewed" | "Approved";
+
+export interface PortfolioHolding {
+  _id: string;
+  fundId: string;
+  companyName: string;
+  sector: string;
+  country: string;
+  entryDate: string;
+  costBasis: number;
+  currency: string;
+  status: HoldingStatus;
+  exitedAt: string | null;
+  exitProceeds: number | null;
+  recycledAmount: number;
+  fairValue: number | null;
+  fairValuePeriod: string | null;
+  moic: number | null;
+}
+export const fetchHoldings = async (
+  fundId: string,
+): Promise<PortfolioHolding[]> => {
+  const res = await api.get(`/finance/funds/${fundId}/holdings`);
+  const d = unwrap(res);
+  return Array.isArray(d) ? d : [];
+};
+export const createHolding = async (
+  fundId: string,
+  dto: {
+    companyName: string;
+    sector?: string;
+    country?: string;
+    entryDate: string;
+    costBasis: number;
+  },
+): Promise<PortfolioHolding> =>
+  unwrap(await api.post(`/finance/funds/${fundId}/holdings`, dto));
+export const recordExit = async (
+  fundId: string,
+  holdingId: string,
+  dto: { exitedAt: string; exitProceeds: number; recycledAmount?: number },
+): Promise<PortfolioHolding> =>
+  unwrap(
+    await api.post(`/finance/funds/${fundId}/holdings/${holdingId}/exit`, dto),
+  );
+
+export interface HoldingValuation {
+  _id: string;
+  holdingId: string;
+  period: string;
+  method: ValuationMethod;
+  ifrsLevel: IfrsLevel;
+  keyInput: string;
+  proposedValue: number;
+  proposedBy: string;
+  proposedAt: string | null;
+  reviewedValue: number | null;
+  reviewNotes: string;
+  reviewedBy: string;
+  reviewedAt: string | null;
+  methodologyChanged: boolean;
+  approvedValue: number | null;
+  approvedBy: string;
+  approvedAt: string | null;
+  status: HoldingValuationStatus;
+}
+export interface ValuationWorkflowRow {
+  holdingId: string;
+  companyName: string;
+  sector: string;
+  country: string;
+  costBasis: number;
+  valuation: HoldingValuation | null;
+  priorApprovedValue: number | null;
+  priorPeriod: string | null;
+}
+export const fetchValuationWorkflow = async (
+  fundId: string,
+  period: string,
+): Promise<ValuationWorkflowRow[]> =>
+  unwrap(await api.get(`/finance/funds/${fundId}/valuations/${period}`));
+export const proposeValuation = async (
+  fundId: string,
+  holdingId: string,
+  period: string,
+  dto: {
+    method: ValuationMethod;
+    ifrsLevel?: IfrsLevel;
+    keyInput?: string;
+    proposedValue: number;
+    proposedBy: string;
+  },
+): Promise<HoldingValuation> =>
+  unwrap(
+    await api.post(
+      `/finance/funds/${fundId}/valuations/holdings/${holdingId}/periods/${period}/propose`,
+      dto,
+    ),
+  );
+export const reviewValuation = async (
+  fundId: string,
+  valuationId: string,
+  dto: {
+    reviewedValue: number;
+    reviewNotes?: string;
+    reviewedBy: string;
+    methodologyChanged?: boolean;
+  },
+): Promise<HoldingValuation> =>
+  unwrap(
+    await api.post(
+      `/finance/funds/${fundId}/valuations/${valuationId}/review`,
+      dto,
+    ),
+  );
+export const approveValuation = async (
+  fundId: string,
+  valuationId: string,
+  approvedBy: string,
+): Promise<HoldingValuation> =>
+  unwrap(
+    await api.post(
+      `/finance/funds/${fundId}/valuations/${valuationId}/approve`,
+      { approvedBy },
+    ),
+  );
+
+// ── NAV & performance ──────────────────────────────────────────
+
+export interface NavResult {
+  portfolioInvestments: {
+    holdingId: string;
+    companyName: string;
+    costBasis: number;
+    fairValue: number;
+    period: string | null;
+  }[];
+  portfolioTotal: number;
+  cashHeld: number;
+  accruedManagementFeePayable: number;
+  fundExpensesPayable: number;
+  nav: number;
+}
+export interface PerformanceMetrics {
+  called: number;
+  distributed: number;
+  nav: number;
+  dpi: number;
+  rvpi: number;
+  tvpi: number;
+  netIrr: number | null;
+  netIrrNote: string;
+  pmeNote: string;
+}
+export const fetchNav = async (fundId: string): Promise<NavResult> =>
+  unwrap(await api.get(`/finance/funds/${fundId}/nav`));
+export const fetchPerformanceMetrics = async (
+  fundId: string,
+): Promise<PerformanceMetrics> =>
+  unwrap(await api.get(`/finance/funds/${fundId}/nav/performance`));
+
+// ── Fund expenses & management fee ────────────────────────────────
+
+export type ExpenseBorneBy = "Fund" | "GP";
+export type FeeChargeStatus = "Accrued" | "Paid";
+
+export interface FundExpenseRecord {
+  _id: string;
+  category: string;
+  amount: number;
+  date: string;
+  isOrganisationalCost: boolean;
+  borneBy: ExpenseBorneBy;
+  gpBorneAmount: number;
+}
+export const fetchFundExpenses = async (
+  fundId: string,
+): Promise<FundExpenseRecord[]> => {
+  const res = await api.get(`/finance/funds/${fundId}/expenses`);
+  const d = unwrap(res);
+  return Array.isArray(d) ? d : [];
+};
+export const recordFundExpense = async (
+  fundId: string,
+  dto: {
+    category: string;
+    amount: number;
+    date: string;
+    isOrganisationalCost?: boolean;
+  },
+): Promise<FundExpenseRecord> =>
+  unwrap(await api.post(`/finance/funds/${fundId}/expenses`, dto));
+
+export interface FeeChargeAllocation {
+  commitmentId: string;
+  lpName: string;
+  baseAmount: number;
+  ratePct: number;
+  feeAmount: number;
+}
+export interface ManagementFeeCharge {
+  _id: string;
+  period: string;
+  basis: string;
+  totalBaseAmount: number;
+  totalFeeAmount: number;
+  allocations: FeeChargeAllocation[];
+  status: FeeChargeStatus;
+  paidAt: string | null;
+}
+export interface FeePreview {
+  basis: string;
+  allocations: FeeChargeAllocation[];
+  totalBaseAmount: number;
+  totalFeeAmount: number;
+}
+
+export const fetchManagementFeeCharges = async (
+  fundId: string,
+): Promise<ManagementFeeCharge[]> => {
+  const res = await api.get(`/finance/funds/${fundId}/management-fee`);
+  const d = unwrap(res);
+  return Array.isArray(d) ? d : [];
+};
+export const previewManagementFee = async (
+  fundId: string,
+): Promise<FeePreview> =>
+  unwrap(await api.get(`/finance/funds/${fundId}/management-fee/preview`));
+export const chargeManagementFee = async (
+  fundId: string,
+  period: string,
+  asOfDate: string,
+): Promise<ManagementFeeCharge> =>
+  unwrap(
+    await api.post(`/finance/funds/${fundId}/management-fee/${period}/charge`, {
+      asOfDate,
+    }),
+  );
+export const payManagementFee = async (
+  fundId: string,
+  chargeId: string,
+): Promise<ManagementFeeCharge> =>
+  unwrap(
+    await api.post(
+      `/finance/funds/${fundId}/management-fee/charges/${chargeId}/pay`,
+    ),
+  );
+
+// ── Compliance ──────────────────────────────────────────────────
+
+export type KeyPersonStatus = "Active" | "Departed";
+export type ComplianceFrequency =
+  | "Quarterly"
+  | "Semi-annual"
+  | "Annual"
+  | "As needed";
+
+export interface KeyPerson {
+  _id: string;
+  name: string;
+  role: string;
+  timeThresholdPct: number;
+  status: KeyPersonStatus;
+  lastConfirmedAt: string | null;
+  departedAt: string | null;
+}
+export interface ComplianceCalendarItem {
+  _id: string;
+  name: string;
+  frequency: ComplianceFrequency;
+  daysAfterPeriodEnd: number;
+  lastCompletedAt: string | null;
+  lastCompletedPeriod: string | null;
+  nextDueDate: string | null;
+  daysUntilDue: number | null;
+  status: string;
+}
+export interface RestrictionCheck {
+  pct: number;
+  withinLimit: boolean;
+  amount: number;
+  capAmount?: number;
+}
+export interface RestrictionMonitoring {
+  singleInvestment: (RestrictionCheck & { companyName: string })[];
+  sectorConcentration: (RestrictionCheck & { sector: string })[];
+  countryConcentration: (RestrictionCheck & { country: string })[];
+  excludedSectorViolations: PortfolioHolding[];
+  outOfGeographyHoldings: PortfolioHolding[];
+  investmentPeriodSuspended: boolean;
+  amlNote: string;
+}
+
+export const fetchKeyPersons = async (fundId: string): Promise<KeyPerson[]> => {
+  const res = await api.get(`/finance/funds/${fundId}/compliance/key-persons`);
+  const d = unwrap(res);
+  return Array.isArray(d) ? d : [];
+};
+export const addKeyPerson = async (
+  fundId: string,
+  dto: { name: string; role: string; timeThresholdPct: number },
+): Promise<KeyPerson> =>
+  unwrap(
+    await api.post(`/finance/funds/${fundId}/compliance/key-persons`, dto),
+  );
+export const confirmKeyPersonActive = async (
+  fundId: string,
+  keyPersonId: string,
+): Promise<KeyPerson> =>
+  unwrap(
+    await api.post(
+      `/finance/funds/${fundId}/compliance/key-persons/${keyPersonId}/confirm`,
+    ),
+  );
+export const markKeyPersonDeparted = async (
+  fundId: string,
+  keyPersonId: string,
+): Promise<KeyPerson> =>
+  unwrap(
+    await api.post(
+      `/finance/funds/${fundId}/compliance/key-persons/${keyPersonId}/depart`,
+    ),
+  );
+
+export const fetchComplianceCalendar = async (
+  fundId: string,
+): Promise<ComplianceCalendarItem[]> =>
+  unwrap(await api.get(`/finance/funds/${fundId}/compliance/calendar`));
+export const addComplianceCalendarItem = async (
+  fundId: string,
+  dto: {
+    name: string;
+    frequency: ComplianceFrequency;
+    daysAfterPeriodEnd?: number;
+  },
+): Promise<ComplianceCalendarItem> =>
+  unwrap(await api.post(`/finance/funds/${fundId}/compliance/calendar`, dto));
+export const markComplianceComplete = async (
+  fundId: string,
+  calendarItemId: string,
+  period: string,
+): Promise<ComplianceCalendarItem> =>
+  unwrap(
+    await api.post(
+      `/finance/funds/${fundId}/compliance/calendar/${calendarItemId}/complete`,
+      { period },
+    ),
+  );
+
+export const fetchRestrictionMonitoring = async (
+  fundId: string,
+): Promise<RestrictionMonitoring> =>
+  unwrap(await api.get(`/finance/funds/${fundId}/compliance/restrictions`));
+
+// ── Multi-currency (FX) ────────────────────────────────────────
+
+export interface FxRateRecord {
+  _id: string;
+  fromCurrency: string;
+  toCurrency: string;
+  rate: number;
+  asOfDate: string;
+  source: string;
+}
+export interface FxExposureRow {
+  companyName: string;
+  currency: string;
+  entryRate?: number;
+  currentRate?: number;
+  costBasisFundCcy?: number;
+  fxGainLoss?: number;
+  note?: string;
+}
+export interface FxExposure {
+  fundCurrency: string;
+  rows: FxExposureRow[];
+  totalFxGainLoss: number;
+  currencyCount: number;
+}
+
+export const fetchFxRates = async (fundId: string): Promise<FxRateRecord[]> => {
+  const res = await api.get(`/finance/funds/${fundId}/fx-rates`);
+  const d = unwrap(res);
+  return Array.isArray(d) ? d : [];
+};
+export const recordFxRate = async (
+  fundId: string,
+  dto: {
+    fromCurrency: string;
+    toCurrency: string;
+    rate: number;
+    asOfDate: string;
+    source?: string;
+  },
+): Promise<FxRateRecord> =>
+  unwrap(await api.post(`/finance/funds/${fundId}/fx-rates`, dto));
+export const fetchFxExposure = async (fundId: string): Promise<FxExposure> =>
+  unwrap(await api.get(`/finance/funds/${fundId}/fx-rates/exposure`));
+
+// ── Scenarios ───────────────────────────────────────────────────
+
+export interface ScenarioResult {
+  perHolding: {
+    holdingId: string;
+    companyName: string;
+    value: number;
+    overridden: boolean;
+  }[];
+  cashHeld: number;
+  hypotheticalTotal: number;
+  tier1Amount: number;
+  tier2Amount: number;
+  tier3Amount: number;
+  tier4LpAmount: number;
+  tier4GpAmount: number;
+  totalToLps: number;
+  totalToGpGross: number;
+  hurdleCleared: boolean;
+  tier2Target: number;
+  tier3Target: number;
+  note: string;
+}
+export const runScenario = async (
+  fundId: string,
+  holdingExitValues?: { holdingId: string; exitValue: number }[],
+): Promise<ScenarioResult> =>
+  unwrap(
+    await api.post(`/finance/funds/${fundId}/scenarios/run`, {
+      holdingExitValues,
+    }),
+  );
+
+// ── LP reporting ────────────────────────────────────────────────
+
+export interface QuarterlyStatement {
+  commitmentId: string;
+  lpName: string;
+  periodStart: string;
+  periodEnd: string;
+  commitment: number;
+  calledToDate: number;
+  uncalled: number;
+  openingBalance: number;
+  contributionsInPeriod: number;
+  incomeAlloc: number;
+  expenseAlloc: number;
+  gainLoss: number;
+  distributionsInPeriod: number;
+  closingBalance: number;
+  dpi: number;
+  rvpi: number;
+  tvpi: number;
+}
+export const fetchQuarterlyStatement = async (
+  fundId: string,
+  commitmentId: string,
+  periodStart: string,
+  periodEnd: string,
+): Promise<QuarterlyStatement> =>
+  unwrap(
+    await api.get(
+      `/finance/funds/${fundId}/lp-reporting/commitments/${commitmentId}/statement`,
+      {
+        params: { periodStart, periodEnd },
+      },
+    ),
+  );
+export const fetchCallNotice = async (
+  fundId: string,
+  callId: string,
+  commitmentId: string,
+) =>
+  unwrap(
+    await api.get(
+      `/finance/funds/${fundId}/lp-reporting/calls/${callId}/notice/${commitmentId}`,
+    ),
+  );
+export const fetchDistributionNotice = async (
+  fundId: string,
+  distributionId: string,
+  commitmentId: string,
+) =>
+  unwrap(
+    await api.get(
+      `/finance/funds/${fundId}/lp-reporting/distributions/${distributionId}/notice/${commitmentId}`,
+    ),
+  );
+export const fetchFeeExpenseDisclosure = async (
+  fundId: string,
+  commitmentId: string,
+  period: string,
+) =>
+  unwrap(
+    await api.get(
+      `/finance/funds/${fundId}/lp-reporting/commitments/${commitmentId}/fee-expense-disclosure/${period}`,
+    ),
+  );
