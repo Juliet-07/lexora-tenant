@@ -4,27 +4,28 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import {
-  Users,
   AlertTriangle,
-  CheckCircle2,
   ArrowUpRight,
-  Package,
-  Loader2,
   CalendarClock,
   ShieldCheck,
   Briefcase,
   Clock,
   Sparkles,
-  FileText,
-  Mail,
-  Gauge,
-  ListChecks,
+  Package,
+  Loader2,
   Activity,
+  Trophy,
+  TrendingUp,
+  Zap,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useModule } from "@/contexts/ModuleContext";
 import { timeEntries } from "@/data/mockData";
 import { MotivationalQuote } from "@/components/dashboard/MotivationalQuote";
+import { quickLinksFor } from "@/components/dashboard/moduleQuickLinks";
+import { useCrossModuleMetrics } from "@/components/dashboard/useCrossModuleMetrics";
+import { ModulePulse } from "@/components/dashboard/ModulePulse";
+import { AttentionFeed } from "@/components/dashboard/AttentionFeed";
 
 // ─── Trial banner ─────────────────────────────────────────────
 function TrialBanner({
@@ -60,20 +61,63 @@ function TrialBanner({
   );
 }
 
-const quickActions = [
-  { label: "Clients", to: "/clients", icon: Users },
-  { label: "Mandates", to: "/crm/mandates", icon: Briefcase },
-  { label: "Tasks", to: "/crm/tasks", icon: ListChecks },
-  { label: "Invoicing", to: "/crm/invoicing", icon: FileText },
-  { label: "Newsletter", to: "/crm/newsletter", icon: Mail },
-  { label: "Reports", to: "/crm/reports", icon: Gauge },
-];
+// ─── Organisation health ring ─────────────────────────────────
+function HealthRing({ score }: { score: number }) {
+  const R = 52;
+  const C = 2 * Math.PI * R;
+  const filled = (score / 100) * C;
+  const tone =
+    score >= 75
+      ? "stroke-success text-success"
+      : score >= 50
+        ? "stroke-warning text-warning"
+        : "stroke-destructive text-destructive";
+  const [strokeClass, textClass] = tone.split(" ");
+
+  return (
+    <div className="relative h-36 w-36">
+      <svg viewBox="0 0 120 120" className="h-full w-full -rotate-90">
+        <circle
+          cx="60"
+          cy="60"
+          r={R}
+          fill="none"
+          strokeWidth="10"
+          className="stroke-muted/40"
+        />
+        <circle
+          cx="60"
+          cy="60"
+          r={R}
+          fill="none"
+          strokeWidth="10"
+          strokeLinecap="round"
+          strokeDasharray={`${filled} ${C}`}
+          className={`${strokeClass} transition-all duration-700`}
+        />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className={`text-3xl font-bold ${textClass}`}>{score}%</span>
+        <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+          Org health
+        </span>
+      </div>
+    </div>
+  );
+}
 
 // ─── Component ────────────────────────────────────────────────
 export default function Dashboard() {
   const { user, isAdmin } = useAuth();
-  const { dashboardData, subscription, isLoadingDashboard, modules } =
-    useModule();
+  const {
+    dashboardData,
+    subscription,
+    isLoadingDashboard,
+    modules,
+    currentModule,
+  } = useModule();
+  const { cards, attention, wins, overallScore, counts } =
+    useCrossModuleMetrics();
 
   const now = new Date();
   const today = now.toLocaleDateString("en-US", {
@@ -86,6 +130,9 @@ export default function Dashboard() {
   const greeting =
     hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
 
+  // Module-aware quick links — change with the active module
+  const quickLinks = quickLinksFor(currentModule?.id);
+
   if (isLoadingDashboard) {
     return (
       <div className="flex h-64 items-center justify-center gap-3 text-muted-foreground">
@@ -96,72 +143,6 @@ export default function Dashboard() {
   }
 
   const team = dashboardData?.team;
-  const hr = dashboardData?.hr;
-  const activeModules = subscription?.activeModules ?? [];
-  const hasHrModule = activeModules.some(
-    (m: string) => m === "hr_pm" || m === "hr",
-  );
-
-  // ── Stat cards ────────────────────────────────────────────
-  const statCards = isAdmin
-    ? [
-        {
-          title: "Team Members",
-          value: team?.total ?? 0,
-          icon: Users,
-          change: `${team?.active ?? 0} active`,
-          accent: "from-blue-500 to-cyan-500",
-        },
-        {
-          title: "Active Modules",
-          value: activeModules.length,
-          icon: Package,
-          change: subscription?.plan ? `${subscription.plan} plan` : "No plan",
-          accent: "from-violet-500 to-purple-600",
-        },
-        {
-          title: "Subscription",
-          value: subscription?.status ?? "—",
-          icon: ShieldCheck,
-          change: subscription?.plan ?? "—",
-          accent: "from-amber-500 to-orange-500",
-        },
-        ...(hasHrModule
-          ? [
-              {
-                title: "Total Employees",
-                value: hr?.totalEmployees ?? 0,
-                icon: Briefcase,
-                change: `${hr?.activeEmployees ?? 0} active`,
-                accent: "from-emerald-500 to-teal-500",
-              },
-            ]
-          : [
-              {
-                title: "Active",
-                value: team?.active ?? 0,
-                icon: CheckCircle2,
-                change: "Online members",
-                accent: "from-emerald-500 to-teal-500",
-              },
-            ]),
-      ]
-    : [
-        {
-          title: "Active Modules",
-          value: activeModules.length,
-          icon: Package,
-          change: `${subscription?.plan ?? "—"} plan`,
-          accent: "from-violet-500 to-purple-600",
-        },
-        {
-          title: "Team Size",
-          value: team?.total ?? 0,
-          icon: Users,
-          change: `${team?.active ?? 0} active`,
-          accent: "from-blue-500 to-cyan-500",
-        },
-      ];
 
   // ── Time tracking rollup ──────────────────────────────────
   const fullName = user ? `${user.firstName} ${user.lastName}` : "";
@@ -192,6 +173,11 @@ export default function Dashboard() {
             <p className="flex items-center gap-2 text-xs font-medium uppercase tracking-widest text-muted-foreground">
               <Sparkles className="h-3.5 w-3.5 text-primary" />
               {today}
+              {currentModule && (
+                <Badge variant="secondary" className="ml-1 normal-case tracking-normal">
+                  {currentModule.shortName} workspace
+                </Badge>
+              )}
             </p>
             <h1 className="mt-2 text-3xl font-bold tracking-tight">
               {greeting}, {user?.firstName}
@@ -202,7 +188,7 @@ export default function Dashboard() {
               </p>
             )}
             <div className="mt-4 flex flex-wrap gap-2">
-              {quickActions.map((a) => (
+              {quickLinks.map((a) => (
                 <Button
                   key={a.label}
                   asChild
@@ -244,37 +230,127 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Stat cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {statCards.map((stat) => (
-          <Card
-            key={stat.title}
-            className="relative overflow-hidden transition-shadow hover:shadow-lg"
-          >
-            <div
-              className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${stat.accent}`}
-            />
-            <CardContent className="p-5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">{stat.title}</p>
-                  <p className="mt-1 text-2xl font-bold capitalize">
-                    {stat.value}
-                  </p>
-                  <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
-                    <ArrowUpRight className="h-3 w-3" />
-                    {stat.change}
-                  </p>
-                </div>
-                <div
-                  className={`rounded-xl bg-gradient-to-br ${stat.accent} p-3 text-white shadow-sm`}
-                >
-                  <stat.icon className="h-5 w-5" />
-                </div>
+      {/* Org health + momentum */}
+      <section className="grid gap-4 lg:grid-cols-[1fr_2.2fr]">
+        <Card className="relative overflow-hidden">
+          <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-primary to-secondary" />
+          <CardContent className="flex items-center gap-5 p-5">
+            <HealthRing score={overallScore} />
+            <div className="space-y-3">
+              <div>
+                <p className="text-sm font-semibold">Business pulse</p>
+                <p className="text-xs text-muted-foreground">
+                  Blended score across AML/KYC, GRC, CRM and HR
+                </p>
               </div>
-            </CardContent>
-          </Card>
-        ))}
+              <div className="space-y-1.5 text-xs">
+                <p className="flex items-center gap-1.5 text-muted-foreground">
+                  <ShieldCheck className="h-3.5 w-3.5 text-primary" />
+                  {counts.criticalRisks} critical risks ·{" "}
+                  {counts.overdueObligations} overdue filings
+                </p>
+                <p className="flex items-center gap-1.5 text-muted-foreground">
+                  <Briefcase className="h-3.5 w-3.5 text-primary" />
+                  {counts.atRiskMandates} mandates at risk ·{" "}
+                  {counts.overdueInvoices} overdue invoices
+                </p>
+                <p className="flex items-center gap-1.5 text-muted-foreground">
+                  <Zap className="h-3.5 w-3.5 text-primary" />
+                  {counts.openTickets} open support tickets
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="relative overflow-hidden">
+          <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-amber-500 to-emerald-500" />
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Trophy className="h-4 w-4 text-warning" />
+              Momentum — what the business has banked
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {wins.map((w) => (
+                <div
+                  key={w.label}
+                  className="rounded-xl border bg-muted/20 p-3 transition-colors hover:bg-muted/40"
+                >
+                  <p className="flex items-center gap-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                    <TrendingUp className="h-3 w-3 text-success" />
+                    {w.label}
+                  </p>
+                  <p className="mt-1 text-xl font-bold tracking-tight">
+                    {w.value}
+                  </p>
+                  <p className="mt-0.5 text-[10px] leading-tight text-muted-foreground">
+                    {w.hint}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </section>
+
+      {/* Cross-module pulse */}
+      <section className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+            <Activity className="h-4 w-4 text-primary" />
+            Cross-module pulse
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            Live health of every module in your workspace
+          </p>
+        </div>
+        <ModulePulse cards={cards} />
+      </section>
+
+      {/* Attention feed + delivery pulse */}
+      <div className="grid gap-6 lg:grid-cols-3">
+        <div className="lg:col-span-2">
+          <AttentionFeed items={attention} />
+        </div>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Clock className="h-4 w-4 text-primary" />
+              Delivery pulse
+            </CardTitle>
+            <Button asChild variant="ghost" size="sm" className="text-xs">
+              <Link to="/crm/time">Tracker →</Link>
+            </Button>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div className="rounded-lg bg-muted/30 p-2">
+                <p className="text-[11px] text-muted-foreground">Hours</p>
+                <p className="text-lg font-bold">{totalHours.toFixed(1)}</p>
+              </div>
+              <div className="rounded-lg bg-muted/30 p-2">
+                <p className="text-[11px] text-muted-foreground">Billable</p>
+                <p className="text-lg font-bold">{billableHours.toFixed(1)}</p>
+              </div>
+              <div className="rounded-lg bg-muted/30 p-2">
+                <p className="text-[11px] text-muted-foreground">Revenue</p>
+                <p className="text-lg font-bold">
+                  ${Math.round(revenue).toLocaleString()}
+                </p>
+              </div>
+            </div>
+            <div>
+              <div className="mb-1 flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">Utilisation</span>
+                <span className="font-medium">{utilisation}%</span>
+              </div>
+              <Progress value={utilisation} className="h-2" />
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
@@ -315,46 +391,6 @@ export default function Dashboard() {
           </Card>
         )}
 
-        {/* Delivery pulse */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Clock className="h-4 w-4 text-primary" />
-              Delivery pulse
-            </CardTitle>
-            <Button asChild variant="ghost" size="sm" className="text-xs">
-              <Link to="/crm/time">Tracker →</Link>
-            </Button>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-3 gap-2 text-center">
-              <div className="rounded-lg bg-muted/30 p-2">
-                <p className="text-[11px] text-muted-foreground">Hours</p>
-                <p className="text-lg font-bold">{totalHours.toFixed(1)}</p>
-              </div>
-              <div className="rounded-lg bg-muted/30 p-2">
-                <p className="text-[11px] text-muted-foreground">Billable</p>
-                <p className="text-lg font-bold">{billableHours.toFixed(1)}</p>
-              </div>
-              <div className="rounded-lg bg-muted/30 p-2">
-                <p className="text-[11px] text-muted-foreground">Revenue</p>
-                <p className="text-lg font-bold">
-                  ${Math.round(revenue).toLocaleString()}
-                </p>
-              </div>
-            </div>
-            <div>
-              <div className="mb-1 flex items-center justify-between text-xs">
-                <span className="text-muted-foreground">Utilisation</span>
-                <span className="font-medium">{utilisation}%</span>
-              </div>
-              <Progress value={utilisation} className="h-2" />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-2">
         {/* Recent activity */}
         <Card>
           <CardHeader className="pb-2">
@@ -394,82 +430,85 @@ export default function Dashboard() {
             )}
           </CardContent>
         </Card>
-
-        {/* Team overview — admin only */}
-        {isAdmin && team ? (
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Team composition</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {team.byRole?.length > 0 ? (
-                <div className="space-y-2">
-                  {team.byRole.map((r: { _id: string; count: number }) => (
-                    <div
-                      key={r._id}
-                      className="flex items-center justify-between text-sm"
-                    >
-                      <span className="capitalize text-muted-foreground">
-                        {r._id.replace("tenant_", "").replace(/_/g, " ")}
-                      </span>
-                      <Badge variant="secondary">{r.count}</Badge>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="py-4 text-center text-sm text-muted-foreground">
-                  No team members yet.
-                </p>
-              )}
-
-              {team.recentMembers?.length > 0 && (
-                <div className="space-y-3 border-t pt-3">
-                  <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                    Recent members
-                  </p>
-                  {team.recentMembers.map((m) => (
-                    <div key={m._id} className="flex items-center gap-3">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-xs font-bold text-muted-foreground">
-                        {m.firstName?.[0]}
-                        {m.lastName?.[0]}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium">
-                          {m.firstName} {m.lastName}
-                        </p>
-                        <p className="truncate text-xs capitalize text-muted-foreground">
-                          {m.role?.replace("tenant_", "").replace(/_/g, " ")}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        ) : (
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Jump back in</CardTitle>
-            </CardHeader>
-            <CardContent className="grid grid-cols-2 gap-3">
-              {quickActions.map((a) => (
-                <Button
-                  key={a.label}
-                  asChild
-                  variant="outline"
-                  className="justify-start"
-                >
-                  <Link to={a.to}>
-                    <a.icon className="mr-2 h-4 w-4" />
-                    {a.label}
-                  </Link>
-                </Button>
-              ))}
-            </CardContent>
-          </Card>
-        )}
       </div>
+
+      {/* Team overview — admin only */}
+      {isAdmin && team ? (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Team composition</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-6 sm:grid-cols-2">
+            {team.byRole?.length > 0 ? (
+              <div className="space-y-2">
+                {team.byRole.map((r: { _id: string; count: number }) => (
+                  <div
+                    key={r._id}
+                    className="flex items-center justify-between text-sm"
+                  >
+                    <span className="capitalize text-muted-foreground">
+                      {r._id.replace("tenant_", "").replace(/_/g, " ")}
+                    </span>
+                    <Badge variant="secondary">{r.count}</Badge>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="py-4 text-center text-sm text-muted-foreground">
+                No team members yet.
+              </p>
+            )}
+
+            {team.recentMembers?.length > 0 && (
+              <div className="space-y-3 border-t pt-3 sm:border-l sm:border-t-0 sm:pl-6 sm:pt-0">
+                <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  Recent members
+                </p>
+                {team.recentMembers.map((m) => (
+                  <div key={m._id} className="flex items-center gap-3">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-xs font-bold text-muted-foreground">
+                      {m.firstName?.[0]}
+                      {m.lastName?.[0]}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium">
+                        {m.firstName} {m.lastName}
+                      </p>
+                      <p className="truncate text-xs capitalize text-muted-foreground">
+                        {m.role?.replace("tenant_", "").replace(/_/g, " ")}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      ) : (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <ArrowUpRight className="h-4 w-4 text-primary" />
+              Jump back in
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            {quickLinks.map((a) => (
+              <Button
+                key={a.label}
+                asChild
+                variant="outline"
+                className="justify-start"
+              >
+                <Link to={a.to}>
+                  <a.icon className="mr-2 h-4 w-4" />
+                  {a.label}
+                </Link>
+              </Button>
+            ))}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
