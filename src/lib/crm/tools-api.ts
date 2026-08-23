@@ -332,6 +332,20 @@ export const createCampaign = async (dto: {
   body?: string;
   event?: Partial<CampaignEventDetails>;
 }): Promise<Campaign> => unwrap(await api.post("/tools/campaigns", dto));
+// Allowed while Draft or Scheduled — refused by the backend once
+// Sending or Sent. If segmentId differs from the campaign's current
+// one, real recipients are re-resolved against the new segment.
+export const updateCampaign = async (
+  id: string,
+  dto: {
+    name: string;
+    type: CampaignType;
+    segmentId: string;
+    subject?: string;
+    body?: string;
+    event?: Partial<CampaignEventDetails>;
+  },
+): Promise<Campaign> => unwrap(await api.patch(`/tools/campaigns/${id}`, dto));
 export const duplicateCampaign = async (id: string): Promise<Campaign> =>
   unwrap(await api.post(`/tools/campaigns/${id}/duplicate`));
 export const deleteCampaign = async (
@@ -343,6 +357,11 @@ export const scheduleCampaign = async (
   scheduledAt: string,
 ): Promise<Campaign> =>
   unwrap(await api.post(`/tools/campaigns/${id}/schedule`, { scheduledAt }));
+// Real way back from Scheduled to Draft — clears the schedule
+// rather than leaving the campaign stuck waiting for its original
+// time with no other path forward.
+export const unscheduleCampaign = async (id: string): Promise<Campaign> =>
+  unwrap(await api.post(`/tools/campaigns/${id}/unschedule`));
 export const sendCampaignNow = async (id: string): Promise<Campaign> =>
   unwrap(await api.post(`/tools/campaigns/${id}/send-now`));
 export const sendCampaignTest = async (

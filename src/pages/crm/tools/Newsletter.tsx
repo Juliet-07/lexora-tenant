@@ -53,6 +53,7 @@ import {
   Eye,
   CheckCircle2,
   Info,
+  Pencil,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { RichTextEditor } from "@/components/RichTextEditor";
@@ -69,9 +70,11 @@ import {
   fetchSegmentMembers,
   fetchCampaigns,
   createCampaign,
+  updateCampaign,
   duplicateCampaign,
   deleteCampaign,
   scheduleCampaign,
+  unscheduleCampaign,
   sendCampaignNow,
   sendCampaignTest,
   fetchNewsletterDrafts,
@@ -298,12 +301,19 @@ export default function Newsletter() {
   const [prefillNewsletterId, setPrefillNewsletterId] = useState<string | null>(
     null,
   );
+  // Set only when editing an existing campaign — distinguishes a
+  // real edit (PATCH) from a fresh create (POST) in the same dialog
+  // and form state.
+  const [editingCampaignId, setEditingCampaignId] = useState<string | null>(
+    null,
+  );
 
   const openNewCampaign = (prefill?: {
     title: string;
     body: string;
     newsletterId: string;
   }) => {
+    setEditingCampaignId(null);
     setPrefillNewsletterId(prefill?.newsletterId ?? null);
     setCampaignDraft({
       name: prefill?.title ?? "",
@@ -316,13 +326,29 @@ export default function Newsletter() {
     setOpenCampaignDialog(true);
   };
 
+  // Real edit — pre-fills the same dialog from the campaign's own
+  // current real values, available while Draft or Scheduled.
+  const openEditCampaign = (c: Campaign) => {
+    setEditingCampaignId(c._id);
+    setPrefillNewsletterId(null);
+    setCampaignDraft({
+      name: c.name,
+      type: c.type,
+      segmentId: c.segmentId,
+      subject: c.subject,
+      body: c.body,
+      event: c.event ?? emptyEventDetails,
+    });
+    setOpenCampaignDialog(true);
+  };
+
   const [detailCampaignId, setDetailCampaignId] = useState<string | null>(null);
   const detailCampaign =
     campaigns.find((c) => c._id === detailCampaignId) ?? null;
 
-  const createCampaignMut = useMutation({
-    mutationFn: () =>
-      createCampaign({
+  const saveCampaignMut = useMutation({
+    mutationFn: () => {
+      const payload = {
         name: campaignDraft.name,
         type: campaignDraft.type,
         segmentId: campaignDraft.segmentId,
@@ -332,7 +358,11 @@ export default function Newsletter() {
           campaignDraft.type === "Event invite"
             ? campaignDraft.event
             : undefined,
-      }),
+      };
+      return editingCampaignId
+        ? updateCampaign(editingCampaignId, payload)
+        : createCampaign(payload);
+    },
     onSuccess: (c) => {
       invalidateCampaigns();
       if (prefillNewsletterId) {
@@ -342,12 +372,20 @@ export default function Newsletter() {
       }
       setOpenCampaignDialog(false);
       setDetailCampaignId(c._id);
-      toast({
-        title: "Campaign created",
-        description: `${c.name} drafted, targeting ${c.recipients.length} recipients.`,
-      });
+      toast(
+        editingCampaignId
+          ? { title: "Campaign updated" }
+          : {
+              title: "Campaign created",
+              description: `${c.name} drafted, targeting ${c.recipients.length} recipients.`,
+            },
+      );
     },
-    onError: onErr("Failed to create campaign"),
+    onError: onErr(
+      editingCampaignId
+        ? "Failed to save changes"
+        : "Failed to create campaign",
+    ),
   });
 
   // ── Campaign detail actions ──────────────────────────────
@@ -367,6 +405,18 @@ export default function Newsletter() {
       toast({ title: "Campaign scheduled" });
     },
     onError: onErr("Failed to schedule"),
+  });
+  const unscheduleMut = useMutation({
+    mutationFn: () => unscheduleCampaign(detailCampaign!._id),
+    onSuccess: () => {
+      invalidateCampaigns();
+      toast({
+        title: "Schedule cancelled",
+        description:
+          "Back to Draft — send now or reschedule whenever you're ready.",
+      });
+    },
+    onError: onErr("Failed to cancel schedule"),
   });
   const sendNowMut = useMutation({
     mutationFn: () => sendCampaignNow(detailCampaign!._id),
@@ -847,11 +897,13 @@ export default function Newsletter() {
         </DialogContent>
       </Dialog>
 
-      {/* New campaign dialog */}
+      {/* New / edit campaign dialog */}
       <Dialog open={openCampaignDialog} onOpenChange={setOpenCampaignDialog}>
         <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>New campaign</DialogTitle>
+            <DialogTitle>
+              {editingCampaignId ? "Edit campaign" : "New campaign"}
+            </DialogTitle>
           </DialogHeader>
           <div className="grid gap-3">
             <div className="grid grid-cols-2 gap-3">
@@ -999,14 +1051,14 @@ export default function Newsletter() {
           </div>
           <DialogFooter>
             <Button
-              onClick={() => createCampaignMut.mutate()}
+              onClick={() => saveCampaignMut.mutate()}
               disabled={
                 !campaignDraft.name.trim() ||
                 !campaignDraft.segmentId ||
-                createCampaignMut.isPending
+                saveCampaignMut.isPending
               }
             >
-              Create campaign
+              {editingCampaignId ? "Save changes" : "Create campaign"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1051,7 +1103,8 @@ export default function Newsletter() {
                   <Send className="mr-1 h-3 w-3" />
                   Send test
                 </Button>
-                {detailCampaign.status === "Draft" && (
+                {(detailCampaign.status === "Draft" ||
+                  detailCampaign.status === "Scheduled") && (
                   <Button
                     size="sm"
                     variant="outline"
@@ -1059,6 +1112,17 @@ export default function Newsletter() {
                     onClick={() => sendNowMut.mutate()}
                   >
                     Send now
+                  </Button>
+                )}
+                {(detailCampaign.status === "Draft" ||
+                  detailCampaign.status === "Scheduled") && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => openEditCampaign(detailCampaign)}
+                  >
+                    <Pencil className="mr-1 h-3 w-3" />
+                    Edit
                   </Button>
                 )}
                 <Button
@@ -1103,13 +1167,25 @@ export default function Newsletter() {
                 </Card>
               )}
               {detailCampaign.status === "Scheduled" && (
-                <p className="text-sm text-muted-foreground">
-                  Scheduled to send on{" "}
-                  <strong>
-                    {new Date(detailCampaign.scheduledAt!).toLocaleString()}
-                  </strong>
-                  .
-                </p>
+                <Card>
+                  <CardContent className="flex flex-wrap items-center justify-between gap-2 p-4">
+                    <p className="text-sm text-muted-foreground">
+                      Scheduled to send on{" "}
+                      <strong>
+                        {new Date(detailCampaign.scheduledAt!).toLocaleString()}
+                      </strong>
+                      .
+                    </p>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={unscheduleMut.isPending}
+                      onClick={() => unscheduleMut.mutate()}
+                    >
+                      Cancel schedule
+                    </Button>
+                  </CardContent>
+                </Card>
               )}
               {detailCampaign.status === "Sending" && (
                 <p className="text-sm text-muted-foreground">
