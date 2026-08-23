@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,15 +11,20 @@ import {
 } from "@/components/ui/popover";
 import { Card, CardContent } from "@/components/ui/card";
 import { Paperclip, Pencil, Trash2, CornerDownRight } from "lucide-react";
-import {
-  CommentNode,
-  seedComments,
-  teamDirectory,
-} from "@/data/crmPmMockData";
 import { useToast } from "@/hooks/use-toast";
+import {
+  fetchCommentThread,
+  addComment,
+  editComment,
+  deleteComment,
+  toggleReaction,
+  fetchMentionDirectory,
+  type CommentNode,
+  type CommentSubjectType,
+} from "@/lib/crm/tools-api";
 
 const REACTIONS = ["👍", "✅", "👀", "🚩", "🔥", "❓"];
-const ME = "Sarah Chen";
+const AUTHOR_STORAGE_KEY = "lexora-comment-author-name";
 
 const initials = (n: string) =>
   n
@@ -28,18 +34,23 @@ const initials = (n: string) =>
     .slice(0, 2)
     .toUpperCase();
 
-const availabilityDot: Record<string, string> = {
-  Online: "bg-success",
-  Away: "bg-warning",
-  DND: "bg-destructive",
-  Offline: "bg-muted-foreground",
-};
+type MentionEntry = { name: string; role: string };
 
 /** Renders comment text with @mentions as clickable profile cards. */
-export function MentionText({ body }: { body: string }) {
+export function MentionText({
+  body,
+  directory,
+}: {
+  body: string;
+  directory: MentionEntry[];
+}) {
   const parts = useMemo(() => {
-    const names = teamDirectory.map((t) => t.name);
-    const rx = new RegExp(`@(${names.join("|")})`, "g");
+    if (!directory.length) return [body];
+    const names = directory.map((t) => t.name);
+    const rx = new RegExp(
+      `@(${names.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})`,
+      "g",
+    );
     const out: (string | { mention: string })[] = [];
     let last = 0;
     let m: RegExpExecArray | null;
@@ -50,7 +61,7 @@ export function MentionText({ body }: { body: string }) {
     }
     if (last < body.length) out.push(body.slice(last));
     return out;
-  }, [body]);
+  }, [body, directory]);
 
   return (
     <span className="whitespace-pre-wrap text-sm">
@@ -58,15 +69,21 @@ export function MentionText({ body }: { body: string }) {
         typeof p === "string" ? (
           <span key={i}>{p}</span>
         ) : (
-          <MentionChip key={i} name={p.mention} />
+          <MentionChip key={i} name={p.mention} directory={directory} />
         ),
       )}
     </span>
   );
 }
 
-function MentionChip({ name }: { name: string }) {
-  const member = teamDirectory.find((t) => t.name === name);
+function MentionChip({
+  name,
+  directory,
+}: {
+  name: string;
+  directory: MentionEntry[];
+}) {
+  const member = directory.find((t) => t.name === name);
   return (
     <Popover>
       <PopoverTrigger asChild>
@@ -82,23 +99,7 @@ function MentionChip({ name }: { name: string }) {
           <div>
             <p className="text-sm font-semibold">{name}</p>
             <p className="text-xs text-muted-foreground">{member?.role}</p>
-            <p className="mt-1 flex items-center gap-1.5 text-xs">
-              <span
-                className={`h-2 w-2 rounded-full ${
-                  availabilityDot[member?.availability ?? "Offline"]
-                }`}
-              />
-              {member?.availability} · {member?.mandates ?? 0} active mandates
-            </p>
           </div>
-        </div>
-        <div className="mt-3 flex gap-2">
-          <Button size="sm" variant="outline" className="flex-1 text-xs">
-            Message
-          </Button>
-          <Button size="sm" variant="outline" className="flex-1 text-xs">
-            Assign task
-          </Button>
         </div>
       </PopoverContent>
     </Popover>
@@ -109,10 +110,12 @@ function Composer({
   placeholder,
   onSubmit,
   autoFocus,
+  directory,
 }: {
   placeholder: string;
   onSubmit: (body: string) => void;
   autoFocus?: boolean;
+  directory: MentionEntry[];
 }) {
   const [value, setValue] = useState("");
   const [showMentions, setShowMentions] = useState(false);
@@ -138,18 +141,15 @@ function Composer({
           setShowMentions(/@[\w-]*$/.test(e.target.value));
         }}
       />
-      {showMentions && (
+      {showMentions && directory.length > 0 && (
         <Card>
           <CardContent className="max-h-44 overflow-auto p-1">
-            {teamDirectory.map((t) => (
+            {directory.map((t) => (
               <button
                 key={t.name}
                 onClick={() => insert(t.name)}
                 className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-muted"
               >
-                <span
-                  className={`h-2 w-2 rounded-full ${availabilityDot[t.availability]}`}
-                />
                 <span className="font-medium">@{t.name}</span>
                 <span className="text-xs text-muted-foreground">{t.role}</span>
               </button>
@@ -159,8 +159,8 @@ function Composer({
       )}
       <div className="flex items-center justify-between">
         <p className="flex items-center gap-1 text-xs text-muted-foreground">
-          <Paperclip className="h-3 w-3" /> Markdown & drag-and-drop attachments
-          supported
+          <Paperclip className="h-3 w-3" /> Markdown supported. Type @ to
+          mention.
         </p>
         <Button
           size="sm"
@@ -183,6 +183,8 @@ function CommentItem({
   onReact,
   onEdit,
   onDelete,
+  currentAuthor,
+  directory,
   depth = 0,
 }: {
   node: CommentNode;
@@ -190,12 +192,14 @@ function CommentItem({
   onReact: (id: string, emoji: string) => void;
   onEdit: (id: string, body: string) => void;
   onDelete: (id: string) => void;
+  currentAuthor: string;
+  directory: MentionEntry[];
   depth?: number;
 }) {
   const [replying, setReplying] = useState(false);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(node.body);
-  const mine = node.author === ME;
+  const mine = !!currentAuthor && node.author === currentAuthor;
 
   return (
     <div className={depth ? "ml-6 border-l pl-4" : ""}>
@@ -209,7 +213,7 @@ function CommentItem({
           <div className="flex items-center gap-2">
             <span className="text-sm font-semibold">{node.author}</span>
             <span className="text-xs text-muted-foreground">
-              {new Date(node.at).toLocaleString()}
+              {new Date(node.createdAt).toLocaleString()}
             </span>
             {node.edited && (
               <span className="text-xs text-muted-foreground">(edited)</span>
@@ -231,7 +235,7 @@ function CommentItem({
                 <Button
                   size="sm"
                   onClick={() => {
-                    onEdit(node.id, draft);
+                    onEdit(node._id, draft);
                     setEditing(false);
                   }}
                 >
@@ -247,7 +251,7 @@ function CommentItem({
               </div>
             </div>
           ) : (
-            <MentionText body={node.body} />
+            <MentionText body={node.body} directory={directory} />
           )}
 
           {!node.deleted && (
@@ -277,7 +281,7 @@ function CommentItem({
                     <button
                       key={r}
                       className="rounded p-1 text-base hover:bg-muted"
-                      onClick={() => onReact(node.id, r)}
+                      onClick={() => onReact(node._id, r)}
                     >
                       {r}
                     </button>
@@ -306,7 +310,7 @@ function CommentItem({
                     size="sm"
                     variant="ghost"
                     className="h-6 px-2 text-xs text-destructive"
-                    onClick={() => onDelete(node.id)}
+                    onClick={() => onDelete(node._id)}
                   >
                     <Trash2 className="mr-1 h-3 w-3" /> Delete
                   </Button>
@@ -320,8 +324,9 @@ function CommentItem({
               <Composer
                 autoFocus
                 placeholder="Reply… type @ to mention"
+                directory={directory}
                 onSubmit={(b) => {
-                  onReply(node.id, b);
+                  onReply(node._id, b);
                   setReplying(false);
                 }}
               />
@@ -332,9 +337,11 @@ function CommentItem({
 
       {node.replies.map((r) => (
         <CommentItem
-          key={r.id}
+          key={r._id}
           node={r}
           depth={depth + 1}
+          currentAuthor={currentAuthor}
+          directory={directory}
           onReply={onReply}
           onReact={onReact}
           onEdit={onEdit}
@@ -346,109 +353,160 @@ function CommentItem({
 }
 
 /**
- * Shared collaboration component (Section 9): threaded comments,
- * @mentions with profile cards, reactions, edit/delete, auto-watch.
- * Consumed by mandates, tasks, tickets, documents and ADR cases.
+ * Shared collaboration component: real threaded comments, @mentions
+ * with profile cards (from the real employee directory), reactions,
+ * edit/delete. Consumed by Contracts today; mandates, tasks,
+ * tickets, documents and ADR cases can adopt it the same way.
  */
-export function CommentThread({ subject }: { subject: string }) {
-  const [nodes, setNodes] = useState<CommentNode[]>(() =>
-    seedComments(subject),
-  );
+export function CommentThread({
+  subject,
+  subjectType,
+}: {
+  subject: string;
+  subjectType: CommentSubjectType;
+}) {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
-  const mutate = (
-    list: CommentNode[],
-    id: string,
-    fn: (n: CommentNode) => CommentNode,
-  ): CommentNode[] =>
-    list.map((n) =>
-      n.id === id ? fn(n) : { ...n, replies: mutate(n.replies, id, fn) },
-    );
+  const [authorName, setAuthorName] = useState(
+    () => localStorage.getItem(AUTHOR_STORAGE_KEY) ?? "",
+  );
+  const saveAuthorName = (v: string) => {
+    setAuthorName(v);
+    localStorage.setItem(AUTHOR_STORAGE_KEY, v);
+  };
+
+  const { data: nodes = [] } = useQuery({
+    queryKey: ["comment-thread", subjectType, subject],
+    queryFn: () => fetchCommentThread(subjectType, subject),
+    enabled: !!subject,
+  });
+  const { data: directory = [] } = useQuery({
+    queryKey: ["mention-directory"],
+    queryFn: fetchMentionDirectory,
+  });
+
+  const invalidate = () =>
+    queryClient.invalidateQueries({
+      queryKey: ["comment-thread", subjectType, subject],
+    });
 
   const notifyMentions = (body: string) => {
-    const names = teamDirectory
+    const names = directory
       .map((t) => t.name)
       .filter((n) => body.includes(`@${n}`));
     if (names.length)
       toast({
-        title: "Watchers added",
-        description: `${names.join(", ")} mentioned, auto-subscribed and notified.`,
+        title: "Mentioned",
+        description: `${names.join(", ")} mentioned in this comment.`,
       });
   };
 
-  const add = (body: string) => {
-    setNodes((p) => [
-      ...p,
-      {
-        id: `${subject}-${Date.now()}`,
-        author: ME,
-        at: new Date().toISOString(),
-        body,
-        reactions: {},
-        replies: [],
-      },
-    ]);
-    notifyMentions(body);
-  };
+  const addMut = useMutation({
+    mutationFn: (vars: { body: string; parentId?: string }) =>
+      addComment(subjectType, subject, {
+        author: authorName,
+        body: vars.body,
+        parentId: vars.parentId,
+      }),
+    onSuccess: (_, vars) => {
+      invalidate();
+      notifyMentions(vars.body);
+    },
+    onError: () =>
+      toast({ title: "Failed to post comment", variant: "destructive" }),
+  });
+  const editMut = useMutation({
+    mutationFn: (vars: { id: string; body: string }) =>
+      editComment(vars.id, vars.body),
+    onSuccess: invalidate,
+    onError: () =>
+      toast({ title: "Failed to edit comment", variant: "destructive" }),
+  });
+  const deleteMut = useMutation({
+    mutationFn: (id: string) => deleteComment(id),
+    onSuccess: invalidate,
+    onError: () =>
+      toast({ title: "Failed to delete comment", variant: "destructive" }),
+  });
+  const reactMut = useMutation({
+    mutationFn: (vars: { id: string; emoji: string }) =>
+      toggleReaction(vars.id, vars.emoji, authorName),
+    onSuccess: invalidate,
+    onError: () => toast({ title: "Failed to react", variant: "destructive" }),
+  });
+
+  const threadCount = (list: CommentNode[]): number =>
+    list.reduce((s, n) => s + 1 + threadCount(n.replies), 0);
+
+  if (!authorName) {
+    return (
+      <div className="space-y-2 rounded-lg border p-3">
+        <h4 className="text-sm font-semibold">Discussion</h4>
+        <p className="text-xs text-muted-foreground">
+          Enter your name once to comment — it's remembered on this device.
+        </p>
+        <div className="flex gap-2">
+          <input
+            className="flex-1 rounded border bg-background px-2 py-1 text-sm"
+            placeholder="Your name"
+            onKeyDown={(e) => {
+              if (e.key === "Enter")
+                saveAuthorName((e.target as HTMLInputElement).value.trim());
+            }}
+          />
+          <Button
+            size="sm"
+            onClick={(e) => {
+              const input = e.currentTarget.previousSibling as HTMLInputElement;
+              saveAuthorName(input.value.trim());
+            }}
+          >
+            Set
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2">
         <h4 className="text-sm font-semibold">Discussion</h4>
         <Badge variant="secondary" className="text-xs">
-          {nodes.length} threads
+          {threadCount(nodes)} comments
         </Badge>
+        <button
+          className="ml-auto text-xs text-muted-foreground underline"
+          onClick={() => saveAuthorName("")}
+        >
+          Not {authorName}?
+        </button>
       </div>
       <div className="divide-y rounded-lg border px-3">
         {nodes.map((n) => (
           <CommentItem
-            key={n.id}
+            key={n._id}
             node={n}
-            onReply={(id, body) => {
-              setNodes((p) =>
-                mutate(p, id, (n) => ({
-                  ...n,
-                  replies: [
-                    ...n.replies,
-                    {
-                      id: `${id}-r${Date.now()}`,
-                      author: ME,
-                      at: new Date().toISOString(),
-                      body,
-                      reactions: {},
-                      replies: [],
-                    },
-                  ],
-                })),
-              );
-              notifyMentions(body);
-            }}
-            onReact={(id, emoji) =>
-              setNodes((p) =>
-                mutate(p, id, (n) => {
-                  const users = n.reactions[emoji] ?? [];
-                  return {
-                    ...n,
-                    reactions: {
-                      ...n.reactions,
-                      [emoji]: users.includes(ME)
-                        ? users.filter((u) => u !== ME)
-                        : [...users, ME],
-                    },
-                  };
-                }),
-              )
-            }
-            onEdit={(id, body) =>
-              setNodes((p) => mutate(p, id, (n) => ({ ...n, body, edited: true })))
-            }
-            onDelete={(id) =>
-              setNodes((p) => mutate(p, id, (n) => ({ ...n, deleted: true })))
-            }
+            currentAuthor={authorName}
+            directory={directory}
+            onReply={(id, body) => addMut.mutate({ body, parentId: id })}
+            onReact={(id, emoji) => reactMut.mutate({ id, emoji })}
+            onEdit={(id, body) => editMut.mutate({ id, body })}
+            onDelete={(id) => deleteMut.mutate(id)}
           />
         ))}
+        {!nodes.length && (
+          <p className="py-4 text-center text-sm text-muted-foreground">
+            No comments yet.
+          </p>
+        )}
       </div>
-      <Composer placeholder="Add a comment… type @ to mention" onSubmit={add} />
+      <Composer
+        placeholder="Add a comment… type @ to mention"
+        directory={directory}
+        onSubmit={(body) => addMut.mutate({ body })}
+      />
     </div>
   );
 }
@@ -457,7 +515,13 @@ export function CommentThread({ subject }: { subject: string }) {
 export function ActivityLog({
   entries,
 }: {
-  entries: { id: string; at: string; actor: string; type: string; text: string }[];
+  entries: {
+    id: string;
+    at: string;
+    actor: string;
+    type: string;
+    text: string;
+  }[];
 }) {
   return (
     <div className="space-y-3">

@@ -640,11 +640,7 @@ export default function Adr() {
                   </CardContent>
                 </Card>
 
-                <p className="text-xs text-muted-foreground">
-                  Comment threads aren't wired to a real backend yet — coming
-                  with a later pass.
-                </p>
-                <CommentThread subject={selected._id} />
+                <CommentThread subject={selected._id} subjectType="ADR case" />
               </div>
             </>
           )}
