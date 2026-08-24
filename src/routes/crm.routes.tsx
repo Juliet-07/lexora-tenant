@@ -29,7 +29,6 @@ import Newsletter from "@/pages/crm/tools/Newsletter";
 
 import Reports from "@/pages/crm/Reports";
 import Pmo from "@/pages/crm/projects/Pmo";
-import Notifications from "@/pages/crm/Notifications";
 import Billing from "@/pages/Billing";
 import {
   MyProjectsList,
@@ -83,11 +82,6 @@ export const crmRoutes = ({ isAdmin, accessibleModules }: RouteContext) => {
       element={layout(<ServiceDesk />)}
     />,
     <Route key="crm-adr" path="/crm/adr" element={layout(<Adr />)} />,
-    <Route
-      key="crm-notifications"
-      path="/crm/notifications"
-      element={layout(<Notifications />)}
-    />,
   ];
 
   if (isAdmin && accessibleModules?.includes("crm")) {

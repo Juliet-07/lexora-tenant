@@ -212,7 +212,7 @@ export function NotificationBell() {
         </ScrollArea>
         <Separator />
         <Link
-          to="/crm/notifications"
+          to="/notifications"
           className="flex items-center justify-center gap-1 py-2 text-xs font-medium text-primary hover:underline"
         >
           Open notification centre <ExternalLink className="h-3 w-3" />
