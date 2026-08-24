@@ -306,7 +306,6 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
       icon: FileBarChart,
       adminOnly: true,
     },
-    { title: "Notifications", url: "/crm/notifications", icon: Bell },
   ],
 
   // ── HR & People Management ─────────────────────────────────
@@ -498,6 +497,18 @@ export function AppSidebar() {
             <SidebarMenuItem>
               <SidebarMenuButton asChild>
                 <NavLink
+                  to="/notifications"
+                  className="hover:bg-sidebar-accent/50 text-sidebar-foreground"
+                  activeClassName="bg-sidebar-accent text-sidebar-accent-foreground"
+                >
+                  <Bell className="mr-2 h-4 w-4" />
+                  {!collapsed && <span>Notifications</span>}
+                </NavLink>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton asChild>
+                <NavLink
                   to="/settings"
                   className="hover:bg-sidebar-accent/50 text-sidebar-foreground"
                   activeClassName="bg-sidebar-accent text-sidebar-accent-foreground"
@@ -668,6 +679,18 @@ export function AppSidebar() {
 
       <SidebarFooter className="border-t border-sidebar-border">
         <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild>
+              <NavLink
+                to="/notifications"
+                className="hover:bg-sidebar-accent/50 text-sidebar-foreground"
+                activeClassName="bg-sidebar-accent text-sidebar-accent-foreground"
+              >
+                <Bell className="mr-2 h-4 w-4" />
+                {!collapsed && <span>Notifications</span>}
+              </NavLink>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
           <SidebarMenuItem>
             <SidebarMenuButton asChild>
               <NavLink

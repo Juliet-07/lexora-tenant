@@ -10,6 +10,7 @@ import ClientOnboarding from "@/pages/kyc/ClientOnboarding";
 import OnboardingDetail from "@/pages/kyc/OnboardingDetail";
 import Settings from "@/pages/settings/Index";
 import MySettings from "@/pages/hr/employee/MySettings";
+import Notifications from "@/pages/crm/Notifications";
 import { MyProjectsList, MyProjectDetail } from "@/pages/crm/projects/employee-project";
 
 /**
@@ -40,6 +41,12 @@ export const coreRoutes = ({ isAdmin }: RouteContext) => {
       key="settings"
       path="/settings"
       element={layout(isAdmin ? <Settings /> : <MySettings />)}
+    />,
+    // Notification centre — standalone, shared across every module
+    <Route
+      key="notifications"
+      path="/notifications"
+      element={layout(<Notifications />)}
     />,
   ];
 

@@ -1,15 +1,7 @@
-import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -44,10 +36,7 @@ import {
   MANDATE_STAGES,
 } from "@/data/crmPmMockData";
 
-type Role = "Partner" | "Manager" | "Team member" | "Finance";
-
 export default function CrmOverview() {
-  const [role, setRole] = useState<Role>("Partner");
   const navigate = useNavigate();
 
   const active = mandates.filter((m) => m.stage !== "Close");
@@ -88,25 +77,11 @@ export default function CrmOverview() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold">CRM Overview</h1>
-          <p className="text-sm text-muted-foreground">
-            Role-based aggregation across mandates, delivery, finance and tools
-          </p>
-        </div>
-        <Select value={role} onValueChange={(v) => setRole(v as Role)}>
-          <SelectTrigger className="w-48">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {["Partner", "Manager", "Team member", "Finance"].map((r) => (
-              <SelectItem key={r} value={r}>
-                Viewing as {r}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      <div>
+        <h1 className="text-2xl font-bold">CRM Overview</h1>
+        <p className="text-sm text-muted-foreground">
+          Aggregation across mandates, delivery, finance and tools
+        </p>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -338,8 +313,7 @@ export default function CrmOverview() {
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-base">
-              <AlertTriangle className="h-4 w-4 text-warning" /> Attention for{" "}
-              {role}
+              <AlertTriangle className="h-4 w-4 text-warning" /> Needs attention
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
