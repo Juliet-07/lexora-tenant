@@ -108,14 +108,17 @@ export const fetchObligationsDue = async (
 };
 export const createContract = async (dto: {
   title: string;
-  counterparty: string;
-  counterpartyEmail: string;
+  // Either a real client, or both fields below for an external
+  // party — the backend enforces this and derives name/email from
+  // the real client record server-side when clientId is set.
+  clientId?: string;
+  counterparty?: string;
+  counterpartyEmail?: string;
   type: ContractType;
   value?: number;
   currency?: string;
   expiresOn: string;
   autoRenew?: boolean;
-  clientId?: string;
   mandateId?: string;
   mandateName?: string;
   content?: string;
@@ -667,13 +670,13 @@ export const generateContractFromTemplate = async (dto: {
   templateSource: "platform" | "tenant";
   title: string;
   type: ContractType;
-  counterparty: string;
-  counterpartyEmail: string;
+  clientId?: string;
+  counterparty?: string;
+  counterpartyEmail?: string;
   value?: number;
   currency?: string;
   expiresOn: string;
   autoRenew?: boolean;
-  clientId?: string;
   mandateId?: string;
   mandateName?: string;
 }): Promise<SignableContract> =>
