@@ -165,6 +165,11 @@ export interface Invoice {
   clientAction: "Paid" | "Cancelled" | null;
   clientActionAt: string | null;
   clientActionNote: string | null;
+  // Real proof-of-payment the client attached when marking Paid —
+  // a receipt or transfer confirmation the tenant can actually
+  // open, not just the claim in words.
+  proofOfPaymentUrl: string | null;
+  proofOfPaymentFileName: string | null;
   subtotal: number;
   net: number;
   vat: number;

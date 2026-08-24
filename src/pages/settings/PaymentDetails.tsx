@@ -19,12 +19,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Landmark, Plus } from "lucide-react";
+import { Landmark, Plus, Pencil } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
   fetchRemittanceAccounts,
   createRemittanceAccount,
+  updateRemittanceAccount,
   setRemittanceAccountActive,
+  type RemittanceAccount,
 } from "@/lib/crm/finance-api";
 
 export default function PaymentDetails() {
@@ -74,6 +76,37 @@ export default function PaymentDetails() {
       setRemittanceAccountActive(id, active),
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: ["remittanceAccounts"] }),
+    onError: onErr("Failed to update"),
+  });
+
+  // ── Edit ──────────────────────────────────────────────────
+  const [editTarget, setEditTarget] = useState<RemittanceAccount | null>(null);
+  const [editDraft, setEditDraft] = useState({
+    accountName: "",
+    bankName: "",
+    accountNumber: "",
+    currency: "USD",
+    branchCode: "",
+    swiftCode: "",
+  });
+  const openEdit = (a: RemittanceAccount) => {
+    setEditTarget(a);
+    setEditDraft({
+      accountName: a.accountName,
+      bankName: a.bankName,
+      accountNumber: a.accountNumber,
+      currency: a.currency,
+      branchCode: a.branchCode,
+      swiftCode: a.swiftCode,
+    });
+  };
+  const editMut = useMutation({
+    mutationFn: () => updateRemittanceAccount(editTarget!._id, editDraft),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["remittanceAccounts"] });
+      setEditTarget(null);
+      toast({ title: "Payment details updated" });
+    },
     onError: onErr("Failed to update"),
   });
 
@@ -133,6 +166,14 @@ export default function PaymentDetails() {
                 </p>
               </div>
               <div className="flex items-center gap-2 shrink-0">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => openEdit(a)}
+                  aria-label={`Edit ${a.accountName}`}
+                >
+                  <Pencil className="h-4 w-4" />
+                </Button>
                 <span className="text-xs text-muted-foreground">
                   {a.active ? "Visible to clients" : "Hidden"}
                 </span>
@@ -231,6 +272,97 @@ export default function PaymentDetails() {
               onClick={() => createMut.mutate()}
             >
               Add
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!editTarget}
+        onOpenChange={(o) => !o && setEditTarget(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit payment details</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-3">
+            <div>
+              <Label>Account name</Label>
+              <Input
+                value={editDraft.accountName}
+                onChange={(e) =>
+                  setEditDraft({ ...editDraft, accountName: e.target.value })
+                }
+                placeholder="e.g. as it appears on the bank account"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Bank name</Label>
+                <Input
+                  value={editDraft.bankName}
+                  onChange={(e) =>
+                    setEditDraft({ ...editDraft, bankName: e.target.value })
+                  }
+                />
+              </div>
+              <div>
+                <Label>Currency</Label>
+                <Input
+                  value={editDraft.currency}
+                  onChange={(e) =>
+                    setEditDraft({
+                      ...editDraft,
+                      currency: e.target.value.toUpperCase(),
+                    })
+                  }
+                  placeholder="e.g. USD, RWF"
+                  maxLength={3}
+                />
+              </div>
+            </div>
+            <div>
+              <Label>Account number</Label>
+              <Input
+                value={editDraft.accountNumber}
+                onChange={(e) =>
+                  setEditDraft({ ...editDraft, accountNumber: e.target.value })
+                }
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Branch code (optional)</Label>
+                <Input
+                  value={editDraft.branchCode}
+                  onChange={(e) =>
+                    setEditDraft({ ...editDraft, branchCode: e.target.value })
+                  }
+                />
+              </div>
+              <div>
+                <Label>SWIFT code (optional)</Label>
+                <Input
+                  value={editDraft.swiftCode}
+                  onChange={(e) =>
+                    setEditDraft({ ...editDraft, swiftCode: e.target.value })
+                  }
+                />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              disabled={
+                !editDraft.accountName ||
+                !editDraft.bankName ||
+                !editDraft.accountNumber ||
+                !editDraft.currency ||
+                editMut.isPending
+              }
+              onClick={() => editMut.mutate()}
+            >
+              Save changes
             </Button>
           </DialogFooter>
         </DialogContent>

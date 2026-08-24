@@ -44,6 +44,7 @@ import {
   ArrowRight,
   AlertTriangle,
   X,
+  FileText,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { fetchMandates, money } from "@/lib/crm/mandates-api";
@@ -637,6 +638,18 @@ export default function Invoicing() {
                           <p className="text-xs text-muted-foreground">
                             "{selected.clientActionNote}"
                           </p>
+                        )}
+                        {selected.proofOfPaymentUrl && (
+                          <a
+                            href={selected.proofOfPaymentUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-primary underline"
+                          >
+                            <FileText className="h-3 w-3" />
+                            {selected.proofOfPaymentFileName ||
+                              "View proof of payment"}
+                          </a>
                         )}
                         <p className="text-xs text-muted-foreground">
                           {selected.clientActionAt &&
