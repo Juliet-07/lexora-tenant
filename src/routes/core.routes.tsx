@@ -10,7 +10,7 @@ import ClientOnboarding from "@/pages/kyc/ClientOnboarding";
 import OnboardingDetail from "@/pages/kyc/OnboardingDetail";
 import Settings from "@/pages/settings/Index";
 import MySettings from "@/pages/hr/employee/MySettings";
-import Notifications from "@/pages/crm/Notifications";
+import Notifications from "@/pages/Notifications";
 import { MyProjectsList, MyProjectDetail } from "@/pages/crm/projects/employee-project";
 
 /**

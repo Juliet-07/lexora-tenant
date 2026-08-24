@@ -1,3 +1,4 @@
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,32 +26,88 @@ import {
 import { useNavigate } from "react-router-dom";
 import { ActivityLog } from "@/components/crm/CommentThread";
 import {
-  mandates,
-  pmInvoices,
-  invoiceTotal,
-  utilisation,
-  activityStream,
-  calendarEvents,
-  money,
-  ragClass,
+  fetchMandates,
   MANDATE_STAGES,
-} from "@/data/crmPmMockData";
+  ragClass,
+  money,
+} from "@/lib/crm/mandates-api";
+import { fetchInvoices } from "@/lib/crm/finance-api";
+import {
+  fetchTimeEntries,
+  ASSUMED_AVAILABLE_HRS,
+  UTILISATION_TARGET_PCT,
+} from "@/lib/crm/time-tracking-api";
+import {
+  fetchCalendarEvents,
+  fetchExpiringContracts,
+} from "@/lib/crm/tools-api";
+import { fetchTickets } from "@/lib/crm/service-desk-api";
 
 export default function CrmOverview() {
   const navigate = useNavigate();
 
+  const { data: mandates = [] } = useQuery({
+    queryKey: ["overview-mandates"],
+    queryFn: fetchMandates,
+  });
+  const { data: invoices = [] } = useQuery({
+    queryKey: ["overview-invoices"],
+    queryFn: () => fetchInvoices(),
+  });
+  const { data: timeEntries = [] } = useQuery({
+    queryKey: ["overview-time-entries"],
+    queryFn: () => fetchTimeEntries(),
+  });
+  const { data: calendarEvents = [] } = useQuery({
+    queryKey: ["overview-calendar"],
+    queryFn: fetchCalendarEvents,
+  });
+  const { data: tickets = [] } = useQuery({
+    queryKey: ["overview-tickets"],
+    queryFn: () => fetchTickets(),
+  });
+  const { data: expiringContracts = [] } = useQuery({
+    queryKey: ["overview-expiring-contracts"],
+    queryFn: () => fetchExpiringContracts(90),
+  });
+
   const active = mandates.filter((m) => m.stage !== "Close");
   const wip = mandates.reduce((s, m) => s + m.wip, 0);
-  const outstanding = pmInvoices
-    .filter((i) => !["Paid", "Draft", "Written Off"].includes(i.stage))
-    .reduce((s, i) => s + invoiceTotal(i).payable - i.paidAmount, 0);
-  const overdue = pmInvoices
-    .filter((i) => i.stage === "Overdue")
-    .reduce((s, i) => s + invoiceTotal(i).payable, 0);
-  const avgUtil = Math.round(
-    utilisation.reduce((s, u) => s + (u.billable / u.available) * 100, 0) /
-      utilisation.length,
+  const outstandingInvoices = invoices.filter(
+    (i) => !["Paid", "Draft", "Written Off"].includes(i.stage),
   );
+  const outstanding = outstandingInvoices.reduce(
+    (s, i) => s + (i.payable - i.paidAmount),
+    0,
+  );
+  const overdue = invoices
+    .filter((i) => i.stage === "Overdue")
+    .reduce((s, i) => s + (i.payable - i.paidAmount), 0);
+
+  // Real billable hours per member, against the shared assumed
+  // capacity — the same ASSUMED_AVAILABLE_HRS constant Timesheets'
+  // Utilisation tab and Gantt & Planning's Resource Allocation tab
+  // use, so this dashboard never quietly drifts to a different
+  // number than those pages show.
+  const billableByMember = timeEntries
+    .filter((t) => t.billable)
+    .reduce<Record<string, number>>((acc, t) => {
+      acc[t.member] = (acc[t.member] ?? 0) + t.hours;
+      return acc;
+    }, {});
+  const memberUtilisation = Object.entries(billableByMember).map(
+    ([member, billableHrs]) => ({
+      member,
+      billableHrs,
+      pct: Math.round((billableHrs / ASSUMED_AVAILABLE_HRS) * 100),
+    }),
+  );
+  const avgUtil = memberUtilisation.length
+    ? Math.round(
+        memberUtilisation.reduce((s, u) => s + u.pct, 0) /
+          memberUtilisation.length,
+      )
+    : 0;
 
   const revenueByService = Object.entries(
     mandates.reduce<Record<string, number>>((acc, m) => {
@@ -61,10 +118,30 @@ export default function CrmOverview() {
   const maxRevenue = Math.max(...revenueByService.map(([, v]) => v), 1);
 
   const kpis = [
-    { label: "Active mandates", value: String(active.length), icon: Briefcase, sub: `${mandates.length} total in register` },
-    { label: "Unbilled WIP", value: money(wip), icon: Clock, sub: "From approved timesheets" },
-    { label: "Outstanding receivables", value: money(outstanding), icon: Receipt, sub: `${money(overdue)} overdue` },
-    { label: "Team utilisation", value: `${avgUtil}%`, icon: Timer, sub: "Target 80%" },
+    {
+      label: "Active mandates",
+      value: String(active.length),
+      icon: Briefcase,
+      sub: `${mandates.length} total in register`,
+    },
+    {
+      label: "Unbilled WIP",
+      value: money(wip),
+      icon: Clock,
+      sub: "From approved timesheets",
+    },
+    {
+      label: "Outstanding receivables",
+      value: money(outstanding),
+      icon: Receipt,
+      sub: `${money(overdue)} overdue`,
+    },
+    {
+      label: "Team utilisation",
+      value: `${avgUtil}%`,
+      icon: Timer,
+      sub: `Target ${UTILISATION_TARGET_PCT}%`,
+    },
   ];
 
   const quickActions = [
@@ -74,6 +151,69 @@ export default function CrmOverview() {
     { label: "New ticket", icon: LifeBuoy, to: "/crm/service-desk" },
     { label: "New contract", icon: FileSignature, to: "/crm/contracts" },
   ];
+
+  // Real recent activity, derived live from already-fetched records
+  // rather than a separate stored activity log — same reasoning the
+  // calendar aggregation uses (compute from source records, don't
+  // duplicate event storage).
+  const activityStream = [
+    ...mandates.map((m) => ({
+      id: `mandate-${m._id}`,
+      at: m.updatedAt,
+      actor: m.manager || "System",
+      type: "mandate",
+      text: `updated mandate ${m.name} (${m.stage})`,
+    })),
+    ...invoices.map((i) => ({
+      id: `invoice-${i._id}`,
+      at: i.updatedAt,
+      actor: i.clientName || "System",
+      type: "invoice",
+      text: `${i.stage.toLowerCase()} invoice ${i.ref}`,
+    })),
+    ...tickets.map((t) => ({
+      id: `ticket-${t._id}`,
+      at: t.createdAt,
+      actor: t.agent || t.clientName || "System",
+      type: "ticket",
+      text: `logged ticket ${t.ref} — ${t.subject}`,
+    })),
+  ]
+    .sort((a, b) => (b.at || "").localeCompare(a.at || ""))
+    .slice(0, 8);
+
+  // Real, rule-based alerts computed from the same data already on
+  // the page — not invented, not a placeholder list.
+  const attentionItems: string[] = [
+    ...mandates
+      .filter((m) => m.conflictCheck === "Pending")
+      .map(
+        (m) => `${m.ref} conflict check pending — mandate blocked at Create`,
+      ),
+    ...mandates
+      .filter((m) => m.rag === "Red")
+      .map((m) => `${m.name} is flagged Red — needs attention`),
+    ...invoices
+      .filter((i) => i.stage === "Overdue")
+      .slice(0, 3)
+      .map(
+        (i) =>
+          `${i.ref} is overdue — ${money(i.payable - i.paidAmount, i.currency)} outstanding`,
+      ),
+    ...tickets
+      .filter((t) => t.slaElapsedHrs >= t.slaTargetHrs)
+      .slice(0, 3)
+      .map((t) => `Ticket ${t.ref} has breached its SLA target`),
+    ...expiringContracts
+      .filter((c) => {
+        const days = Math.ceil(
+          (new Date(c.expiresOn).getTime() - Date.now()) / 86_400_000,
+        );
+        return days <= 30;
+      })
+      .slice(0, 3)
+      .map((c) => `${c.title} expires within 30 days`),
+  ].slice(0, 6);
 
   return (
     <div className="space-y-6">
@@ -156,7 +296,7 @@ export default function CrmOverview() {
               <TableBody>
                 {active.slice(0, 5).map((m) => (
                   <TableRow
-                    key={m.id}
+                    key={m._id}
                     className="cursor-pointer"
                     onClick={() => navigate("/crm/mandates")}
                   >
@@ -177,6 +317,16 @@ export default function CrmOverview() {
                     </TableCell>
                   </TableRow>
                 ))}
+                {!active.length && (
+                  <TableRow>
+                    <TableCell
+                      colSpan={4}
+                      className="py-6 text-center text-sm text-muted-foreground"
+                    >
+                      No active mandates.
+                    </TableCell>
+                  </TableRow>
+                )}
               </TableBody>
             </Table>
           </CardContent>
@@ -187,24 +337,28 @@ export default function CrmOverview() {
             <CardTitle className="text-base">Team utilisation</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {utilisation.map((u) => {
-              const pct = Math.round((u.billable / u.available) * 100);
-              return (
-                <div key={u.member} className="space-y-1">
-                  <div className="flex justify-between text-sm">
-                    <span>{u.member}</span>
-                    <span
-                      className={
-                        pct >= u.target ? "text-success" : "text-warning"
-                      }
-                    >
-                      {pct}%
-                    </span>
-                  </div>
-                  <Progress value={pct} className="h-2" />
+            {memberUtilisation.map((u) => (
+              <div key={u.member} className="space-y-1">
+                <div className="flex justify-between text-sm">
+                  <span>{u.member}</span>
+                  <span
+                    className={
+                      u.pct >= UTILISATION_TARGET_PCT
+                        ? "text-success"
+                        : "text-warning"
+                    }
+                  >
+                    {u.pct}%
+                  </span>
                 </div>
-              );
-            })}
+                <Progress value={u.pct} className="h-2" />
+              </div>
+            ))}
+            {!memberUtilisation.length && (
+              <p className="text-sm text-muted-foreground">
+                No billable time logged yet.
+              </p>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -221,12 +375,14 @@ export default function CrmOverview() {
                   <span>{type}</span>
                   <span className="font-medium">{money(value)}</span>
                 </div>
-                <Progress
-                  value={(value / maxRevenue) * 100}
-                  className="h-2"
-                />
+                <Progress value={(value / maxRevenue) * 100} className="h-2" />
               </div>
             ))}
+            {!revenueByService.length && (
+              <p className="text-sm text-muted-foreground">
+                No billed revenue recorded yet.
+              </p>
+            )}
           </CardContent>
         </Card>
 
@@ -242,21 +398,19 @@ export default function CrmOverview() {
             </Button>
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
-            {pmInvoices.slice(0, 5).map((i) => (
+            {invoices.slice(0, 5).map((i) => (
               <div
-                key={i.id}
+                key={i._id}
                 className="flex items-center justify-between rounded border p-2"
               >
                 <div>
-                  <p className="font-medium">{i.id}</p>
+                  <p className="font-medium">{i.ref}</p>
                   <p className="text-xs text-muted-foreground">
                     {i.clientName}
                   </p>
                 </div>
                 <div className="text-right">
-                  <p className="font-medium">
-                    {money(invoiceTotal(i).payable, i.currency)}
-                  </p>
+                  <p className="font-medium">{money(i.payable, i.currency)}</p>
                   <Badge
                     variant="outline"
                     className={
@@ -268,6 +422,9 @@ export default function CrmOverview() {
                 </div>
               </div>
             ))}
+            {!invoices.length && (
+              <p className="text-muted-foreground">No invoices yet.</p>
+            )}
           </CardContent>
         </Card>
 
@@ -297,6 +454,11 @@ export default function CrmOverview() {
                   </p>
                 </div>
               ))}
+            {!calendarEvents.length && (
+              <p className="text-sm text-muted-foreground">
+                Nothing scheduled.
+              </p>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -307,7 +469,13 @@ export default function CrmOverview() {
             <CardTitle className="text-base">Activity feed</CardTitle>
           </CardHeader>
           <CardContent>
-            <ActivityLog entries={activityStream} />
+            {activityStream.length ? (
+              <ActivityLog entries={activityStream} />
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                No recent activity.
+              </p>
+            )}
           </CardContent>
         </Card>
         <Card>
@@ -317,17 +485,20 @@ export default function CrmOverview() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
-            {[
-              "MND-006 conflict check flagged — mandate blocked at Create",
-              "INV-2026-039 is 46 days overdue — escalate to partner",
-              "Greenfield trust account unreconciled for July",
-              "Ticket TCK-103 at 95% of SLA — urgent",
-              "Meridian MSA renewal notice window opens in 64 days",
-            ].map((t) => (
-              <div key={t} className="rounded border-l-2 border-warning bg-muted/40 p-2">
-                {t}
-              </div>
-            ))}
+            {attentionItems.length ? (
+              attentionItems.map((t) => (
+                <div
+                  key={t}
+                  className="rounded border-l-2 border-warning bg-muted/40 p-2"
+                >
+                  {t}
+                </div>
+              ))
+            ) : (
+              <p className="text-muted-foreground">
+                Nothing needs attention right now.
+              </p>
+            )}
           </CardContent>
         </Card>
       </div>
