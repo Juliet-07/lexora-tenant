@@ -95,6 +95,7 @@ import {
   countersignContract,
   sendSignedContractCopy,
   downloadContractPdf,
+  previewContractPdf,
   CONTRACT_STAGES,
   type Contract,
   type ContractType,
@@ -198,19 +199,34 @@ export default function Contracts() {
   const [openNew, setOpenNew] = useState(false);
   const emptyForm = {
     title: "",
+    partyMode: "client" as "client" | "external",
+    clientId: "",
+    mandateId: "",
     counterparty: "",
     counterpartyEmail: "",
     type: "MSA" as ContractType,
     value: 0,
     currency: "USD",
     expiresOn: today(),
-    clientId: "",
     content: "",
   };
   const [form, setForm] = useState(emptyForm);
   const createMut = useMutation({
     mutationFn: () =>
-      createContract({ ...form, clientId: form.clientId || undefined }),
+      createContract({
+        title: form.title,
+        type: form.type,
+        value: form.value,
+        currency: form.currency,
+        expiresOn: form.expiresOn,
+        content: form.content,
+        ...(form.partyMode === "client"
+          ? { clientId: form.clientId, mandateId: form.mandateId || undefined }
+          : {
+              counterparty: form.counterparty,
+              counterpartyEmail: form.counterpartyEmail,
+            }),
+      }),
     onSuccess: (c) => {
       invalidate();
       setOpenNew(false);
@@ -466,27 +482,20 @@ export default function Contracts() {
     templateSource: "tenant" as "platform" | "tenant",
     title: "",
     type: "MSA" as ContractType,
+    partyMode: "client" as "client" | "external",
+    clientId: "",
+    mandateId: "",
     counterparty: "",
     counterpartyEmail: "",
     value: "",
     currency: "USD",
     expiresOn: "",
-    clientId: "",
   };
   const [generateDraft, setGenerateDraft] = useState(emptyGenerateDraft);
 
   const openGenerate = () => {
     setGenerateDraft(emptyGenerateDraft);
     setOpenGenerateDialog(true);
-  };
-  const applyClientToGenerate = (clientId: string) => {
-    const c = clients.find((cl) => cl._id === clientId);
-    setGenerateDraft({
-      ...generateDraft,
-      clientId,
-      counterparty: c ? displayName(c) : generateDraft.counterparty,
-      counterpartyEmail: c ? c.email : generateDraft.counterpartyEmail,
-    });
   };
   const generateMut = useMutation({
     mutationFn: () =>
@@ -495,12 +504,18 @@ export default function Contracts() {
         templateSource: generateDraft.templateSource,
         title: generateDraft.title,
         type: generateDraft.type,
-        counterparty: generateDraft.counterparty,
-        counterpartyEmail: generateDraft.counterpartyEmail,
         value: generateDraft.value ? Number(generateDraft.value) : undefined,
         currency: generateDraft.currency,
         expiresOn: generateDraft.expiresOn,
-        clientId: generateDraft.clientId || undefined,
+        ...(generateDraft.partyMode === "client"
+          ? {
+              clientId: generateDraft.clientId,
+              mandateId: generateDraft.mandateId || undefined,
+            }
+          : {
+              counterparty: generateDraft.counterparty,
+              counterpartyEmail: generateDraft.counterpartyEmail,
+            }),
       }),
     onSuccess: (c) => {
       invalidate();
@@ -571,6 +586,10 @@ export default function Contracts() {
   const downloadPdfMut = useMutation({
     mutationFn: (id: string) => downloadContractPdf(id),
     onError: onErr("Failed to download PDF"),
+  });
+  const previewPdfMut = useMutation({
+    mutationFn: (id: string) => previewContractPdf(id),
+    onError: onErr("Failed to open preview"),
   });
 
   return (
@@ -1102,6 +1121,14 @@ export default function Contracts() {
                         </Badge>
                       </CardTitle>
                       <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={previewPdfMut.isPending}
+                          onClick={() => previewPdfMut.mutate(selected._id)}
+                        >
+                          <Eye className="mr-2 h-4 w-4" /> Preview
+                        </Button>
                         {(selected.signatureStatus === "not_sent" ||
                           selected.signatureStatus === "sent") && (
                           <Button
@@ -1437,64 +1464,103 @@ export default function Contracts() {
               />
             </div>
             <div>
-              <Label>Client (optional)</Label>
-              <Select
-                value={form.clientId || "none"}
-                onValueChange={(v) => {
-                  if (v === "none") {
-                    setForm({ ...form, clientId: "" });
-                    return;
+              <Label>Who is this contract for?</Label>
+              <div className="mt-1 flex gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={form.partyMode === "client" ? "default" : "outline"}
+                  onClick={() => setForm({ ...form, partyMode: "client" })}
+                >
+                  Client
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={
+                    form.partyMode === "external" ? "default" : "outline"
                   }
-                  const c = clients.find((cl) => cl._id === v);
-                  setForm({
-                    ...form,
-                    clientId: v,
-                    counterparty: c ? displayName(c) : form.counterparty,
-                    counterpartyEmail: c ? c.email : form.counterpartyEmail,
-                  });
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Pick a registered client, or leave blank" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">
-                    None — enter details manually
-                  </SelectItem>
-                  {clients.map((c) => (
-                    <SelectItem key={c._id} value={c._id}>
-                      {displayName(c)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Picking a client fills in the fields below — you can still edit
-                them, or leave the client unset for a counterparty who isn't a
-                registered client (e.g. a vendor).
-              </p>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label>Counterparty name</Label>
-                <Input
-                  value={form.counterparty}
-                  onChange={(e) =>
-                    setForm({ ...form, counterparty: e.target.value })
-                  }
-                />
-              </div>
-              <div>
-                <Label>Counterparty email</Label>
-                <Input
-                  type="email"
-                  value={form.counterpartyEmail}
-                  onChange={(e) =>
-                    setForm({ ...form, counterpartyEmail: e.target.value })
-                  }
-                />
+                  onClick={() => setForm({ ...form, partyMode: "external" })}
+                >
+                  Vendor / consultant
+                </Button>
               </div>
             </div>
+            {form.partyMode === "client" ? (
+              <>
+                <div>
+                  <Label>Client</Label>
+                  <Select
+                    value={form.clientId}
+                    onValueChange={(v) => setForm({ ...form, clientId: v })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Pick a registered client" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {clients.map((c) => (
+                        <SelectItem key={c._id} value={c._id}>
+                          {displayName(c)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Emailed to this client and also appears on their
+                    client-portal dashboard, where they can sign or leave
+                    feedback.
+                  </p>
+                </div>
+                <div>
+                  <Label>Linked mandate (optional)</Label>
+                  <Select
+                    value={form.mandateId || "none"}
+                    onValueChange={(v) =>
+                      setForm({ ...form, mandateId: v === "none" ? "" : v })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="None" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None</SelectItem>
+                      {mandates.map((m: any) => (
+                        <SelectItem key={m._id} value={m._id}>
+                          {m.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </>
+            ) : (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label>Name</Label>
+                  <Input
+                    value={form.counterparty}
+                    onChange={(e) =>
+                      setForm({ ...form, counterparty: e.target.value })
+                    }
+                    placeholder="e.g. Jane Doe Consulting"
+                  />
+                </div>
+                <div>
+                  <Label>Email</Label>
+                  <Input
+                    type="email"
+                    value={form.counterpartyEmail}
+                    onChange={(e) =>
+                      setForm({ ...form, counterpartyEmail: e.target.value })
+                    }
+                  />
+                </div>
+                <p className="col-span-2 text-xs text-muted-foreground">
+                  Sent via a real, public signing link — no client-portal
+                  account needed.
+                </p>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label>Type</Label>
@@ -1565,7 +1631,11 @@ export default function Contracts() {
           <DialogFooter>
             <Button
               disabled={
-                !form.title || !form.counterparty || createMut.isPending
+                !form.title ||
+                (form.partyMode === "client"
+                  ? !form.clientId
+                  : !form.counterparty || !form.counterpartyEmail) ||
+                createMut.isPending
               }
               onClick={() => createMut.mutate()}
             >
@@ -1841,30 +1911,124 @@ export default function Contracts() {
               )}
             </div>
             <div>
-              <Label>Client (optional)</Label>
-              <Select
-                value={generateDraft.clientId || "none"}
-                onValueChange={(v) =>
-                  v === "none"
-                    ? setGenerateDraft({ ...generateDraft, clientId: "" })
-                    : applyClientToGenerate(v)
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Pick a registered client, or leave blank" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">
-                    None — enter details manually
-                  </SelectItem>
-                  {clients.map((c) => (
-                    <SelectItem key={c._id} value={c._id}>
-                      {displayName(c)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label>Who is this contract for?</Label>
+              <div className="mt-1 flex gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={
+                    generateDraft.partyMode === "client" ? "default" : "outline"
+                  }
+                  onClick={() =>
+                    setGenerateDraft({ ...generateDraft, partyMode: "client" })
+                  }
+                >
+                  Client
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={
+                    generateDraft.partyMode === "external"
+                      ? "default"
+                      : "outline"
+                  }
+                  onClick={() =>
+                    setGenerateDraft({
+                      ...generateDraft,
+                      partyMode: "external",
+                    })
+                  }
+                >
+                  Vendor / consultant
+                </Button>
+              </div>
             </div>
+            {generateDraft.partyMode === "client" ? (
+              <>
+                <div>
+                  <Label>Client</Label>
+                  <Select
+                    value={generateDraft.clientId}
+                    onValueChange={(v) =>
+                      setGenerateDraft({ ...generateDraft, clientId: v })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Pick a registered client" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {clients.map((c) => (
+                        <SelectItem key={c._id} value={c._id}>
+                          {displayName(c)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Emailed to this client and also appears on their
+                    client-portal dashboard.
+                  </p>
+                </div>
+                <div>
+                  <Label>Linked mandate (optional)</Label>
+                  <Select
+                    value={generateDraft.mandateId || "none"}
+                    onValueChange={(v) =>
+                      setGenerateDraft({
+                        ...generateDraft,
+                        mandateId: v === "none" ? "" : v,
+                      })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="None" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None</SelectItem>
+                      {mandates.map((m: any) => (
+                        <SelectItem key={m._id} value={m._id}>
+                          {m.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </>
+            ) : (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label>Name</Label>
+                  <Input
+                    value={generateDraft.counterparty}
+                    onChange={(e) =>
+                      setGenerateDraft({
+                        ...generateDraft,
+                        counterparty: e.target.value,
+                      })
+                    }
+                    placeholder="e.g. Jane Doe Consulting"
+                  />
+                </div>
+                <div>
+                  <Label>Email</Label>
+                  <Input
+                    type="email"
+                    value={generateDraft.counterpartyEmail}
+                    onChange={(e) =>
+                      setGenerateDraft({
+                        ...generateDraft,
+                        counterpartyEmail: e.target.value,
+                      })
+                    }
+                  />
+                </div>
+                <p className="col-span-2 text-xs text-muted-foreground">
+                  Sent via a real, public signing link — no client-portal
+                  account needed.
+                </p>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label>Title</Label>
@@ -1900,33 +2064,6 @@ export default function Contracts() {
                     ))}
                   </SelectContent>
                 </Select>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label>Counterparty</Label>
-                <Input
-                  value={generateDraft.counterparty}
-                  onChange={(e) =>
-                    setGenerateDraft({
-                      ...generateDraft,
-                      counterparty: e.target.value,
-                    })
-                  }
-                />
-              </div>
-              <div>
-                <Label>Counterparty email</Label>
-                <Input
-                  type="email"
-                  value={generateDraft.counterpartyEmail}
-                  onChange={(e) =>
-                    setGenerateDraft({
-                      ...generateDraft,
-                      counterpartyEmail: e.target.value,
-                    })
-                  }
-                />
               </div>
             </div>
             <div className="grid grid-cols-3 gap-3">
@@ -1975,8 +2112,10 @@ export default function Contracts() {
               disabled={
                 !generateDraft.templateId ||
                 !generateDraft.title.trim() ||
-                !generateDraft.counterparty.trim() ||
-                !generateDraft.counterpartyEmail.trim() ||
+                (generateDraft.partyMode === "client"
+                  ? !generateDraft.clientId
+                  : !generateDraft.counterparty.trim() ||
+                    !generateDraft.counterpartyEmail.trim()) ||
                 !generateDraft.expiresOn ||
                 generateMut.isPending
               }

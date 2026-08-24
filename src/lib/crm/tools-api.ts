@@ -739,6 +739,21 @@ export const downloadContractPdf = async (
   window.URL.revokeObjectURL(url);
 };
 
+// Real document preview — works at any status (draft, sent,
+// signed...), showing the real letterhead and real current content
+// exactly as it stands. Opens in a new tab rather than downloading.
+export const previewContractPdf = async (id: string): Promise<void> => {
+  const res = await api.get(`/tools/contracts/${id}/preview-pdf`, {
+    responseType: "blob",
+  });
+  const blob = new Blob([res.data], { type: "application/pdf" });
+  const url = window.URL.createObjectURL(blob);
+  window.open(url, "_blank", "noopener,noreferrer");
+  // Revoke after a delay — the new tab needs time to actually load
+  // the blob URL before it's invalidated.
+  setTimeout(() => window.URL.revokeObjectURL(url), 30_000);
+};
+
 // ─────────────────────────────────────────────────────────────
 // Contract signing — Public signer-facing API (token-based, no
 // auth). Bypasses the shared `api` axios instance's auth handling.
