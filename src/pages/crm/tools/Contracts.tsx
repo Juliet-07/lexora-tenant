@@ -37,10 +37,34 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
-import { FileSignature, Bell, RefreshCw, ArrowRight, Plus } from "lucide-react";
+import {
+  FileSignature,
+  Bell,
+  RefreshCw,
+  ArrowRight,
+  Plus,
+  Upload,
+  FileUp,
+  Download,
+  Pencil,
+  Trash2,
+  Eye,
+  Image as ImageIcon,
+  X,
+  Send,
+  Sparkles,
+  MessageSquare,
+  PenTool,
+} from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { CommentThread } from "@/components/crm/CommentThread";
+import { RichTextEditor } from "@/components/RichTextEditor";
 import { fetchMandates } from "@/lib/crm/mandates-api";
+import {
+  fetchClients,
+  displayName,
+  type ApiClient,
+} from "@/lib/client/clients-api";
 import {
   fetchContracts,
   fetchExpiringContracts,
@@ -54,12 +78,35 @@ import {
   addAmendment,
   addObligation,
   setObligationDone,
+  fetchAvailableTemplates,
+  fetchTenantTemplates,
+  createTenantTemplate,
+  updateTenantTemplate,
+  deleteTenantTemplate,
+  uploadTenantTemplate,
+  replaceTenantTemplateFile,
+  fetchMyLetterhead,
+  uploadLetterhead,
+  deleteLetterhead,
+  generateContractFromTemplate,
+  sendContractForSignature,
+  respondToContractComment,
+  editContractBody,
+  countersignContract,
+  sendSignedContractCopy,
+  downloadContractPdf,
   CONTRACT_STAGES,
   type Contract,
   type ContractType,
   type ContractStage,
   type ObligationType,
+  type AvailableTemplate,
+  type TenantContractTemplate,
+  type SignableContract,
 } from "@/lib/crm/tools-api";
+
+const WORD_ACCEPT =
+  ".doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
 const money = (n: number, c = "USD") =>
   (n ?? 0).toLocaleString(undefined, {
@@ -114,6 +161,22 @@ export default function Contracts() {
     queryKey: ["mandates"],
     queryFn: fetchMandates,
   });
+  const { data: clients = [] } = useQuery({
+    queryKey: ["clients-for-contracts"],
+    queryFn: fetchClients,
+  });
+  const { data: availableTemplates = [] } = useQuery({
+    queryKey: ["available-templates"],
+    queryFn: fetchAvailableTemplates,
+  });
+  const { data: myTemplates = [] } = useQuery({
+    queryKey: ["my-templates"],
+    queryFn: fetchTenantTemplates,
+  });
+  const { data: letterhead } = useQuery({
+    queryKey: ["letterhead"],
+    queryFn: fetchMyLetterhead,
+  });
 
   const selected = list.find((c) => c._id === selectedId) ?? null;
 
@@ -122,6 +185,10 @@ export default function Contracts() {
     queryClient.invalidateQueries({ queryKey: ["contracts-expiring"] });
     queryClient.invalidateQueries({ queryKey: ["obligations-due"] });
   };
+  const invalidateTemplates = () => {
+    queryClient.invalidateQueries({ queryKey: ["available-templates"] });
+    queryClient.invalidateQueries({ queryKey: ["my-templates"] });
+  };
 
   const filtered = list.filter(
     (c) => stageFilter === "all" || c.stage === stageFilter,
@@ -129,34 +196,25 @@ export default function Contracts() {
 
   // ── New contract ─────────────────────────────────────────
   const [openNew, setOpenNew] = useState(false);
-  const [form, setForm] = useState({
+  const emptyForm = {
     title: "",
     counterparty: "",
+    counterpartyEmail: "",
     type: "MSA" as ContractType,
     value: 0,
     currency: "USD",
     expiresOn: today(),
-    owner: "",
-    mandateId: "",
-    mandateName: "",
-  });
+    clientId: "",
+    content: "",
+  };
+  const [form, setForm] = useState(emptyForm);
   const createMut = useMutation({
     mutationFn: () =>
-      createContract({ ...form, mandateId: form.mandateId || undefined }),
+      createContract({ ...form, clientId: form.clientId || undefined }),
     onSuccess: (c) => {
       invalidate();
       setOpenNew(false);
-      setForm({
-        title: "",
-        counterparty: "",
-        type: "MSA",
-        value: 0,
-        currency: "USD",
-        expiresOn: today(),
-        owner: "",
-        mandateId: "",
-        mandateName: "",
-      });
+      setForm(emptyForm);
       setSelectedId(c._id);
       toast({ title: "Contract created" });
     },
@@ -224,12 +282,20 @@ export default function Contracts() {
   // ── Amendment ─────────────────────────────────────────────
   const [openAmendment, setOpenAmendment] = useState(false);
   const [amendmentSummary, setAmendmentSummary] = useState("");
+  const [amendmentEditBody, setAmendmentEditBody] = useState(false);
+  const [amendmentBodyDraft, setAmendmentBodyDraft] = useState("");
   const addAmendmentMut = useMutation({
-    mutationFn: (id: string) => addAmendment(id, { summary: amendmentSummary }),
+    mutationFn: (id: string) =>
+      addAmendment(id, {
+        summary: amendmentSummary,
+        newBody: amendmentEditBody ? amendmentBodyDraft : undefined,
+      }),
     onSuccess: () => {
       invalidate();
       setOpenAmendment(false);
       setAmendmentSummary("");
+      setAmendmentEditBody(false);
+      setAmendmentBodyDraft("");
       toast({ title: "Amendment added" });
     },
     onError: onErr("Failed to add amendment"),
@@ -265,6 +331,248 @@ export default function Contracts() {
     onError: onErr("Failed to update obligation"),
   });
 
+  // ── Templates ─────────────────────────────────────────────
+  const [openTemplateDialog, setOpenTemplateDialog] = useState(false);
+  const [editingTemplateId, setEditingTemplateId] = useState<string | null>(
+    null,
+  );
+  const [templateDraft, setTemplateDraft] = useState({
+    title: "",
+    type: "MSA" as ContractType,
+    jurisdiction: "",
+    description: "",
+    content: "",
+  });
+  const [previewTemplate, setPreviewTemplate] =
+    useState<AvailableTemplate | null>(null);
+  const [pendingDeleteTemplate, setPendingDeleteTemplate] =
+    useState<TenantContractTemplate | null>(null);
+
+  const openCreateTemplate = () => {
+    setEditingTemplateId(null);
+    setTemplateDraft({
+      title: "",
+      type: "MSA",
+      jurisdiction: "",
+      description: "",
+      content: "",
+    });
+    setOpenTemplateDialog(true);
+  };
+  const openEditTemplate = (t: TenantContractTemplate) => {
+    setEditingTemplateId(t._id);
+    setTemplateDraft({
+      title: t.title,
+      type: t.type,
+      jurisdiction: t.jurisdiction,
+      description: t.description,
+      content: t.content,
+    });
+    setOpenTemplateDialog(true);
+  };
+
+  const saveTemplateMut = useMutation({
+    mutationFn: () =>
+      editingTemplateId
+        ? updateTenantTemplate(editingTemplateId, templateDraft)
+        : createTenantTemplate(templateDraft),
+    onSuccess: () => {
+      invalidateTemplates();
+      setOpenTemplateDialog(false);
+      toast({
+        title: editingTemplateId ? "Template updated" : "Template created",
+      });
+    },
+    onError: onErr("Failed to save template"),
+  });
+  const deleteTemplateMut = useMutation({
+    mutationFn: (id: string) => deleteTenantTemplate(id),
+    onSuccess: () => {
+      invalidateTemplates();
+      setPendingDeleteTemplate(null);
+      toast({ title: "Template deleted" });
+    },
+    onError: onErr("Failed to delete template"),
+  });
+
+  // ── Upload template — Word documents only ────────────────
+  const [openUploadTemplate, setOpenUploadTemplate] = useState(false);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadMeta, setUploadMeta] = useState({
+    title: "",
+    type: "MSA" as ContractType,
+    jurisdiction: "",
+    description: "",
+  });
+  const [replaceFileTarget, setReplaceFileTarget] =
+    useState<TenantContractTemplate | null>(null);
+
+  const openUpload = () => {
+    setUploadFile(null);
+    setUploadMeta({
+      title: "",
+      type: "MSA",
+      jurisdiction: "",
+      description: "",
+    });
+    setOpenUploadTemplate(true);
+  };
+  const uploadTemplateMut = useMutation({
+    mutationFn: () => uploadTenantTemplate(uploadFile as File, uploadMeta),
+    onSuccess: () => {
+      invalidateTemplates();
+      setOpenUploadTemplate(false);
+      toast({
+        title: "Template uploaded",
+        description:
+          "Its content was extracted automatically and can be previewed.",
+      });
+    },
+    onError: onErr("Failed to upload template"),
+  });
+  const replaceFileMut = useMutation({
+    mutationFn: (file: File) =>
+      replaceTenantTemplateFile(replaceFileTarget!._id, file),
+    onSuccess: () => {
+      invalidateTemplates();
+      setReplaceFileTarget(null);
+      toast({ title: "File replaced" });
+    },
+    onError: onErr("Failed to replace file"),
+  });
+
+  // ── Letterhead ────────────────────────────────────────────
+  const uploadLetterheadMut = useMutation({
+    mutationFn: (file: File) => uploadLetterhead(file),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["letterhead"] });
+      toast({ title: "Letterhead saved" });
+    },
+    onError: onErr("Failed to upload letterhead"),
+  });
+  const deleteLetterheadMut = useMutation({
+    mutationFn: () => deleteLetterhead(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["letterhead"] });
+      toast({ title: "Letterhead removed" });
+    },
+    onError: onErr("Failed to remove letterhead"),
+  });
+
+  // ── Generate from template ─────────────────────────────────
+  const [openGenerateDialog, setOpenGenerateDialog] = useState(false);
+  const emptyGenerateDraft = {
+    templateId: "",
+    templateSource: "tenant" as "platform" | "tenant",
+    title: "",
+    type: "MSA" as ContractType,
+    counterparty: "",
+    counterpartyEmail: "",
+    value: "",
+    currency: "USD",
+    expiresOn: "",
+    clientId: "",
+  };
+  const [generateDraft, setGenerateDraft] = useState(emptyGenerateDraft);
+
+  const openGenerate = () => {
+    setGenerateDraft(emptyGenerateDraft);
+    setOpenGenerateDialog(true);
+  };
+  const applyClientToGenerate = (clientId: string) => {
+    const c = clients.find((cl) => cl._id === clientId);
+    setGenerateDraft({
+      ...generateDraft,
+      clientId,
+      counterparty: c ? displayName(c) : generateDraft.counterparty,
+      counterpartyEmail: c ? c.email : generateDraft.counterpartyEmail,
+    });
+  };
+  const generateMut = useMutation({
+    mutationFn: () =>
+      generateContractFromTemplate({
+        templateId: generateDraft.templateId,
+        templateSource: generateDraft.templateSource,
+        title: generateDraft.title,
+        type: generateDraft.type,
+        counterparty: generateDraft.counterparty,
+        counterpartyEmail: generateDraft.counterpartyEmail,
+        value: generateDraft.value ? Number(generateDraft.value) : undefined,
+        currency: generateDraft.currency,
+        expiresOn: generateDraft.expiresOn,
+        clientId: generateDraft.clientId || undefined,
+      }),
+    onSuccess: (c) => {
+      invalidate();
+      setOpenGenerateDialog(false);
+      setSelectedId(c._id);
+      toast({
+        title: "Contract generated",
+        description: "Review the content, then send it for signature.",
+      });
+    },
+    onError: onErr("Failed to generate contract"),
+  });
+
+  // ── E-signature workflow ──────────────────────────────────
+  const [respondText, setRespondText] = useState("");
+  const [editingBody, setEditingBody] = useState(false);
+  const [bodyDraft, setBodyDraft] = useState("");
+
+  const sendForSignatureMut = useMutation({
+    mutationFn: (id: string) => sendContractForSignature(id),
+    onSuccess: () => {
+      invalidate();
+      toast({
+        title: "Sent for signature",
+        description: "A PDF of the contract was attached to the email.",
+      });
+    },
+    onError: onErr("Failed to send for signature"),
+  });
+  const respondMut = useMutation({
+    mutationFn: (id: string) => respondToContractComment(id, respondText),
+    onSuccess: () => {
+      invalidate();
+      setRespondText("");
+      toast({ title: "Reply sent" });
+    },
+    onError: onErr("Failed to send reply"),
+  });
+  const editBodyMut = useMutation({
+    mutationFn: (id: string) =>
+      editContractBody(id, { renderedBody: bodyDraft }),
+    onSuccess: () => {
+      invalidate();
+      setEditingBody(false);
+      toast({ title: "Content updated" });
+    },
+    onError: onErr("Failed to update content"),
+  });
+  const [countersignName, setCountersignName] = useState("");
+  const countersignMut = useMutation({
+    mutationFn: (id: string) =>
+      countersignContract(id, { signerName: countersignName }),
+    onSuccess: () => {
+      invalidate();
+      setCountersignName("");
+      toast({ title: "Countersigned — contract is now fully executed" });
+    },
+    onError: onErr("Failed to countersign"),
+  });
+  const sendSignedCopyMut = useMutation({
+    mutationFn: (id: string) => sendSignedContractCopy(id),
+    onSuccess: () => {
+      invalidate();
+      toast({ title: "Signed copy emailed" });
+    },
+    onError: onErr("Failed to send signed copy"),
+  });
+  const downloadPdfMut = useMutation({
+    mutationFn: (id: string) => downloadContractPdf(id),
+    onError: onErr("Failed to download PDF"),
+  });
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -275,9 +583,14 @@ export default function Contracts() {
             obligation and expiry tracking
           </p>
         </div>
-        <Button onClick={() => setOpenNew(true)}>
-          <Plus className="mr-2 h-4 w-4" /> New contract
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={openGenerate}>
+            <Sparkles className="mr-2 h-4 w-4" /> Generate from template
+          </Button>
+          <Button onClick={() => setOpenNew(true)}>
+            <Plus className="mr-2 h-4 w-4" /> New contract
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -305,6 +618,7 @@ export default function Contracts() {
           <TabsTrigger value="lifecycle">Lifecycle board</TabsTrigger>
           <TabsTrigger value="obligations">Obligations</TabsTrigger>
           <TabsTrigger value="renewals">Renewals &amp; expiry</TabsTrigger>
+          <TabsTrigger value="templates">Templates</TabsTrigger>
         </TabsList>
 
         <TabsContent value="register" className="space-y-3 pt-4">
@@ -523,6 +837,208 @@ export default function Contracts() {
             )}
           </div>
         </TabsContent>
+
+        <TabsContent value="templates" className="pt-4 space-y-4">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm">Letterhead</CardTitle>
+              <p className="text-xs text-muted-foreground">
+                Used at the top of contract PDFs generated from your templates.
+              </p>
+            </CardHeader>
+            <CardContent>
+              {letterhead ? (
+                <div className="flex items-center gap-4">
+                  <img
+                    src={letterhead.imageUrl}
+                    alt="Letterhead"
+                    className="h-20 rounded border object-contain bg-muted/30 p-2"
+                  />
+                  <div className="flex gap-2">
+                    <label className="cursor-pointer">
+                      <Button size="sm" variant="outline" asChild>
+                        <span>
+                          <Upload className="mr-2 h-4 w-4" /> Replace
+                        </span>
+                      </Button>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) uploadLetterheadMut.mutate(file);
+                        }}
+                      />
+                    </label>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="text-destructive"
+                      onClick={() => deleteLetterheadMut.mutate()}
+                    >
+                      <X className="mr-2 h-4 w-4" /> Remove
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <label className="cursor-pointer">
+                  <Button size="sm" variant="outline" asChild>
+                    <span>
+                      <ImageIcon className="mr-2 h-4 w-4" /> Upload letterhead
+                    </span>
+                  </Button>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) uploadLetterheadMut.mutate(file);
+                    }}
+                  />
+                </label>
+              )}
+            </CardContent>
+          </Card>
+
+          <div className="flex justify-end gap-2">
+            <Button size="sm" variant="outline" onClick={openUpload}>
+              <Upload className="mr-2 h-4 w-4" /> Upload template
+            </Button>
+            <Button size="sm" onClick={openCreateTemplate}>
+              <Plus className="mr-2 h-4 w-4" /> New template
+            </Button>
+          </div>
+
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm">
+                Available templates — platform-published and my own
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Template</TableHead>
+                    <TableHead>Source</TableHead>
+                    <TableHead>Jurisdiction</TableHead>
+                    <TableHead></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {availableTemplates.map((t) => (
+                    <TableRow key={`${t.source}-${t._id}`}>
+                      <TableCell>
+                        <div className="flex items-center gap-1.5">
+                          {t.sourceType === "uploaded" && (
+                            <FileUp className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                          )}
+                          <p className="text-sm font-medium">{t.title}</p>
+                        </div>
+                        <p className="line-clamp-1 text-xs text-muted-foreground">
+                          {t.description}
+                        </p>
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={
+                            t.source === "platform" ? "outline" : "secondary"
+                          }
+                        >
+                          {t.source === "platform" ? "Platform" : "My own"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {t.jurisdiction || "—"}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex justify-end gap-1">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => setPreviewTemplate(t)}
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          {t.sourceType === "uploaded" && t.fileUrl && (
+                            <Button size="sm" variant="ghost" asChild>
+                              <a
+                                href={t.fileUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                <Download className="h-4 w-4" />
+                              </a>
+                            </Button>
+                          )}
+                          {t.source === "tenant" && (
+                            <>
+                              {t.sourceType === "uploaded" ? (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() =>
+                                    setReplaceFileTarget(
+                                      myTemplates.find(
+                                        (m) => m._id === t._id,
+                                      ) ?? null,
+                                    )
+                                  }
+                                >
+                                  <Upload className="h-4 w-4" />
+                                </Button>
+                              ) : (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() =>
+                                    openEditTemplate(
+                                      myTemplates.find(
+                                        (m) => m._id === t._id,
+                                      ) as TenantContractTemplate,
+                                    )
+                                  }
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
+                              )}
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="text-destructive"
+                                onClick={() =>
+                                  setPendingDeleteTemplate(
+                                    myTemplates.find((m) => m._id === t._id) ??
+                                      null,
+                                  )
+                                }
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {!availableTemplates.length && (
+                    <TableRow>
+                      <TableCell
+                        colSpan={4}
+                        className="py-8 text-center text-sm text-muted-foreground"
+                      >
+                        No templates yet — create your own or check back once
+                        the platform publishes some.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
 
       {/* Contract detail sheet */}
@@ -565,6 +1081,225 @@ export default function Contracts() {
                     </Button>
                   )}
                 </div>
+
+                {selected.renderedBody && (
+                  <Card>
+                    <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 pb-2">
+                      <CardTitle className="text-sm flex items-center gap-2">
+                        <PenTool className="h-4 w-4" /> Signature workflow
+                        <Badge
+                          variant={
+                            selected.signatureStatus === "countersigned"
+                              ? "default"
+                              : selected.signatureStatus === "signed"
+                                ? "secondary"
+                                : selected.signatureStatus === "declined"
+                                  ? "destructive"
+                                  : "outline"
+                          }
+                        >
+                          {selected.signatureStatus.replace("_", " ")}
+                        </Badge>
+                      </CardTitle>
+                      <div className="flex gap-2">
+                        {(selected.signatureStatus === "not_sent" ||
+                          selected.signatureStatus === "sent") && (
+                          <Button
+                            size="sm"
+                            disabled={sendForSignatureMut.isPending}
+                            onClick={() =>
+                              sendForSignatureMut.mutate(selected._id)
+                            }
+                          >
+                            <Send className="mr-2 h-4 w-4" />
+                            {selected.signatureStatus === "sent"
+                              ? "Resend"
+                              : "Send for signature"}
+                          </Button>
+                        )}
+                        {selected.signatureStatus === "countersigned" && (
+                          <>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={downloadPdfMut.isPending}
+                              onClick={() =>
+                                downloadPdfMut.mutate(selected._id)
+                              }
+                            >
+                              <Download className="mr-2 h-4 w-4" /> PDF
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={sendSignedCopyMut.isPending}
+                              onClick={() =>
+                                sendSignedCopyMut.mutate(selected._id)
+                              }
+                            >
+                              <Send className="mr-2 h-4 w-4" />
+                              {selected.signedCopySentAt
+                                ? "Resend signed copy"
+                                : "Email signed copy"}
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-3 text-sm">
+                      {(selected.signatureStatus === "not_sent" ||
+                        selected.signatureStatus === "sent") && (
+                        <p className="text-xs text-muted-foreground">
+                          Sending emails a real PDF of this content to the
+                          counterparty, alongside the signing link.
+                        </p>
+                      )}
+                      {(selected.signatureStatus === "not_sent" ||
+                        selected.signatureStatus === "sent") && (
+                        <div className="space-y-2">
+                          {editingBody ? (
+                            <>
+                              <RichTextEditor
+                                value={bodyDraft}
+                                onChange={setBodyDraft}
+                                minHeight={140}
+                              />
+                              <div className="flex gap-2">
+                                <Button
+                                  size="sm"
+                                  disabled={editBodyMut.isPending}
+                                  onClick={() =>
+                                    editBodyMut.mutate(selected._id)
+                                  }
+                                >
+                                  Save changes
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => setEditingBody(false)}
+                                >
+                                  Cancel
+                                </Button>
+                              </div>
+                            </>
+                          ) : (
+                            <>
+                              <div
+                                className="rounded-md border p-3"
+                                dangerouslySetInnerHTML={{
+                                  __html: selected.renderedBody,
+                                }}
+                              />
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  setBodyDraft(selected.renderedBody);
+                                  setEditingBody(true);
+                                }}
+                              >
+                                <Pencil className="mr-2 h-4 w-4" /> Edit content
+                              </Button>
+                            </>
+                          )}
+                        </div>
+                      )}
+                      {selected.signatureStatus !== "not_sent" &&
+                        selected.signatureStatus !== "sent" && (
+                          <div
+                            className="rounded-md border p-3"
+                            dangerouslySetInnerHTML={{
+                              __html: selected.renderedBody,
+                            }}
+                          />
+                        )}
+
+                      {selected.interactions.length > 0 && (
+                        <div className="space-y-2 rounded-md border p-3">
+                          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                            Activity
+                          </p>
+                          {selected.interactions
+                            .filter((i) => i.type !== "viewed")
+                            .map((i, idx) => (
+                              <div key={idx} className="flex gap-2 text-xs">
+                                <MessageSquare className="h-3.5 w-3.5 shrink-0 text-muted-foreground mt-0.5" />
+                                <div>
+                                  <p className="font-medium">
+                                    {i.actor === "signer"
+                                      ? selected.counterparty
+                                      : "You"}{" "}
+                                    — {i.type.replace("_", " ")}
+                                    <span className="ml-1 text-muted-foreground">
+                                      {new Date(i.occurredAt).toLocaleString()}
+                                    </span>
+                                  </p>
+                                  {i.message && (
+                                    <p className="text-muted-foreground">
+                                      {i.message}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                        </div>
+                      )}
+
+                      {(selected.signatureStatus === "sent" ||
+                        selected.signatureStatus === "signed") && (
+                        <div className="flex gap-2">
+                          <Textarea
+                            rows={2}
+                            value={respondText}
+                            onChange={(e) => setRespondText(e.target.value)}
+                            placeholder="Reply to the counterparty…"
+                          />
+                          <Button
+                            size="sm"
+                            disabled={
+                              !respondText.trim() || respondMut.isPending
+                            }
+                            onClick={() => respondMut.mutate(selected._id)}
+                          >
+                            Reply
+                          </Button>
+                        </div>
+                      )}
+
+                      {selected.signatureStatus === "signed" && (
+                        <div className="flex items-end gap-2 rounded-md border p-3">
+                          <div className="flex-1">
+                            <Label className="text-xs">Countersign as</Label>
+                            <Input
+                              value={countersignName}
+                              onChange={(e) =>
+                                setCountersignName(e.target.value)
+                              }
+                              placeholder="Your full legal name"
+                            />
+                          </div>
+                          <Button
+                            disabled={
+                              !countersignName.trim() ||
+                              countersignMut.isPending
+                            }
+                            onClick={() => countersignMut.mutate(selected._id)}
+                          >
+                            <PenTool className="mr-2 h-4 w-4" /> Countersign
+                          </Button>
+                        </div>
+                      )}
+
+                      {selected.signatureStatus === "declined" &&
+                        selected.declineReason && (
+                          <p className="text-xs text-destructive">
+                            Decline reason: {selected.declineReason}
+                          </p>
+                        )}
+                    </CardContent>
+                  </Card>
+                )}
 
                 <Card>
                   <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -689,7 +1424,7 @@ export default function Contracts() {
 
       {/* New contract */}
       <Dialog open={openNew} onOpenChange={setOpenNew}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>New contract</DialogTitle>
           </DialogHeader>
@@ -702,13 +1437,63 @@ export default function Contracts() {
               />
             </div>
             <div>
-              <Label>Counterparty</Label>
-              <Input
-                value={form.counterparty}
-                onChange={(e) =>
-                  setForm({ ...form, counterparty: e.target.value })
-                }
-              />
+              <Label>Client (optional)</Label>
+              <Select
+                value={form.clientId || "none"}
+                onValueChange={(v) => {
+                  if (v === "none") {
+                    setForm({ ...form, clientId: "" });
+                    return;
+                  }
+                  const c = clients.find((cl) => cl._id === v);
+                  setForm({
+                    ...form,
+                    clientId: v,
+                    counterparty: c ? displayName(c) : form.counterparty,
+                    counterpartyEmail: c ? c.email : form.counterpartyEmail,
+                  });
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Pick a registered client, or leave blank" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">
+                    None — enter details manually
+                  </SelectItem>
+                  {clients.map((c) => (
+                    <SelectItem key={c._id} value={c._id}>
+                      {displayName(c)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Picking a client fills in the fields below — you can still edit
+                them, or leave the client unset for a counterparty who isn't a
+                registered client (e.g. a vendor).
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Counterparty name</Label>
+                <Input
+                  value={form.counterparty}
+                  onChange={(e) =>
+                    setForm({ ...form, counterparty: e.target.value })
+                  }
+                />
+              </div>
+              <div>
+                <Label>Counterparty email</Label>
+                <Input
+                  type="email"
+                  value={form.counterpartyEmail}
+                  onChange={(e) =>
+                    setForm({ ...form, counterpartyEmail: e.target.value })
+                  }
+                />
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -764,37 +1549,17 @@ export default function Contracts() {
               </div>
             </div>
             <div>
-              <Label>Owner</Label>
-              <Input
-                value={form.owner}
-                onChange={(e) => setForm({ ...form, owner: e.target.value })}
+              <Label>Content</Label>
+              <p className="mb-1 text-xs text-muted-foreground">
+                Type the contract text directly — no template needed. You can
+                also generate from a template instead, using the button next to
+                "New contract".
+              </p>
+              <RichTextEditor
+                value={form.content}
+                onChange={(html) => setForm({ ...form, content: html })}
+                minHeight={160}
               />
-            </div>
-            <div>
-              <Label>Linked mandate (optional)</Label>
-              <Select
-                value={form.mandateId || "none"}
-                onValueChange={(v) => {
-                  const m = mandates.find((m) => m._id === v);
-                  setForm({
-                    ...form,
-                    mandateId: v === "none" ? "" : v,
-                    mandateName: m?.name ?? "",
-                  });
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">None</SelectItem>
-                  {mandates.map((m) => (
-                    <SelectItem key={m._id} value={m._id}>
-                      {m.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
             </div>
           </div>
           <DialogFooter>
@@ -904,16 +1669,43 @@ export default function Contracts() {
 
       {/* Add amendment */}
       <Dialog open={openAmendment} onOpenChange={setOpenAmendment}>
-        <DialogContent className="sm:max-w-sm">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Add amendment</DialogTitle>
           </DialogHeader>
-          <div>
-            <Label>Summary</Label>
-            <Textarea
-              value={amendmentSummary}
-              onChange={(e) => setAmendmentSummary(e.target.value)}
-            />
+          <div className="space-y-3">
+            <div>
+              <Label>Summary</Label>
+              <Textarea
+                value={amendmentSummary}
+                onChange={(e) => setAmendmentSummary(e.target.value)}
+                placeholder="What changed and why"
+              />
+            </div>
+            {selected?.renderedBody && (
+              <div>
+                <label className="flex items-center gap-2 text-sm">
+                  <Checkbox
+                    checked={amendmentEditBody}
+                    onCheckedChange={(v) => {
+                      setAmendmentEditBody(!!v);
+                      if (v && selected)
+                        setAmendmentBodyDraft(selected.renderedBody);
+                    }}
+                  />
+                  Update the contract content directly
+                </label>
+                {amendmentEditBody && (
+                  <div className="mt-2">
+                    <RichTextEditor
+                      value={amendmentBodyDraft}
+                      onChange={setAmendmentBodyDraft}
+                      minHeight={140}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button
@@ -1003,6 +1795,493 @@ export default function Contracts() {
               onClick={() => selected && addObligationMut.mutate(selected._id)}
             >
               Add obligation
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Generate from template */}
+      <Dialog open={openGenerateDialog} onOpenChange={setOpenGenerateDialog}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Generate contract from template</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-3">
+            <div>
+              <Label>Template</Label>
+              <Select
+                value={generateDraft.templateId}
+                onValueChange={(v) => {
+                  const t = availableTemplates.find((at) => at._id === v);
+                  setGenerateDraft({
+                    ...generateDraft,
+                    templateId: v,
+                    templateSource: t?.source ?? "tenant",
+                  });
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Pick a template" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableTemplates.map((t) => (
+                    <SelectItem key={`${t.source}-${t._id}`} value={t._id}>
+                      {t.sourceType === "uploaded" ? "📄 " : ""}
+                      {t.title}{" "}
+                      {t.source === "platform" ? "(Platform)" : "(My own)"}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {!availableTemplates.length && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  No templates yet — create or upload one on the Templates tab
+                  first.
+                </p>
+              )}
+            </div>
+            <div>
+              <Label>Client (optional)</Label>
+              <Select
+                value={generateDraft.clientId || "none"}
+                onValueChange={(v) =>
+                  v === "none"
+                    ? setGenerateDraft({ ...generateDraft, clientId: "" })
+                    : applyClientToGenerate(v)
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Pick a registered client, or leave blank" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">
+                    None — enter details manually
+                  </SelectItem>
+                  {clients.map((c) => (
+                    <SelectItem key={c._id} value={c._id}>
+                      {displayName(c)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Title</Label>
+                <Input
+                  value={generateDraft.title}
+                  onChange={(e) =>
+                    setGenerateDraft({
+                      ...generateDraft,
+                      title: e.target.value,
+                    })
+                  }
+                />
+              </div>
+              <div>
+                <Label>Type</Label>
+                <Select
+                  value={generateDraft.type}
+                  onValueChange={(v) =>
+                    setGenerateDraft({
+                      ...generateDraft,
+                      type: v as ContractType,
+                    })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CONTRACT_TYPES.map((t) => (
+                      <SelectItem key={t} value={t}>
+                        {t}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Counterparty</Label>
+                <Input
+                  value={generateDraft.counterparty}
+                  onChange={(e) =>
+                    setGenerateDraft({
+                      ...generateDraft,
+                      counterparty: e.target.value,
+                    })
+                  }
+                />
+              </div>
+              <div>
+                <Label>Counterparty email</Label>
+                <Input
+                  type="email"
+                  value={generateDraft.counterpartyEmail}
+                  onChange={(e) =>
+                    setGenerateDraft({
+                      ...generateDraft,
+                      counterpartyEmail: e.target.value,
+                    })
+                  }
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <Label>Value</Label>
+                <Input
+                  type="number"
+                  value={generateDraft.value}
+                  onChange={(e) =>
+                    setGenerateDraft({
+                      ...generateDraft,
+                      value: e.target.value,
+                    })
+                  }
+                />
+              </div>
+              <div>
+                <Label>Currency</Label>
+                <Input
+                  value={generateDraft.currency}
+                  onChange={(e) =>
+                    setGenerateDraft({
+                      ...generateDraft,
+                      currency: e.target.value,
+                    })
+                  }
+                />
+              </div>
+              <div>
+                <Label>Expires on</Label>
+                <Input
+                  type="date"
+                  value={generateDraft.expiresOn}
+                  onChange={(e) =>
+                    setGenerateDraft({
+                      ...generateDraft,
+                      expiresOn: e.target.value,
+                    })
+                  }
+                />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              disabled={
+                !generateDraft.templateId ||
+                !generateDraft.title.trim() ||
+                !generateDraft.counterparty.trim() ||
+                !generateDraft.counterpartyEmail.trim() ||
+                !generateDraft.expiresOn ||
+                generateMut.isPending
+              }
+              onClick={() => generateMut.mutate()}
+            >
+              <Sparkles className="mr-2 h-4 w-4" /> Generate
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create / edit template */}
+      <Dialog open={openTemplateDialog} onOpenChange={setOpenTemplateDialog}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {editingTemplateId ? "Edit template" : "New template"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Title</Label>
+                <Input
+                  value={templateDraft.title}
+                  onChange={(e) =>
+                    setTemplateDraft({
+                      ...templateDraft,
+                      title: e.target.value,
+                    })
+                  }
+                />
+              </div>
+              <div>
+                <Label>Type</Label>
+                <Select
+                  value={templateDraft.type}
+                  onValueChange={(v) =>
+                    setTemplateDraft({
+                      ...templateDraft,
+                      type: v as ContractType,
+                    })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CONTRACT_TYPES.map((t) => (
+                      <SelectItem key={t} value={t}>
+                        {t}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div>
+              <Label>Jurisdiction</Label>
+              <Input
+                value={templateDraft.jurisdiction}
+                onChange={(e) =>
+                  setTemplateDraft({
+                    ...templateDraft,
+                    jurisdiction: e.target.value,
+                  })
+                }
+                placeholder="e.g. Rwanda"
+              />
+            </div>
+            <div>
+              <Label>Description</Label>
+              <Textarea
+                value={templateDraft.description}
+                onChange={(e) =>
+                  setTemplateDraft({
+                    ...templateDraft,
+                    description: e.target.value,
+                  })
+                }
+              />
+            </div>
+            <div>
+              <Label>Template body</Label>
+              <p className="mb-1 text-xs text-muted-foreground">
+                Use placeholders like {"{{counterpartyName}}"},{" "}
+                {"{{tenantCompanyName}}"}, {"{{contractValue}}"},{" "}
+                {"{{contractCurrency}}"}, {"{{effectiveDate}}"},{" "}
+                {"{{expiryDate}}"}, {"{{todayDate}}"} — filled in automatically
+                when generating a contract.
+              </p>
+              <RichTextEditor
+                value={templateDraft.content}
+                onChange={(html) =>
+                  setTemplateDraft({ ...templateDraft, content: html })
+                }
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              disabled={
+                !templateDraft.title.trim() || saveTemplateMut.isPending
+              }
+              onClick={() => saveTemplateMut.mutate()}
+            >
+              {editingTemplateId ? "Save changes" : "Create template"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Upload template — Word documents only */}
+      <Dialog open={openUploadTemplate} onOpenChange={setOpenUploadTemplate}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Upload template</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Word document (.doc, .docx)</Label>
+              <Input
+                type="file"
+                accept={WORD_ACCEPT}
+                onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Its content is extracted automatically and becomes the
+                template's real, previewable text.
+              </p>
+              {uploadFile && (
+                <p className="text-xs text-muted-foreground">
+                  {uploadFile.name} ·{" "}
+                  {(uploadFile.size / 1024 / 1024).toFixed(2)} MB
+                </p>
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="col-span-2">
+                <Label>Title</Label>
+                <Input
+                  value={uploadMeta.title}
+                  onChange={(e) =>
+                    setUploadMeta({ ...uploadMeta, title: e.target.value })
+                  }
+                />
+              </div>
+              <div>
+                <Label>Type</Label>
+                <Select
+                  value={uploadMeta.type}
+                  onValueChange={(v) =>
+                    setUploadMeta({ ...uploadMeta, type: v as ContractType })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CONTRACT_TYPES.map((t) => (
+                      <SelectItem key={t} value={t}>
+                        {t}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Jurisdiction</Label>
+                <Input
+                  value={uploadMeta.jurisdiction}
+                  onChange={(e) =>
+                    setUploadMeta({
+                      ...uploadMeta,
+                      jurisdiction: e.target.value,
+                    })
+                  }
+                />
+              </div>
+              <div className="col-span-2">
+                <Label>Description</Label>
+                <Textarea
+                  value={uploadMeta.description}
+                  onChange={(e) =>
+                    setUploadMeta({
+                      ...uploadMeta,
+                      description: e.target.value,
+                    })
+                  }
+                />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              disabled={
+                !uploadFile ||
+                !uploadMeta.title.trim() ||
+                uploadTemplateMut.isPending
+              }
+              onClick={() => uploadTemplateMut.mutate()}
+            >
+              <Upload className="mr-2 h-4 w-4" /> Upload
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Replace an uploaded template's file — Word documents only */}
+      <Dialog
+        open={!!replaceFileTarget}
+        onOpenChange={(o) => !o && setReplaceFileTarget(null)}
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Replace file — {replaceFileTarget?.title}</DialogTitle>
+          </DialogHeader>
+          <Input
+            type="file"
+            accept={WORD_ACCEPT}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) replaceFileMut.mutate(file);
+            }}
+          />
+          {replaceFileMut.isPending && (
+            <p className="text-xs text-muted-foreground">Uploading…</p>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Preview a template (authored, or extracted from an uploaded Word document) */}
+      <Dialog
+        open={!!previewTemplate}
+        onOpenChange={(o) => !o && setPreviewTemplate(null)}
+      >
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{previewTemplate?.title}</DialogTitle>
+          </DialogHeader>
+          {previewTemplate && (
+            <div className="space-y-3">
+              {previewTemplate.sourceType === "uploaded" && (
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <FileUp className="h-3.5 w-3.5" /> From uploaded Word document
+                  {previewTemplate.fileUrl && (
+                    <a
+                      href={previewTemplate.fileUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="underline"
+                    >
+                      download original
+                    </a>
+                  )}
+                </div>
+              )}
+              <p className="text-sm text-muted-foreground">
+                {previewTemplate.description}
+              </p>
+              <div
+                className="rounded-md border p-4 text-sm"
+                dangerouslySetInnerHTML={{
+                  __html:
+                    previewTemplate.content ||
+                    "<p class='text-muted-foreground'>No content</p>",
+                }}
+              />
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete template confirm */}
+      <Dialog
+        open={!!pendingDeleteTemplate}
+        onOpenChange={(o) => !o && setPendingDeleteTemplate(null)}
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Delete template?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            "{pendingDeleteTemplate?.title}" will be removed
+            {pendingDeleteTemplate?.sourceType === "uploaded"
+              ? ", including its file"
+              : ""}
+            .
+          </p>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setPendingDeleteTemplate(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={deleteTemplateMut.isPending}
+              onClick={() =>
+                pendingDeleteTemplate &&
+                deleteTemplateMut.mutate(pendingDeleteTemplate._id)
+              }
+            >
+              Delete
             </Button>
           </DialogFooter>
         </DialogContent>

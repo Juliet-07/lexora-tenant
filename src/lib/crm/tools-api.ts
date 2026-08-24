@@ -68,6 +68,7 @@ export interface Contract {
   expiresOn: string;
   autoRenew: boolean;
   owner: string;
+  clientId: string | null;
   mandateId: string | null;
   mandateName: string;
   rounds: NegotiationRound[];
@@ -80,12 +81,12 @@ export interface ObligationDue extends ContractObligation {
   contractRef: string;
 }
 
-export const fetchContracts = async (): Promise<Contract[]> => {
+export const fetchContracts = async (): Promise<SignableContract[]> => {
   const res = await api.get("/tools/contracts");
   const d = unwrap(res);
   return Array.isArray(d) ? d : [];
 };
-export const fetchContract = async (id: string): Promise<Contract> =>
+export const fetchContract = async (id: string): Promise<SignableContract> =>
   unwrap(await api.get(`/tools/contracts/${id}`));
 export const fetchExpiringContracts = async (
   withinDays = 90,
@@ -108,15 +109,18 @@ export const fetchObligationsDue = async (
 export const createContract = async (dto: {
   title: string;
   counterparty: string;
+  counterpartyEmail: string;
   type: ContractType;
   value?: number;
   currency?: string;
   expiresOn: string;
   autoRenew?: boolean;
-  owner?: string;
+  clientId?: string;
   mandateId?: string;
   mandateName?: string;
-}): Promise<Contract> => unwrap(await api.post("/tools/contracts", dto));
+  content?: string;
+}): Promise<SignableContract> =>
+  unwrap(await api.post("/tools/contracts", dto));
 export const advanceContractStage = async (id: string): Promise<Contract> =>
   unwrap(await api.post(`/tools/contracts/${id}/advance`));
 export const executeContract = async (
@@ -135,8 +139,8 @@ export const addNegotiationRound = async (
   unwrap(await api.post(`/tools/contracts/${id}/rounds`, dto));
 export const addAmendment = async (
   id: string,
-  dto: { summary: string },
-): Promise<Contract> =>
+  dto: { summary: string; newBody?: string },
+): Promise<SignableContract> =>
   unwrap(await api.post(`/tools/contracts/${id}/amendments`, dto));
 export const addObligation = async (
   id: string,
@@ -155,7 +159,7 @@ export const setObligationDone = async (
   );
 
 // ══════════════════════════════════════════════════════════════
-// Comments — shared thread, keyed by subjectType + subjectId
+// Comments
 // ══════════════════════════════════════════════════════════════
 
 export type CommentSubjectType =
@@ -332,9 +336,6 @@ export const createCampaign = async (dto: {
   body?: string;
   event?: Partial<CampaignEventDetails>;
 }): Promise<Campaign> => unwrap(await api.post("/tools/campaigns", dto));
-// Allowed while Draft or Scheduled — refused by the backend once
-// Sending or Sent. If segmentId differs from the campaign's current
-// one, real recipients are re-resolved against the new segment.
 export const updateCampaign = async (
   id: string,
   dto: {
@@ -357,9 +358,6 @@ export const scheduleCampaign = async (
   scheduledAt: string,
 ): Promise<Campaign> =>
   unwrap(await api.post(`/tools/campaigns/${id}/schedule`, { scheduledAt }));
-// Real way back from Scheduled to Draft — clears the schedule
-// rather than leaving the campaign stuck waiting for its original
-// time with no other path forward.
 export const unscheduleCampaign = async (id: string): Promise<Campaign> =>
   unwrap(await api.post(`/tools/campaigns/${id}/unschedule`));
 export const sendCampaignNow = async (id: string): Promise<Campaign> =>
@@ -371,7 +369,7 @@ export const sendCampaignTest = async (
   unwrap(await api.post(`/tools/campaigns/${id}/send-test`, { to }));
 
 // ══════════════════════════════════════════════════════════════
-// Newsletter — Drafts (from the GRC regulatory feed)
+// Newsletter — Drafts
 // ══════════════════════════════════════════════════════════════
 
 export interface NewsletterDraft {
@@ -425,9 +423,6 @@ export interface CalendarEventItem {
   virtualProvider?: VirtualProvider | null;
   virtualLink?: string;
   recurrence?: RecurrenceRule;
-  // Only real manual events (source: "Manual") can be edited or
-  // deleted — Contract/Compliance/ADR events are computed live from
-  // their real source records and have no separate identity to edit.
   editable: boolean;
 }
 
@@ -466,3 +461,318 @@ export const deleteCalendarEvent = async (
   id: string,
 ): Promise<{ deleted: boolean }> =>
   unwrap(await api.delete(`/tools/calendar/${id}`));
+
+// ══════════════════════════════════════════════════════════════
+// Contract Templates (Tenant) — Word documents only
+// ══════════════════════════════════════════════════════════════
+
+export type TemplateSourceType = "authored" | "uploaded";
+
+export interface TenantContractTemplate {
+  _id: string;
+  title: string;
+  type: ContractType;
+  jurisdiction: string;
+  description: string;
+  sourceType: TemplateSourceType;
+  content: string;
+  fileUrl: string | null;
+  fileName: string | null;
+  fileMimeType: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AvailableTemplate {
+  _id: string;
+  title: string;
+  jurisdiction?: string;
+  description: string;
+  sourceType: TemplateSourceType;
+  content: string;
+  fileUrl: string | null;
+  fileName: string | null;
+  source: "platform" | "tenant";
+  category?: string;
+  type?: ContractType;
+}
+
+export const fetchTenantTemplates = async (): Promise<
+  TenantContractTemplate[]
+> => {
+  const res = await api.get("/tools/contract-templates");
+  const d = unwrap(res);
+  return Array.isArray(d) ? d : [];
+};
+export const fetchAvailableTemplates = async (): Promise<
+  AvailableTemplate[]
+> => {
+  const res = await api.get("/tools/contract-templates/available");
+  const d = unwrap(res);
+  return Array.isArray(d) ? d : [];
+};
+export const fetchTenantTemplate = async (
+  id: string,
+): Promise<TenantContractTemplate> =>
+  unwrap(await api.get(`/tools/contract-templates/${id}`));
+export const createTenantTemplate = async (dto: {
+  title: string;
+  type: ContractType;
+  jurisdiction?: string;
+  description?: string;
+  content: string;
+}): Promise<TenantContractTemplate> =>
+  unwrap(await api.post("/tools/contract-templates", dto));
+export const updateTenantTemplate = async (
+  id: string,
+  dto: {
+    title: string;
+    type: ContractType;
+    jurisdiction?: string;
+    description?: string;
+    content: string;
+  },
+): Promise<TenantContractTemplate> =>
+  unwrap(await api.patch(`/tools/contract-templates/${id}`, dto));
+export const deleteTenantTemplate = async (
+  id: string,
+): Promise<{ deleted: boolean }> =>
+  unwrap(await api.delete(`/tools/contract-templates/${id}`));
+
+export interface UploadTenantTemplateMeta {
+  title: string;
+  type: ContractType;
+  jurisdiction?: string;
+  description?: string;
+}
+// Word documents only — real content is extracted server-side
+// (mammoth), becoming the template's real, previewable, editable
+// content.
+export const uploadTenantTemplate = async (
+  file: File,
+  meta: UploadTenantTemplateMeta,
+): Promise<TenantContractTemplate> => {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("title", meta.title);
+  form.append("type", meta.type);
+  if (meta.jurisdiction) form.append("jurisdiction", meta.jurisdiction);
+  if (meta.description) form.append("description", meta.description);
+  const res = await api.post("/tools/contract-templates/upload", form, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return unwrap(res);
+};
+export const replaceTenantTemplateFile = async (
+  id: string,
+  file: File,
+): Promise<TenantContractTemplate> => {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await api.post(
+    `/tools/contract-templates/${id}/replace-file`,
+    form,
+    {
+      headers: { "Content-Type": "multipart/form-data" },
+    },
+  );
+  return unwrap(res);
+};
+
+// ══════════════════════════════════════════════════════════════
+// Letterhead (Tenant)
+// ══════════════════════════════════════════════════════════════
+
+export interface Letterhead {
+  _id: string;
+  imageUrl: string;
+  imageMimeType: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const fetchMyLetterhead = async (): Promise<Letterhead | null> => {
+  const res = await api.get("/tools/letterhead");
+  return unwrap(res) ?? null;
+};
+export const uploadLetterhead = async (file: File): Promise<Letterhead> => {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await api.post("/tools/letterhead/upload", form, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return unwrap(res);
+};
+export const deleteLetterhead = async (): Promise<{ deleted: boolean }> =>
+  unwrap(await api.delete("/tools/letterhead"));
+
+// ══════════════════════════════════════════════════════════════
+// Contract e-signature workflow (Tenant side)
+// ══════════════════════════════════════════════════════════════
+
+export type SignatureStatus =
+  | "not_sent"
+  | "sent"
+  | "signed"
+  | "countersigned"
+  | "declined";
+export type ToolContractInteractionType =
+  | "sent"
+  | "viewed"
+  | "comment"
+  | "tenant_response"
+  | "updated"
+  | "resent"
+  | "signed"
+  | "countersigned"
+  | "signed_copy_sent"
+  | "declined";
+
+export interface ToolContractInteraction {
+  type: ToolContractInteractionType;
+  occurredAt: string;
+  actor: "signer" | "tenant";
+  message: string | null;
+}
+export interface ToolContractSignature {
+  signedAt: string;
+  signerName: string;
+  signatureImageData: string | null;
+}
+export interface ToolContractTenantSignature {
+  signedAt: string;
+  signerName: string;
+  signatureImageData: string | null;
+  stampImageData: string | null;
+}
+
+export interface SignableContract extends Contract {
+  templateId: string | null;
+  templateName: string | null;
+  counterpartyEmail: string;
+  renderedBody: string;
+  requiresSignature: boolean;
+  signatureStatus: SignatureStatus;
+  interactions: ToolContractInteraction[];
+  signature: ToolContractSignature | null;
+  tenantSignature: ToolContractTenantSignature | null;
+  signedCopySentAt: string | null;
+  declinedAt: string | null;
+  declineReason: string | null;
+}
+
+export const generateContractFromTemplate = async (dto: {
+  templateId: string;
+  templateSource: "platform" | "tenant";
+  title: string;
+  type: ContractType;
+  counterparty: string;
+  counterpartyEmail: string;
+  value?: number;
+  currency?: string;
+  expiresOn: string;
+  autoRenew?: boolean;
+  clientId?: string;
+  mandateId?: string;
+  mandateName?: string;
+}): Promise<SignableContract> =>
+  unwrap(await api.post("/tools/contracts/generate-from-template", dto));
+
+// Sending emails a real PDF attachment of the contract-as-it-stands
+// alongside the signing link, server-side.
+export const sendContractForSignature = async (
+  id: string,
+  expiresInHours?: number,
+): Promise<SignableContract> =>
+  unwrap(
+    await api.post(`/tools/contracts/${id}/send-for-signature`, {
+      expiresInHours,
+    }),
+  );
+
+export const respondToContractComment = async (
+  id: string,
+  message: string,
+): Promise<SignableContract> =>
+  unwrap(await api.post(`/tools/contracts/${id}/respond`, { message }));
+
+export const editContractBody = async (
+  id: string,
+  dto: { renderedBody: string; changeNote?: string },
+): Promise<SignableContract> =>
+  unwrap(await api.patch(`/tools/contracts/${id}/body`, dto));
+
+export const countersignContract = async (
+  id: string,
+  dto: {
+    signerName: string;
+    signatureImageData?: string;
+    stampImageData?: string;
+  },
+): Promise<SignableContract> =>
+  unwrap(await api.post(`/tools/contracts/${id}/countersign`, dto));
+
+export const sendSignedContractCopy = async (
+  id: string,
+): Promise<SignableContract> =>
+  unwrap(await api.post(`/tools/contracts/${id}/send-signed-copy`, {}));
+
+export const downloadContractPdf = async (
+  id: string,
+  filename?: string,
+): Promise<void> => {
+  const res = await api.get(`/tools/contracts/${id}/pdf`, {
+    responseType: "blob",
+  });
+  const blob = new Blob([res.data], { type: "application/pdf" });
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename ?? `contract-${id}.pdf`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(url);
+};
+
+// ─────────────────────────────────────────────────────────────
+// Contract signing — Public signer-facing API (token-based, no
+// auth). Bypasses the shared `api` axios instance's auth handling.
+// ─────────────────────────────────────────────────────────────
+
+import axios from "axios";
+const PUBLIC_API_BASE = (api.defaults as any)?.baseURL ?? "/api";
+const publicApi = axios.create({ baseURL: PUBLIC_API_BASE });
+
+export const fetchToolContractByToken = async (
+  token: string,
+): Promise<SignableContract> => {
+  const res = await publicApi.get(`/tools/contracts/sign/${token}`);
+  return res.data?.data ?? res.data;
+};
+export const submitToolContractComment = async (
+  token: string,
+  message: string,
+): Promise<SignableContract> => {
+  const res = await publicApi.post(`/tools/contracts/sign/${token}/comment`, {
+    message,
+  });
+  return res.data?.data ?? res.data;
+};
+export const signToolContract = async (
+  token: string,
+  dto: { signerName: string; signatureImageData?: string },
+): Promise<SignableContract> => {
+  const res = await publicApi.post(`/tools/contracts/sign/${token}/sign`, dto);
+  return res.data?.data ?? res.data;
+};
+export const declineToolContract = async (
+  token: string,
+  reason?: string,
+): Promise<SignableContract> => {
+  const res = await publicApi.post(`/tools/contracts/sign/${token}/decline`, {
+    reason,
+  });
+  return res.data?.data ?? res.data;
+};

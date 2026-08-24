@@ -8,12 +8,13 @@ import { hrRoutes } from "./hr.routes";
 import { crmRoutes } from "./crm.routes";
 import { grcRoutes } from "./grc.routes";
 import { employeeRoutes } from "./employee.routes";
-import SignContractPage from "@/pages/SigninContractPage";
+import SignContractPage from "@/pages/public/SigninContractPage";
 import MeetingAckPage from "@/pages/grc/governance/MeetingAck";
 import MinutesReviewPage from "@/pages/grc/governance/MinutesReview";
 import PolicyAckPage from "@/pages/grc/compliance/PolicyAck";
 import DealContractReviewPage from "@/pages/grc/deals/DealContractReview";
 import DealOfferReviewPage from "@/pages/grc/deals/DealOfferReview";
+import SignToolContractPage from "@/pages/public/SignToolContractPage";
 
 /**
  * Top-level router. Module-specific routes live in their own files so
@@ -22,6 +23,7 @@ import DealOfferReviewPage from "@/pages/grc/deals/DealOfferReview";
 
 const PUBLIC_ROUTE_PATTERNS = [
   /^\/sign-contract\/[^/]+$/,
+  /^\/sign-tool-contract\/[^/]+$/,
   /^\/meeting-ack\/[^/]+$/,
   /^\/minutes-review\/[^/]+$/,
   /^\/policy-ack\/[^/]+$/,
@@ -41,6 +43,10 @@ export function AppRoutes() {
     return (
       <Routes>
         <Route path="/sign-contract/:token" element={<SignContractPage />} />
+        <Route
+          path="/sign-tool-contract/:token"
+          element={<SignToolContractPage />}
+        />
         <Route path="/meeting-ack/:token" element={<MeetingAckPage />} />
         <Route path="/minutes-review/:token" element={<MinutesReviewPage />} />
         <Route path="/policy-ack/:token" element={<PolicyAckPage />} />
