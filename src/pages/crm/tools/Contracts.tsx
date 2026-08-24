@@ -981,17 +981,19 @@ export default function Contracts() {
                           >
                             <Eye className="h-4 w-4" />
                           </Button>
-                          {t.sourceType === "uploaded" && t.fileUrl && (
-                            <Button size="sm" variant="ghost" asChild>
-                              <a
-                                href={t.fileUrl}
-                                target="_blank"
-                                rel="noreferrer"
-                              >
-                                <Download className="h-4 w-4" />
-                              </a>
-                            </Button>
-                          )}
+                          {t.sourceType === "uploaded" &&
+                            t.fileUrl &&
+                            t.source === "tenant" && (
+                              <Button size="sm" variant="ghost" asChild>
+                                <a
+                                  href={t.fileUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                >
+                                  <Download className="h-4 w-4" />
+                                </a>
+                              </Button>
+                            )}
                           {t.source === "tenant" && (
                             <>
                               {t.sourceType === "uploaded" ? (
@@ -2361,16 +2363,17 @@ export default function Contracts() {
               {previewTemplate.sourceType === "uploaded" && (
                 <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                   <FileUp className="h-3.5 w-3.5" /> From uploaded Word document
-                  {previewTemplate.fileUrl && (
-                    <a
-                      href={previewTemplate.fileUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="underline"
-                    >
-                      download original
-                    </a>
-                  )}
+                  {previewTemplate.fileUrl &&
+                    previewTemplate.source === "tenant" && (
+                      <a
+                        href={previewTemplate.fileUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="underline"
+                      >
+                        download original
+                      </a>
+                    )}
                 </div>
               )}
               <p className="text-sm text-muted-foreground">
