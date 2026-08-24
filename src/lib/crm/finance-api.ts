@@ -761,7 +761,7 @@ export const upsertExpensePolicy = async (
 
 // ── Banking ───────────────────────────────────────────────────
 
-export type BankAccountType = "Office" | "Trust" | "Special purpose";
+export type BankAccountType = "Office" | "Trust" | "Special purpose" | "Fund";
 export interface BankAccount {
   _id: string;
   name: string;
