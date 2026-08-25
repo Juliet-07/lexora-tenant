@@ -268,6 +268,7 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
         { title: "Timesheets", url: "/crm/time" },
         { title: "Service Desk", url: "/crm/service-desk" },
         { title: "ADR", url: "/crm/adr" },
+        { title: "Litigation", url: "/crm/litigation" },
         { title: "PMO", url: "/crm/pmo" },
       ],
     },
