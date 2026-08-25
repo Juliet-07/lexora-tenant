@@ -471,6 +471,9 @@ export const deleteCalendarEvent = async (
 
 export type TemplateSourceType = "authored" | "uploaded";
 
+// Template creation was retired for tenants — kept read-only here so
+// a contract already generated from a tenant-authored template built
+// before that change stays fully readable. No new ones can be made.
 export interface TenantContractTemplate {
   _id: string;
   title: string;
@@ -499,6 +502,16 @@ export interface AvailableTemplate {
   source: "platform" | "tenant";
   category?: string;
   type?: ContractType;
+  // Real folder from the super admin's library — null/undefined
+  // means uncategorized.
+  folderId?: string | null;
+}
+
+export interface TemplateFolder {
+  _id: string;
+  name: string;
+  description?: string;
+  templateCount: number;
 }
 
 export const fetchTenantTemplates = async (): Promise<
@@ -508,6 +521,8 @@ export const fetchTenantTemplates = async (): Promise<
   const d = unwrap(res);
   return Array.isArray(d) ? d : [];
 };
+// The real picker for generating a new contract — every published
+// platform template, each carrying its real folderId.
 export const fetchAvailableTemplates = async (): Promise<
   AvailableTemplate[]
 > => {
@@ -515,73 +530,15 @@ export const fetchAvailableTemplates = async (): Promise<
   const d = unwrap(res);
   return Array.isArray(d) ? d : [];
 };
+export const fetchTemplateFolders = async (): Promise<TemplateFolder[]> => {
+  const res = await api.get("/tools/contract-templates/folders");
+  const d = unwrap(res);
+  return Array.isArray(d) ? d : [];
+};
 export const fetchTenantTemplate = async (
   id: string,
 ): Promise<TenantContractTemplate> =>
   unwrap(await api.get(`/tools/contract-templates/${id}`));
-export const createTenantTemplate = async (dto: {
-  title: string;
-  type: ContractType;
-  jurisdiction?: string;
-  description?: string;
-  content: string;
-}): Promise<TenantContractTemplate> =>
-  unwrap(await api.post("/tools/contract-templates", dto));
-export const updateTenantTemplate = async (
-  id: string,
-  dto: {
-    title: string;
-    type: ContractType;
-    jurisdiction?: string;
-    description?: string;
-    content: string;
-  },
-): Promise<TenantContractTemplate> =>
-  unwrap(await api.patch(`/tools/contract-templates/${id}`, dto));
-export const deleteTenantTemplate = async (
-  id: string,
-): Promise<{ deleted: boolean }> =>
-  unwrap(await api.delete(`/tools/contract-templates/${id}`));
-
-export interface UploadTenantTemplateMeta {
-  title: string;
-  type: ContractType;
-  jurisdiction?: string;
-  description?: string;
-}
-// Word documents only — real content is extracted server-side
-// (mammoth), becoming the template's real, previewable, editable
-// content.
-export const uploadTenantTemplate = async (
-  file: File,
-  meta: UploadTenantTemplateMeta,
-): Promise<TenantContractTemplate> => {
-  const form = new FormData();
-  form.append("file", file);
-  form.append("title", meta.title);
-  form.append("type", meta.type);
-  if (meta.jurisdiction) form.append("jurisdiction", meta.jurisdiction);
-  if (meta.description) form.append("description", meta.description);
-  const res = await api.post("/tools/contract-templates/upload", form, {
-    headers: { "Content-Type": "multipart/form-data" },
-  });
-  return unwrap(res);
-};
-export const replaceTenantTemplateFile = async (
-  id: string,
-  file: File,
-): Promise<TenantContractTemplate> => {
-  const form = new FormData();
-  form.append("file", file);
-  const res = await api.post(
-    `/tools/contract-templates/${id}/replace-file`,
-    form,
-    {
-      headers: { "Content-Type": "multipart/form-data" },
-    },
-  );
-  return unwrap(res);
-};
 
 // ══════════════════════════════════════════════════════════════
 // Letterhead (Tenant)

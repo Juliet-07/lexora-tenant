@@ -55,6 +55,7 @@ import {
   Sparkles,
   MessageSquare,
   PenTool,
+  Folder,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { CommentThread } from "@/components/crm/CommentThread";
@@ -79,12 +80,7 @@ import {
   addObligation,
   setObligationDone,
   fetchAvailableTemplates,
-  fetchTenantTemplates,
-  createTenantTemplate,
-  updateTenantTemplate,
-  deleteTenantTemplate,
-  uploadTenantTemplate,
-  replaceTenantTemplateFile,
+  fetchTemplateFolders,
   fetchMyLetterhead,
   uploadLetterhead,
   deleteLetterhead,
@@ -102,12 +98,8 @@ import {
   type ContractStage,
   type ObligationType,
   type AvailableTemplate,
-  type TenantContractTemplate,
   type SignableContract,
 } from "@/lib/crm/tools-api";
-
-const WORD_ACCEPT =
-  ".doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
 const money = (n: number, c = "USD") =>
   (n ?? 0).toLocaleString(undefined, {
@@ -170,10 +162,11 @@ export default function Contracts() {
     queryKey: ["available-templates"],
     queryFn: fetchAvailableTemplates,
   });
-  const { data: myTemplates = [] } = useQuery({
-    queryKey: ["my-templates"],
-    queryFn: fetchTenantTemplates,
+  const { data: templateFolders = [] } = useQuery({
+    queryKey: ["template-folders"],
+    queryFn: fetchTemplateFolders,
   });
+  const uncategorizedTemplates = availableTemplates.filter((t) => !t.folderId);
   const { data: letterhead } = useQuery({
     queryKey: ["letterhead"],
     queryFn: fetchMyLetterhead,
@@ -185,10 +178,6 @@ export default function Contracts() {
     queryClient.invalidateQueries({ queryKey: ["contracts"] });
     queryClient.invalidateQueries({ queryKey: ["contracts-expiring"] });
     queryClient.invalidateQueries({ queryKey: ["obligations-due"] });
-  };
-  const invalidateTemplates = () => {
-    queryClient.invalidateQueries({ queryKey: ["available-templates"] });
-    queryClient.invalidateQueries({ queryKey: ["my-templates"] });
   };
 
   const filtered = list.filter(
@@ -348,114 +337,12 @@ export default function Contracts() {
   });
 
   // ── Templates ─────────────────────────────────────────────
-  const [openTemplateDialog, setOpenTemplateDialog] = useState(false);
-  const [editingTemplateId, setEditingTemplateId] = useState<string | null>(
-    null,
-  );
-  const [templateDraft, setTemplateDraft] = useState({
-    title: "",
-    type: "MSA" as ContractType,
-    jurisdiction: "",
-    description: "",
-    content: "",
-  });
+  // Template creation was retired for tenants — every template now
+  // comes from the super admin's folder-organized library, read-only
+  // here. previewTemplate is the only remaining piece of state this
+  // section needs.
   const [previewTemplate, setPreviewTemplate] =
     useState<AvailableTemplate | null>(null);
-  const [pendingDeleteTemplate, setPendingDeleteTemplate] =
-    useState<TenantContractTemplate | null>(null);
-
-  const openCreateTemplate = () => {
-    setEditingTemplateId(null);
-    setTemplateDraft({
-      title: "",
-      type: "MSA",
-      jurisdiction: "",
-      description: "",
-      content: "",
-    });
-    setOpenTemplateDialog(true);
-  };
-  const openEditTemplate = (t: TenantContractTemplate) => {
-    setEditingTemplateId(t._id);
-    setTemplateDraft({
-      title: t.title,
-      type: t.type,
-      jurisdiction: t.jurisdiction,
-      description: t.description,
-      content: t.content,
-    });
-    setOpenTemplateDialog(true);
-  };
-
-  const saveTemplateMut = useMutation({
-    mutationFn: () =>
-      editingTemplateId
-        ? updateTenantTemplate(editingTemplateId, templateDraft)
-        : createTenantTemplate(templateDraft),
-    onSuccess: () => {
-      invalidateTemplates();
-      setOpenTemplateDialog(false);
-      toast({
-        title: editingTemplateId ? "Template updated" : "Template created",
-      });
-    },
-    onError: onErr("Failed to save template"),
-  });
-  const deleteTemplateMut = useMutation({
-    mutationFn: (id: string) => deleteTenantTemplate(id),
-    onSuccess: () => {
-      invalidateTemplates();
-      setPendingDeleteTemplate(null);
-      toast({ title: "Template deleted" });
-    },
-    onError: onErr("Failed to delete template"),
-  });
-
-  // ── Upload template — Word documents only ────────────────
-  const [openUploadTemplate, setOpenUploadTemplate] = useState(false);
-  const [uploadFile, setUploadFile] = useState<File | null>(null);
-  const [uploadMeta, setUploadMeta] = useState({
-    title: "",
-    type: "MSA" as ContractType,
-    jurisdiction: "",
-    description: "",
-  });
-  const [replaceFileTarget, setReplaceFileTarget] =
-    useState<TenantContractTemplate | null>(null);
-
-  const openUpload = () => {
-    setUploadFile(null);
-    setUploadMeta({
-      title: "",
-      type: "MSA",
-      jurisdiction: "",
-      description: "",
-    });
-    setOpenUploadTemplate(true);
-  };
-  const uploadTemplateMut = useMutation({
-    mutationFn: () => uploadTenantTemplate(uploadFile as File, uploadMeta),
-    onSuccess: () => {
-      invalidateTemplates();
-      setOpenUploadTemplate(false);
-      toast({
-        title: "Template uploaded",
-        description:
-          "Its content was extracted automatically and can be previewed.",
-      });
-    },
-    onError: onErr("Failed to upload template"),
-  });
-  const replaceFileMut = useMutation({
-    mutationFn: (file: File) =>
-      replaceTenantTemplateFile(replaceFileTarget!._id, file),
-    onSuccess: () => {
-      invalidateTemplates();
-      setReplaceFileTarget(null);
-      toast({ title: "File replaced" });
-    },
-    onError: onErr("Failed to replace file"),
-  });
 
   // ── Letterhead ────────────────────────────────────────────
   const uploadLetterheadMut = useMutation({
@@ -921,142 +808,118 @@ export default function Contracts() {
             </CardContent>
           </Card>
 
-          <div className="flex justify-end gap-2">
-            <Button size="sm" variant="outline" onClick={openUpload}>
-              <Upload className="mr-2 h-4 w-4" /> Upload template
-            </Button>
-            <Button size="sm" onClick={openCreateTemplate}>
-              <Plus className="mr-2 h-4 w-4" /> New template
-            </Button>
-          </div>
-
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm">
-                Available templates — platform-published and my own
+                Available templates — published by your platform, organized into
+                folders
               </CardTitle>
             </CardHeader>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Template</TableHead>
-                    <TableHead>Source</TableHead>
-                    <TableHead>Jurisdiction</TableHead>
-                    <TableHead></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {availableTemplates.map((t) => (
-                    <TableRow key={`${t.source}-${t._id}`}>
-                      <TableCell>
-                        <div className="flex items-center gap-1.5">
-                          {t.sourceType === "uploaded" && (
-                            <FileUp className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                          )}
-                          <p className="text-sm font-medium">{t.title}</p>
-                        </div>
-                        <p className="line-clamp-1 text-xs text-muted-foreground">
-                          {t.description}
-                        </p>
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={
-                            t.source === "platform" ? "outline" : "secondary"
-                          }
-                        >
-                          {t.source === "platform" ? "Platform" : "My own"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {t.jurisdiction || "—"}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex justify-end gap-1">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => setPreviewTemplate(t)}
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                          {t.sourceType === "uploaded" &&
-                            t.fileUrl &&
-                            t.source === "tenant" && (
-                              <Button size="sm" variant="ghost" asChild>
-                                <a
-                                  href={t.fileUrl}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                >
-                                  <Download className="h-4 w-4" />
-                                </a>
-                              </Button>
-                            )}
-                          {t.source === "tenant" && (
-                            <>
-                              {t.sourceType === "uploaded" ? (
+            <CardContent className="space-y-5">
+              {templateFolders.map((folder) => {
+                const inFolder = availableTemplates.filter(
+                  (t) => t.folderId === folder._id,
+                );
+                if (!inFolder.length) return null;
+                return (
+                  <div key={folder._id} className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Folder className="h-4 w-4 text-muted-foreground" />
+                      <h4 className="text-sm font-semibold">{folder.name}</h4>
+                      <Badge variant="outline" className="text-[10px]">
+                        {inFolder.length}
+                      </Badge>
+                    </div>
+                    <div className="overflow-hidden rounded-md border">
+                      <Table>
+                        <TableBody>
+                          {inFolder.map((t) => (
+                            <TableRow key={t._id}>
+                              <TableCell>
+                                <div className="flex items-center gap-1.5">
+                                  {t.sourceType === "uploaded" && (
+                                    <FileUp className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                                  )}
+                                  <p className="text-sm font-medium">
+                                    {t.title}
+                                  </p>
+                                </div>
+                                <p className="line-clamp-1 text-xs text-muted-foreground">
+                                  {t.description}
+                                </p>
+                              </TableCell>
+                              <TableCell className="text-sm text-muted-foreground">
+                                {t.jurisdiction || "—"}
+                              </TableCell>
+                              <TableCell className="w-10">
                                 <Button
                                   size="sm"
                                   variant="ghost"
-                                  onClick={() =>
-                                    setReplaceFileTarget(
-                                      myTemplates.find(
-                                        (m) => m._id === t._id,
-                                      ) ?? null,
-                                    )
-                                  }
+                                  onClick={() => setPreviewTemplate(t)}
                                 >
-                                  <Upload className="h-4 w-4" />
+                                  <Eye className="h-4 w-4" />
                                 </Button>
-                              ) : (
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() =>
-                                    openEditTemplate(
-                                      myTemplates.find(
-                                        (m) => m._id === t._id,
-                                      ) as TenantContractTemplate,
-                                    )
-                                  }
-                                >
-                                  <Pencil className="h-4 w-4" />
-                                </Button>
-                              )}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {uncategorizedTemplates.length > 0 && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Folder className="h-4 w-4 text-muted-foreground" />
+                    <h4 className="text-sm font-semibold">Uncategorized</h4>
+                    <Badge variant="outline" className="text-[10px]">
+                      {uncategorizedTemplates.length}
+                    </Badge>
+                  </div>
+                  <div className="overflow-hidden rounded-md border">
+                    <Table>
+                      <TableBody>
+                        {uncategorizedTemplates.map((t) => (
+                          <TableRow key={t._id}>
+                            <TableCell>
+                              <div className="flex items-center gap-1.5">
+                                {t.sourceType === "uploaded" && (
+                                  <FileUp className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                                )}
+                                <p className="text-sm font-medium">{t.title}</p>
+                              </div>
+                              <p className="line-clamp-1 text-xs text-muted-foreground">
+                                {t.description}
+                              </p>
+                            </TableCell>
+                            <TableCell className="text-sm text-muted-foreground">
+                              {t.jurisdiction || "—"}
+                            </TableCell>
+                            <TableCell className="w-10">
                               <Button
                                 size="sm"
                                 variant="ghost"
-                                className="text-destructive"
-                                onClick={() =>
-                                  setPendingDeleteTemplate(
-                                    myTemplates.find((m) => m._id === t._id) ??
-                                      null,
-                                  )
-                                }
+                                onClick={() => setPreviewTemplate(t)}
                               >
-                                <Trash2 className="h-4 w-4" />
+                                <Eye className="h-4 w-4" />
                               </Button>
-                            </>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {!availableTemplates.length && (
-                    <TableRow>
-                      <TableCell
-                        colSpan={4}
-                        className="py-8 text-center text-sm text-muted-foreground"
-                      >
-                        No templates yet — create your own or check back once
-                        the platform publishes some.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              )}
+
+              {!availableTemplates.length && (
+                <p className="py-8 text-center text-sm text-muted-foreground">
+                  No templates published yet — check back once your platform
+                  publishes some.
+                </p>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -2129,226 +1992,6 @@ export default function Contracts() {
         </DialogContent>
       </Dialog>
 
-      {/* Create / edit template */}
-      <Dialog open={openTemplateDialog} onOpenChange={setOpenTemplateDialog}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>
-              {editingTemplateId ? "Edit template" : "New template"}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="grid gap-3">
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label>Title</Label>
-                <Input
-                  value={templateDraft.title}
-                  onChange={(e) =>
-                    setTemplateDraft({
-                      ...templateDraft,
-                      title: e.target.value,
-                    })
-                  }
-                />
-              </div>
-              <div>
-                <Label>Type</Label>
-                <Select
-                  value={templateDraft.type}
-                  onValueChange={(v) =>
-                    setTemplateDraft({
-                      ...templateDraft,
-                      type: v as ContractType,
-                    })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {CONTRACT_TYPES.map((t) => (
-                      <SelectItem key={t} value={t}>
-                        {t}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div>
-              <Label>Jurisdiction</Label>
-              <Input
-                value={templateDraft.jurisdiction}
-                onChange={(e) =>
-                  setTemplateDraft({
-                    ...templateDraft,
-                    jurisdiction: e.target.value,
-                  })
-                }
-                placeholder="e.g. Rwanda"
-              />
-            </div>
-            <div>
-              <Label>Description</Label>
-              <Textarea
-                value={templateDraft.description}
-                onChange={(e) =>
-                  setTemplateDraft({
-                    ...templateDraft,
-                    description: e.target.value,
-                  })
-                }
-              />
-            </div>
-            <div>
-              <Label>Template body</Label>
-              <p className="mb-1 text-xs text-muted-foreground">
-                Use placeholders like {"{{counterpartyName}}"},{" "}
-                {"{{tenantCompanyName}}"}, {"{{contractValue}}"},{" "}
-                {"{{contractCurrency}}"}, {"{{effectiveDate}}"},{" "}
-                {"{{expiryDate}}"}, {"{{todayDate}}"} — filled in automatically
-                when generating a contract.
-              </p>
-              <RichTextEditor
-                value={templateDraft.content}
-                onChange={(html) =>
-                  setTemplateDraft({ ...templateDraft, content: html })
-                }
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button
-              disabled={
-                !templateDraft.title.trim() || saveTemplateMut.isPending
-              }
-              onClick={() => saveTemplateMut.mutate()}
-            >
-              {editingTemplateId ? "Save changes" : "Create template"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Upload template — Word documents only */}
-      <Dialog open={openUploadTemplate} onOpenChange={setOpenUploadTemplate}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Upload template</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Word document (.doc, .docx)</Label>
-              <Input
-                type="file"
-                accept={WORD_ACCEPT}
-                onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)}
-              />
-              <p className="text-xs text-muted-foreground">
-                Its content is extracted automatically and becomes the
-                template's real, previewable text.
-              </p>
-              {uploadFile && (
-                <p className="text-xs text-muted-foreground">
-                  {uploadFile.name} ·{" "}
-                  {(uploadFile.size / 1024 / 1024).toFixed(2)} MB
-                </p>
-              )}
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="col-span-2">
-                <Label>Title</Label>
-                <Input
-                  value={uploadMeta.title}
-                  onChange={(e) =>
-                    setUploadMeta({ ...uploadMeta, title: e.target.value })
-                  }
-                />
-              </div>
-              <div>
-                <Label>Type</Label>
-                <Select
-                  value={uploadMeta.type}
-                  onValueChange={(v) =>
-                    setUploadMeta({ ...uploadMeta, type: v as ContractType })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {CONTRACT_TYPES.map((t) => (
-                      <SelectItem key={t} value={t}>
-                        {t}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Jurisdiction</Label>
-                <Input
-                  value={uploadMeta.jurisdiction}
-                  onChange={(e) =>
-                    setUploadMeta({
-                      ...uploadMeta,
-                      jurisdiction: e.target.value,
-                    })
-                  }
-                />
-              </div>
-              <div className="col-span-2">
-                <Label>Description</Label>
-                <Textarea
-                  value={uploadMeta.description}
-                  onChange={(e) =>
-                    setUploadMeta({
-                      ...uploadMeta,
-                      description: e.target.value,
-                    })
-                  }
-                />
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button
-              disabled={
-                !uploadFile ||
-                !uploadMeta.title.trim() ||
-                uploadTemplateMut.isPending
-              }
-              onClick={() => uploadTemplateMut.mutate()}
-            >
-              <Upload className="mr-2 h-4 w-4" /> Upload
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Replace an uploaded template's file — Word documents only */}
-      <Dialog
-        open={!!replaceFileTarget}
-        onOpenChange={(o) => !o && setReplaceFileTarget(null)}
-      >
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Replace file — {replaceFileTarget?.title}</DialogTitle>
-          </DialogHeader>
-          <Input
-            type="file"
-            accept={WORD_ACCEPT}
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) replaceFileMut.mutate(file);
-            }}
-          />
-          {replaceFileMut.isPending && (
-            <p className="text-xs text-muted-foreground">Uploading…</p>
-          )}
-        </DialogContent>
-      </Dialog>
-
       {/* Preview a template (authored, or extracted from an uploaded Word document) */}
       <Dialog
         open={!!previewTemplate}
@@ -2363,17 +2006,6 @@ export default function Contracts() {
               {previewTemplate.sourceType === "uploaded" && (
                 <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                   <FileUp className="h-3.5 w-3.5" /> From uploaded Word document
-                  {previewTemplate.fileUrl &&
-                    previewTemplate.source === "tenant" && (
-                      <a
-                        href={previewTemplate.fileUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="underline"
-                      >
-                        download original
-                      </a>
-                    )}
                 </div>
               )}
               <p className="text-sm text-muted-foreground">
@@ -2389,43 +2021,6 @@ export default function Contracts() {
               />
             </div>
           )}
-        </DialogContent>
-      </Dialog>
-
-      {/* Delete template confirm */}
-      <Dialog
-        open={!!pendingDeleteTemplate}
-        onOpenChange={(o) => !o && setPendingDeleteTemplate(null)}
-      >
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Delete template?</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground">
-            "{pendingDeleteTemplate?.title}" will be removed
-            {pendingDeleteTemplate?.sourceType === "uploaded"
-              ? ", including its file"
-              : ""}
-            .
-          </p>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setPendingDeleteTemplate(null)}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              disabled={deleteTemplateMut.isPending}
-              onClick={() =>
-                pendingDeleteTemplate &&
-                deleteTemplateMut.mutate(pendingDeleteTemplate._id)
-              }
-            >
-              Delete
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
