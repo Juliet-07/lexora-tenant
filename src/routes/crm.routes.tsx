@@ -34,6 +34,7 @@ import {
   MyProjectsList,
   MyProjectDetail,
 } from "@/pages/crm/projects/employee-project";
+import Litigation from "@/pages/crm/projects/Litigation";
 
 /**
  * CRM & Project Management — Module 2.
@@ -82,6 +83,16 @@ export const crmRoutes = ({ isAdmin, accessibleModules }: RouteContext) => {
       element={layout(<ServiceDesk />)}
     />,
     <Route key="crm-adr" path="/crm/adr" element={layout(<Adr />)} />,
+    <Route
+      key="crm-litigation"
+      path="/crm/litigation"
+      element={layout(<Litigation />)}
+    />,
+    <Route
+      key="crm-litigation-detail"
+      path="/crm/litigation/:id"
+      element={layout(<Litigation />)}
+    />,
   ];
 
   if (isAdmin && accessibleModules?.includes("crm")) {
