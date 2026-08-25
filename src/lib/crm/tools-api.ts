@@ -32,12 +32,21 @@ export type ObligationType =
   | "Payment"
   | "Covenant";
 
+export type ClauseChangeStatus = "Pending" | "Accepted" | "Rejected";
+export interface ClauseChange {
+  _id: string;
+  clauseRef: string;
+  change: string;
+  note: string;
+  status: ClauseChangeStatus;
+}
 export interface NegotiationRound {
   _id: string;
   round: number;
   by: string;
   at: string;
   summary: string;
+  changes: ClauseChange[];
 }
 export interface ContractObligation {
   _id: string;
@@ -53,6 +62,26 @@ export interface ContractAmendment {
   ref: string;
   at: string;
   summary: string;
+}
+export interface ConditionPrecedent {
+  _id: string;
+  label: string;
+  detail: string;
+  satisfied: boolean;
+}
+export type ApprovalStepStatus =
+  | "Waiting"
+  | "In review"
+  | "Approved"
+  | "Rejected";
+export interface ApprovalStep {
+  _id: string;
+  userId: string | null;
+  name: string;
+  role: string;
+  status: ApprovalStepStatus;
+  decidedAt: string | null;
+  note: string;
 }
 export interface Contract {
   _id: string;
@@ -74,6 +103,26 @@ export interface Contract {
   rounds: NegotiationRound[];
   obligations: ContractObligation[];
   amendments: ContractAmendment[];
+  // ── Governance panel — real, tenant-entered fields ──
+  governingLaw: string;
+  adrClause: string;
+  leadDrafterUserId: string | null;
+  leadDrafterName: string;
+  noticeDays: number;
+  conflictCheckStatus: "Pending" | "Clear" | "Flagged";
+  riskClassification: "Low" | "Medium" | "High" | null;
+  conditionsPrecedent: ConditionPrecedent[];
+  approvalChain: ApprovalStep[];
+  // ── Live-computed, never stored — see getById on the backend ──
+  tenantBusinessName: string;
+  counterpartyKycStatus: string | null;
+  counterpartyRegistrationNumber: string | null;
+  linkedRisks: {
+    _id: string;
+    title: string;
+    severity: string;
+    status: string;
+  }[];
 }
 export interface ObligationDue extends ContractObligation {
   contractId: string;
@@ -86,8 +135,18 @@ export const fetchContracts = async (): Promise<SignableContract[]> => {
   const d = unwrap(res);
   return Array.isArray(d) ? d : [];
 };
-export const fetchContract = async (id: string): Promise<SignableContract> =>
-  unwrap(await api.get(`/tools/contracts/${id}`));
+export const fetchContract = async (id: string): Promise<SignableContract> => {
+  const d = unwrap(await api.get(`/tools/contracts/${id}`));
+  return {
+    ...d,
+    conditionsPrecedent: d.conditionsPrecedent ?? [],
+    rounds: d.rounds ?? [],
+    interactions: d.interactions ?? [],
+    obligations: d.obligations ?? [],
+    amendments: d.amendments ?? [],
+    approvalChain: d.approvalChain ?? [],
+  };
+};
 export const fetchExpiringContracts = async (
   withinDays = 90,
 ): Promise<Contract[]> => {
@@ -137,9 +196,26 @@ export const toggleAutoRenew = async (id: string): Promise<Contract> =>
   unwrap(await api.post(`/tools/contracts/${id}/toggle-auto-renew`));
 export const addNegotiationRound = async (
   id: string,
-  dto: { by: string; at: string; summary: string },
+  dto: {
+    by: string;
+    at: string;
+    summary: string;
+    changes?: { clauseRef: string; change: string; note?: string }[];
+  },
 ): Promise<Contract> =>
   unwrap(await api.post(`/tools/contracts/${id}/rounds`, dto));
+export const updateClauseChangeStatus = async (
+  id: string,
+  roundId: string,
+  changeId: string,
+  status: ClauseChangeStatus,
+): Promise<Contract> =>
+  unwrap(
+    await api.patch(
+      `/tools/contracts/${id}/rounds/${roundId}/changes/${changeId}`,
+      { status },
+    ),
+  );
 export const addAmendment = async (
   id: string,
   dto: { summary: string; newBody?: string },
@@ -158,6 +234,79 @@ export const setObligationDone = async (
   unwrap(
     await api.post(`/tools/contracts/${id}/obligations/${obligationId}/done`, {
       done,
+    }),
+  );
+
+// ── Governance panel ────────────────────────────────────────────
+export const updateContractGovernance = async (
+  id: string,
+  dto: Partial<{
+    governingLaw: string;
+    adrClause: string;
+    leadDrafterUserId: string;
+    leadDrafterName: string;
+    noticeDays: number;
+    conflictCheckStatus: "Pending" | "Clear" | "Flagged";
+    riskClassification: "Low" | "Medium" | "High";
+  }>,
+): Promise<Contract> =>
+  unwrap(await api.patch(`/tools/contracts/${id}/governance`, dto));
+
+export interface ClauseLibraryEntry {
+  _id: string;
+  title: string;
+  category: string;
+  jurisdiction: string;
+  body: string;
+  approved: boolean;
+  version: number;
+}
+// Real clause library — the same tenant-scoped collection Deals &
+// Transactions manages, exposed here under a CRM-gated route.
+export const fetchClauseLibrary = async (): Promise<ClauseLibraryEntry[]> => {
+  const res = await api.get("/tools/contracts/clause-library");
+  const d = unwrap(res);
+  return Array.isArray(d) ? d : [];
+};
+
+// ── Conditions precedent ────────────────────────────────────────
+export const addConditionPrecedent = async (
+  id: string,
+  dto: { label: string; detail?: string },
+): Promise<Contract> =>
+  unwrap(await api.post(`/tools/contracts/${id}/conditions-precedent`, dto));
+export const setConditionPrecedentSatisfied = async (
+  id: string,
+  conditionId: string,
+  satisfied: boolean,
+): Promise<Contract> =>
+  unwrap(
+    await api.patch(
+      `/tools/contracts/${id}/conditions-precedent/${conditionId}`,
+      { satisfied },
+    ),
+  );
+
+// ── Approval chain ──────────────────────────────────────────────
+// Setting the chain (re)starts it — the first step becomes "In
+// review", every other step resets to "Waiting".
+export const setApprovalChain = async (
+  id: string,
+  steps: { userId?: string; name: string; role: string }[],
+): Promise<Contract> =>
+  unwrap(await api.post(`/tools/contracts/${id}/approval-chain`, { steps }));
+// Only the step currently "In review" can be decided — approving it
+// advances the next Waiting step to In review.
+export const decideApprovalStep = async (
+  id: string,
+  stepId: string,
+  decision: "Approved" | "Rejected",
+  note?: string,
+): Promise<Contract> =>
+  unwrap(
+    await api.post(`/tools/contracts/${id}/approval-chain/${stepId}/decide`, {
+      decision,
+      note,
     }),
   );
 

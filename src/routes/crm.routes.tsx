@@ -24,6 +24,7 @@ import AssetRegister from "@/pages/crm/finance/AssetRegister";
 import Financials from "@/pages/crm/finance/Financials";
 import FundAccounting from "@/pages/crm/finance/FundAccounting";
 import Contracts from "@/pages/crm/tools/Contracts";
+import ContractDetail from "@/pages/crm/tools/ContractDetail";
 import CrmCalendar from "@/pages/crm/tools/Calendar";
 import Newsletter from "@/pages/crm/tools/Newsletter";
 
@@ -162,6 +163,11 @@ export const crmRoutes = ({ isAdmin, accessibleModules }: RouteContext) => {
         key="crm-contracts"
         path="/crm/contracts"
         element={layout(<Contracts />)}
+      />,
+      <Route
+        key="crm-contract-detail"
+        path="/crm/contracts/:id"
+        element={layout(<ContractDetail />)}
       />,
       <Route
         key="crm-newsletter"

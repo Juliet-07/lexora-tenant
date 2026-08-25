@@ -9,7 +9,6 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
-import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
@@ -46,13 +45,13 @@ import {
   Plus,
   Send,
   ShieldCheck,
-  Sparkles,
   Users,
-  Zap,
+  X,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { CommentThread } from "@/components/crm/CommentThread";
 import { RichTextEditor } from "@/components/RichTextEditor";
+import { fetchEmployees } from "@/lib/hr/hr-api";
 import {
   fetchContract,
   advanceContractStage,
@@ -60,6 +59,7 @@ import {
   initiateRenewal,
   toggleAutoRenew,
   addNegotiationRound,
+  updateClauseChangeStatus,
   addAmendment,
   addObligation,
   setObligationDone,
@@ -69,19 +69,15 @@ import {
   sendSignedContractCopy,
   downloadContractPdf,
   previewContractPdf,
+  updateContractGovernance,
+  fetchClauseLibrary,
+  addConditionPrecedent,
+  setConditionPrecedentSatisfied,
+  setApprovalChain,
+  decideApprovalStep,
   CONTRACT_STAGES,
   type ObligationType,
 } from "@/lib/crm/tools-api";
-import {
-  CLAUSE_LIBRARY,
-  POST_EXECUTION_TRIGGERS,
-  mockApprovalChain,
-  mockConditionsPrecedent,
-  mockGovernance,
-  mockNegotiationRounds,
-  mockParties,
-  mockVersions,
-} from "@/data/contractDetailMock";
 
 const money = (n: number, c = "USD") =>
   (n ?? 0).toLocaleString(undefined, {
@@ -133,11 +129,26 @@ const outlineFrom = (html: string): { label: string; sub: boolean }[] => {
   for (const raw of text.split("\n")) {
     const line = raw.trim();
     const m = line.match(/^(\d+(?:\.\d+)?)[.)]?\s+([A-Za-z][^.]{2,60})/);
-    if (m) items.push({ label: `${m[1]} ${m[2]}`.trim(), sub: m[1].includes(".") });
+    if (m)
+      items.push({ label: `${m[1]} ${m[2]}`.trim(), sub: m[1].includes(".") });
     if (items.length > 24) break;
   }
   return items;
 };
+
+const approvalStatusTone: Record<string, string> = {
+  Approved: "bg-success/10 text-success hover:bg-success/10",
+  "In review": "bg-primary/10 text-primary hover:bg-primary/10",
+  Waiting: "bg-muted text-muted-foreground",
+  Rejected: "bg-destructive/10 text-destructive hover:bg-destructive/10",
+};
+const changeStatusTone: Record<string, string> = {
+  Accepted: "bg-success/10 text-success hover:bg-success/10",
+  Rejected: "bg-destructive/10 text-destructive hover:bg-destructive/10",
+  Pending: "bg-warning/10 text-warning hover:bg-warning/10",
+};
+
+const emptyChangeRow = { clauseRef: "", change: "", note: "" };
 
 export default function ContractDetail() {
   const { id = "" } = useParams();
@@ -161,6 +172,16 @@ export default function ContractDetail() {
     queryFn: () => fetchContract(id),
     enabled: !!id,
   });
+  const { data: clauseLibrary = [] } = useQuery({
+    queryKey: ["clause-library"],
+    queryFn: fetchClauseLibrary,
+  });
+  const { data: employeesPage } = useQuery({
+    queryKey: ["hr-employees-all"],
+    queryFn: () => fetchEmployees({ limit: 500 }),
+    retry: false,
+  });
+  const employees = employeesPage?.items ?? [];
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ["contract", id] });
@@ -184,7 +205,7 @@ export default function ContractDetail() {
     onError: onErr("Preview failed"),
   });
   const downloadMut = useMutation({
-    mutationFn: () => downloadContractPdf(id, `${contract?.ref}.pdf`),
+    mutationFn: () => downloadContractPdf(id),
     onError: onErr("Download failed"),
   });
   const sendMut = useMutation({
@@ -227,13 +248,31 @@ export default function ContractDetail() {
         by: roundForm.by,
         at: roundForm.at,
         summary: roundForm.summary,
+        changes: roundChanges
+          .filter((c) => c.clauseRef.trim() && c.change.trim())
+          .map((c) => ({
+            clauseRef: c.clauseRef,
+            change: c.change,
+            note: c.note || undefined,
+          })),
       }),
     onSuccess: () => {
       setRoundOpen(false);
       setRoundForm({ by: "", at: today(), summary: "" });
+      setRoundChanges([{ ...emptyChangeRow }]);
       ok("Negotiation round logged")();
     },
     onError: onErr("Could not add round"),
+  });
+  const changeStatusMut = useMutation({
+    mutationFn: (vars: {
+      roundId: string;
+      changeId: string;
+      status: "Accepted" | "Rejected" | "Pending";
+    }) =>
+      updateClauseChangeStatus(id, vars.roundId, vars.changeId, vars.status),
+    onSuccess: invalidate,
+    onError: onErr("Could not update change"),
   });
   const amendMut = useMutation({
     mutationFn: () => addAmendment(id, amendForm),
@@ -274,6 +313,51 @@ export default function ContractDetail() {
     onSuccess: ok("Auto-renew updated"),
     onError: onErr("Could not update auto-renew"),
   });
+  const governanceMut = useMutation({
+    mutationFn: () =>
+      updateContractGovernance(id, {
+        ...governanceDraft,
+        riskClassification: governanceDraft.riskClassification || undefined,
+      }),
+    onSuccess: () => {
+      setGovernanceOpen(false);
+      ok("Governance updated")();
+    },
+    onError: onErr("Could not update governance"),
+  });
+  const addCpMut = useMutation({
+    mutationFn: () => addConditionPrecedent(id, cpForm),
+    onSuccess: () => {
+      setCpOpen(false);
+      setCpForm({ label: "", detail: "" });
+      ok("Condition precedent added")();
+    },
+    onError: onErr("Could not add condition"),
+  });
+  const toggleCpMut = useMutation({
+    mutationFn: (vars: { conditionId: string; satisfied: boolean }) =>
+      setConditionPrecedentSatisfied(id, vars.conditionId, vars.satisfied),
+    onSuccess: invalidate,
+    onError: onErr("Could not update condition"),
+  });
+  const setChainMut = useMutation({
+    mutationFn: () =>
+      setApprovalChain(
+        id,
+        chainDraft.filter((s) => s.name.trim() && s.role.trim()),
+      ),
+    onSuccess: () => {
+      setChainSetupOpen(false);
+      ok("Approval chain set")();
+    },
+    onError: onErr("Could not set approval chain"),
+  });
+  const decideStepMut = useMutation({
+    mutationFn: (vars: { stepId: string; decision: "Approved" | "Rejected" }) =>
+      decideApprovalStep(id, vars.stepId, vars.decision),
+    onSuccess: invalidate,
+    onError: onErr("Could not record decision"),
+  });
 
   // ── Local state ─────────────────────────────────────────
   const [editing, setEditing] = useState(false);
@@ -292,6 +376,7 @@ export default function ContractDetail() {
     at: today(),
     summary: "",
   });
+  const [roundChanges, setRoundChanges] = useState([{ ...emptyChangeRow }]);
   const [amendOpen, setAmendOpen] = useState(false);
   const [amendForm, setAmendForm] = useState({
     ref: "",
@@ -305,6 +390,23 @@ export default function ContractDetail() {
     type: ObligationType;
     leadDays: number;
   }>({ label: "", due: today(), type: "Deliverable", leadDays: 14 });
+
+  const [governanceOpen, setGovernanceOpen] = useState(false);
+  const [governanceDraft, setGovernanceDraft] = useState({
+    governingLaw: "",
+    adrClause: "",
+    leadDrafterUserId: "",
+    leadDrafterName: "",
+    noticeDays: 60,
+    conflictCheckStatus: "Pending" as "Pending" | "Clear" | "Flagged",
+    riskClassification: "" as "" | "Low" | "Medium" | "High",
+  });
+  const [cpOpen, setCpOpen] = useState(false);
+  const [cpForm, setCpForm] = useState({ label: "", detail: "" });
+  const [chainSetupOpen, setChainSetupOpen] = useState(false);
+  const [chainDraft, setChainDraft] = useState<
+    { userId?: string; name: string; role: string }[]
+  >([{ name: "", role: "" }]);
 
   const outline = useMemo(
     () => outlineFrom(contract?.renderedBody ?? ""),
@@ -331,14 +433,13 @@ export default function ContractDetail() {
     );
   }
 
-  const gov = mockGovernance(contract._id);
-  const parties = mockParties(contract.counterparty, contract.counterpartyEmail);
-  const chain = mockApprovalChain(contract._id);
-  const cps = mockConditionsPrecedent(contract._id);
-  const rounds = mockNegotiationRounds(contract._id);
-  const versions = mockVersions(fmt(contract.executedOn) ?? "");
+  // ── Real, derived data — replaces every mock computation ──
+  const cps = contract.conditionsPrecedent;
   const cpsDone = cps.filter((c) => c.satisfied).length;
-  const allChanges = rounds.flatMap((r) => r.changes);
+  const chain = contract.approvalChain;
+  const allChanges = contract.rounds.flatMap((r) =>
+    r.changes.map((c) => ({ ...c, roundId: r._id })),
+  );
   const pending = allChanges.filter((c) => c.status === "Pending").length;
   const accepted = allChanges.filter((c) => c.status === "Accepted").length;
   const rejected = allChanges.filter((c) => c.status === "Rejected").length;
@@ -346,6 +447,35 @@ export default function ContractDetail() {
     (i) => i.type === "comment" || i.type === "tenant_response",
   );
   const stageIndex = CONTRACT_STAGES.indexOf(contract.stage);
+  const currentVersion = contract.amendments.length + 1;
+  // Real version history, derived from the template used at
+  // generation and each real amendment since — no separate
+  // versioning backend needed, this is just the amendment log read
+  // as a version list.
+  const versions = [
+    {
+      label: `v${currentVersion}`,
+      title: "Current draft",
+      meta: contract.amendments.length
+        ? `After ${contract.amendments.length} amendment${contract.amendments.length === 1 ? "" : "s"}`
+        : "No amendments yet",
+    },
+    ...contract.amendments
+      .slice()
+      .reverse()
+      .map((a, i) => ({
+        label: `v${contract.amendments.length - i}`,
+        title: a.summary,
+        meta: `${a.ref} · ${fmt(a.at)}`,
+      })),
+    {
+      label: "v1",
+      title: contract.templateName
+        ? `Generated from ${contract.templateName}`
+        : "Initial draft",
+      meta: "",
+    },
+  ];
 
   const statusTone =
     contract.signatureStatus === "countersigned"
@@ -355,6 +485,8 @@ export default function ContractDetail() {
         : contract.signatureStatus === "declined"
           ? "destructive"
           : "outline";
+
+  const currentApprovalStep = chain.find((s) => s.status === "In review");
 
   return (
     <div className="space-y-4">
@@ -379,7 +511,7 @@ export default function ContractDetail() {
               <Badge className="bg-primary/10 text-primary hover:bg-primary/10">
                 {contract.type}
               </Badge>
-              <Badge variant="secondary">v{contract.amendments.length + 1}</Badge>
+              <Badge variant="secondary">v{currentVersion}</Badge>
               <Badge variant={statusTone as any}>
                 {contract.signatureStatus.replace(/_/g, " ")}
               </Badge>
@@ -499,14 +631,21 @@ export default function ContractDetail() {
                 />
                 <KV k="Value" v={money(contract.value, contract.currency)} />
                 <KV k="Stage" v={<Badge>{contract.stage}</Badge>} />
-                <KV k="Template used" v={contract.templateName ?? "Free-form"} />
-                <KV k="Governing law" v={gov.governingLaw} />
+                <KV
+                  k="Template used"
+                  v={contract.templateName ?? "Free-form"}
+                />
+                <KV k="Governing law" v={contract.governingLaw || "Not set"} />
                 <KV
                   k="ADR clause"
                   v={
-                    <Badge className="bg-success/10 text-success hover:bg-success/10">
-                      {gov.adrClause}
-                    </Badge>
+                    contract.adrClause ? (
+                      <Badge className="bg-success/10 text-success hover:bg-success/10">
+                        {contract.adrClause}
+                      </Badge>
+                    ) : (
+                      "Not set"
+                    )
                   }
                 />
               </CardContent>
@@ -517,27 +656,39 @@ export default function ContractDetail() {
                 <SectionTitle icon={Users}>Parties</SectionTitle>
               </CardHeader>
               <CardContent className="space-y-3 pt-0">
-                {parties.map((p) => (
-                  <div
-                    key={p.role}
-                    className="flex items-start justify-between gap-3 rounded-lg border p-3"
-                  >
-                    <div>
-                      <p className="text-sm font-semibold">{p.name}</p>
-                      <p className="text-xs text-muted-foreground">{p.meta}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {p.signatory}
-                      </p>
-                    </div>
-                    <Badge variant="secondary" className="shrink-0">
-                      {p.role}
-                    </Badge>
+                <div className="flex items-start justify-between gap-3 rounded-lg border p-3">
+                  <div>
+                    <p className="text-sm font-semibold">
+                      {contract.counterparty}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {contract.counterpartyRegistrationNumber
+                        ? `Reg. ${contract.counterpartyRegistrationNumber}`
+                        : "External party — not a registered client"}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {contract.counterpartyEmail || "—"}
+                    </p>
                   </div>
-                ))}
-                <p className="text-xs text-muted-foreground">
-                  Party records are pulled from the CRM client file. Multi-party
-                  contracts are supported once the parties API lands.
-                </p>
+                  <Badge variant="secondary" className="shrink-0">
+                    First party
+                  </Badge>
+                </div>
+                <div className="flex items-start justify-between gap-3 rounded-lg border p-3">
+                  <div>
+                    <p className="text-sm font-semibold">
+                      {contract.tenantBusinessName}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {contract.tenantSignature
+                        ? `Countersigned by ${contract.tenantSignature.signerName}`
+                        : "Not yet countersigned"}
+                    </p>
+                  </div>
+                  <Badge variant="secondary" className="shrink-0">
+                    Second party
+                  </Badge>
+                </div>
               </CardContent>
             </Card>
 
@@ -564,8 +715,8 @@ export default function ContractDetail() {
                   k="Renewal type"
                   v={
                     contract.autoRenew
-                      ? `Auto-renew · ${gov.noticeDays}-day notice`
-                      : `Manual renewal · ${gov.noticeDays}-day notice`
+                      ? `Auto-renew · ${contract.noticeDays}-day notice`
+                      : `Manual renewal · ${contract.noticeDays}-day notice`
                   }
                 />
                 <KV k="Owner" v={contract.owner || "—"} />
@@ -573,42 +724,93 @@ export default function ContractDetail() {
             </Card>
 
             <Card>
-              <CardHeader className="pb-2">
-                <SectionTitle icon={ShieldCheck}>Internal controls</SectionTitle>
+              <CardHeader className="flex-row items-center justify-between pb-2">
+                <SectionTitle icon={ShieldCheck}>
+                  Internal controls
+                </SectionTitle>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    setGovernanceDraft({
+                      governingLaw: contract.governingLaw,
+                      adrClause: contract.adrClause,
+                      leadDrafterUserId: contract.leadDrafterUserId ?? "",
+                      leadDrafterName: contract.leadDrafterName,
+                      noticeDays: contract.noticeDays,
+                      conflictCheckStatus: contract.conflictCheckStatus,
+                      riskClassification: contract.riskClassification ?? "",
+                    });
+                    setGovernanceOpen(true);
+                  }}
+                >
+                  <Pencil className="h-4 w-4" />
+                </Button>
               </CardHeader>
               <CardContent className="pt-0">
-                <KV k="Lead drafter" v={gov.leadDrafter} />
-                <KV k="Approval chain" v={gov.approvalChain} />
+                <KV
+                  k="Lead drafter"
+                  v={contract.leadDrafterName || "Not assigned"}
+                />
+                <KV
+                  k="Approval chain"
+                  v={
+                    chain.length
+                      ? chain.map((s) => s.name).join(" → ")
+                      : "Not set"
+                  }
+                />
                 <KV
                   k="Conflict check"
                   v={
-                    <Badge className="bg-success/10 text-success hover:bg-success/10">
-                      {gov.conflictCheck}
+                    <Badge
+                      className={
+                        contract.conflictCheckStatus === "Clear"
+                          ? "bg-success/10 text-success hover:bg-success/10"
+                          : contract.conflictCheckStatus === "Flagged"
+                            ? "bg-destructive/10 text-destructive hover:bg-destructive/10"
+                            : "bg-muted text-muted-foreground"
+                      }
+                    >
+                      {contract.conflictCheckStatus}
                     </Badge>
                   }
                 />
                 <KV
                   k="AML/KYC status"
                   v={
-                    <span className="flex items-center gap-2">
+                    contract.counterpartyKycStatus ? (
                       <Badge className="bg-success/10 text-success hover:bg-success/10">
-                        {gov.kycStatus}
+                        {contract.counterpartyKycStatus}
                       </Badge>
-                      <span className="text-primary">{gov.kycRef}</span>
-                    </span>
+                    ) : (
+                      "Not linked to a registered client"
+                    )
                   }
                 />
                 <KV
                   k="Risk classification"
                   v={
-                    <Badge className="bg-warning/10 text-warning hover:bg-warning/10">
-                      {gov.riskClassification}
-                    </Badge>
+                    contract.riskClassification ? (
+                      <Badge className="bg-warning/10 text-warning hover:bg-warning/10">
+                        {contract.riskClassification}
+                      </Badge>
+                    ) : (
+                      "Not set"
+                    )
                   }
                 />
                 <KV
                   k="Linked GRC risk"
-                  v={<span className="text-primary">{gov.linkedRisk}</span>}
+                  v={
+                    contract.linkedRisks.length ? (
+                      <span className="text-primary">
+                        {contract.linkedRisks.map((r) => r.title).join(", ")}
+                      </span>
+                    ) : (
+                      "No linked risks"
+                    )
+                  }
                 />
               </CardContent>
             </Card>
@@ -648,24 +850,27 @@ export default function ContractDetail() {
               <Card>
                 <CardHeader className="pb-2">
                   <CardTitle className="text-xs uppercase tracking-wide text-muted-foreground">
-                    Clause library
+                    Clause library ({clauseLibrary.length})
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-2 pt-0">
-                  {CLAUSE_LIBRARY.map((c) => (
+                  {clauseLibrary.slice(0, 8).map((c) => (
                     <div
-                      key={c.ref}
+                      key={c._id}
                       className="rounded-md border bg-muted/40 px-2 py-1.5 text-xs"
                     >
-                      <p className="font-medium">{c.label}</p>
+                      <p className="font-medium">{c.title}</p>
                       <p className="text-[11px] text-muted-foreground">
-                        {c.ref}
+                        {c.category}
+                        {c.approved && " · Approved"}
                       </p>
                     </div>
                   ))}
-                  <p className="text-xs font-medium text-primary">
-                    Library insertion arrives with the clause API.
-                  </p>
+                  {!clauseLibrary.length && (
+                    <p className="text-xs text-muted-foreground">
+                      No clauses in the library yet.
+                    </p>
+                  )}
                 </CardContent>
               </Card>
             </div>
@@ -776,7 +981,9 @@ export default function ContractDetail() {
                       <p className="font-semibold">
                         {v.label} · {v.title}
                       </p>
-                      <p className="text-muted-foreground">{v.meta}</p>
+                      {v.meta && (
+                        <p className="text-muted-foreground">{v.meta}</p>
+                      )}
                     </div>
                   ))}
                 </CardContent>
@@ -804,8 +1011,8 @@ export default function ContractDetail() {
             <div>
               <h2 className="text-lg font-semibold">Negotiation</h2>
               <p className="text-sm text-muted-foreground">
-                Rounds of redlines, counterparty positions and version
-                comparisons.
+                Rounds of redlines, counterparty positions and clause-level
+                changes.
               </p>
             </div>
             <Button size="sm" onClick={() => setRoundOpen(true)}>
@@ -815,7 +1022,7 @@ export default function ContractDetail() {
 
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
             {[
-              { label: "Rounds", value: rounds.length, tone: "" },
+              { label: "Rounds", value: contract.rounds.length, tone: "" },
               { label: "Total changes", value: allChanges.length, tone: "" },
               { label: "Accepted", value: accepted, tone: "text-success" },
               { label: "Rejected", value: rejected, tone: "text-destructive" },
@@ -835,110 +1042,193 @@ export default function ContractDetail() {
             className="h-2"
           />
 
-          {contract.rounds.length > 0 && (
-            <Card>
-              <CardHeader className="pb-2">
-                <SectionTitle icon={Clock}>Logged rounds</SectionTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 pt-0">
-                {contract.rounds.map((r) => (
-                  <div key={r._id} className="rounded-md border p-3 text-sm">
-                    <p className="font-medium">
-                      Round {r.round} · {r.by}
-                      <span className="ml-2 text-xs text-muted-foreground">
-                        {fmt(r.at)}
-                      </span>
-                    </p>
-                    <p className="text-muted-foreground">{r.summary}</p>
-                  </div>
-                ))}
+          {contract.rounds
+            .slice()
+            .reverse()
+            .map((r) => (
+              <Card key={r._id}>
+                <CardHeader className="flex flex-row flex-wrap items-center gap-2 pb-2">
+                  <Badge
+                    variant={
+                      r.round === contract.rounds.length
+                        ? "default"
+                        : "secondary"
+                    }
+                  >
+                    Round {r.round}
+                  </Badge>
+                  <CardTitle className="flex-1 text-sm">{r.by}</CardTitle>
+                  <span className="text-xs text-muted-foreground">
+                    {fmt(r.at)} · {r.changes.length} change
+                    {r.changes.length === 1 ? "" : "s"}
+                  </span>
+                </CardHeader>
+                <CardContent className="space-y-2 pt-0">
+                  <p className="text-sm text-muted-foreground">{r.summary}</p>
+                  {r.changes.map((c) => (
+                    <div
+                      key={c._id}
+                      className="flex flex-wrap items-start gap-3 rounded-md border p-3"
+                    >
+                      <Badge className={changeStatusTone[c.status]}>
+                        {c.status}
+                      </Badge>
+                      <div className="min-w-[240px] flex-1">
+                        <p className="text-sm">
+                          <span className="font-semibold">{c.clauseRef}:</span>{" "}
+                          {c.change}
+                        </p>
+                        {c.note && (
+                          <p className="text-xs text-muted-foreground">
+                            {c.note}
+                          </p>
+                        )}
+                      </div>
+                      {c.status === "Pending" && (
+                        <div className="flex shrink-0 gap-1.5">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={changeStatusMut.isPending}
+                            onClick={() =>
+                              changeStatusMut.mutate({
+                                roundId: r._id,
+                                changeId: c._id,
+                                status: "Accepted",
+                              })
+                            }
+                          >
+                            <Check className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={changeStatusMut.isPending}
+                            onClick={() =>
+                              changeStatusMut.mutate({
+                                roundId: r._id,
+                                changeId: c._id,
+                                status: "Rejected",
+                              })
+                            }
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            ))}
+          {!contract.rounds.length && (
+            <Card className="border-dashed">
+              <CardContent className="p-8 text-center text-sm text-muted-foreground">
+                No negotiation rounds logged yet.
               </CardContent>
             </Card>
           )}
-
-          {rounds.map((r) => (
-            <Card key={r.round}>
-              <CardHeader className="flex flex-row flex-wrap items-center gap-2 pb-2">
-                <Badge
-                  variant={r.round === rounds.length ? "default" : "secondary"}
-                >
-                  Round {r.round}
-                </Badge>
-                <CardTitle className="flex-1 text-sm">{r.title}</CardTitle>
-                <span className="text-xs text-muted-foreground">{r.meta}</span>
-              </CardHeader>
-              <CardContent className="space-y-2 pt-0">
-                {r.changes.map((c, i) => (
-                  <div
-                    key={i}
-                    className="flex flex-wrap items-start gap-3 rounded-md border p-3"
-                  >
-                    <Badge
-                      className={
-                        c.status === "Accepted"
-                          ? "bg-success/10 text-success hover:bg-success/10"
-                          : c.status === "Rejected"
-                            ? "bg-destructive/10 text-destructive hover:bg-destructive/10"
-                            : "bg-warning/10 text-warning hover:bg-warning/10"
-                      }
-                    >
-                      {c.status}
-                    </Badge>
-                    <div className="min-w-[240px] flex-1">
-                      <p className="text-sm">
-                        <span className="font-semibold">{c.clause}:</span>{" "}
-                        {c.change}
-                      </p>
-                      {c.note && (
-                        <p className="text-xs text-muted-foreground">{c.note}</p>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          ))}
         </TabsContent>
 
         {/* ══ APPROVALS ══ */}
         <TabsContent value="approvals" className="space-y-4 pt-4">
-          <div>
-            <h2 className="text-lg font-semibold">Approval chain</h2>
-            <p className="text-sm text-muted-foreground">
-              Sequential internal approvals before the contract goes out for
-              execution.
-            </p>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold">Approval chain</h2>
+              <p className="text-sm text-muted-foreground">
+                Sequential internal approvals before the contract goes out for
+                execution.
+              </p>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setChainDraft(
+                  chain.length
+                    ? chain.map((s) => ({
+                        userId: s.userId ?? undefined,
+                        name: s.name,
+                        role: s.role,
+                      }))
+                    : [{ name: "", role: "" }],
+                );
+                setChainSetupOpen(true);
+              }}
+            >
+              {chain.length ? "Restart chain" : "Set up chain"}
+            </Button>
           </div>
           {pending > 0 && (
             <Card className="border-warning/40 bg-warning/5">
               <CardContent className="flex items-center gap-3 p-4 text-sm">
                 <Flag className="h-4 w-4 text-warning" />
-                Blocked: {pending} pending negotiation change
-                {pending === 1 ? "" : "s"} must be resolved before approvals can
-                complete.
+                {pending} pending negotiation change{pending === 1 ? "" : "s"}{" "}
+                still open — worth resolving before approvals complete.
               </CardContent>
             </Card>
           )}
           <div className="grid gap-3 md:grid-cols-3">
             {chain.map((a) => (
-              <Card key={a.name}>
+              <Card key={a._id}>
                 <CardContent className="space-y-2 p-4 text-center">
                   <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">
-                    {a.initials}
+                    {a.name
+                      .split(" ")
+                      .filter(Boolean)
+                      .slice(0, 2)
+                      .map((w) => w[0]?.toUpperCase())
+                      .join("")}
                   </div>
                   <p className="text-sm font-semibold">{a.name}</p>
                   <p className="text-xs text-muted-foreground">{a.role}</p>
-                  <Badge
-                    variant={a.status === "Approved" ? "default" : "secondary"}
-                  >
+                  <Badge className={approvalStatusTone[a.status]}>
                     {a.status}
                   </Badge>
-                  {a.at && (
-                    <p className="text-xs text-muted-foreground">{a.at}</p>
+                  {a.decidedAt && (
+                    <p className="text-xs text-muted-foreground">
+                      {fmt(a.decidedAt)}
+                    </p>
+                  )}
+                  {a.status === "In review" && (
+                    <div className="flex justify-center gap-1.5 pt-1">
+                      <Button
+                        size="sm"
+                        disabled={decideStepMut.isPending}
+                        onClick={() =>
+                          decideStepMut.mutate({
+                            stepId: a._id,
+                            decision: "Approved",
+                          })
+                        }
+                      >
+                        Approve
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={decideStepMut.isPending}
+                        onClick={() =>
+                          decideStepMut.mutate({
+                            stepId: a._id,
+                            decision: "Rejected",
+                          })
+                        }
+                      >
+                        Reject
+                      </Button>
+                    </div>
                   )}
                 </CardContent>
               </Card>
             ))}
+            {!chain.length && (
+              <Card className="border-dashed md:col-span-3">
+                <CardContent className="p-8 text-center text-sm text-muted-foreground">
+                  No approval chain set up yet.
+                </CardContent>
+              </Card>
+            )}
           </div>
           <Card>
             <CardHeader className="pb-2">
@@ -955,10 +1245,22 @@ export default function ContractDetail() {
                     : "All negotiation changes resolved"
                 }
               />
-              <KV k="Conflict check" v={gov.conflictCheck} />
-              <KV k="AML/KYC" v={`${gov.kycStatus} · ${gov.kycRef}`} />
-              <KV k="Value threshold" v="Partner sign-off required above $25k" />
-              <KV k="Final signatory" v="Managing Partner" />
+              <KV k="Conflict check" v={contract.conflictCheckStatus} />
+              <KV
+                k="AML/KYC"
+                v={
+                  contract.counterpartyKycStatus ??
+                  "Not linked to a registered client"
+                }
+              />
+              <KV
+                k="Currently awaiting"
+                v={
+                  currentApprovalStep
+                    ? `${currentApprovalStep.name} (${currentApprovalStep.role})`
+                    : "—"
+                }
+              />
             </CardContent>
           </Card>
         </TabsContent>
@@ -969,8 +1271,7 @@ export default function ContractDetail() {
             <div>
               <h2 className="text-lg font-semibold">Execution &amp; signing</h2>
               <p className="text-sm text-muted-foreground">
-                Signature workflow, conditions precedent and post-execution
-                triggers.
+                Signature workflow and conditions precedent.
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -1026,8 +1327,16 @@ export default function ContractDetail() {
             <CardContent className="flex flex-wrap gap-2 p-4">
               {[
                 { label: "Draft finalised", done: stageIndex >= 1 },
-                { label: "Internal approval", done: stageIndex >= 3 },
-                { label: "CPs satisfied", done: cpsDone === cps.length },
+                {
+                  label: "Internal approval",
+                  done:
+                    chain.length > 0 &&
+                    chain.every((s) => s.status === "Approved"),
+                },
+                {
+                  label: "CPs satisfied",
+                  done: cps.length > 0 && cpsDone === cps.length,
+                },
                 {
                   label: "Counterparty signs",
                   done:
@@ -1090,7 +1399,7 @@ export default function ContractDetail() {
                   <div>
                     <p className="text-sm font-semibold">
                       {contract.tenantSignature?.signerName ??
-                        "Lexora Africa (Limited)"}
+                        contract.tenantBusinessName}
                     </p>
                     <p className="text-xs text-muted-foreground">
                       Second party · countersignature
@@ -1121,28 +1430,58 @@ export default function ContractDetail() {
             </Card>
 
             <Card>
-              <CardHeader className="pb-2">
+              <CardHeader className="flex-row items-center justify-between pb-2">
                 <SectionTitle icon={Flag}>
                   Conditions precedent ({cpsDone}/{cps.length})
                 </SectionTitle>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setCpOpen(true)}
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
               </CardHeader>
               <CardContent className="space-y-3 pt-0">
-                <Progress value={(cpsDone / cps.length) * 100} className="h-2" />
+                {cps.length > 0 && (
+                  <Progress
+                    value={(cpsDone / cps.length) * 100}
+                    className="h-2"
+                  />
+                )}
                 {cps.map((c) => (
-                  <div key={c.label} className="flex items-start gap-2">
-                    {c.satisfied ? (
-                      <Check className="mt-0.5 h-4 w-4 shrink-0 text-success" />
-                    ) : (
-                      <Clock className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
-                    )}
+                  <label key={c._id} className="flex items-start gap-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        toggleCpMut.mutate({
+                          conditionId: c._id,
+                          satisfied: !c.satisfied,
+                        })
+                      }
+                      className="mt-0.5 shrink-0"
+                    >
+                      {c.satisfied ? (
+                        <Check className="h-4 w-4 text-success" />
+                      ) : (
+                        <Clock className="h-4 w-4 text-warning" />
+                      )}
+                    </button>
                     <div>
                       <p className="text-sm font-medium">{c.label}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {c.detail}
-                      </p>
+                      {c.detail && (
+                        <p className="text-xs text-muted-foreground">
+                          {c.detail}
+                        </p>
+                      )}
                     </div>
-                  </div>
+                  </label>
                 ))}
+                {!cps.length && (
+                  <p className="text-sm text-muted-foreground">
+                    No conditions precedent recorded.
+                  </p>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -1156,8 +1495,7 @@ export default function ContractDetail() {
                 Obligations &amp; conditions
               </h2>
               <p className="text-sm text-muted-foreground">
-                Ongoing obligations, conditions precedent and post-execution
-                automation.
+                Ongoing obligations and conditions precedent.
               </p>
             </div>
             <Button size="sm" onClick={() => setObOpen(true)}>
@@ -1210,47 +1548,61 @@ export default function ContractDetail() {
             </Card>
 
             <Card>
-              <CardHeader className="pb-2">
+              <CardHeader className="flex-row items-center justify-between pb-2">
                 <SectionTitle icon={Flag}>
                   Conditions precedent ({cpsDone}/{cps.length})
                 </SectionTitle>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setCpOpen(true)}
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
               </CardHeader>
               <CardContent className="space-y-3 pt-0">
-                <Progress value={(cpsDone / cps.length) * 100} className="h-2" />
+                {cps.length > 0 && (
+                  <Progress
+                    value={(cpsDone / cps.length) * 100}
+                    className="h-2"
+                  />
+                )}
                 {cps.map((c) => (
-                  <div key={c.label} className="flex items-start gap-2">
-                    {c.satisfied ? (
-                      <Check className="mt-0.5 h-4 w-4 shrink-0 text-success" />
-                    ) : (
-                      <Clock className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
-                    )}
+                  <label key={c._id} className="flex items-start gap-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        toggleCpMut.mutate({
+                          conditionId: c._id,
+                          satisfied: !c.satisfied,
+                        })
+                      }
+                      className="mt-0.5 shrink-0"
+                    >
+                      {c.satisfied ? (
+                        <Check className="h-4 w-4 text-success" />
+                      ) : (
+                        <Clock className="h-4 w-4 text-warning" />
+                      )}
+                    </button>
                     <div>
                       <p className="text-sm font-medium">{c.label}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {c.detail}
-                      </p>
+                      {c.detail && (
+                        <p className="text-xs text-muted-foreground">
+                          {c.detail}
+                        </p>
+                      )}
                     </div>
-                  </div>
+                  </label>
                 ))}
+                {!cps.length && (
+                  <p className="text-sm text-muted-foreground">
+                    No conditions precedent recorded.
+                  </p>
+                )}
               </CardContent>
             </Card>
           </div>
-
-          <Card>
-            <CardHeader className="pb-2">
-              <SectionTitle icon={Zap}>
-                Post-execution triggers (automated)
-              </SectionTitle>
-            </CardHeader>
-            <CardContent className="grid gap-3 pt-0 sm:grid-cols-2 lg:grid-cols-3">
-              {POST_EXECUTION_TRIGGERS.map((t) => (
-                <div key={t.area} className="rounded-md border bg-muted/40 p-3">
-                  <p className="text-sm font-semibold">{t.area}</p>
-                  <p className="text-xs text-muted-foreground">{t.detail}</p>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
         </TabsContent>
 
         {/* ══ AMENDMENTS ══ */}
@@ -1261,8 +1613,7 @@ export default function ContractDetail() {
                 Amendments &amp; variations
               </h2>
               <p className="text-sm text-muted-foreground">
-                Formal changes to the executed contract. Each amendment carries
-                its own drafting, approval and signing cycle.
+                Formal changes to the executed contract.
               </p>
             </div>
             <Button size="sm" onClick={() => setAmendOpen(true)}>
@@ -1293,17 +1644,6 @@ export default function ContractDetail() {
               </CardContent>
             </Card>
           )}
-          <Card className="bg-muted/40">
-            <CardContent className="p-4 text-xs text-muted-foreground">
-              <span className="font-semibold text-foreground">
-                How amendments work:{" "}
-              </span>
-              each amendment is a child of this contract with its own editor,
-              approval chain and signing flow. The obligation tracker updates
-              automatically on execution, and version history shows the full
-              lineage.
-            </CardContent>
-          </Card>
         </TabsContent>
 
         {/* ══ RENEWALS ══ */}
@@ -1328,7 +1668,10 @@ export default function ContractDetail() {
                   k="Renewal type"
                   v={contract.autoRenew ? "Auto-renew" : "Manual renewal"}
                 />
-                <KV k="Notice period" v={`${gov.noticeDays} calendar days`} />
+                <KV
+                  k="Notice period"
+                  v={`${contract.noticeDays} calendar days`}
+                />
                 <KV
                   k="Days to expiry"
                   v={
@@ -1345,75 +1688,59 @@ export default function ContractDetail() {
             </Card>
             <Card>
               <CardHeader className="pb-2">
-                <SectionTitle icon={Sparkles}>Renewal actions</SectionTitle>
+                <SectionTitle icon={ArrowRight}>Actions</SectionTitle>
               </CardHeader>
               <CardContent className="space-y-3 pt-0">
-                <div className="flex items-center justify-between gap-3 rounded-md border p-3">
-                  <div>
-                    <p className="text-sm font-medium">Auto-renew</p>
-                    <p className="text-xs text-muted-foreground">
-                      Renews automatically unless notice is served.
-                    </p>
-                  </div>
+                <div className="flex items-center justify-between rounded-lg border p-3">
+                  <span className="text-sm font-medium">Auto-renew</span>
                   <Switch
                     checked={contract.autoRenew}
-                    disabled={autoRenewMut.isPending}
                     onCheckedChange={() => autoRenewMut.mutate()}
                   />
                 </div>
                 <Button
                   variant="outline"
+                  className="w-full"
                   disabled={renewalMut.isPending}
                   onClick={() => renewalMut.mutate()}
                 >
                   Initiate renewal
                 </Button>
-                <Separator />
-                <p className="text-xs text-muted-foreground">
-                  Reminder cadence: 90 / 60 / 30 days before expiry to the
-                  contract owner and relationship manager.
-                </p>
               </CardContent>
             </Card>
           </div>
         </TabsContent>
 
         {/* ══ ACTIVITY ══ */}
-        <TabsContent value="activity" className="space-y-4 pt-4">
-          <div>
-            <h2 className="text-lg font-semibold">Activity &amp; audit trail</h2>
-            <p className="text-sm text-muted-foreground">
-              Every action, edit, comment and stage change — timestamped.
-            </p>
-          </div>
+        <TabsContent value="activity" className="pt-4">
           <Card>
-            <CardContent className="space-y-3 p-4">
+            <CardHeader className="pb-2">
+              <SectionTitle icon={MessageSquare}>Activity log</SectionTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 pt-0">
               {contract.interactions.length ? (
-                [...contract.interactions]
-                  .sort(
-                    (a, b) =>
-                      new Date(b.occurredAt).getTime() -
-                      new Date(a.occurredAt).getTime(),
-                  )
-                  .map((i, idx) => (
-                    <div key={idx} className="flex gap-3">
-                      <MessageSquare className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-                      <div>
-                        <p className="text-sm font-medium">
-                          {i.actor === "signer" ? contract.counterparty : "You"}{" "}
-                          — {i.type.replace(/_/g, " ")}
-                          <span className="ml-2 text-xs font-normal text-muted-foreground">
-                            {new Date(i.occurredAt).toLocaleString()}
-                          </span>
+                [...contract.interactions].reverse().map((i, idx) => (
+                  <div
+                    key={idx}
+                    className="flex gap-2 border-b border-border/60 pb-3 last:border-0"
+                  >
+                    <MessageSquare className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                    <div>
+                      <p className="text-sm font-medium">
+                        {i.actor === "signer" ? contract.counterparty : "You"} —{" "}
+                        {i.type.replace(/_/g, " ")}
+                        <span className="ml-2 text-xs font-normal text-muted-foreground">
+                          {new Date(i.occurredAt).toLocaleString()}
+                        </span>
+                      </p>
+                      {i.message && (
+                        <p className="text-sm text-muted-foreground">
+                          {i.message}
                         </p>
-                        {i.message && (
-                          <p className="text-sm text-muted-foreground">
-                            {i.message}
-                          </p>
-                        )}
-                      </div>
+                      )}
                     </div>
-                  ))
+                  </div>
+                ))
               ) : (
                 <p className="text-sm text-muted-foreground">
                   No activity recorded yet.
@@ -1493,7 +1820,7 @@ export default function ContractDetail() {
       </Dialog>
 
       <Dialog open={roundOpen} onOpenChange={setRoundOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Add negotiation round</DialogTitle>
           </DialogHeader>
@@ -1528,10 +1855,80 @@ export default function ContractDetail() {
                 }
               />
             </div>
+            <div>
+              <Label>Clause changes (optional)</Label>
+              <div className="space-y-2">
+                {roundChanges.map((c, i) => (
+                  <div key={i} className="space-y-1.5 rounded-md border p-2">
+                    <div className="grid grid-cols-2 gap-2">
+                      <Input
+                        placeholder="Clause ref, e.g. cl. 5.1"
+                        value={c.clauseRef}
+                        onChange={(e) =>
+                          setRoundChanges(
+                            roundChanges.map((x, j) =>
+                              j === i ? { ...x, clauseRef: e.target.value } : x,
+                            ),
+                          )
+                        }
+                      />
+                      <Input
+                        placeholder="What changed"
+                        value={c.change}
+                        onChange={(e) =>
+                          setRoundChanges(
+                            roundChanges.map((x, j) =>
+                              j === i ? { ...x, change: e.target.value } : x,
+                            ),
+                          )
+                        }
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="Note (optional)"
+                        value={c.note}
+                        onChange={(e) =>
+                          setRoundChanges(
+                            roundChanges.map((x, j) =>
+                              j === i ? { ...x, note: e.target.value } : x,
+                            ),
+                          )
+                        }
+                      />
+                      {roundChanges.length > 1 && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() =>
+                            setRoundChanges(
+                              roundChanges.filter((_, j) => j !== i),
+                            )
+                          }
+                        >
+                          ×
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    setRoundChanges([...roundChanges, { ...emptyChangeRow }])
+                  }
+                >
+                  <Plus className="mr-1 h-3.5 w-3.5" /> Add change
+                </Button>
+              </div>
+            </div>
           </div>
           <DialogFooter>
             <Button
-              disabled={!roundForm.by || !roundForm.summary || roundMut.isPending}
+              disabled={
+                !roundForm.by || !roundForm.summary || roundMut.isPending
+              }
               onClick={() => roundMut.mutate()}
             >
               Log round
@@ -1654,6 +2051,287 @@ export default function ContractDetail() {
               onClick={() => obligationMut.mutate()}
             >
               Add obligation
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={governanceOpen} onOpenChange={setGovernanceOpen}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Edit internal controls</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Governing law</Label>
+                <Input
+                  value={governanceDraft.governingLaw}
+                  onChange={(e) =>
+                    setGovernanceDraft({
+                      ...governanceDraft,
+                      governingLaw: e.target.value,
+                    })
+                  }
+                  placeholder="e.g. Laws of Rwanda"
+                />
+              </div>
+              <div>
+                <Label>ADR clause</Label>
+                <Input
+                  value={governanceDraft.adrClause}
+                  onChange={(e) =>
+                    setGovernanceDraft({
+                      ...governanceDraft,
+                      adrClause: e.target.value,
+                    })
+                  }
+                  placeholder="e.g. Mediation then arbitration"
+                />
+              </div>
+            </div>
+            <div>
+              <Label>Lead drafter</Label>
+              <Select
+                value={governanceDraft.leadDrafterUserId || "none"}
+                onValueChange={(v) => {
+                  if (v === "none") {
+                    setGovernanceDraft({
+                      ...governanceDraft,
+                      leadDrafterUserId: "",
+                      leadDrafterName: "",
+                    });
+                    return;
+                  }
+                  const emp = employees.find((e) => e._id === v);
+                  setGovernanceDraft({
+                    ...governanceDraft,
+                    leadDrafterUserId: v,
+                    leadDrafterName: emp
+                      ? `${emp.firstName} ${emp.lastName}`
+                      : "",
+                  });
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select an employee" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Not assigned</SelectItem>
+                  {employees.map((e) => (
+                    <SelectItem key={e._id} value={e._id}>
+                      {e.firstName} {e.lastName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Notice days</Label>
+                <Input
+                  type="number"
+                  value={governanceDraft.noticeDays}
+                  onChange={(e) =>
+                    setGovernanceDraft({
+                      ...governanceDraft,
+                      noticeDays: Number(e.target.value),
+                    })
+                  }
+                />
+              </div>
+              <div>
+                <Label>Conflict check</Label>
+                <Select
+                  value={governanceDraft.conflictCheckStatus}
+                  onValueChange={(v) =>
+                    setGovernanceDraft({
+                      ...governanceDraft,
+                      conflictCheckStatus: v as any,
+                    })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Pending">Pending</SelectItem>
+                    <SelectItem value="Clear">Clear</SelectItem>
+                    <SelectItem value="Flagged">Flagged</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div>
+              <Label>Risk classification</Label>
+              <Select
+                value={governanceDraft.riskClassification || "none"}
+                onValueChange={(v) =>
+                  setGovernanceDraft({
+                    ...governanceDraft,
+                    riskClassification: v === "none" ? "" : (v as any),
+                  })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Not set" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Not set</SelectItem>
+                  <SelectItem value="Low">Low</SelectItem>
+                  <SelectItem value="Medium">Medium</SelectItem>
+                  <SelectItem value="High">High</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              disabled={governanceMut.isPending}
+              onClick={() => governanceMut.mutate()}
+            >
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={cpOpen} onOpenChange={setCpOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Add condition precedent</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-3">
+            <div>
+              <Label>Label</Label>
+              <Input
+                value={cpForm.label}
+                onChange={(e) =>
+                  setCpForm({ ...cpForm, label: e.target.value })
+                }
+                placeholder="e.g. AML/KYC verification"
+              />
+            </div>
+            <div>
+              <Label>Detail (optional)</Label>
+              <Textarea
+                value={cpForm.detail}
+                onChange={(e) =>
+                  setCpForm({ ...cpForm, detail: e.target.value })
+                }
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              disabled={!cpForm.label.trim() || addCpMut.isPending}
+              onClick={() => addCpMut.mutate()}
+            >
+              Add
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={chainSetupOpen} onOpenChange={setChainSetupOpen}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              {chain.length
+                ? "Restart approval chain"
+                : "Set up approval chain"}
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-xs text-muted-foreground">
+            The first step becomes "In review" immediately; every step resets.
+          </p>
+          <div className="space-y-2">
+            {chainDraft.map((s, i) => (
+              <div key={i} className="grid grid-cols-[1fr_1fr_auto] gap-2">
+                <Select
+                  value={s.userId || "custom"}
+                  onValueChange={(v) => {
+                    if (v === "custom") return;
+                    const emp = employees.find((e) => e._id === v);
+                    setChainDraft(
+                      chainDraft.map((x, j) =>
+                        j === i
+                          ? {
+                              ...x,
+                              userId: v,
+                              name: emp
+                                ? `${emp.firstName} ${emp.lastName}`
+                                : x.name,
+                            }
+                          : x,
+                      ),
+                    );
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Employee (optional)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="custom">Type name manually</SelectItem>
+                    {employees.map((e) => (
+                      <SelectItem key={e._id} value={e._id}>
+                        {e.firstName} {e.lastName}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Input
+                  placeholder="Name"
+                  value={s.name}
+                  onChange={(e) =>
+                    setChainDraft(
+                      chainDraft.map((x, j) =>
+                        j === i ? { ...x, name: e.target.value } : x,
+                      ),
+                    )
+                  }
+                />
+                <Input
+                  placeholder="Role"
+                  value={s.role}
+                  onChange={(e) =>
+                    setChainDraft(
+                      chainDraft.map((x, j) =>
+                        j === i ? { ...x, role: e.target.value } : x,
+                      ),
+                    )
+                  }
+                />
+                {chainDraft.length > 1 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="col-span-3 justify-self-end"
+                    onClick={() =>
+                      setChainDraft(chainDraft.filter((_, j) => j !== i))
+                    }
+                  >
+                    Remove step
+                  </Button>
+                )}
+              </div>
+            ))}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                setChainDraft([...chainDraft, { name: "", role: "" }])
+              }
+            >
+              <Plus className="mr-1 h-3.5 w-3.5" /> Add step
+            </Button>
+          </div>
+          <DialogFooter>
+            <Button
+              disabled={setChainMut.isPending}
+              onClick={() => setChainMut.mutate()}
+            >
+              Save chain
             </Button>
           </DialogFooter>
         </DialogContent>
