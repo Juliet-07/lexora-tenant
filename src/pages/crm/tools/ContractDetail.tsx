@@ -39,6 +39,7 @@ import {
   Flag,
   GitCompare,
   Loader2,
+  Lock,
   MessageSquare,
   Pencil,
   PenTool,
@@ -448,6 +449,13 @@ export default function ContractDetail() {
   );
   const stageIndex = CONTRACT_STAGES.indexOf(contract.stage);
   const currentVersion = contract.amendments.length + 1;
+  // Matches the backend's own guard exactly (editRenderedBody):
+  // editable while Not Sent or Sent, locked once Signed,
+  // Countersigned, or Declined — real recipients may already have
+  // real copies of the document by then.
+  const canEditBody =
+    contract.signatureStatus === "not_sent" ||
+    contract.signatureStatus === "sent";
   // Real version history, derived from the template used at
   // generation and each real amendment since — no separate
   // versioning backend needed, this is just the amendment log read
@@ -879,40 +887,49 @@ export default function ContractDetail() {
             <Card className="min-h-[520px]">
               <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 pb-3">
                 <SectionTitle icon={FileText}>Document</SectionTitle>
-                <div className="flex gap-2">
-                  {editing ? (
-                    <>
+                <div className="flex items-center gap-2">
+                  {canEditBody ? (
+                    editing ? (
+                      <>
+                        <Button
+                          size="sm"
+                          disabled={editBodyMut.isPending}
+                          onClick={() => editBodyMut.mutate(bodyDraft)}
+                        >
+                          Save draft
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setEditing(false)}
+                        >
+                          Cancel
+                        </Button>
+                      </>
+                    ) : (
                       <Button
                         size="sm"
-                        disabled={editBodyMut.isPending}
-                        onClick={() => editBodyMut.mutate(bodyDraft)}
+                        variant="outline"
+                        onClick={() => {
+                          setBodyDraft(contract.renderedBody ?? "");
+                          setEditing(true);
+                        }}
                       >
-                        Save draft
+                        <Pencil className="mr-2 h-4 w-4" /> Edit content
                       </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => setEditing(false)}
-                      >
-                        Cancel
-                      </Button>
-                    </>
+                    )
                   ) : (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        setBodyDraft(contract.renderedBody ?? "");
-                        setEditing(true);
-                      }}
-                    >
-                      <Pencil className="mr-2 h-4 w-4" /> Edit content
-                    </Button>
+                    <Badge variant="outline" className="text-muted-foreground">
+                      <Lock className="mr-1.5 h-3 w-3" />
+                      {contract.signatureStatus === "declined"
+                        ? "Declined — locked"
+                        : "Signed — locked"}
+                    </Badge>
                   )}
                 </div>
               </CardHeader>
               <CardContent>
-                {editing ? (
+                {canEditBody && editing ? (
                   <RichTextEditor
                     value={bodyDraft}
                     onChange={setBodyDraft}
