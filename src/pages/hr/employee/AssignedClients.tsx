@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -26,6 +27,8 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { Progress } from "@/components/ui/progress";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Users,
   Search,
@@ -33,116 +36,19 @@ import {
   Phone,
   Building2,
   ShieldAlert,
-  CalendarClock,
-  FileText,
+  ShieldCheck,
+  FileCheck2,
   ExternalLink,
 } from "lucide-react";
+import {
+  fetchClients,
+  displayName,
+  prettyLabel,
+  toneFor,
+  type ApiClient,
+} from "@/lib/client/clients-api";
 
-// ──────────────────────────────────────────────────────────────
-// AssignedClients — clients assigned to the currently logged-in
-// team member. Mock data for now; will swap for an API call later.
-// ──────────────────────────────────────────────────────────────
-
-type AssignedClient = {
-  id: string;
-  name: string;
-  type: "individual" | "corporate";
-  email: string;
-  phone: string;
-  industry?: string;
-  status: "active" | "in_review" | "pending" | "suspended";
-  risk: "low" | "medium" | "high";
-  assignedOn: string;
-  nextAction: string;
-  nextActionDue: string;
-  openTasks: number;
-  lastContact: string;
-};
-
-const MOCK_CLIENTS: AssignedClient[] = [
-  {
-    id: "c-001",
-    name: "Acme Holdings Ltd",
-    type: "corporate",
-    email: "chloe@acme.com",
-    phone: "+250 794 424 333",
-    industry: "Financial Services",
-    status: "in_review",
-    risk: "medium",
-    assignedOn: "2026-05-12",
-    nextAction: "Review EDD documents",
-    nextActionDue: "Today",
-    openTasks: 3,
-    lastContact: "2 days ago",
-  },
-  {
-    id: "c-002",
-    name: "Jane Smith",
-    type: "individual",
-    email: "jane.smith@gmail.com",
-    phone: "+250 788 110 220",
-    status: "pending",
-    risk: "low",
-    assignedOn: "2026-05-30",
-    nextAction: "Complete KYC verification",
-    nextActionDue: "Tomorrow",
-    openTasks: 1,
-    lastContact: "5 days ago",
-  },
-  {
-    id: "c-003",
-    name: "Bright Futures NGO",
-    type: "corporate",
-    email: "ops@brightfutures.org",
-    phone: "+250 722 998 100",
-    industry: "Non-Profit",
-    status: "active",
-    risk: "low",
-    assignedOn: "2026-02-14",
-    nextAction: "Annual review",
-    nextActionDue: "Jun 18",
-    openTasks: 2,
-    lastContact: "1 week ago",
-  },
-  {
-    id: "c-004",
-    name: "Vortex Trading Co.",
-    type: "corporate",
-    email: "compliance@vortex.co",
-    phone: "+1 415 555 0192",
-    industry: "Trading",
-    status: "active",
-    risk: "high",
-    assignedOn: "2026-04-02",
-    nextAction: "Source of funds follow-up",
-    nextActionDue: "Jun 11",
-    openTasks: 4,
-    lastContact: "Yesterday",
-  },
-  {
-    id: "c-005",
-    name: "Daniel Okafor",
-    type: "individual",
-    email: "d.okafor@outlook.com",
-    phone: "+234 803 111 4477",
-    status: "active",
-    risk: "low",
-    assignedOn: "2026-03-21",
-    nextAction: "Quarterly check-in",
-    nextActionDue: "Jul 01",
-    openTasks: 0,
-    lastContact: "3 weeks ago",
-  },
-];
-
-const statusStyle: Record<AssignedClient["status"], string> = {
-  active: "bg-success/10 text-success border-success/30",
-  in_review: "bg-info/10 text-info border-info/30",
-  pending: "bg-warning/10 text-warning border-warning/30",
-  suspended: "bg-destructive/10 text-destructive border-destructive/30",
-};
-
-const riskStyle: Record<AssignedClient["risk"], string> = {
+const riskStyle: Record<string, string> = {
   low: "bg-success/10 text-success",
   medium: "bg-warning/10 text-warning",
   high: "bg-destructive/10 text-destructive",
@@ -152,49 +58,68 @@ export default function AssignedClients() {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [riskFilter, setRiskFilter] = useState<string>("all");
-  const [selected, setSelected] = useState<AssignedClient | null>(null);
+  const [selected, setSelected] = useState<ApiClient | null>(null);
+
+  // No assignedTo param needed — the backend already scopes this to
+  // clients assigned to the logged-in employee, enforced server-side
+  // from their own identity, not a value the frontend could tamper
+  // with. Same call an admin's Clients.tsx makes; the response
+  // differs because the caller differs.
+  const { data: clients = [], isLoading } = useQuery({
+    queryKey: ["my-assigned-clients"],
+    queryFn: fetchClients,
+  });
 
   const filtered = useMemo(() => {
-    return MOCK_CLIENTS.filter((c) => {
-      if (statusFilter !== "all" && c.status !== statusFilter) return false;
-      if (riskFilter !== "all" && c.risk !== riskFilter) return false;
+    return clients.filter((c) => {
       if (
-        query &&
-        !`${c.name} ${c.email}`.toLowerCase().includes(query.toLowerCase())
+        statusFilter !== "all" &&
+        (c.status ?? "").toLowerCase() !== statusFilter
       )
         return false;
+      if (
+        riskFilter !== "all" &&
+        (c.riskLevel ?? "").toLowerCase() !== riskFilter
+      )
+        return false;
+      if (query) {
+        const haystack = `${displayName(c)} ${c.email}`.toLowerCase();
+        if (!haystack.includes(query.toLowerCase())) return false;
+      }
       return true;
     });
-  }, [query, statusFilter, riskFilter]);
+  }, [clients, query, statusFilter, riskFilter]);
 
   const stats = [
     {
       label: "Assigned",
-      value: MOCK_CLIENTS.length,
+      value: clients.length,
       icon: Users,
       tone: "text-primary",
     },
     {
       label: "High risk",
-      value: MOCK_CLIENTS.filter((c) => c.risk === "high").length,
+      value: clients.filter((c) => (c.riskLevel ?? "").toLowerCase() === "high")
+        .length,
       icon: ShieldAlert,
       tone: "text-destructive",
     },
     {
-      label: "Due this week",
-      value: MOCK_CLIENTS.filter((c) =>
-        ["Today", "Tomorrow", "Jun 11", "Jun 12", "Jun 13", "Jun 14"].includes(
-          c.nextActionDue,
+      label: "Pending KYC",
+      value: clients.filter((c) =>
+        ["not_started", "in_progress", "submitted"].includes(
+          (c.kycStatus ?? "").toLowerCase(),
         ),
       ).length,
-      icon: CalendarClock,
+      icon: FileCheck2,
       tone: "text-warning",
     },
     {
-      label: "Open tasks",
-      value: MOCK_CLIENTS.reduce((sum, c) => sum + c.openTasks, 0),
-      icon: FileText,
-      tone: "text-info",
+      label: "Active",
+      value: clients.filter((c) => (c.status ?? "").toLowerCase() === "active")
+        .length,
+      icon: ShieldCheck,
+      tone: "text-success",
     },
   ];
 
@@ -203,7 +128,7 @@ export default function AssignedClients() {
       <div>
         <h1 className="text-2xl font-bold">My Clients</h1>
         <p className="text-sm text-muted-foreground">
-          Clients assigned to you. Reach out, log activity, and track next steps.
+          Clients assigned to you.
         </p>
       </div>
 
@@ -247,9 +172,9 @@ export default function AssignedClients() {
                 <SelectContent>
                   <SelectItem value="all">All status</SelectItem>
                   <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="in_review">In review</SelectItem>
                   <SelectItem value="pending">Pending</SelectItem>
                   <SelectItem value="suspended">Suspended</SelectItem>
+                  <SelectItem value="invited">Invited</SelectItem>
                 </SelectContent>
               </Select>
               <Select value={riskFilter} onValueChange={setRiskFilter}>
@@ -267,77 +192,94 @@ export default function AssignedClients() {
           </div>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Client</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Risk</TableHead>
-                <TableHead>Next action</TableHead>
-                <TableHead>Due</TableHead>
-                <TableHead className="text-right">Tasks</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtered.map((c) => (
-                <TableRow
-                  key={c.id}
-                  className="cursor-pointer hover:bg-accent/40"
-                  onClick={() => setSelected(c)}
-                >
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      {c.type === "corporate" ? (
-                        <Building2 className="h-4 w-4 text-muted-foreground" />
-                      ) : (
-                        <Users className="h-4 w-4 text-muted-foreground" />
-                      )}
-                      <div>
-                        <p className="font-medium text-sm">{c.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {c.email}
-                        </p>
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell className="capitalize text-sm">{c.type}</TableCell>
-                  <TableCell>
-                    <Badge
-                      variant="outline"
-                      className={`text-[10px] capitalize ${statusStyle[c.status]}`}
-                    >
-                      {c.status.replace("_", " ")}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge
-                      className={`text-[10px] capitalize ${riskStyle[c.risk]}`}
-                    >
-                      {c.risk}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-sm">{c.nextAction}</TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
-                    {c.nextActionDue}
-                  </TableCell>
-                  <TableCell className="text-right text-sm">
-                    {c.openTasks}
-                  </TableCell>
-                </TableRow>
+          {isLoading ? (
+            <div className="space-y-2">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <Skeleton key={i} className="h-12 w-full" />
               ))}
-              {filtered.length === 0 && (
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell
-                    colSpan={7}
-                    className="text-center text-sm text-muted-foreground py-8"
-                  >
-                    No clients match your filters.
-                  </TableCell>
+                  <TableHead>Client</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Risk</TableHead>
+                  <TableHead>KYC</TableHead>
+                  <TableHead className="text-right">Country</TableHead>
                 </TableRow>
-              )}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {filtered.map((c) => (
+                  <TableRow
+                    key={c._id}
+                    className="cursor-pointer hover:bg-accent/40"
+                    onClick={() => setSelected(c)}
+                  >
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        {c.classifications === "corporate" ? (
+                          <Building2 className="h-4 w-4 text-muted-foreground" />
+                        ) : (
+                          <Users className="h-4 w-4 text-muted-foreground" />
+                        )}
+                        <div>
+                          <p className="font-medium text-sm">
+                            {displayName(c)}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {c.email}
+                          </p>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell className="capitalize text-sm">
+                      {prettyLabel(c.classifications)}
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant="outline"
+                        className={`text-[10px] ${toneFor(c.status)}`}
+                      >
+                        {prettyLabel(c.status)}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        className={`text-[10px] capitalize ${riskStyle[(c.riskLevel ?? "").toLowerCase()] ?? "bg-muted text-muted-foreground"}`}
+                      >
+                        {c.riskLevel ?? "Unrated"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant="outline"
+                        className={`text-[10px] ${toneFor(c.kycStatus)}`}
+                      >
+                        {prettyLabel(c.kycStatus)}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right text-sm text-muted-foreground">
+                      {c.country ?? "—"}
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {filtered.length === 0 && (
+                  <TableRow>
+                    <TableCell
+                      colSpan={6}
+                      className="text-center text-sm text-muted-foreground py-8"
+                    >
+                      {clients.length === 0
+                        ? "No clients assigned to you yet."
+                        : "No clients match your filters."}
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
 
@@ -347,32 +289,35 @@ export default function AssignedClients() {
             <>
               <SheetHeader>
                 <SheetTitle className="flex items-center gap-2">
-                  {selected.type === "corporate" ? (
+                  {selected.classifications === "corporate" ? (
                     <Building2 className="h-4 w-4" />
                   ) : (
                     <Users className="h-4 w-4" />
                   )}
-                  {selected.name}
+                  {displayName(selected)}
                 </SheetTitle>
                 <SheetDescription className="capitalize">
-                  {selected.type} · Assigned {selected.assignedOn}
+                  {prettyLabel(selected.classifications)} · Client since{" "}
+                  {new Date(selected.createdAt).toLocaleDateString()}
                 </SheetDescription>
               </SheetHeader>
 
               <div className="mt-6 space-y-5">
                 <div className="flex flex-wrap gap-2">
+                  <Badge variant="outline" className={toneFor(selected.status)}>
+                    {prettyLabel(selected.status)}
+                  </Badge>
+                  <Badge
+                    className={`capitalize ${riskStyle[(selected.riskLevel ?? "").toLowerCase()] ?? "bg-muted text-muted-foreground"}`}
+                  >
+                    {selected.riskLevel ?? "Unrated"} risk
+                  </Badge>
                   <Badge
                     variant="outline"
-                    className={`capitalize ${statusStyle[selected.status]}`}
+                    className={toneFor(selected.kycStatus)}
                   >
-                    {selected.status.replace("_", " ")}
+                    KYC: {prettyLabel(selected.kycStatus)}
                   </Badge>
-                  <Badge className={`capitalize ${riskStyle[selected.risk]}`}>
-                    {selected.risk} risk
-                  </Badge>
-                  {selected.industry && (
-                    <Badge variant="outline">{selected.industry}</Badge>
-                  )}
                 </div>
 
                 <div className="space-y-2 text-sm">
@@ -380,38 +325,17 @@ export default function AssignedClients() {
                     <Mail className="h-4 w-4 text-muted-foreground" />
                     <span>{selected.email}</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Phone className="h-4 w-4 text-muted-foreground" />
-                    <span>{selected.phone}</span>
-                  </div>
-                </div>
-
-                <Card>
-                  <CardContent className="p-4 space-y-2">
-                    <p className="text-xs text-muted-foreground uppercase tracking-wide">
-                      Next action
-                    </p>
-                    <p className="font-medium text-sm">{selected.nextAction}</p>
+                  {selected.phone && (
+                    <div className="flex items-center gap-2">
+                      <Phone className="h-4 w-4 text-muted-foreground" />
+                      <span>{selected.phone}</span>
+                    </div>
+                  )}
+                  {selected.country && (
                     <p className="text-xs text-muted-foreground">
-                      Due {selected.nextActionDue} · Last contact{" "}
-                      {selected.lastContact}
+                      {selected.country}
                     </p>
-                  </CardContent>
-                </Card>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <Card>
-                    <CardContent className="p-4">
-                      <p className="text-xs text-muted-foreground">Open tasks</p>
-                      <p className="text-xl font-bold">{selected.openTasks}</p>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardContent className="p-4">
-                      <p className="text-xs text-muted-foreground">Assigned on</p>
-                      <p className="text-sm font-medium">{selected.assignedOn}</p>
-                    </CardContent>
-                  </Card>
+                  )}
                 </div>
 
                 <div className="flex flex-col sm:flex-row gap-2 pt-2">
@@ -420,10 +344,6 @@ export default function AssignedClients() {
                       <ExternalLink className="h-4 w-4 mr-2" />
                       View related projects
                     </Link>
-                  </Button>
-                  <Button className="flex-1">
-                    <Mail className="h-4 w-4 mr-2" />
-                    Contact client
                   </Button>
                 </div>
               </div>

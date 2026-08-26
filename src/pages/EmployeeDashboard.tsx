@@ -1,7 +1,9 @@
 import { Link } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Users,
   FolderKanban,
@@ -16,112 +18,54 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { QuickClockCard } from "@/components/hr/QuickClockCard";
+import { fetchMyTasks, fetchMyMandates } from "@/lib/crm/mandates-api";
+import { fetchClients, displayName, toneFor } from "@/lib/client/clients-api";
 
 // ─────────────────────────────────────────────────────────────
-// Team Member dashboard — scoped strictly to their workspace:
-// assigned clients, assigned tasks/projects, announcements.
-// No HR / admin actions here.
+// Team Member ("employee of the tenant") dashboard. Scoped
+// strictly to their own workspace: assigned clients (server-
+// enforced, not a UI filter), assigned tasks across every
+// project, and quick actions. No HR/admin actions here.
 // ─────────────────────────────────────────────────────────────
-
-// ─────────────────────────────────────────────────────────────
-// Team Member ("employee of the tenant") dashboard.
-// Focused, task-oriented view: assigned clients, assigned projects/tasks,
-// upcoming leave, learning, and quick actions. Mock data for now —
-// endpoints can be wired in later.
-// ─────────────────────────────────────────────────────────────
-
-const assignedClients = [
-  {
-    id: "c-1",
-    name: "Acme Holdings Ltd",
-    status: "in_review",
-    classification: "corporate",
-    risk: "medium",
-    nextAction: "Review EDD documents",
-  },
-  {
-    id: "c-2",
-    name: "Jane Smith",
-    status: "pending",
-    classification: "individual",
-    risk: "low",
-    nextAction: "Complete KYC verification",
-  },
-  {
-    id: "c-3",
-    name: "Bright Futures NGO",
-    status: "active",
-    classification: "corporate",
-    risk: "low",
-    nextAction: "Annual review due",
-  },
-];
-
-const assignedTasks = [
-  {
-    id: "t-1",
-    title: "Acme Holdings — Source of funds review",
-    project: "Q2 KYC Refresh",
-    due: "Today",
-    priority: "high",
-    status: "in_progress",
-  },
-  {
-    id: "t-2",
-    title: "Prepare STR draft for case #4421",
-    project: "AML Investigations",
-    due: "Tomorrow",
-    priority: "high",
-    status: "todo",
-  },
-  {
-    id: "t-3",
-    title: "Upload signed engagement letter",
-    project: "Onboarding — Bright Futures",
-    due: "Jun 12",
-    priority: "medium",
-    status: "todo",
-  },
-  {
-    id: "t-4",
-    title: "Quarterly compliance training",
-    project: "Learning & Dev",
-    due: "Jun 18",
-    priority: "low",
-    status: "todo",
-  },
-];
-
-const announcements = [
-  {
-    id: "a-1",
-    title: "Updated KYC policy v3.2 published",
-    time: "2h ago",
-  },
-  {
-    id: "a-2",
-    title: "Office closed Monday — public holiday",
-    time: "Yesterday",
-  },
-];
 
 const priorityColor: Record<string, string> = {
-  high: "bg-destructive/10 text-destructive border-destructive/30",
-  medium: "bg-warning/10 text-warning border-warning/30",
-  low: "bg-muted text-muted-foreground border-border",
+  Critical: "bg-destructive/10 text-destructive border-destructive/30",
+  High: "bg-destructive/10 text-destructive border-destructive/30",
+  Medium: "bg-warning/10 text-warning border-warning/30",
+  Low: "bg-muted text-muted-foreground border-border",
 };
 
 const statusColor: Record<string, string> = {
-  in_progress: "bg-info/10 text-info",
-  todo: "bg-muted text-muted-foreground",
-  done: "bg-success/10 text-success",
-  active: "bg-success/10 text-success",
-  pending: "bg-warning/10 text-warning",
-  in_review: "bg-info/10 text-info",
+  "In Progress": "bg-info/10 text-info",
+  "In Review": "bg-info/10 text-info",
+  Backlog: "bg-muted text-muted-foreground",
+  Done: "bg-success/10 text-success",
+};
+
+const isThisWeek = (iso: string) => {
+  const d = new Date(iso);
+  const now = new Date();
+  const weekAgo = new Date(now.getTime() - 7 * 86400000);
+  return d >= weekAgo && d <= now;
 };
 
 export default function TeamMemberDashboard() {
   const { user } = useAuth();
+
+  const { data: tasks = [], isLoading: tasksLoading } = useQuery({
+    queryKey: ["my-dashboard-tasks"],
+    queryFn: () => fetchMyTasks(),
+  });
+  const { data: mandates = [], isLoading: mandatesLoading } = useQuery({
+    queryKey: ["my-dashboard-mandates"],
+    queryFn: fetchMyMandates,
+  });
+  const { data: clients = [], isLoading: clientsLoading } = useQuery({
+    queryKey: ["my-dashboard-clients"],
+    queryFn: fetchClients,
+  });
+
+  const isLoading = tasksLoading || mandatesLoading || clientsLoading;
 
   const today = new Date().toLocaleDateString("en-US", {
     weekday: "long",
@@ -130,34 +74,44 @@ export default function TeamMemberDashboard() {
     day: "numeric",
   });
 
-  const openTasks = assignedTasks.filter((t) => t.status !== "done").length;
-  const dueToday = assignedTasks.filter((t) => t.due === "Today").length;
+  const openTasks = tasks.filter((t) => t.status !== "Done");
+  const dueToday = openTasks.filter(
+    (t) => new Date(t.dueDate).toDateString() === new Date().toDateString(),
+  ).length;
+  const completedThisWeek = tasks.filter(
+    (t) => t.status === "Done" && isThisWeek(t.updatedAt),
+  ).length;
+  const upcomingTasks = [...openTasks]
+    .sort(
+      (a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime(),
+    )
+    .slice(0, 6);
 
   const stats = [
     {
       title: "My Clients",
-      value: assignedClients.length,
+      value: clients.length,
       icon: Users,
       change: "Assigned to you",
       color: "text-primary",
     },
     {
       title: "Open Tasks",
-      value: openTasks,
+      value: openTasks.length,
       icon: ListChecks,
       change: `${dueToday} due today`,
       color: "text-warning",
     },
     {
       title: "Projects",
-      value: 3,
+      value: mandates.length,
       icon: FolderKanban,
       change: "Active",
       color: "text-secondary",
     },
     {
       title: "Completed",
-      value: assignedTasks.filter((t) => t.status === "done").length,
+      value: completedThisWeek,
       icon: CheckCircle2,
       change: "This week",
       color: "text-success",
@@ -197,25 +151,29 @@ export default function TeamMemberDashboard() {
 
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {stats.map((s) => (
-          <Card key={s.title} className="hover:shadow-md transition-shadow">
-            <CardContent className="p-5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">{s.title}</p>
-                  <p className="text-2xl font-bold mt-1">{s.value}</p>
-                  <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-                    <ArrowUpRight className="h-3 w-3" />
-                    {s.change}
-                  </p>
-                </div>
-                <div className={`p-3 rounded-xl bg-accent ${s.color}`}>
-                  <s.icon className="h-5 w-5" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+        {isLoading
+          ? Array.from({ length: 4 }).map((_, i) => (
+              <Skeleton key={i} className="h-[92px] w-full rounded-xl" />
+            ))
+          : stats.map((s) => (
+              <Card key={s.title} className="hover:shadow-md transition-shadow">
+                <CardContent className="p-5">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-muted-foreground">{s.title}</p>
+                      <p className="text-2xl font-bold mt-1">{s.value}</p>
+                      <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                        <ArrowUpRight className="h-3 w-3" />
+                        {s.change}
+                      </p>
+                    </div>
+                    <div className={`p-3 rounded-xl bg-accent ${s.color}`}>
+                      <s.icon className="h-5 w-5" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -231,32 +189,44 @@ export default function TeamMemberDashboard() {
             </Button>
           </CardHeader>
           <CardContent className="space-y-2">
-            {assignedTasks.map((t) => (
-              <div
-                key={t.id}
-                className="flex items-start gap-3 p-3 rounded-lg border bg-card hover:bg-muted/30 transition-colors"
-              >
-                <div className="mt-1">
-                  {t.status === "in_progress" ? (
-                    <Clock className="h-4 w-4 text-info" />
-                  ) : (
-                    <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{t.title}</p>
-                  <p className="text-xs text-muted-foreground truncate">
-                    {t.project} · Due {t.due}
-                  </p>
-                </div>
-                <Badge
-                  variant="outline"
-                  className={`text-[10px] capitalize ${priorityColor[t.priority]}`}
+            {isLoading ? (
+              Array.from({ length: 4 }).map((_, i) => (
+                <Skeleton key={i} className="h-14 w-full" />
+              ))
+            ) : upcomingTasks.length ? (
+              upcomingTasks.map((t) => (
+                <Link
+                  key={t._id}
+                  to={`/projects/${t.mandateId}`}
+                  className="flex items-start gap-3 p-3 rounded-lg border bg-card hover:bg-muted/30 transition-colors"
                 >
-                  {t.priority}
-                </Badge>
-              </div>
-            ))}
+                  <div className="mt-1">
+                    {t.status === "In Progress" || t.status === "In Review" ? (
+                      <Clock className="h-4 w-4 text-info" />
+                    ) : (
+                      <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{t.title}</p>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {t.mandateName} · Due{" "}
+                      {new Date(t.dueDate).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <Badge
+                    variant="outline"
+                    className={`text-[10px] ${priorityColor[t.priority]}`}
+                  >
+                    {t.priority}
+                  </Badge>
+                </Link>
+              ))
+            ) : (
+              <p className="py-8 text-center text-sm text-muted-foreground">
+                No open tasks — you're all caught up.
+              </p>
+            )}
           </CardContent>
         </Card>
 
@@ -321,21 +291,6 @@ export default function TeamMemberDashboard() {
               </Button>
             </CardContent>
           </Card>
-
-          {/* Announcements */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Announcements</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {announcements.map((a) => (
-                <div key={a.id} className="text-sm">
-                  <p className="font-medium">{a.title}</p>
-                  <p className="text-xs text-muted-foreground">{a.time}</p>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
         </div>
       </div>
 
@@ -346,32 +301,46 @@ export default function TeamMemberDashboard() {
             <Users className="h-4 w-4 text-primary" />
             My Clients
           </CardTitle>
+          <Button asChild variant="ghost" size="sm">
+            <Link to="/clients">View all</Link>
+          </Button>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {assignedClients.map((c) => (
-              <div
-                key={c.id}
-                className="p-4 rounded-lg border bg-card hover:shadow-md transition-shadow"
-              >
-                <div className="flex items-start justify-between gap-2 mb-2">
-                  <p className="font-medium text-sm truncate">{c.name}</p>
-                  <Badge
-                    variant="outline"
-                    className={`text-[10px] capitalize ${statusColor[c.status]}`}
-                  >
-                    {c.status.replace("_", " ")}
-                  </Badge>
+          {isLoading ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <Skeleton key={i} className="h-24 w-full" />
+              ))}
+            </div>
+          ) : clients.length ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {clients.slice(0, 6).map((c) => (
+                <div
+                  key={c._id}
+                  className="p-4 rounded-lg border bg-card hover:shadow-md transition-shadow"
+                >
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <p className="font-medium text-sm truncate">
+                      {displayName(c)}
+                    </p>
+                    <Badge
+                      variant="outline"
+                      className={`text-[10px] ${toneFor(c.status)}`}
+                    >
+                      {c.status}
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground capitalize">
+                    {c.classifications} · Risk: {c.riskLevel ?? "unrated"}
+                  </p>
                 </div>
-                <p className="text-xs text-muted-foreground capitalize mb-2">
-                  {c.classification} · Risk: {c.risk}
-                </p>
-                <p className="text-xs text-foreground/80 mb-3">
-                  Next: {c.nextAction}
-                </p>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              No clients assigned to you yet.
+            </p>
+          )}
         </CardContent>
       </Card>
     </div>

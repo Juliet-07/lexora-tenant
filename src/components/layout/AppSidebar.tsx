@@ -270,6 +270,7 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
         { title: "ADR", url: "/crm/adr" },
         { title: "Litigation", url: "/crm/litigation" },
         { title: "PMO", url: "/crm/pmo" },
+        { title: "Contracts", url: "/crm/contracts" },
       ],
     },
     {
@@ -295,7 +296,7 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
       adminOnly: true,
       children: [
         // { title: "Documents", url: "/crm/documents" },
-        { title: "Contracts", url: "/crm/contracts" },
+        // { title: "Contracts", url: "/crm/contracts" },
         // { title: "Forms & Workflows", url: "/crm/forms" },
         { title: "Calendar", url: "/crm/calendar" },
         { title: "Newsletter", url: "/crm/newsletter" },
