@@ -946,7 +946,7 @@ export default function ContractDetail() {
               <Card>
                 <CardHeader className="pb-2">
                   <CardTitle className="text-xs uppercase tracking-wide text-muted-foreground">
-                    Counterparty comments ({comments.length})
+                    comments ({comments.length})
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3 pt-0">
@@ -964,7 +964,7 @@ export default function ContractDetail() {
                     ))
                   ) : (
                     <p className="text-xs text-muted-foreground">
-                      No counterparty comments yet.
+                      No comments yet.
                     </p>
                   )}
                 </CardContent>
@@ -988,7 +988,7 @@ export default function ContractDetail() {
                   ))}
                 </CardContent>
               </Card>
-              <Card>
+              {/* <Card>
                 <CardHeader className="pb-2">
                   <CardTitle className="text-xs uppercase tracking-wide text-muted-foreground">
                     Internal discussion
@@ -1000,7 +1000,7 @@ export default function ContractDetail() {
                     subjectType="Contract"
                   />
                 </CardContent>
-              </Card>
+              </Card> */}
             </div>
           </div>
         </TabsContent>

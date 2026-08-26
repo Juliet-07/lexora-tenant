@@ -38,6 +38,19 @@ interface Props {
   minHeight?: number;
 }
 
+const FONT_FAMILIES = [
+  { label: "Default", value: "" },
+  { label: "Arial", value: "Arial, sans-serif" },
+  { label: "Times New Roman", value: "'Times New Roman', serif" },
+  { label: "Georgia", value: "Georgia, serif" },
+  { label: "Garamond", value: "Garamond, serif" },
+  { label: "Courier New", value: "'Courier New', monospace" },
+  { label: "Verdana", value: "Verdana, sans-serif" },
+  { label: "Calibri", value: "Calibri, sans-serif" },
+  { label: "Trebuchet MS", value: "'Trebuchet MS', sans-serif" },
+];
+const FONT_SIZES = ["10", "12", "14", "16", "18", "20", "24", "28", "32", "36"];
+
 // Lightweight contentEditable rich-text editor. Uses document.execCommand
 // for simplicity (deprecated but still universally supported) — adequate
 // for the fixed set of formatting this app actually needs.
@@ -63,6 +76,27 @@ export function RichTextEditor({
     document.execCommand(cmd, false, arg);
     if (ref.current) onChange(ref.current.innerHTML);
     ref.current?.focus();
+  };
+
+  // execCommand("fontSize") only accepts the old 1–7 HTML scale, not
+  // real point/pixel values — the standard workaround is to apply a
+  // marker size, then rewrite the resulting elements with a real
+  // font-size style, same trick most contentEditable editors use.
+  const applyFontSize = (px: string) => {
+    document.execCommand("fontSize", false, "7");
+    if (ref.current) {
+      ref.current.querySelectorAll('font[size="7"]').forEach((el) => {
+        (el as HTMLElement).removeAttribute("size");
+        (el as HTMLElement).style.fontSize = `${px}px`;
+      });
+      onChange(ref.current.innerHTML);
+    }
+    ref.current?.focus();
+  };
+
+  const applyFontFamily = (family: string) => {
+    if (!family) return;
+    exec("fontName", family);
   };
 
   const insertTable = () => {
@@ -96,6 +130,35 @@ export function RichTextEditor({
             <SelectItem value="<h1>">Heading 1</SelectItem>
             <SelectItem value="<h2>">Heading 2</SelectItem>
             <SelectItem value="<h3>">Heading 3</SelectItem>
+          </SelectContent>
+        </Select>
+        <div className="w-px h-5 bg-border mx-1" />
+        <Select onValueChange={applyFontFamily}>
+          <SelectTrigger className="h-8 w-[150px] text-xs">
+            <SelectValue placeholder="Font" />
+          </SelectTrigger>
+          <SelectContent>
+            {FONT_FAMILIES.filter((f) => f.value).map((f) => (
+              <SelectItem
+                key={f.value}
+                value={f.value}
+                style={{ fontFamily: f.value }}
+              >
+                {f.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select onValueChange={applyFontSize}>
+          <SelectTrigger className="h-8 w-[80px] text-xs">
+            <SelectValue placeholder="Size" />
+          </SelectTrigger>
+          <SelectContent>
+            {FONT_SIZES.map((s) => (
+              <SelectItem key={s} value={s}>
+                {s}px
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
         <div className="w-px h-5 bg-border mx-1" />
