@@ -154,9 +154,9 @@ export function ModuleProvider({ children }: { children: ReactNode }) {
   const currentModule =
     modules.find((m) => m.id === currentModuleId) ?? modules[0] ?? null;
 
-  const fetchDashboard = async () => {
+  const fetchDashboard = async (silent = false) => {
     if (!user) return;
-    setIsLoadingDashboard(true);
+    if (!silent) setIsLoadingDashboard(true);
     try {
       const res = await api.get("/tenant/dashboard");
       const data = res.data?.data ?? res.data;
@@ -185,7 +185,7 @@ export function ModuleProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       console.error("Failed to fetch dashboard:", err);
     } finally {
-      setIsLoadingDashboard(false);
+      if (!silent) setIsLoadingDashboard(false);
     }
   };
 
@@ -198,6 +198,18 @@ export function ModuleProvider({ children }: { children: ReactNode }) {
       setDashboardData(null);
       setCurrentModuleId(null);
     }
+  }, [user]);
+
+  // Real-time refresh — re-pulls the dashboard silently every 45s so
+  // counts and the attention feed reflect what's actually happening
+  // elsewhere in the app without the user reloading. Silent means no
+  // loading spinner and no module-list flicker on every tick.
+  useEffect(() => {
+    if (!user) return;
+    const interval = setInterval(() => {
+      fetchDashboard(true);
+    }, 45_000);
+    return () => clearInterval(interval);
   }, [user]);
 
   const setModule = (id: string) => {

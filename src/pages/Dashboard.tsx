@@ -20,7 +20,6 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useModule } from "@/contexts/ModuleContext";
-import { timeEntries } from "@/data/mockData";
 import { MotivationalQuote } from "@/components/dashboard/MotivationalQuote";
 import { quickLinksFor } from "@/components/dashboard/moduleQuickLinks";
 import { useCrossModuleMetrics } from "@/components/dashboard/useCrossModuleMetrics";
@@ -117,7 +116,7 @@ export default function Dashboard() {
     currentModule,
   } = useModule();
   const { cards, attention, wins, overallScore, counts } =
-    useCrossModuleMetrics();
+    useCrossModuleMetrics(dashboardData);
 
   const now = new Date();
   const today = now.toLocaleDateString("en-US", {
@@ -144,24 +143,23 @@ export default function Dashboard() {
 
   const team = dashboardData?.team;
 
-  // ── Time tracking rollup ──────────────────────────────────
-  const fullName = user ? `${user.firstName} ${user.lastName}` : "";
-  const visibleEntries = isAdmin
-    ? timeEntries
-    : timeEntries.filter((e) => e.teamMemberName === fullName);
-  const totalHours = visibleEntries.reduce((s, e) => s + e.hours, 0);
-  const billableHours = visibleEntries
-    .filter((e) => e.billable)
-    .reduce((s, e) => s + e.hours, 0);
-  const revenue = visibleEntries
-    .filter((e) => e.billable)
-    .reduce((s, e) => s + e.hours * e.rate, 0);
-  const utilisation = totalHours
-    ? Math.round((billableHours / totalHours) * 100)
-    : 0;
-  const recentEntries = [...visibleEntries]
-    .sort((a, b) => (a.date < b.date ? 1 : -1))
-    .slice(0, 5);
+  // ── Delivery pulse — real, from this week's approved time
+  // entries, computed server-side so it can never drift from what
+  // finance itself considers billable.
+  const pulse = dashboardData?.deliveryPulse ?? {
+    totalHours: 0,
+    billableHours: 0,
+    revenue: 0,
+    utilisation: 0,
+  };
+  const recentEntries: {
+    id: string;
+    projectName: string;
+    description: string;
+    teamMemberName: string;
+    hours: number;
+    date: string;
+  }[] = dashboardData?.recentActivity ?? [];
 
   return (
     <div className="space-y-6">
@@ -174,7 +172,10 @@ export default function Dashboard() {
               <Sparkles className="h-3.5 w-3.5 text-primary" />
               {today}
               {currentModule && (
-                <Badge variant="secondary" className="ml-1 normal-case tracking-normal">
+                <Badge
+                  variant="secondary"
+                  className="ml-1 normal-case tracking-normal"
+                >
                   {currentModule.shortName} workspace
                 </Badge>
               )}
@@ -326,28 +327,35 @@ export default function Dashboard() {
             </Button>
           </CardHeader>
           <CardContent className="space-y-4">
+            <p className="text-[11px] text-muted-foreground">
+              Approved hours, this week
+            </p>
             <div className="grid grid-cols-3 gap-2 text-center">
               <div className="rounded-lg bg-muted/30 p-2">
                 <p className="text-[11px] text-muted-foreground">Hours</p>
-                <p className="text-lg font-bold">{totalHours.toFixed(1)}</p>
+                <p className="text-lg font-bold">
+                  {pulse.totalHours.toFixed(1)}
+                </p>
               </div>
               <div className="rounded-lg bg-muted/30 p-2">
                 <p className="text-[11px] text-muted-foreground">Billable</p>
-                <p className="text-lg font-bold">{billableHours.toFixed(1)}</p>
+                <p className="text-lg font-bold">
+                  {pulse.billableHours.toFixed(1)}
+                </p>
               </div>
               <div className="rounded-lg bg-muted/30 p-2">
                 <p className="text-[11px] text-muted-foreground">Revenue</p>
                 <p className="text-lg font-bold">
-                  ${Math.round(revenue).toLocaleString()}
+                  ${Math.round(pulse.revenue).toLocaleString()}
                 </p>
               </div>
             </div>
             <div>
               <div className="mb-1 flex items-center justify-between text-xs">
                 <span className="text-muted-foreground">Utilisation</span>
-                <span className="font-medium">{utilisation}%</span>
+                <span className="font-medium">{pulse.utilisation}%</span>
               </div>
-              <Progress value={utilisation} className="h-2" />
+              <Progress value={pulse.utilisation} className="h-2" />
             </div>
           </CardContent>
         </Card>
