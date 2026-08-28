@@ -1524,8 +1524,96 @@ export default function Litigation() {
   // LIST VIEW
   // ═══════════════════════════════════════════════════════════
   const active = list.filter((c) => c.status === "Active");
+  const closed = list.filter((c) => c.status !== "Active");
   const escalatedFromAdr = list.filter((c) => c.adrCaseId);
   const totalCourtFees = list.reduce((s, c) => s + c.courtFeesPaid, 0);
+
+  const allCourtDates = list
+    .flatMap((c) =>
+      c.courtDates.map((d) => ({
+        ...d,
+        key: `${c._id}-${d._id}`,
+        caseId: c._id,
+        caseTitle: c.title,
+      })),
+    )
+    .sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""));
+
+  const litDeadlines = active.flatMap((c) =>
+    mockDeadlineRules(c._id).map((d) => ({
+      ...d,
+      caseId: c._id,
+      caseTitle: c.title,
+    })),
+  );
+
+  const litTable = (rows: LitigationCase[], empty: string) => (
+    <Card>
+      <CardContent className="p-0">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Case</TableHead>
+              <TableHead>Court</TableHead>
+              <TableHead>Stage</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Claim value</TableHead>
+              <TableHead>Filed</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((c) => (
+              <TableRow
+                key={c._id}
+                className="cursor-pointer"
+                onClick={() => navigate(`/crm/litigation/${c._id}`)}
+              >
+                <TableCell>
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-sm font-medium">{c.title}</p>
+                    {c.adrCaseId && (
+                      <Badge variant="outline" className="text-[10px]">
+                        from ADR
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">{c.ref}</p>
+                </TableCell>
+                <TableCell className="text-sm">{c.court || "—"}</TableCell>
+                <TableCell>
+                  <Badge variant="outline" className={stageTone[c.stage]}>
+                    {c.stage}
+                  </Badge>
+                </TableCell>
+                <TableCell>
+                  <Badge variant="outline" className={statusTone[c.status]}>
+                    {c.status}
+                  </Badge>
+                </TableCell>
+                <TableCell className="text-sm">
+                  {money(c.claimValue, c.currency)}
+                </TableCell>
+                <TableCell className="text-sm">
+                  {c.filedOn?.slice(0, 10)}
+                </TableCell>
+              </TableRow>
+            ))}
+            {!rows.length && (
+              <TableRow>
+                <TableCell
+                  colSpan={6}
+                  className="py-8 text-center text-sm text-muted-foreground"
+                >
+                  {empty}
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
+  );
+
 
   return (
     <div className="space-y-6">
