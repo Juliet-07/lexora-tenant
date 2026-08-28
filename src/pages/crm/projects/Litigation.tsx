@@ -848,6 +848,109 @@ export default function Litigation() {
             </Card>
           </div>
         </div>
+        </TabsContent>
+
+        <TabsContent value="communications" className="pt-4">
+          <CaseCommunicationsTab caseId={c._id} />
+        </TabsContent>
+        <TabsContent value="drafting" className="pt-4">
+          <CaseDraftingTab />
+        </TabsContent>
+        <TabsContent value="hearings" className="space-y-4 pt-4">
+          {courtDatesCard}
+        </TabsContent>
+        <TabsContent value="documents" className="pt-4">
+          <CaseDocumentsTab caseId={c._id} />
+        </TabsContent>
+        <TabsContent value="deadlines" className="pt-4">
+          <CaseDeadlineRulesTab caseId={c._id} />
+        </TabsContent>
+        <TabsContent value="billing" className="space-y-4 pt-4">
+          <CaseTimeBillingTab
+            hours={`${(t?.litigationHours ?? 0).toFixed(1)} hrs`}
+            fees={money(t?.litigationFees ?? 0, c.currency)}
+            disbursed={money(t?.litigationDisbursed ?? 0, c.currency)}
+          />
+          {disbursementsCard}
+        </TabsContent>
+        <TabsContent value="resolution" className="space-y-4 pt-4">
+          <p className="text-sm text-muted-foreground">
+            How this matter ends. Settlement remains possible at any stage via
+            a consent judgment.
+          </p>
+          <div className="grid gap-3 lg:grid-cols-3">
+            <button
+              disabled={!canAct}
+              onClick={() => {
+                setConsentTerms("");
+                setConsentOpen(true);
+              }}
+              className="rounded-lg border p-4 text-left transition-colors hover:border-primary disabled:opacity-60"
+            >
+              <p className="text-sm font-semibold">Consent judgment</p>
+              <p className="text-xs text-muted-foreground">
+                Settlement reached mid-litigation, entered as an order.
+              </p>
+            </button>
+            <button
+              disabled={!canAct}
+              onClick={() => {
+                setOutcomeDraft("");
+                setOutcomeOpen(true);
+              }}
+              className="rounded-lg border p-4 text-left transition-colors hover:border-primary disabled:opacity-60"
+            >
+              <p className="text-sm font-semibold">Judgment issued</p>
+              <p className="text-xs text-muted-foreground">
+                Court decision, costs order, interest and appeal window.
+              </p>
+            </button>
+            <button
+              disabled={!canAct}
+              onClick={() => {
+                setWithdrawReason("");
+                setWithdrawOpen(true);
+              }}
+              className="rounded-lg border p-4 text-left transition-colors hover:border-primary disabled:opacity-60"
+            >
+              <p className="text-sm font-semibold">Withdrawn</p>
+              <p className="text-xs text-muted-foreground">
+                Claim discontinued before judgment.
+              </p>
+            </button>
+          </div>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Closure report</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm">
+              {[
+                ["Outcome", c.outcome || "Not yet recorded"],
+                ["Litigation age", t ? `${t.litigationAgeDays} days` : "—"],
+                [
+                  "Total age inc. ADR",
+                  t ? `${t.totalAgeDays} days` : "—",
+                ],
+                [
+                  "Combined cost",
+                  t ? money(t.combinedTotal, c.currency) : "—",
+                ],
+                ["Costs recovered", "To be recorded on closure"],
+                ["Precedent / KB value", "To be flagged on closure"],
+              ].map(([l, v]) => (
+                <div key={l} className="flex justify-between gap-3">
+                  <span className="text-muted-foreground">{l}</span>
+                  <span className="text-right font-medium">{v}</span>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </TabsContent>
+        <TabsContent value="audit" className="pt-4">
+          <CaseAuditAccessTab />
+        </TabsContent>
+        </Tabs>
+
 
         {/* ── Stage bar ──────────────────────────────────────── */}
         <Card>
