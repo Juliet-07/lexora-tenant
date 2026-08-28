@@ -1569,70 +1569,129 @@ export default function Litigation() {
         </Card>
       </div>
 
-      <Card>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Case</TableHead>
-                <TableHead>Court</TableHead>
-                <TableHead>Stage</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Claim value</TableHead>
-                <TableHead>Filed</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {list.map((c) => (
-                <TableRow
-                  key={c._id}
-                  className="cursor-pointer"
-                  onClick={() => navigate(`/crm/litigation/${c._id}`)}
-                >
-                  <TableCell>
-                    <div className="flex items-center gap-1.5">
-                      <p className="text-sm font-medium">{c.title}</p>
-                      {c.adrCaseId && (
-                        <Badge variant="outline" className="text-[10px]">
-                          from ADR
-                        </Badge>
-                      )}
-                    </div>
-                    <p className="text-xs text-muted-foreground">{c.ref}</p>
-                  </TableCell>
-                  <TableCell className="text-sm">{c.court || "—"}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className={stageTone[c.stage]}>
-                      {c.stage}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className={statusTone[c.status]}>
-                      {c.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-sm">
-                    {money(c.claimValue, c.currency)}
-                  </TableCell>
-                  <TableCell className="text-sm">
-                    {c.filedOn?.slice(0, 10)}
-                  </TableCell>
-                </TableRow>
-              ))}
-              {!list.length && (
-                <TableRow>
-                  <TableCell
-                    colSpan={6}
-                    className="py-8 text-center text-sm text-muted-foreground"
-                  >
-                    No litigation cases yet.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+      <Tabs defaultValue="all">
+        <TabsList className="flex w-full flex-wrap justify-start">
+          <TabsTrigger value="all">All</TabsTrigger>
+          <TabsTrigger value="active">Active cases</TabsTrigger>
+          <TabsTrigger value="hearings">Hearings</TabsTrigger>
+          <TabsTrigger value="deadlines">Deadlines</TabsTrigger>
+          <TabsTrigger value="closed">Closed cases</TabsTrigger>
+          <TabsTrigger value="templates">Templates</TabsTrigger>
+          <TabsTrigger value="reports">Reports</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="all" className="pt-4">
+          {litTable(list, "No litigation cases yet.")}
+        </TabsContent>
+        <TabsContent value="active" className="pt-4">
+          {litTable(active, "No active litigation cases.")}
+        </TabsContent>
+        <TabsContent value="hearings" className="pt-4">
+          <Card>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Hearing</TableHead>
+                    <TableHead>Case</TableHead>
+                    <TableHead>Location</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {allCourtDates.map((d) => (
+                    <TableRow
+                      key={d.key}
+                      className="cursor-pointer"
+                      onClick={() => navigate(`/crm/litigation/${d.caseId}`)}
+                    >
+                      <TableCell className="text-sm">
+                        {d.date?.slice(0, 10)}
+                        {d.time && ` · ${d.time}`}
+                      </TableCell>
+                      <TableCell className="text-sm font-medium">
+                        {d.title}
+                      </TableCell>
+                      <TableCell className="text-sm">{d.caseTitle}</TableCell>
+                      <TableCell className="text-sm">
+                        {d.location || "—"}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {!allCourtDates.length && (
+                    <TableRow>
+                      <TableCell
+                        colSpan={4}
+                        className="py-8 text-center text-sm text-muted-foreground"
+                      >
+                        No court dates scheduled.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+        <TabsContent value="deadlines" className="pt-4">
+          <Card>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Deadline</TableHead>
+                    <TableHead>Case</TableHead>
+                    <TableHead>Trigger</TableHead>
+                    <TableHead>Due</TableHead>
+                    <TableHead>Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {litDeadlines.map((d) => (
+                    <TableRow
+                      key={d.key}
+                      className="cursor-pointer"
+                      onClick={() => navigate(`/crm/litigation/${d.caseId}`)}
+                    >
+                      <TableCell className="text-sm font-medium">
+                        {d.label}
+                      </TableCell>
+                      <TableCell className="text-sm">{d.caseTitle}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {d.trigger}
+                      </TableCell>
+                      <TableCell className="text-sm">{d.due}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{d.status}</Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {!litDeadlines.length && (
+                    <TableRow>
+                      <TableCell
+                        colSpan={5}
+                        className="py-8 text-center text-sm text-muted-foreground"
+                      >
+                        No deadlines tracked.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+        <TabsContent value="closed" className="pt-4">
+          {litTable(closed, "No closed litigation cases.")}
+        </TabsContent>
+        <TabsContent value="templates" className="pt-4">
+          <CaseTemplatesLibrary kind="Litigation" />
+        </TabsContent>
+        <TabsContent value="reports" className="pt-4">
+          <CaseReportsPanel kind="Litigation" />
+        </TabsContent>
+      </Tabs>
+
 
       <Dialog open={openNew} onOpenChange={setOpenNew}>
         <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
