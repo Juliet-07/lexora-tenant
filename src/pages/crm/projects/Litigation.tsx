@@ -636,40 +636,6 @@ export default function Litigation() {
                 )}
               </CardContent>
             </Card>
-
-            <Card>
-              <CardHeader className="flex-row items-center justify-between pb-2">
-                <CardTitle className="text-base">Disbursements</CardTitle>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setDisbursementOpen(true)}
-                >
-                  <Plus className="mr-1 h-3.5 w-3.5" /> Add
-                </Button>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                {c.disbursements.map((d) => (
-                  <div
-                    key={d._id}
-                    className="flex items-center justify-between rounded border p-2.5 text-sm"
-                  >
-                    <div>
-                      <p className="font-medium">{d.label}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {d.category} · {d.date?.slice(0, 10)}
-                      </p>
-                    </div>
-                    <p className="font-medium">{money(d.amount, d.currency)}</p>
-                  </div>
-                ))}
-                {!c.disbursements.length && (
-                  <p className="text-sm text-muted-foreground">
-                    No disbursements recorded.
-                  </p>
-                )}
-              </CardContent>
-            </Card>
           </div>
 
           {/* ── Sidebar ─────────────────────────────────────── */}
