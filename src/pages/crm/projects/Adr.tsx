@@ -597,6 +597,83 @@ export default function Adr() {
     const stageIdx = ADR_STAGES.indexOf(c.stage);
     const nextStage = ADR_STAGES[stageIdx + 1];
 
+    const sessionsCard = (
+      <Card>
+        <CardHeader className="flex-row items-center justify-between pb-2">
+          <CardTitle className="text-base">Sessions</CardTitle>
+          {canAct && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setSessionOpen(true)}
+            >
+              <Plus className="mr-1 h-3.5 w-3.5" /> Schedule
+            </Button>
+          )}
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {(c.sessions ?? []).map((s) => (
+            <div key={s._id} className="rounded border p-3 text-sm">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="font-medium">
+                  {s.date?.slice(0, 10)}
+                  {s.startTime && ` · ${s.startTime}`}
+                  {s.endTime && `–${s.endTime}`}
+                </p>
+                <Badge variant="outline">{s.status}</Badge>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {s.mode}
+                {s.venue && ` · ${s.venue}`}
+              </p>
+              {s.outcome && <p className="mt-1 text-xs">{s.outcome}</p>}
+            </div>
+          ))}
+          {!(c.sessions ?? []).length && (
+            <p className="text-sm text-muted-foreground">
+              No sessions scheduled.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+    );
+
+    const disbursementsCard = (
+      <Card>
+        <CardHeader className="flex-row items-center justify-between pb-2">
+          <CardTitle className="text-base">Disbursements</CardTitle>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setDisbursementOpen(true)}
+          >
+            <Plus className="mr-1 h-3.5 w-3.5" /> Add
+          </Button>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {c.disbursements.map((d) => (
+            <div
+              key={d._id}
+              className="flex items-center justify-between rounded border p-2.5 text-sm"
+            >
+              <div>
+                <p className="font-medium">{d.label}</p>
+                <p className="text-xs text-muted-foreground">
+                  {d.category} · {d.date?.slice(0, 10)}
+                </p>
+              </div>
+              <p className="font-medium">{money(d.amount, d.currency)}</p>
+            </div>
+          ))}
+          {!c.disbursements.length && (
+            <p className="text-sm text-muted-foreground">
+              No disbursements recorded.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+    );
+
 
     return (
       <div className="space-y-6">
