@@ -519,7 +519,20 @@ export default function Litigation() {
             </p>
           </div>
           {canAct && (
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {nextStage && (
+                <Button
+                  size="sm"
+                  disabled={stageMut.isPending}
+                  onClick={() =>
+                    stageMut.mutate({ id: c._id, stage: nextStage })
+                  }
+                >
+                  Advance to {nextStage}{" "}
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              )}
+
               <Button
                 variant="outline"
                 size="sm"
