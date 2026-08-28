@@ -521,6 +521,20 @@ export default function Litigation() {
           ))}
         </div>
 
+        <Tabs defaultValue="overview">
+          <TabsList className="flex w-full flex-wrap justify-start">
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="communications">Communications</TabsTrigger>
+            <TabsTrigger value="drafting">Drafting</TabsTrigger>
+            <TabsTrigger value="hearings">Court dates</TabsTrigger>
+            <TabsTrigger value="documents">Documents</TabsTrigger>
+            <TabsTrigger value="deadlines">Deadline rules</TabsTrigger>
+            <TabsTrigger value="billing">Time &amp; billing</TabsTrigger>
+            <TabsTrigger value="resolution">Resolution</TabsTrigger>
+            <TabsTrigger value="audit">Audit &amp; access</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="overview" className="pt-4">
         <div className="grid gap-4 lg:grid-cols-3">
           {/* ── Main column: timeline ──────────────────────── */}
           <div className="space-y-4 lg:col-span-2">
