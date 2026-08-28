@@ -1639,28 +1639,26 @@ export default function Litigation() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Deadline</TableHead>
-                    <TableHead>Case</TableHead>
                     <TableHead>Trigger</TableHead>
-                    <TableHead>Due</TableHead>
+                    <TableHead>Case</TableHead>
+                    <TableHead>Rule</TableHead>
                     <TableHead>Status</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {litDeadlines.map((d) => (
                     <TableRow
-                      key={d.key}
+                      key={d.id}
                       className="cursor-pointer"
                       onClick={() => navigate(`/crm/litigation/${d.caseId}`)}
                     >
                       <TableCell className="text-sm font-medium">
-                        {d.label}
+                        {d.trigger}
                       </TableCell>
                       <TableCell className="text-sm">{d.caseTitle}</TableCell>
                       <TableCell className="text-sm text-muted-foreground">
-                        {d.trigger}
+                        {d.rule}
                       </TableCell>
-                      <TableCell className="text-sm">{d.due}</TableCell>
                       <TableCell>
                         <Badge variant="outline">{d.status}</Badge>
                       </TableCell>
@@ -1669,7 +1667,7 @@ export default function Litigation() {
                   {!litDeadlines.length && (
                     <TableRow>
                       <TableCell
-                        colSpan={5}
+                        colSpan={4}
                         className="py-8 text-center text-sm text-muted-foreground"
                       >
                         No deadlines tracked.
@@ -1685,12 +1683,32 @@ export default function Litigation() {
           {litTable(closed, "No closed litigation cases.")}
         </TabsContent>
         <TabsContent value="templates" className="pt-4">
-          <CaseTemplatesLibrary kind="Litigation" />
+          <CaseTemplatesLibrary />
         </TabsContent>
         <TabsContent value="reports" className="pt-4">
-          <CaseReportsPanel kind="Litigation" />
+          <CaseReportsPanel
+            title="Litigation case register"
+            metrics={[
+              { label: "Active cases", value: String(active.length) },
+              {
+                label: "Escalated from ADR",
+                value: String(escalatedFromAdr.length),
+                sub: `${list.length} cases total`,
+              },
+              {
+                label: "Claim value active",
+                value: money(active.reduce((s, c) => s + c.claimValue, 0)),
+              },
+              { label: "Court fees paid", value: money(totalCourtFees) },
+            ]}
+            rows={LITIGATION_STAGES.map((s) => ({
+              label: s,
+              value: `${list.filter((c) => c.stage === s).length} cases`,
+            }))}
+          />
         </TabsContent>
       </Tabs>
+
 
 
       <Dialog open={openNew} onOpenChange={setOpenNew}>
