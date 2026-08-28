@@ -32,6 +32,7 @@ import {
 import {
   Plus,
   ArrowLeft,
+  ArrowRight,
   Gavel,
   Handshake,
   Calendar as CalendarIcon,
@@ -45,6 +46,27 @@ import {
   FileText,
   Scale,
 } from "lucide-react";
+import { mockDeadlineRules } from "@/data/caseDetailMock";
+import {
+  CaseTemplatesLibrary,
+  CaseReportsPanel,
+} from "@/components/crm/case/CaseListTabs";
+import type { LitigationCase } from "@/lib/crm/litigation-api";
+import {
+
+  Tabs,
+  TabsList,
+  TabsTrigger,
+  TabsContent,
+} from "@/components/ui/tabs";
+import {
+  CaseCommunicationsTab,
+  CaseDraftingTab,
+  CaseDocumentsTab,
+  CaseDeadlineRulesTab,
+  CaseTimeBillingTab,
+  CaseAuditAccessTab,
+} from "@/components/crm/case/CaseTabs";
 import { useToast } from "@/hooks/use-toast";
 import { fetchMandates } from "@/lib/crm/mandates-api";
 import {
@@ -368,6 +390,88 @@ export default function Litigation() {
       .sort((a, b) => a.date.localeCompare(b.date));
     const nextCourtDate = upcomingCourtDates[0];
     const t = c.totals;
+    const stageIdx = LITIGATION_STAGES.indexOf(c.stage);
+    const nextStage = LITIGATION_STAGES[stageIdx + 1];
+
+    const courtDatesCard = (
+      <Card>
+        <CardHeader className="flex-row items-center justify-between pb-2">
+          <CardTitle className="text-base">Court dates</CardTitle>
+          {canAct && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setCourtDateOpen(true)}
+            >
+              <Plus className="mr-1 h-3.5 w-3.5" /> Schedule
+            </Button>
+          )}
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {[...c.courtDates]
+            .sort((a, b) => b.date.localeCompare(a.date))
+            .map((d) => (
+              <div key={d._id} className="rounded border p-3 text-sm">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="font-medium">{d.title}</p>
+                  <Badge variant="outline">
+                    {daysUntil(d.date) >= 0 ? "Upcoming" : "Past"}
+                  </Badge>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {d.date?.slice(0, 10)}
+                  {d.time && ` · ${d.time}`}
+                  {d.location && ` · ${d.location}`}
+                </p>
+                {d.note && <p className="mt-1 text-xs">{d.note}</p>}
+              </div>
+            ))}
+          {!c.courtDates.length && (
+            <p className="text-sm text-muted-foreground">
+              No court dates scheduled.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+    );
+
+    const disbursementsCard = (
+      <Card>
+        <CardHeader className="flex-row items-center justify-between pb-2">
+          <CardTitle className="text-base">Disbursements</CardTitle>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setDisbursementOpen(true)}
+          >
+            <Plus className="mr-1 h-3.5 w-3.5" /> Add
+          </Button>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {c.disbursements.map((d) => (
+            <div
+              key={d._id}
+              className="flex items-center justify-between rounded border p-2.5 text-sm"
+            >
+              <div>
+                <p className="font-medium">{d.label}</p>
+                <p className="text-xs text-muted-foreground">
+                  {d.category} · {d.date?.slice(0, 10)}
+                </p>
+              </div>
+              <p className="font-medium">{money(d.amount, d.currency)}</p>
+            </div>
+          ))}
+          {!c.disbursements.length && (
+            <p className="text-sm text-muted-foreground">
+              No disbursements recorded.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+    );
+
+
 
     return (
       <div className="space-y-6">
@@ -423,7 +527,20 @@ export default function Litigation() {
             </p>
           </div>
           {canAct && (
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {nextStage && (
+                <Button
+                  size="sm"
+                  disabled={stageMut.isPending}
+                  onClick={() =>
+                    stageMut.mutate(nextStage)
+                  }
+                >
+                  Advance to {nextStage}{" "}
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              )}
+
               <Button
                 variant="outline"
                 size="sm"
@@ -521,6 +638,20 @@ export default function Litigation() {
           ))}
         </div>
 
+        <Tabs defaultValue="overview">
+          <TabsList className="flex w-full flex-wrap justify-start">
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="communications">Communications</TabsTrigger>
+            <TabsTrigger value="drafting">Drafting</TabsTrigger>
+            <TabsTrigger value="hearings">Court dates</TabsTrigger>
+            <TabsTrigger value="documents">Documents</TabsTrigger>
+            <TabsTrigger value="deadlines">Deadline rules</TabsTrigger>
+            <TabsTrigger value="billing">Time &amp; billing</TabsTrigger>
+            <TabsTrigger value="resolution">Resolution</TabsTrigger>
+            <TabsTrigger value="audit">Audit &amp; access</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="overview" className="pt-4">
         <div className="grid gap-4 lg:grid-cols-3">
           {/* ── Main column: timeline ──────────────────────── */}
           <div className="space-y-4 lg:col-span-2">
@@ -632,40 +763,6 @@ export default function Litigation() {
                 {!c.pleadings.length && (
                   <p className="text-sm text-muted-foreground">
                     No pleadings tracked yet.
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex-row items-center justify-between pb-2">
-                <CardTitle className="text-base">Disbursements</CardTitle>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setDisbursementOpen(true)}
-                >
-                  <Plus className="mr-1 h-3.5 w-3.5" /> Add
-                </Button>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                {c.disbursements.map((d) => (
-                  <div
-                    key={d._id}
-                    className="flex items-center justify-between rounded border p-2.5 text-sm"
-                  >
-                    <div>
-                      <p className="font-medium">{d.label}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {d.category} · {d.date?.slice(0, 10)}
-                      </p>
-                    </div>
-                    <p className="font-medium">{money(d.amount, d.currency)}</p>
-                  </div>
-                ))}
-                {!c.disbursements.length && (
-                  <p className="text-sm text-muted-foreground">
-                    No disbursements recorded.
                   </p>
                 )}
               </CardContent>
@@ -848,6 +945,109 @@ export default function Litigation() {
             </Card>
           </div>
         </div>
+        </TabsContent>
+
+        <TabsContent value="communications" className="pt-4">
+          <CaseCommunicationsTab caseId={c._id} />
+        </TabsContent>
+        <TabsContent value="drafting" className="pt-4">
+          <CaseDraftingTab />
+        </TabsContent>
+        <TabsContent value="hearings" className="space-y-4 pt-4">
+          {courtDatesCard}
+        </TabsContent>
+        <TabsContent value="documents" className="pt-4">
+          <CaseDocumentsTab caseId={c._id} />
+        </TabsContent>
+        <TabsContent value="deadlines" className="pt-4">
+          <CaseDeadlineRulesTab caseId={c._id} />
+        </TabsContent>
+        <TabsContent value="billing" className="space-y-4 pt-4">
+          <CaseTimeBillingTab
+            hours={`${(t?.litigationHours ?? 0).toFixed(1)} hrs`}
+            fees={money(t?.litigationFees ?? 0, c.currency)}
+            disbursed={money(t?.litigationDisbursed ?? 0, c.currency)}
+          />
+          {disbursementsCard}
+        </TabsContent>
+        <TabsContent value="resolution" className="space-y-4 pt-4">
+          <p className="text-sm text-muted-foreground">
+            How this matter ends. Settlement remains possible at any stage via
+            a consent judgment.
+          </p>
+          <div className="grid gap-3 lg:grid-cols-3">
+            <button
+              disabled={!canAct}
+              onClick={() => {
+                setConsentTerms("");
+                setConsentOpen(true);
+              }}
+              className="rounded-lg border p-4 text-left transition-colors hover:border-primary disabled:opacity-60"
+            >
+              <p className="text-sm font-semibold">Consent judgment</p>
+              <p className="text-xs text-muted-foreground">
+                Settlement reached mid-litigation, entered as an order.
+              </p>
+            </button>
+            <button
+              disabled={!canAct}
+              onClick={() => {
+                setOutcomeDraft("");
+                setOutcomeOpen(true);
+              }}
+              className="rounded-lg border p-4 text-left transition-colors hover:border-primary disabled:opacity-60"
+            >
+              <p className="text-sm font-semibold">Judgment issued</p>
+              <p className="text-xs text-muted-foreground">
+                Court decision, costs order, interest and appeal window.
+              </p>
+            </button>
+            <button
+              disabled={!canAct}
+              onClick={() => {
+                setWithdrawReason("");
+                setWithdrawOpen(true);
+              }}
+              className="rounded-lg border p-4 text-left transition-colors hover:border-primary disabled:opacity-60"
+            >
+              <p className="text-sm font-semibold">Withdrawn</p>
+              <p className="text-xs text-muted-foreground">
+                Claim discontinued before judgment.
+              </p>
+            </button>
+          </div>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Closure report</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm">
+              {[
+                ["Outcome", c.outcome || "Not yet recorded"],
+                ["Litigation age", t ? `${t.litigationAgeDays} days` : "—"],
+                [
+                  "Total age inc. ADR",
+                  t ? `${t.totalAgeDays} days` : "—",
+                ],
+                [
+                  "Combined cost",
+                  t ? money(t.combinedTotal, c.currency) : "—",
+                ],
+                ["Costs recovered", "To be recorded on closure"],
+                ["Precedent / KB value", "To be flagged on closure"],
+              ].map(([l, v]) => (
+                <div key={l} className="flex justify-between gap-3">
+                  <span className="text-muted-foreground">{l}</span>
+                  <span className="text-right font-medium">{v}</span>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </TabsContent>
+        <TabsContent value="audit" className="pt-4">
+          <CaseAuditAccessTab />
+        </TabsContent>
+        </Tabs>
+
 
         {/* ── Stage bar ──────────────────────────────────────── */}
         <Card>
@@ -1331,8 +1531,96 @@ export default function Litigation() {
   // LIST VIEW
   // ═══════════════════════════════════════════════════════════
   const active = list.filter((c) => c.status === "Active");
+  const closed = list.filter((c) => c.status !== "Active");
   const escalatedFromAdr = list.filter((c) => c.adrCaseId);
   const totalCourtFees = list.reduce((s, c) => s + c.courtFeesPaid, 0);
+
+  const allCourtDates = list
+    .flatMap((c) =>
+      c.courtDates.map((d) => ({
+        ...d,
+        key: `${c._id}-${d._id}`,
+        caseId: c._id,
+        caseTitle: c.title,
+      })),
+    )
+    .sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""));
+
+  const litDeadlines = active.flatMap((c) =>
+    mockDeadlineRules(c._id).map((d) => ({
+      ...d,
+      caseId: c._id,
+      caseTitle: c.title,
+    })),
+  );
+
+  const litTable = (rows: LitigationCase[], empty: string) => (
+    <Card>
+      <CardContent className="p-0">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Case</TableHead>
+              <TableHead>Court</TableHead>
+              <TableHead>Stage</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Claim value</TableHead>
+              <TableHead>Filed</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((c) => (
+              <TableRow
+                key={c._id}
+                className="cursor-pointer"
+                onClick={() => navigate(`/crm/litigation/${c._id}`)}
+              >
+                <TableCell>
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-sm font-medium">{c.title}</p>
+                    {c.adrCaseId && (
+                      <Badge variant="outline" className="text-[10px]">
+                        from ADR
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">{c.ref}</p>
+                </TableCell>
+                <TableCell className="text-sm">{c.court || "—"}</TableCell>
+                <TableCell>
+                  <Badge variant="outline" className={stageTone[c.stage]}>
+                    {c.stage}
+                  </Badge>
+                </TableCell>
+                <TableCell>
+                  <Badge variant="outline" className={statusTone[c.status]}>
+                    {c.status}
+                  </Badge>
+                </TableCell>
+                <TableCell className="text-sm">
+                  {money(c.claimValue, c.currency)}
+                </TableCell>
+                <TableCell className="text-sm">
+                  {c.filedOn?.slice(0, 10)}
+                </TableCell>
+              </TableRow>
+            ))}
+            {!rows.length && (
+              <TableRow>
+                <TableCell
+                  colSpan={6}
+                  className="py-8 text-center text-sm text-muted-foreground"
+                >
+                  {empty}
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
+  );
+
 
   return (
     <div className="space-y-6">
@@ -1376,70 +1664,147 @@ export default function Litigation() {
         </Card>
       </div>
 
-      <Card>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Case</TableHead>
-                <TableHead>Court</TableHead>
-                <TableHead>Stage</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Claim value</TableHead>
-                <TableHead>Filed</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {list.map((c) => (
-                <TableRow
-                  key={c._id}
-                  className="cursor-pointer"
-                  onClick={() => navigate(`/crm/litigation/${c._id}`)}
-                >
-                  <TableCell>
-                    <div className="flex items-center gap-1.5">
-                      <p className="text-sm font-medium">{c.title}</p>
-                      {c.adrCaseId && (
-                        <Badge variant="outline" className="text-[10px]">
-                          from ADR
-                        </Badge>
-                      )}
-                    </div>
-                    <p className="text-xs text-muted-foreground">{c.ref}</p>
-                  </TableCell>
-                  <TableCell className="text-sm">{c.court || "—"}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className={stageTone[c.stage]}>
-                      {c.stage}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className={statusTone[c.status]}>
-                      {c.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-sm">
-                    {money(c.claimValue, c.currency)}
-                  </TableCell>
-                  <TableCell className="text-sm">
-                    {c.filedOn?.slice(0, 10)}
-                  </TableCell>
-                </TableRow>
-              ))}
-              {!list.length && (
-                <TableRow>
-                  <TableCell
-                    colSpan={6}
-                    className="py-8 text-center text-sm text-muted-foreground"
-                  >
-                    No litigation cases yet.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+      <Tabs defaultValue="all">
+        <TabsList className="flex w-full flex-wrap justify-start">
+          <TabsTrigger value="all">All</TabsTrigger>
+          <TabsTrigger value="active">Active cases</TabsTrigger>
+          <TabsTrigger value="hearings">Hearings</TabsTrigger>
+          <TabsTrigger value="deadlines">Deadlines</TabsTrigger>
+          <TabsTrigger value="closed">Closed cases</TabsTrigger>
+          <TabsTrigger value="templates">Templates</TabsTrigger>
+          <TabsTrigger value="reports">Reports</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="all" className="pt-4">
+          {litTable(list, "No litigation cases yet.")}
+        </TabsContent>
+        <TabsContent value="active" className="pt-4">
+          {litTable(active, "No active litigation cases.")}
+        </TabsContent>
+        <TabsContent value="hearings" className="pt-4">
+          <Card>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Hearing</TableHead>
+                    <TableHead>Case</TableHead>
+                    <TableHead>Location</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {allCourtDates.map((d) => (
+                    <TableRow
+                      key={d.key}
+                      className="cursor-pointer"
+                      onClick={() => navigate(`/crm/litigation/${d.caseId}`)}
+                    >
+                      <TableCell className="text-sm">
+                        {d.date?.slice(0, 10)}
+                        {d.time && ` · ${d.time}`}
+                      </TableCell>
+                      <TableCell className="text-sm font-medium">
+                        {d.title}
+                      </TableCell>
+                      <TableCell className="text-sm">{d.caseTitle}</TableCell>
+                      <TableCell className="text-sm">
+                        {d.location || "—"}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {!allCourtDates.length && (
+                    <TableRow>
+                      <TableCell
+                        colSpan={4}
+                        className="py-8 text-center text-sm text-muted-foreground"
+                      >
+                        No court dates scheduled.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+        <TabsContent value="deadlines" className="pt-4">
+          <Card>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Trigger</TableHead>
+                    <TableHead>Case</TableHead>
+                    <TableHead>Rule</TableHead>
+                    <TableHead>Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {litDeadlines.map((d) => (
+                    <TableRow
+                      key={d.id}
+                      className="cursor-pointer"
+                      onClick={() => navigate(`/crm/litigation/${d.caseId}`)}
+                    >
+                      <TableCell className="text-sm font-medium">
+                        {d.trigger}
+                      </TableCell>
+                      <TableCell className="text-sm">{d.caseTitle}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {d.rule}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{d.status}</Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {!litDeadlines.length && (
+                    <TableRow>
+                      <TableCell
+                        colSpan={4}
+                        className="py-8 text-center text-sm text-muted-foreground"
+                      >
+                        No deadlines tracked.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+        <TabsContent value="closed" className="pt-4">
+          {litTable(closed, "No closed litigation cases.")}
+        </TabsContent>
+        <TabsContent value="templates" className="pt-4">
+          <CaseTemplatesLibrary />
+        </TabsContent>
+        <TabsContent value="reports" className="pt-4">
+          <CaseReportsPanel
+            title="Litigation case register"
+            metrics={[
+              { label: "Active cases", value: String(active.length) },
+              {
+                label: "Escalated from ADR",
+                value: String(escalatedFromAdr.length),
+                sub: `${list.length} cases total`,
+              },
+              {
+                label: "Claim value active",
+                value: money(active.reduce((s, c) => s + c.claimValue, 0)),
+              },
+              { label: "Court fees paid", value: money(totalCourtFees) },
+            ]}
+            rows={LITIGATION_STAGES.map((s) => ({
+              label: s,
+              value: `${list.filter((c) => c.stage === s).length} cases`,
+            }))}
+          />
+        </TabsContent>
+      </Tabs>
+
+
 
       <Dialog open={openNew} onOpenChange={setOpenNew}>
         <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
