@@ -45,6 +45,20 @@ import {
   FileText,
   Scale,
 } from "lucide-react";
+import {
+  Tabs,
+  TabsList,
+  TabsTrigger,
+  TabsContent,
+} from "@/components/ui/tabs";
+import {
+  CaseCommunicationsTab,
+  CaseDraftingTab,
+  CaseDocumentsTab,
+  CaseDeadlineRulesTab,
+  CaseTimeBillingTab,
+  CaseAuditAccessTab,
+} from "@/components/crm/case/CaseTabs";
 import { useToast } from "@/hooks/use-toast";
 import { fetchMandates } from "@/lib/crm/mandates-api";
 import {
