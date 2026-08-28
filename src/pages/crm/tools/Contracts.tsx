@@ -50,6 +50,8 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { CommentThread } from "@/components/crm/CommentThread";
 import { RichTextEditor } from "@/components/RichTextEditor";
+import { CategoryRow } from "@/components/crm/case/CaseListTabs";
+
 import { fetchMandates } from "@/lib/crm/mandates-api";
 import {
   fetchClients,
@@ -232,6 +234,9 @@ export default function Contracts() {
   // section needs.
   const [previewTemplate, setPreviewTemplate] =
     useState<AvailableTemplate | null>(null);
+  // Which category (folder) is selected in the template browser.
+  const [activeFolder, setActiveFolder] = useState<string>("all");
+
 
   // ── Letterhead ────────────────────────────────────────────
   const uploadLetterheadMut = useMutation({
@@ -634,80 +639,90 @@ export default function Contracts() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm">
-                Available templates — published by your platform, organized into
-                folders
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-5">
-              {templateFolders.map((folder) => {
-                const inFolder = availableTemplates.filter(
-                  (t) => t.folderId === folder._id,
-                );
-                if (!inFolder.length) return null;
-                return (
-                  <div key={folder._id} className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <Folder className="h-4 w-4 text-muted-foreground" />
-                      <h4 className="text-sm font-semibold">{folder.name}</h4>
-                      <Badge variant="outline" className="text-[10px]">
-                        {inFolder.length}
-                      </Badge>
-                    </div>
-                    <div className="overflow-hidden rounded-md border">
-                      <Table>
-                        <TableBody>
-                          {inFolder.map((t) => (
-                            <TableRow key={t._id}>
-                              <TableCell>
-                                <div className="flex items-center gap-1.5">
-                                  {t.sourceType === "uploaded" && (
-                                    <FileUp className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                                  )}
-                                  <p className="text-sm font-medium">
-                                    {t.title}
-                                  </p>
-                                </div>
-                                <p className="line-clamp-1 text-xs text-muted-foreground">
-                                  {t.description}
-                                </p>
-                              </TableCell>
-                              <TableCell className="text-sm text-muted-foreground">
-                                {t.jurisdiction || "—"}
-                              </TableCell>
-                              <TableCell className="w-10">
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => setPreviewTemplate(t)}
-                                >
-                                  <Eye className="h-4 w-4" />
-                                </Button>
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  </div>
-                );
-              })}
+          {(() => {
+            const folderName = (fid?: string | null) =>
+              templateFolders.find((f) => f._id === fid)?.name ||
+              "Uncategorized";
+            const cats = [
+              ...templateFolders
+                .filter((f) =>
+                  availableTemplates.some((t) => t.folderId === f._id),
+                )
+                .map((f) => ({
+                  id: f._id,
+                  name: f.name,
+                  count: availableTemplates.filter((t) => t.folderId === f._id)
+                    .length,
+                })),
+              ...(uncategorizedTemplates.length
+                ? [
+                    {
+                      id: "uncategorized",
+                      name: "Uncategorized",
+                      count: uncategorizedTemplates.length,
+                    },
+                  ]
+                : []),
+            ];
+            const shown =
+              activeFolder === "all"
+                ? availableTemplates
+                : activeFolder === "uncategorized"
+                  ? uncategorizedTemplates
+                  : availableTemplates.filter(
+                      (t) => t.folderId === activeFolder,
+                    );
+            const activeName =
+              activeFolder === "all"
+                ? "All templates — platform-published and my own"
+                : cats.find((c) => c.id === activeFolder)?.name ||
+                  "All templates";
 
-              {uncategorizedTemplates.length > 0 && (
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <Folder className="h-4 w-4 text-muted-foreground" />
-                    <h4 className="text-sm font-semibold">Uncategorized</h4>
-                    <Badge variant="outline" className="text-[10px]">
-                      {uncategorizedTemplates.length}
-                    </Badge>
-                  </div>
-                  <div className="overflow-hidden rounded-md border">
+            return (
+              <div className="grid gap-4 md:grid-cols-[260px_1fr]">
+                <Card className="h-fit">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="flex items-center gap-2 text-sm">
+                      <Folder className="h-4 w-4 fill-amber-400 text-amber-500" />
+                      Categories
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-1 p-2">
+                    <CategoryRow
+                      label="All templates"
+                      count={availableTemplates.length}
+                      active={activeFolder === "all"}
+                      onClick={() => setActiveFolder("all")}
+                    />
+                    {cats.map((c) => (
+                      <CategoryRow
+                        key={c.id}
+                        label={c.name}
+                        count={c.count}
+                        active={activeFolder === c.id}
+                        onClick={() => setActiveFolder(c.id)}
+                      />
+                    ))}
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm">{activeName}</CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-0">
                     <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Template</TableHead>
+                          <TableHead>Source</TableHead>
+                          <TableHead>Category</TableHead>
+                          <TableHead>Jurisdiction</TableHead>
+                          <TableHead className="w-10" />
+                        </TableRow>
+                      </TableHeader>
                       <TableBody>
-                        {uncategorizedTemplates.map((t) => (
+                        {shown.map((t) => (
                           <TableRow key={t._id}>
                             <TableCell>
                               <div className="flex items-center gap-1.5">
@@ -720,10 +735,21 @@ export default function Contracts() {
                                 {t.description}
                               </p>
                             </TableCell>
+                            <TableCell>
+                              <Badge
+                                variant="outline"
+                                className="bg-primary/10 text-primary border-primary/20 text-[10px] capitalize"
+                              >
+                                {t.source}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-sm text-muted-foreground">
+                              {folderName(t.folderId)}
+                            </TableCell>
                             <TableCell className="text-sm text-muted-foreground">
                               {t.jurisdiction || "—"}
                             </TableCell>
-                            <TableCell className="w-10">
+                            <TableCell>
                               <Button
                                 size="sm"
                                 variant="ghost"
@@ -734,22 +760,26 @@ export default function Contracts() {
                             </TableCell>
                           </TableRow>
                         ))}
+                        {!shown.length && (
+                          <TableRow>
+                            <TableCell
+                              colSpan={5}
+                              className="py-8 text-center text-sm text-muted-foreground"
+                            >
+                              No templates in this category yet.
+                            </TableCell>
+                          </TableRow>
+                        )}
                       </TableBody>
                     </Table>
-                  </div>
-                </div>
-              )}
-
-              {!availableTemplates.length && (
-                <p className="py-8 text-center text-sm text-muted-foreground">
-                  No templates published yet — check back once your platform
-                  publishes some.
-                </p>
-              )}
-            </CardContent>
-          </Card>
+                  </CardContent>
+                </Card>
+              </div>
+            );
+          })()}
         </TabsContent>
       </Tabs>
+
 
       {/* New contract */}
       <Dialog open={openNew} onOpenChange={setOpenNew}>

@@ -34,6 +34,8 @@ import {
 import {
   Plus,
   ArrowLeft,
+  ArrowRight,
+
   Gavel,
   Handshake,
   Calendar as CalendarIcon,
@@ -77,6 +79,20 @@ import {
   type SessionMode,
   type AdrPartyRole,
 } from "@/lib/crm/adr-api";
+import { mockDeadlineRules } from "@/data/caseDetailMock";
+import {
+  CaseTemplatesLibrary,
+  CaseReportsPanel,
+} from "@/components/crm/case/CaseListTabs";
+import {
+  CaseCommunicationsTab,
+  CaseDraftingTab,
+  CaseDocumentsTab,
+  CaseDeadlineRulesTab,
+  CaseTimeBillingTab,
+  CaseAuditAccessTab,
+} from "@/components/crm/case/CaseTabs";
+
 
 const money = (n: number, c = "USD") =>
   n.toLocaleString(undefined, {
@@ -483,6 +499,84 @@ export default function Adr() {
     setDragOver(null);
   };
 
+  // Every session across every case, for the Hearings tab.
+  const allSessions = list
+    .flatMap((c) => (c.sessions ?? []).map((s) => ({ ...s, case: c })))
+    .sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""));
+
+  // Rule-driven deadlines across active cases (dummy rules until the
+  // deadline-rules endpoint lands).
+  const deadlineRows = active.flatMap((c) =>
+    mockDeadlineRules(c._id).map((d) => ({
+      ...d,
+      key: `${c._id}-${d.id}`,
+      caseId: c._id,
+      caseRef: c.ref,
+      caseTitle: c.title,
+    })),
+  );
+
+  const caseTable = (rows: AdrCase[], empty: string) => (
+    <Card>
+      <CardContent className="p-0">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Case</TableHead>
+              <TableHead>Type</TableHead>
+              <TableHead>Stage</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Claim value</TableHead>
+              <TableHead>Filed</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((c) => (
+              <TableRow
+                key={c._id}
+                className="cursor-pointer"
+                onClick={() => setSelectedId(c._id)}
+              >
+                <TableCell>
+                  <p className="text-sm font-medium">{c.title}</p>
+                  <p className="text-xs text-muted-foreground">{c.ref}</p>
+                </TableCell>
+                <TableCell className="text-sm">{c.type}</TableCell>
+                <TableCell>
+                  <Badge variant="outline" className={stageTone[c.stage]}>
+                    {c.stage}
+                  </Badge>
+                </TableCell>
+                <TableCell>
+                  <Badge variant="outline" className={statusTone[c.status]}>
+                    {c.status}
+                  </Badge>
+                </TableCell>
+                <TableCell className="text-sm">
+                  {money(c.claimValue, c.currency)}
+                </TableCell>
+                <TableCell className="text-sm">
+                  {c.filedOn?.slice(0, 10)}
+                </TableCell>
+              </TableRow>
+            ))}
+            {!rows.length && (
+              <TableRow>
+                <TableCell
+                  colSpan={6}
+                  className="py-8 text-center text-sm text-muted-foreground"
+                >
+                  {empty}
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
+  );
+
+
   if (isLoading) {
     return (
       <div className="py-16 text-center text-sm text-muted-foreground">
@@ -500,6 +594,9 @@ export default function Adr() {
       .filter((s) => s.status === "Scheduled")
       .sort((a, b) => a.date.localeCompare(b.date))[0];
     const canAct = c.status === "Active";
+    const stageIdx = ADR_STAGES.indexOf(c.stage);
+    const nextStage = ADR_STAGES[stageIdx + 1];
+
 
     return (
       <div className="space-y-6">
@@ -525,7 +622,20 @@ export default function Adr() {
             </p>
           </div>
           {canAct && (
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {nextStage && (
+                <Button
+                  size="sm"
+                  disabled={stageMut.isPending}
+                  onClick={() =>
+                    stageMut.mutate({ id: c._id, stage: nextStage })
+                  }
+                >
+                  Advance to {nextStage}{" "}
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              )}
+
               <Button
                 variant="outline"
                 size="sm"
@@ -962,6 +1072,148 @@ export default function Adr() {
             </Card>
           </div>
         </div>
+        </TabsContent>
+
+        <TabsContent value="communications" className="pt-4">
+          <CaseCommunicationsTab caseId={c._id} />
+        </TabsContent>
+        <TabsContent value="drafting" className="pt-4">
+          <CaseDraftingTab />
+        </TabsContent>
+        <TabsContent value="hearings" className="space-y-4 pt-4">
+          <p className="text-sm text-muted-foreground">
+            Every {c.type.toLowerCase()} session for this case, past and
+            upcoming, with its own scheduling, logistics and outcome.
+          </p>
+          {sessionsCard}
+        </TabsContent>
+        <TabsContent value="documents" className="pt-4">
+          <CaseDocumentsTab caseId={c._id} />
+        </TabsContent>
+        <TabsContent value="deadlines" className="pt-4">
+          <CaseDeadlineRulesTab caseId={c._id} />
+        </TabsContent>
+        <TabsContent value="billing" className="space-y-4 pt-4">
+          <CaseTimeBillingTab
+            hours={`${(c.totals?.hours ?? 0).toFixed(1)} hrs`}
+            fees={money(c.totals?.fees ?? 0, c.currency)}
+            disbursed={money(c.totals?.disbursed ?? 0, c.currency)}
+          />
+          {disbursementsCard}
+        </TabsContent>
+        <TabsContent value="resolution" className="space-y-4 pt-4">
+          <p className="text-sm text-muted-foreground">
+            How this case ends, and the closure report that archives it.
+            Nothing here is final until you submit — the case stays active and
+            editable until then.
+          </p>
+          <div className="grid gap-3 lg:grid-cols-3">
+            <button
+              disabled={!canAct}
+              onClick={() => {
+                setSettlementDraft({ amount: 0, terms: "" });
+                setSettlementOpen(true);
+              }}
+              className="rounded-lg border p-4 text-left transition-colors hover:border-primary disabled:opacity-60"
+            >
+              <p className="text-sm font-semibold">Settled at {c.type}</p>
+              <p className="text-xs text-muted-foreground">
+                Terms agreed by both parties, recorded in a settlement deed.
+              </p>
+            </button>
+            <button
+              disabled={!canAct}
+              onClick={() => {
+                setEscalateDraft({
+                  reason: "",
+                  court: "",
+                  courtDivision: "",
+                  registry: "",
+                });
+                setEscalateOpen(true);
+              }}
+              className="rounded-lg border p-4 text-left transition-colors hover:border-primary disabled:opacity-60"
+            >
+              <p className="text-sm font-semibold">Escalated to litigation</p>
+              <p className="text-xs text-muted-foreground">
+                No settlement reached; case proceeds under{" "}
+                {c.adrClause || "the ADR clause"}.
+              </p>
+            </button>
+            <button
+              disabled={!canAct}
+              onClick={() => {
+                setWithdrawReason("");
+                setWithdrawOpen(true);
+              }}
+              className="rounded-lg border p-4 text-left transition-colors hover:border-primary disabled:opacity-60"
+            >
+              <p className="text-sm font-semibold">Withdrawn</p>
+              <p className="text-xs text-muted-foreground">
+                Client instructed withdrawal before resolution.
+              </p>
+            </button>
+          </div>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Settlement terms</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2 text-sm">
+                {[
+                  [
+                    "Settlement value",
+                    c.settlement
+                      ? money(c.settlement.amount, c.currency)
+                      : "Not yet agreed",
+                  ],
+                  [
+                    "Payment schedule",
+                    "50% on execution, 50% in 60 days (dummy)",
+                  ],
+                  ["Settlement deed", "Draft in Documents → Contracts & signed"],
+                  ["Release of claims", "Mutual, full and final"],
+                ].map(([l, v]) => (
+                  <div key={l} className="flex justify-between gap-3">
+                    <span className="text-muted-foreground">{l}</span>
+                    <span className="text-right font-medium">{v}</span>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Closure report</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2 text-sm">
+                {[
+                  [
+                    "Case duration",
+                    `${c.totals?.ageDays ?? daysFrom(c.filedOn)} days`,
+                  ],
+                  ["Total fees billed", money(c.totals?.fees ?? 0, c.currency)],
+                  [
+                    "Disbursements",
+                    money(c.totals?.disbursed ?? 0, c.currency),
+                  ],
+                  ["Client satisfaction", "To be recorded on closure"],
+                  ["Lessons learned", "To be recorded on closure"],
+                  ["Precedent / KB value", "To be flagged on closure"],
+                ].map(([l, v]) => (
+                  <div key={l} className="flex justify-between gap-3">
+                    <span className="text-muted-foreground">{l}</span>
+                    <span className="text-right font-medium">{v}</span>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+        <TabsContent value="audit" className="pt-4">
+          <CaseAuditAccessTab />
+        </TabsContent>
+        </Tabs>
+
 
         {/* ── Stage bar ──────────────────────────────────────── */}
         <Card>
@@ -1457,9 +1709,21 @@ export default function Adr() {
       </div>
 
       <Tabs defaultValue="pipeline">
-        <TabsList>
+        <TabsList className="flex-wrap">
           <TabsTrigger value="pipeline">Case pipeline</TabsTrigger>
-          <TabsTrigger value="all">All cases ({list.length})</TabsTrigger>
+          <TabsTrigger value="all">All ({list.length})</TabsTrigger>
+          <TabsTrigger value="active">Active cases ({active.length})</TabsTrigger>
+          <TabsTrigger value="hearings">
+            Hearings ({allSessions.length})
+          </TabsTrigger>
+          <TabsTrigger value="deadlines">
+            Deadlines ({deadlineRows.length})
+          </TabsTrigger>
+          <TabsTrigger value="closed">
+            Closed cases ({closedTotal.length})
+          </TabsTrigger>
+          <TabsTrigger value="templates">Templates</TabsTrigger>
+          <TabsTrigger value="reports">Reports</TabsTrigger>
         </TabsList>
 
         <TabsContent value="pipeline" className="pt-4">
@@ -1529,59 +1793,66 @@ export default function Adr() {
         </TabsContent>
 
         <TabsContent value="all" className="pt-4">
+          {caseTable(list, "No cases filed yet.")}
+        </TabsContent>
+        <TabsContent value="active" className="pt-4">
+          {caseTable(active, "No active cases.")}
+        </TabsContent>
+        <TabsContent value="closed" className="pt-4">
+          {caseTable(closedTotal, "No closed cases yet.")}
+        </TabsContent>
+
+        <TabsContent value="hearings" className="pt-4">
           <Card>
             <CardContent className="p-0">
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead>Date</TableHead>
                     <TableHead>Case</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Stage</TableHead>
+                    <TableHead>Mode</TableHead>
+                    <TableHead>Venue</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>Claim value</TableHead>
-                    <TableHead>Filed</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {list.map((c) => (
+                  {allSessions.map((s) => (
                     <TableRow
-                      key={c._id}
+                      key={s._id}
                       className="cursor-pointer"
-                      onClick={() => setSelectedId(c._id)}
+                      onClick={() => setSelectedId(s.case._id)}
                     >
-                      <TableCell>
-                        <p className="text-sm font-medium">{c.title}</p>
-                        <p className="text-xs text-muted-foreground">{c.ref}</p>
-                      </TableCell>
-                      <TableCell className="text-sm">{c.type}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className={stageTone[c.stage]}>
-                          {c.stage}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant="outline"
-                          className={statusTone[c.status]}
-                        >
-                          {c.status}
-                        </Badge>
-                      </TableCell>
                       <TableCell className="text-sm">
-                        {money(c.claimValue, c.currency)}
+                        {s.date?.slice(0, 10)}
+                        {s.startTime && (
+                          <span className="text-muted-foreground">
+                            {" "}
+                            · {s.startTime}
+                          </span>
+                        )}
                       </TableCell>
-                      <TableCell className="text-sm">
-                        {c.filedOn?.slice(0, 10)}
+                      <TableCell>
+                        <p className="text-sm font-medium">{s.case.title}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {s.case.ref} · {s.case.type}
+                        </p>
+                      </TableCell>
+                      <TableCell className="text-sm">{s.mode}</TableCell>
+                      <TableCell className="text-sm">{s.venue || "—"}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="text-[10px]">
+                          {s.status}
+                        </Badge>
                       </TableCell>
                     </TableRow>
                   ))}
-                  {!list.length && (
+                  {!allSessions.length && (
                     <TableRow>
                       <TableCell
-                        colSpan={6}
+                        colSpan={5}
                         className="py-8 text-center text-sm text-muted-foreground"
                       >
-                        No cases filed yet.
+                        No sessions scheduled.
                       </TableCell>
                     </TableRow>
                   )}
@@ -1590,7 +1861,116 @@ export default function Adr() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        <TabsContent value="deadlines" className="pt-4">
+          <Card>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Case</TableHead>
+                    <TableHead>Trigger</TableHead>
+                    <TableHead>Rule</TableHead>
+                    <TableHead>Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {deadlineRows.map((d) => (
+                    <TableRow
+                      key={d.key}
+                      className="cursor-pointer"
+                      onClick={() => setSelectedId(d.caseId)}
+                    >
+                      <TableCell>
+                        <p className="text-sm font-medium">{d.caseTitle}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {d.caseRef}
+                        </p>
+                      </TableCell>
+                      <TableCell className="text-sm">{d.trigger}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {d.rule}
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant="outline"
+                          className={
+                            d.tone === "met"
+                              ? "bg-success/10 text-success border-success/20"
+                              : d.tone === "due"
+                                ? "bg-amber-100 text-amber-700 border-amber-200"
+                                : "bg-muted text-muted-foreground border-border"
+                          }
+                        >
+                          {d.status}
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {!deadlineRows.length && (
+                    <TableRow>
+                      <TableCell
+                        colSpan={4}
+                        className="py-8 text-center text-sm text-muted-foreground"
+                      >
+                        No deadline rules configured.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="templates" className="pt-4">
+          <CaseTemplatesLibrary />
+        </TabsContent>
+
+        <TabsContent value="reports" className="pt-4">
+          <CaseReportsPanel
+            title="ADR case register"
+            metrics={[
+              { label: "Active cases", value: String(active.length) },
+              {
+                label: "Resolution rate",
+                value: closedTotal.length ? `${resolutionRate}%` : "—",
+                sub: `${resolved.length} of ${closedTotal.length} closed`,
+              },
+              {
+                label: "Avg. resolution time",
+                value: resolved.length ? `${avgResolutionDays} days` : "—",
+              },
+              { label: "Claim value at stake", value: money(claimAtStake) },
+            ]}
+            rows={[
+              ...typeBreakdown.map(([t, n]) => ({
+                label: `Active — ${t}`,
+                value: String(n),
+              })),
+              {
+                label: "Upcoming sessions",
+                value: String(upcomingSessions.length),
+              },
+              { label: "Resolved", value: String(resolved.length) },
+              {
+                label: "Escalated to litigation",
+                value: String(
+                  list.filter((c) => c.status === "Escalated to litigation")
+                    .length,
+                ),
+              },
+              {
+                label: "Withdrawn",
+                value: String(
+                  list.filter((c) => c.status === "Withdrawn").length,
+                ),
+              },
+            ]}
+          />
+        </TabsContent>
       </Tabs>
+
 
       {/* ── New case dialog ──────────────────────────────────── */}
       <Dialog open={openNew} onOpenChange={setOpenNew}>
