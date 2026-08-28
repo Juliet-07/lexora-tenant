@@ -32,6 +32,7 @@ import {
 import {
   Plus,
   ArrowLeft,
+  ArrowRight,
   Gavel,
   Handshake,
   Calendar as CalendarIcon,
@@ -525,7 +526,7 @@ export default function Litigation() {
                   size="sm"
                   disabled={stageMut.isPending}
                   onClick={() =>
-                    stageMut.mutate({ id: c._id, stage: nextStage })
+                    stageMut.mutate(nextStage)
                   }
                 >
                   Advance to {nextStage}{" "}
