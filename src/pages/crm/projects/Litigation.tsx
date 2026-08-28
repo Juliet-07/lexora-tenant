@@ -46,7 +46,14 @@ import {
   FileText,
   Scale,
 } from "lucide-react";
+import { mockDeadlineRules } from "@/data/caseDetailMock";
 import {
+  CaseTemplatesLibrary,
+  CaseReportsPanel,
+} from "@/components/crm/case/CaseListTabs";
+import type { LitigationCase } from "@/lib/crm/litigation-api";
+import {
+
   Tabs,
   TabsList,
   TabsTrigger,
