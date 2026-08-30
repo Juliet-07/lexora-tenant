@@ -84,6 +84,8 @@ export function quickLinksFor(moduleId?: string | null): QuickLink[] {
       return AML_LINKS;
     case "crm":
       return CRM_LINKS;
+    case "finance":
+      return FINANCE_LINKS;
     default:
       return CRM_LINKS;
   }
