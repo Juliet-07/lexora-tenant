@@ -78,6 +78,7 @@ export function AppRoutes() {
       {hrRoutes(ctx)}
       {crmRoutes(ctx)}
       {grcRoutes(ctx)}
+      {financeRoutes(ctx)}
       {employeeRoutes(ctx)}
       <Route path="*" element={<NotFound />} />
     </Routes>
