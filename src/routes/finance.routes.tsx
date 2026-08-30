@@ -1,16 +1,16 @@
 import { Route } from "react-router-dom";
 import { layout, RouteContext } from "./_helpers";
 import { ModulePlaceholder } from "@/components/layout/ModulePlaceholder";
-import Invoicing from "@/pages/crm/finance/Invoicing";
-import TrustAccounting from "@/pages/crm/finance/TrustAccounting";
-import Sales from "@/pages/crm/finance/Sales";
-import Purchases from "@/pages/crm/finance/Purchases";
-import Banking from "@/pages/crm/finance/Banking";
-import TaxPage from "@/pages/crm/finance/Tax";
-import Accounting from "@/pages/crm/finance/Accounting";
-import AssetRegister from "@/pages/crm/finance/AssetRegister";
-import Financials from "@/pages/crm/finance/Financials";
-import FundAccounting from "@/pages/crm/finance/FundAccounting";
+import Invoicing from "@/pages/finance/Invoicing";
+import TrustAccounting from "@/pages/finance/TrustAccounting";
+import Sales from "@/pages/finance/Sales";
+import Purchases from "@/pages/finance/Purchases";
+import Banking from "@/pages/finance/Banking";
+import TaxPage from "@/pages/finance/Tax";
+import Accounting from "@/pages/finance/Accounting";
+import AssetRegister from "@/pages/finance/AssetRegister";
+import Financials from "@/pages/finance/Financials";
+import FundAccounting from "@/pages/finance/FundAccounting";
 import ManagementReporting from "@/pages/finance/ManagementReporting";
 
 /**
