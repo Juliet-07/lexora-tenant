@@ -274,23 +274,6 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
       ],
     },
     {
-      title: "Finance",
-      icon: Receipt,
-      adminOnly: true,
-      children: [
-        { title: "Sales", url: "/crm/sales" },
-        { title: "Billing & Invoicing", url: "/crm/invoicing" },
-        { title: "Purchases", url: "/crm/purchases" },
-        { title: "Banking", url: "/crm/banking" },
-        { title: "Tax", url: "/crm/tax" },
-        { title: "Accounting", url: "/crm/accounting" },
-        { title: "Financials", url: "/crm/financials" },
-        { title: "Asset Register", url: "/crm/assets" },
-        { title: "Trust Accounting", url: "/crm/trust" },
-        { title: "Fund Accounting", url: "/crm/funds" },
-      ],
-    },
-    {
       title: "Tools",
       icon: Cog,
       adminOnly: true,
@@ -307,6 +290,65 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
       url: "/crm/reports",
       icon: FileBarChart,
       adminOnly: true,
+    },
+  ],
+
+  // ── Finance ────────────────────────────────────────────────
+  finance: [
+    { title: "Dashboard", url: "/", icon: LayoutDashboard },
+    {
+      title: "Financials",
+      url: "/finance/financials",
+      icon: BarChart3,
+      adminOnly: true,
+    },
+    {
+      title: "Management Reporting",
+      url: "/finance/reporting",
+      icon: FileBarChart,
+      adminOnly: true,
+    },
+    {
+      title: "Sales & Billing",
+      icon: TrendingUp,
+      adminOnly: true,
+      children: [
+        { title: "Sales", url: "/finance/sales" },
+        { title: "Billing & Invoicing", url: "/finance/invoicing" },
+      ],
+    },
+    {
+      title: "Purchases",
+      url: "/finance/purchases",
+      icon: Receipt,
+      adminOnly: true,
+    },
+    {
+      title: "Banking & Tax",
+      icon: Landmark,
+      adminOnly: true,
+      children: [
+        { title: "Banking", url: "/finance/banking" },
+        { title: "Tax", url: "/finance/tax" },
+      ],
+    },
+    {
+      title: "Accounting",
+      icon: Cog,
+      adminOnly: true,
+      children: [
+        { title: "Accounting", url: "/finance/accounting" },
+        { title: "Asset Register", url: "/finance/assets" },
+      ],
+    },
+    {
+      title: "Client & Fund Money",
+      icon: Wallet,
+      adminOnly: true,
+      children: [
+        { title: "Trust Accounting", url: "/finance/trust" },
+        { title: "Fund Accounting", url: "/finance/funds" },
+      ],
     },
   ],
 

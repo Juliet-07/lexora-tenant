@@ -10,6 +10,7 @@ import {
   Database,
   Globe,
   Briefcase,
+  Landmark,
   Box,
   LucideIcon,
 } from "lucide-react";
@@ -93,6 +94,14 @@ const MODULE_VISUALS: Record<
     shortName: "HR",
     name: "Human Resources & People Management",
     scope: "HRIS, payroll, leave, performance and recruitment",
+  },
+  finance: {
+    icon: Landmark,
+    color: "from-amber-500 to-yellow-600",
+    shortName: "Finance",
+    name: "Finance & Management Reporting",
+    scope:
+      "Sales, purchases, banking, tax, accounting, funds and management reporting",
   },
   // Legacy key variants
   "kyc/aml": {
