@@ -7,6 +7,7 @@ import { amlRoutes } from "./aml.routes";
 import { hrRoutes } from "./hr.routes";
 import { crmRoutes } from "./crm.routes";
 import { grcRoutes } from "./grc.routes";
+import { financeRoutes } from "./finance.routes";
 import { employeeRoutes } from "./employee.routes";
 import SignContractPage from "@/pages/public/SigninContractPage";
 import MeetingAckPage from "@/pages/grc/governance/MeetingAck";
