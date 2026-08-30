@@ -10,6 +10,7 @@ import {
   Database,
   Globe,
   Briefcase,
+  Landmark,
   Box,
   LucideIcon,
 } from "lucide-react";

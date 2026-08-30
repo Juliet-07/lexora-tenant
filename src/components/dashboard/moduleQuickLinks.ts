@@ -62,6 +62,15 @@ const AML_LINKS: QuickLink[] = [
   { label: "Reports", to: "/aml/reports", icon: Gauge },
 ];
 
+const FINANCE_LINKS: QuickLink[] = [
+  { label: "Financials", to: "/finance/financials", icon: Gauge },
+  { label: "Management reporting", to: "/finance/reporting", icon: FileText },
+  { label: "Invoicing", to: "/finance/invoicing", icon: FileText },
+  { label: "Banking", to: "/finance/banking", icon: Landmark },
+  { label: "Tax", to: "/finance/tax", icon: Scale },
+  { label: "Fund accounting", to: "/finance/funds", icon: Wallet },
+];
+
 /** Quick links resolved from the active module key. */
 export function quickLinksFor(moduleId?: string | null): QuickLink[] {
   switch (moduleId) {
