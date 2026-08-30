@@ -274,23 +274,6 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
       ],
     },
     {
-      title: "Finance",
-      icon: Receipt,
-      adminOnly: true,
-      children: [
-        { title: "Sales", url: "/crm/sales" },
-        { title: "Billing & Invoicing", url: "/crm/invoicing" },
-        { title: "Purchases", url: "/crm/purchases" },
-        { title: "Banking", url: "/crm/banking" },
-        { title: "Tax", url: "/crm/tax" },
-        { title: "Accounting", url: "/crm/accounting" },
-        { title: "Financials", url: "/crm/financials" },
-        { title: "Asset Register", url: "/crm/assets" },
-        { title: "Trust Accounting", url: "/crm/trust" },
-        { title: "Fund Accounting", url: "/crm/funds" },
-      ],
-    },
-    {
       title: "Tools",
       icon: Cog,
       adminOnly: true,
