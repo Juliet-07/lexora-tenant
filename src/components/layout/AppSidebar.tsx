@@ -310,6 +310,65 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
     },
   ],
 
+  // ── Finance ────────────────────────────────────────────────
+  finance: [
+    { title: "Dashboard", url: "/", icon: LayoutDashboard },
+    {
+      title: "Financials",
+      url: "/finance/financials",
+      icon: BarChart3,
+      adminOnly: true,
+    },
+    {
+      title: "Management Reporting",
+      url: "/finance/reporting",
+      icon: FileBarChart,
+      adminOnly: true,
+    },
+    {
+      title: "Sales & Billing",
+      icon: TrendingUp,
+      adminOnly: true,
+      children: [
+        { title: "Sales", url: "/finance/sales" },
+        { title: "Billing & Invoicing", url: "/finance/invoicing" },
+      ],
+    },
+    {
+      title: "Purchases",
+      url: "/finance/purchases",
+      icon: Receipt,
+      adminOnly: true,
+    },
+    {
+      title: "Banking & Tax",
+      icon: Landmark,
+      adminOnly: true,
+      children: [
+        { title: "Banking", url: "/finance/banking" },
+        { title: "Tax", url: "/finance/tax" },
+      ],
+    },
+    {
+      title: "Accounting",
+      icon: Cog,
+      adminOnly: true,
+      children: [
+        { title: "Accounting", url: "/finance/accounting" },
+        { title: "Asset Register", url: "/finance/assets" },
+      ],
+    },
+    {
+      title: "Client & Fund Money",
+      icon: Wallet,
+      adminOnly: true,
+      children: [
+        { title: "Trust Accounting", url: "/finance/trust" },
+        { title: "Fund Accounting", url: "/finance/funds" },
+      ],
+    },
+  ],
+
   // ── HR & People Management ─────────────────────────────────
   hr_pm: [
     { title: "Dashboard", url: "/", icon: LayoutDashboard },
