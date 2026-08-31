@@ -547,10 +547,6 @@ export default function Clients() {
             })}
           </div>
         </TabsContent>
-
-            })}
-          </div>
-        </TabsContent>
       </Tabs>
 
       <Dialog open={!!draft} onOpenChange={(o) => !o && setDraft(null)}>
