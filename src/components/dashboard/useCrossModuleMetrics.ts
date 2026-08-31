@@ -153,7 +153,7 @@ export function useCrossModuleMetrics(dashboardData: any) {
       id: "finance",
       name: "Finance",
       accent: "from-amber-500 to-yellow-500",
-      to: "/finance/overview",
+      to: "/finance/financials",
       headline: `$${Math.round(finance.receivables / 1000)}k`,
       headlineLabel: "Outstanding receivables",
       score: finance.score,
