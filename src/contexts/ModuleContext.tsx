@@ -68,40 +68,40 @@ const MODULE_VISUALS: Record<
   kyc_aml: {
     icon: Shield,
     color: "from-rose-500 to-orange-500",
-    shortName: "AML/KYC",
-    name: "AML / KYC Compliance",
+    shortName: "Lexora AML/KYC",
+    name: "Lexora AML / KYC",
     scope:
-      "Client onboarding, screening, risk scoring and regulatory reporting",
+      "Client Onboarding, Screening, Risk Scoring and Regulatory Reporting",
   },
   grc: {
     icon: Database,
     color: "from-violet-500 to-purple-600",
-    shortName: "GRC",
-    name: "Governance, Risk & Compliance",
+    shortName: "Lexora GRC",
+    name: "Lexora GRC",
     scope:
-      "Risk register, controls library, policies, audits and incident management",
+      "Governance, Risk & Compliance, Risk register, Board Management, Controls Library, Policies, Audits and Incident Management",
   },
   crm: {
     icon: Globe,
     color: "from-blue-500 to-cyan-500",
-    shortName: "CRM",
-    name: "Client Relationship Management",
-    scope: "Client lifecycle, projects, billing, contracts and e-signatures",
+    shortName: "Lexora Projects",
+    name: "Lexora Projects (CRM)",
+    scope: "Client relationship management, projects, ADR, and contracts",
   },
   hr_pm: {
     icon: Briefcase,
     color: "from-emerald-500 to-teal-500",
-    shortName: "HR",
-    name: "Human Resources & People Management",
-    scope: "HRIS, payroll, leave, performance and recruitment",
+    shortName: "Lexora HR",
+    name: "Lexora HR",
+    scope: "Human Resources & People Management, HRIS, Payroll, Leave, Performance, Recruitment, and Dispute Management",
   },
   finance: {
     icon: Landmark,
     color: "from-amber-500 to-yellow-600",
-    shortName: "Finance",
-    name: "Finance & Management Reporting",
+    shortName: "Lexora Finance",
+    name: "Lexora Finance",
     scope:
-      "Sales, purchases, banking, tax, accounting, funds and management reporting",
+      "Sales, Purchases, Banking, Tax, Accounting, Funds and Management Reporting",
   },
   // Legacy key variants
   "kyc/aml": {

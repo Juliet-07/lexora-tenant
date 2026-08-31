@@ -258,6 +258,7 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
         { title: "SLA Management", url: "/crm/sla" },
       ],
     },
+    { title: "Clients", url: "/clients", icon: Users, adminOnly: true },
     {
       title: "Projects",
       icon: FolderKanban,
@@ -361,7 +362,6 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
       icon: BarChart3,
       adminOnly: true,
     },
-    { title: "Clients", url: "/clients", icon: Users, adminOnly: true },
     {
       title: "Employees",
       url: "/hr/employees",
