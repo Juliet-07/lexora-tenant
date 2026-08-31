@@ -269,20 +269,10 @@ export default function Clients() {
         </Card>
       )}
 
-      {atRisk > 0 && (
-        <Card className="border-destructive/40 bg-destructive/5">
-          <CardContent className="flex items-center gap-2 p-4 text-sm text-destructive">
-            <AlertTriangle className="h-4 w-4" /> {atRisk} client(s) have a
-            health score below 50 — see Client health tab.
-          </CardContent>
-        </Card>
-      )}
-
       <Tabs defaultValue="clients">
         <TabsList>
           <TabsTrigger value="clients">Clients</TabsTrigger>
           <TabsTrigger value="sla">SLA coverage</TabsTrigger>
-          <TabsTrigger value="health">Client health</TabsTrigger>
         </TabsList>
 
         <TabsContent value="clients" className="pt-4">
@@ -558,62 +548,6 @@ export default function Clients() {
           </div>
         </TabsContent>
 
-        <TabsContent value="health" className="space-y-4 pt-4">
-          {assignedRows.length === 0 && (
-            <Card>
-              <CardContent className="p-6 text-center text-sm text-muted-foreground">
-                Assign parameters to a client to start tracking health.
-              </CardContent>
-            </Card>
-          )}
-          <div className="grid gap-4 md:grid-cols-2">
-            {assignedRows.map(({ client, name, commercial }) => {
-              const score = healthScore(commercial as any);
-              const band = healthBand(score);
-              return (
-                <Card
-                  key={client._id}
-                  className={score < 50 ? "border-destructive/40" : ""}
-                >
-                  <CardHeader className="pb-2">
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="text-base">{name}</CardTitle>
-                      <span className={`text-lg font-bold ${bandClass[band]}`}>
-                        {score}
-                      </span>
-                    </div>
-                    <p className={`text-xs font-medium ${bandClass[band]}`}>
-                      {band}
-                      {commercial.relationshipManager
-                        ? ` · RM ${commercial.relationshipManager}`
-                        : ""}
-                    </p>
-                  </CardHeader>
-                  <CardContent className="space-y-2">
-                    <Progress value={score} className="h-2" />
-                    {healthFactors(commercial as any).map((f) => (
-                      <div key={f.l} className="space-y-1">
-                        <div className="flex justify-between text-xs text-muted-foreground">
-                          <span>{f.l}</span>
-                          <span>
-                            {f.v}/{f.max}
-                          </span>
-                        </div>
-                        <Progress
-                          value={(f.v / f.max) * 100}
-                          className="h-1.5"
-                        />
-                      </div>
-                    ))}
-                    {score < 50 && (
-                      <p className="flex items-center gap-1 pt-1 text-xs text-destructive">
-                        <AlertTriangle className="h-3 w-3" /> Deteriorating
-                        health — recommend RM outreach this week.
-                      </p>
-                    )}
-                  </CardContent>
-                </Card>
-              );
             })}
           </div>
         </TabsContent>
