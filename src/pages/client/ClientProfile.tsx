@@ -37,6 +37,7 @@ import {
   ClientProjectsPanel,
   ClientInvoicesPanel,
   ClientCommercialPanel,
+  ClientHealthPanel,
 } from "@/components/client/ClientRelationshipPanels";
 import { useToast } from "@/hooks/use-toast";
 
@@ -284,6 +285,7 @@ export default function ClientProfile() {
           <TabsTrigger value="projects">Projects</TabsTrigger>
           <TabsTrigger value="invoices">Invoices</TabsTrigger>
           <TabsTrigger value="commercial">Commercial</TabsTrigger>
+          <TabsTrigger value="health">Health</TabsTrigger>
           <TabsTrigger value="activity">Activity</TabsTrigger>
         </TabsList>
 
@@ -298,6 +300,9 @@ export default function ClientProfile() {
         </TabsContent>
         <TabsContent value="commercial" className="mt-4">
           <ClientCommercialPanel clientId={client._id} clientName={displayName(client)} />
+        </TabsContent>
+        <TabsContent value="health" className="mt-4">
+          <ClientHealthPanel clientId={client._id} clientName={displayName(client)} />
         </TabsContent>
 
         {/* ── Overview ── */}
