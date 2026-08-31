@@ -432,6 +432,9 @@ export interface Str {
   submittedAt: string | null;
   acknowledgedAt: string | null;
   goAmlReference: string | null;
+  behavioralContext: BehavioralProfile | null;
+  ficEmailSent: boolean;
+  ficEmailSentAt: string | null;
   createdAt: string;
 }
 
@@ -460,6 +463,7 @@ export const fetchStrById = async (strId: string): Promise<Str> => {
 
 export const createStr = async (dto: {
   clientId: string;
+  transactionId?: string;
   relatedCaseId?: string;
   customerName: string;
   amount: number;
@@ -488,9 +492,30 @@ export const submitStr = async (
   success: boolean;
   message: string;
   strId: string;
+  ficEmailSent: boolean;
   xml: string;
 }> => {
   const res = await api.post(`/kyc/str/${strId}/submit`);
+  return res.data?.data ?? res.data;
+};
+
+// Real pre-fill for the "File STR" flow from a flagged transaction —
+// the actual connection between Transaction Monitoring and STR.
+export interface StrDraft {
+  clientId: string;
+  transactionId: string;
+  customerName: string;
+  amount: number;
+  currency: string;
+  transactionDate: string;
+  descriptionOfActivity: string;
+  behavioralProfile: BehavioralProfile;
+}
+
+export const fetchStrDraftFromTransaction = async (
+  txId: string,
+): Promise<StrDraft> => {
+  const res = await api.get(`/kyc/transactions/${txId}/str-draft`);
   return res.data?.data ?? res.data;
 };
 

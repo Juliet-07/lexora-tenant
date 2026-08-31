@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -43,6 +44,7 @@ import {
   RefreshCw,
   CheckCircle2,
   XCircle,
+  FileWarning,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -359,6 +361,7 @@ function ReviewDialog({
   onReviewed: () => void;
 }) {
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [note, setNote] = useState("");
 
@@ -445,7 +448,14 @@ function ReviewDialog({
             />
           </div>
         </div>
-        <DialogFooter className="gap-2">
+        <DialogFooter className="gap-2 flex-wrap">
+          <Button
+            variant="outline"
+            className="border-primary/30 text-primary hover:bg-primary/5"
+            onClick={() => navigate(`/aml/str?fromTransaction=${tx._id}`)}
+          >
+            <FileWarning className="h-4 w-4 mr-1" /> File STR
+          </Button>
           <Button
             variant="outline"
             className="border-destructive/30 text-destructive hover:bg-destructive/5"

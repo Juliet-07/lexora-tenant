@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -54,8 +55,10 @@ import {
   submitStr,
   acknowledgeStr,
   downloadStrXml,
+  fetchStrDraftFromTransaction,
   type Str,
   type StrStats,
+  type StrDraft,
 } from "@/lib/kyc/kyc-api";
 import { prettyLabel } from "@/lib/client/clients-api";
 import { ClientSelect } from "@/components/ClientDropdown";
@@ -89,6 +92,7 @@ interface StrFormDialogProps {
   onClose: () => void;
   onSaved: () => void;
   editStr?: Str | null; // if set → edit mode
+  prefill?: StrDraft; // if set → pre-filled from a flagged transaction
 }
 
 function StrFormDialog({
@@ -96,6 +100,7 @@ function StrFormDialog({
   onClose,
   onSaved,
   editStr,
+  prefill,
 }: StrFormDialogProps) {
   const { toast } = useToast();
   const isEdit = !!editStr;
@@ -105,16 +110,23 @@ function StrFormDialog({
       ? typeof editStr.clientId === "object"
         ? editStr.clientId._id
         : editStr.clientId
-      : "",
+      : (prefill?.clientId ?? ""),
     relatedCaseId: editStr?.relatedCaseId ?? "",
-    customerName: editStr?.customerName ?? "",
-    amount: editStr ? String(editStr.amount) : "",
-    currency: editStr?.currency ?? "USD",
+    customerName: editStr?.customerName ?? prefill?.customerName ?? "",
+    amount: editStr
+      ? String(editStr.amount)
+      : prefill
+        ? String(prefill.amount)
+        : "",
+    currency: editStr?.currency ?? prefill?.currency ?? "USD",
     transactionDate: editStr?.transactionDate
       ? new Date(editStr.transactionDate).toISOString().split("T")[0]
-      : "",
+      : prefill?.transactionDate
+        ? new Date(prefill.transactionDate).toISOString().split("T")[0]
+        : "",
     bankName: editStr?.bankName ?? "",
-    descriptionOfActivity: editStr?.descriptionOfActivity ?? "",
+    descriptionOfActivity:
+      editStr?.descriptionOfActivity ?? prefill?.descriptionOfActivity ?? "",
     additionalInformation: editStr?.additionalInformation ?? "",
   });
 
@@ -143,6 +155,7 @@ function StrFormDialog({
     mutationFn: (saveAsDraft: boolean) =>
       createStr({
         clientId: form.clientId,
+        transactionId: prefill?.transactionId,
         relatedCaseId: form.relatedCaseId || undefined,
         customerName: form.customerName,
         amount: Number(form.amount),
@@ -218,6 +231,45 @@ function StrFormDialog({
         </DialogHeader>
 
         <div className="grid md:grid-cols-2 gap-4 py-2">
+          {/* Real behavioral context — shown when filing from a
+              flagged transaction, so the compliance officer sees
+              the pattern while writing the description below */}
+          {prefill && (
+            <div className="md:col-span-2 p-3 rounded-lg border border-primary/20 bg-primary/5">
+              <p className="text-xs font-medium text-primary uppercase tracking-wide mb-2">
+                Client's Behavioral Profile
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                <div>
+                  <p className="text-muted-foreground">30-day activity</p>
+                  <p className="font-medium">
+                    {prefill.behavioralProfile.last30Days.count} transactions
+                  </p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">7-day activity</p>
+                  <p className="font-medium">
+                    {prefill.behavioralProfile.last7Days.count} transactions
+                  </p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Flagged total</p>
+                  <p className="font-medium">
+                    {prefill.behavioralProfile.flaggedCount}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Largest txn</p>
+                  <p className="font-medium">
+                    {prefill.behavioralProfile.largestTransaction
+                      ? `${prefill.behavioralProfile.largestTransaction.currency} ${prefill.behavioralProfile.largestTransaction.amount.toLocaleString()}`
+                      : "—"}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Client selector */}
           {!isEdit && (
             <div className="md:col-span-2 space-y-2">
@@ -227,6 +279,7 @@ function StrFormDialog({
               <ClientSelect
                 value={form.clientId}
                 onValueChange={(v) => set("clientId", v)}
+                disabled={!!prefill}
                 onClientChange={(client) =>
                   set(
                     "customerName",
@@ -416,7 +469,7 @@ function ViewStrDialog({
     onSuccess: (data) => {
       toast({
         title: "STR submitted",
-        description: "Download the goAML XML and upload it to goweb.fic.gov.rw",
+        description: data.message,
       });
       // Auto-trigger XML download
       const blob = new Blob([data.xml], { type: "application/xml" });
@@ -539,6 +592,47 @@ function ViewStrDialog({
               </div>
             )}
 
+            {/* Behavioral context — real snapshot from Transaction
+                Monitoring, captured when this STR was filed */}
+            {str.behavioralContext && (
+              <div className="p-3 rounded-lg border border-primary/20 bg-primary/5 space-y-2">
+                <p className="text-xs font-medium text-primary uppercase tracking-wide">
+                  Behavioral Context at Filing
+                </p>
+                <div className="grid grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <p className="text-muted-foreground">30-day activity</p>
+                    <p className="font-medium">
+                      {str.behavioralContext.last30Days?.count ?? 0}{" "}
+                      transactions
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">7-day activity</p>
+                    <p className="font-medium">
+                      {str.behavioralContext.last7Days?.count ?? 0} transactions
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">
+                      Flagged transactions
+                    </p>
+                    <p className="font-medium">
+                      {str.behavioralContext.flaggedCount ?? 0}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Largest transaction</p>
+                    <p className="font-medium">
+                      {str.behavioralContext.largestTransaction
+                        ? `${str.behavioralContext.largestTransaction.currency} ${str.behavioralContext.largestTransaction.amount.toLocaleString()}`
+                        : "—"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Timeline */}
             <div className="space-y-1.5">
               <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">
@@ -565,6 +659,21 @@ function ViewStrDialog({
                   <CheckCircle2 className="h-3.5 w-3.5 text-info shrink-0" />
                   <span className="text-muted-foreground">goAML Ref:</span>
                   <span className="font-mono">{str.goAmlReference}</span>
+                </div>
+              )}
+              {str.submittedAt && (
+                <div className="flex items-center gap-2 text-xs">
+                  {str.ficEmailSent ? (
+                    <CheckCircle2 className="h-3.5 w-3.5 text-success shrink-0" />
+                  ) : (
+                    <AlertTriangle className="h-3.5 w-3.5 text-warning shrink-0" />
+                  )}
+                  <span className="text-muted-foreground">FIC email:</span>
+                  <span>
+                    {str.ficEmailSent
+                      ? `Sent ${str.ficEmailSentAt ? new Date(str.ficEmailSentAt).toLocaleString() : ""}`
+                      : "Not sent — FIC email isn't configured"}
+                  </span>
                 </div>
               )}
             </div>
@@ -654,10 +763,25 @@ function ViewStrDialog({
 export default function STR() {
   const { toast } = useToast();
   const qc = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [showForm, setShowForm] = useState(false);
   const [editStr, setEditStr] = useState<Str | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>("");
+
+  // Real "File STR" path from a flagged transaction — pre-fills the
+  // new-STR form with the transaction's real details and the
+  // client's real behavioral profile.
+  const fromTransaction = searchParams.get("fromTransaction");
+  const { data: draft, isLoading: draftLoading } = useQuery({
+    queryKey: ["str-draft", fromTransaction],
+    queryFn: () => fetchStrDraftFromTransaction(fromTransaction!),
+    enabled: !!fromTransaction,
+  });
+  const closePrefillForm = () => {
+    searchParams.delete("fromTransaction");
+    setSearchParams(searchParams);
+  };
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ["str-stats"] });
@@ -682,8 +806,10 @@ export default function STR() {
     mutationFn: (id: string) => submitStr(id),
     onSuccess: (data) => {
       toast({
-        title: "STR submitted to Rwanda FIC",
-        description: "Downloading goAML XML…",
+        title: data.ficEmailSent
+          ? "STR submitted to Rwanda FIC"
+          : "STR submitted",
+        description: data.message,
       });
       const blob = new Blob([data.xml], { type: "application/xml" });
       const url = URL.createObjectURL(blob);
@@ -953,12 +1079,33 @@ export default function STR() {
         </CardContent>
       </Card>
 
-      {/* New STR Dialog */}
-      <StrFormDialog
-        open={showForm}
-        onClose={() => setShowForm(false)}
-        onSaved={invalidate}
-      />
+      {/* Loading indicator while a File STR draft is being fetched */}
+      {fromTransaction && draftLoading && (
+        <div className="fixed bottom-6 right-6 flex items-center gap-2 bg-card border rounded-lg px-4 py-2.5 shadow-lg text-sm">
+          <Loader2 className="h-4 w-4 animate-spin text-primary" />
+          Preparing STR from flagged transaction…
+        </div>
+      )}
+
+      {/* New STR Dialog — plain, no prefill */}
+      {!fromTransaction && (
+        <StrFormDialog
+          open={showForm}
+          onClose={() => setShowForm(false)}
+          onSaved={invalidate}
+        />
+      )}
+
+      {/* New STR Dialog — pre-filled from a flagged transaction, only
+          mounted once the real draft data has actually arrived */}
+      {fromTransaction && draft && (
+        <StrFormDialog
+          open={true}
+          onClose={closePrefillForm}
+          onSaved={invalidate}
+          prefill={draft}
+        />
+      )}
 
       {/* Edit STR Dialog */}
       {editStr && (
