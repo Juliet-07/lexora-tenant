@@ -18,6 +18,9 @@ import {
   Receipt,
   Handshake,
   ExternalLink,
+  AlertTriangle,
+  HeartPulse,
+  TrendingUp,
 } from "lucide-react";
 import { fetchDeals } from "@/lib/grc/deals-api";
 import {
@@ -36,6 +39,8 @@ import {
   useClientCommercials,
   healthScore,
   healthBand,
+  healthFactors,
+  defaultCommercial,
 } from "@/lib/crm/clientCommercialStore";
 
 // ─────────────────────────────────────────────────────────────
@@ -397,6 +402,110 @@ function Field({ label, value }: { label: string; value: string }) {
     <div>
       <p className="text-xs text-muted-foreground">{label}</p>
       <p className="text-sm font-medium">{value}</p>
+    </div>
+  );
+}
+
+// ─────────────────────────── Health ──
+
+const bandClass: Record<string, string> = {
+  Healthy: "text-success",
+  Watch: "text-warning",
+  "At risk": "text-destructive",
+};
+
+/** Deterministic demo signals used when no commercial record exists yet. */
+function demoCommercial(clientId: string, clientName: string) {
+  const seed = clientId.split("").reduce((a, c) => a + c.charCodeAt(0), 0);
+  const base = defaultCommercial(clientId, clientName);
+  return {
+    ...base,
+    satisfaction: 3 + (seed % 3) * 0.5,
+    openTickets: seed % 4,
+    invoiceDaysAvg: 28 + (seed % 5) * 6,
+    lastInteraction: new Date(Date.now() - (seed % 20) * 86400000)
+      .toISOString()
+      .slice(0, 10),
+  };
+}
+
+export function ClientHealthPanel({ clientId, clientName }: Props) {
+  const commercials = useClientCommercials();
+  const saved = commercials[clientId];
+  const rec = saved ?? demoCommercial(clientId, clientName);
+  const score = healthScore(rec);
+  const band = healthBand(score);
+  const factors = healthFactors(rec);
+
+  return (
+    <div className="space-y-4">
+      {!saved && (
+        <p className="text-xs text-muted-foreground">
+          Indicative health — no commercial parameters saved for {clientName}
+          &nbsp;yet, so demo signals are shown.
+        </p>
+      )}
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card className={score < 50 ? "border-destructive/40" : ""}>
+          <CardContent className="p-5 text-center space-y-2">
+            <HeartPulse className={`mx-auto h-6 w-6 ${bandClass[band]}`} />
+            <p className={`text-4xl font-bold ${bandClass[band]}`}>{score}</p>
+            <p className={`text-sm font-medium ${bandClass[band]}`}>{band}</p>
+            <Progress value={score} className="h-2" />
+            {rec.relationshipManager && (
+              <p className="text-xs text-muted-foreground">
+                RM {rec.relationshipManager}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+        <Card className="md:col-span-2">
+          <CardContent className="p-5 space-y-3">
+            <p className="text-sm font-semibold flex items-center gap-2">
+              <TrendingUp className="h-4 w-4 text-primary" /> Score breakdown
+            </p>
+            {factors.map((f) => (
+              <div key={f.l} className="space-y-1">
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>{f.l}</span>
+                  <span>
+                    {f.v}/{f.max}
+                  </span>
+                </div>
+                <Progress value={(f.v / f.max) * 100} className="h-1.5" />
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-4">
+        <Kpi
+          label="Satisfaction"
+          value={`${rec.satisfaction}/5`}
+          icon={Handshake}
+        />
+        <Kpi label="Open tickets" value={String(rec.openTickets)} icon={Briefcase} />
+        <Kpi
+          label="Avg invoice days"
+          value={String(rec.invoiceDaysAvg)}
+          icon={Receipt}
+        />
+        <Kpi
+          label="Last interaction"
+          value={rec.lastInteraction || "—"}
+          icon={FolderKanban}
+        />
+      </div>
+
+      {score < 50 && (
+        <Card className="border-destructive/40 bg-destructive/5">
+          <CardContent className="flex items-center gap-2 p-4 text-sm text-destructive">
+            <AlertTriangle className="h-4 w-4" /> Deteriorating health —
+            recommend relationship manager outreach this week.
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
