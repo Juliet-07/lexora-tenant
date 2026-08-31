@@ -1,9 +1,27 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Table,
   TableBody,
@@ -21,7 +39,11 @@ import {
   AlertTriangle,
   HeartPulse,
   TrendingUp,
+  Pencil,
+  Loader2,
+  X,
 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 import { fetchDeals } from "@/lib/grc/deals-api";
 import {
   fetchMandates,
@@ -35,13 +57,23 @@ import {
   money,
   ragClass,
 } from "@/data/crmPmMockData";
+import { slaProfiles } from "@/data/crmClientMockData";
 import {
-  useClientCommercials,
-  healthScore,
-  healthBand,
-  healthFactors,
-  defaultCommercial,
-} from "@/lib/crm/clientCommercialStore";
+  fetchClientHealth,
+  updateClientCommercial,
+  type ClientHealth,
+  type UpdateClientCommercialPayload,
+} from "@/lib/client/client-health-api";
+
+const SERVICE_LINE_OPTIONS = [
+  "TCSP",
+  "Compliance",
+  "Advisory",
+  "Governance",
+  "Tax",
+  "Legal",
+  "Audit support",
+];
 
 // ─────────────────────────────────────────────────────────────
 // Cross-module views of a single client: deals, projects,
@@ -309,46 +341,70 @@ export function ClientInvoicesPanel({ clientId, clientName }: Props) {
 // ─────────────────────────── Commercial relationship ──
 
 export function ClientCommercialPanel({ clientId, clientName }: Props) {
-  const commercials = useClientCommercials();
-  const rec = commercials[clientId];
+  const [editOpen, setEditOpen] = useState(false);
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
 
-  if (!rec)
+  const { data: health, isLoading } = useQuery({
+    queryKey: ["client-health", clientId],
+    queryFn: () => fetchClientHealth(clientId),
+  });
+
+  const mutation = useMutation({
+    mutationFn: (payload: UpdateClientCommercialPayload) =>
+      updateClientCommercial(clientId, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["client-health", clientId] });
+      setEditOpen(false);
+      toast({ title: "Commercial details saved" });
+    },
+    onError: (err: any) =>
+      toast({
+        title: "Failed to save",
+        description: err?.response?.data?.message ?? "Please try again.",
+        variant: "destructive",
+      }),
+  });
+
+  if (isLoading) {
     return (
-      <Card>
-        <CardContent className="p-10 text-center text-sm text-muted-foreground space-y-2">
-          <p>
-            No commercial parameters assigned to {clientName} yet — relationship
-            manager, service lines, SLA profile and fees are set in CRM.
-          </p>
-          <Link
-            to="/crm/clients"
-            className="text-primary inline-flex items-center gap-1"
-          >
-            Go to Client Management <ExternalLink className="h-3 w-3" />
-          </Link>
-        </CardContent>
-      </Card>
+      <div className="flex items-center justify-center p-10 text-muted-foreground">
+        <Loader2 className="h-5 w-5 animate-spin" />
+      </div>
     );
-
-  const score = healthScore(rec);
+  }
+  if (!health) return <Empty text="Could not load commercial details." />;
 
   return (
     <div className="space-y-4">
+      <div className="flex justify-end">
+        <Button size="sm" variant="outline" onClick={() => setEditOpen(true)}>
+          <Pencil className="h-3.5 w-3.5 mr-2" /> Edit
+        </Button>
+      </div>
+
+      {!health.hasRecord && (
+        <p className="text-xs text-muted-foreground">
+          No commercial parameters recorded for {clientName} yet — click Edit to
+          set service lines, fee tier and other relationship details.
+        </p>
+      )}
+
       <div className="grid gap-3 sm:grid-cols-4">
         <Kpi
           label="Relationship manager"
-          value={rec.relationshipManager || "—"}
+          value={health.relationshipManager || "Unassigned"}
           icon={Handshake}
         />
-        <Kpi label="Fee tier" value={rec.feeTier} icon={Receipt} />
+        <Kpi label="Fee tier" value={health.feeTier || "—"} icon={Receipt} />
         <Kpi
           label="Revenue YTD"
-          value={money(rec.revenueYtd, rec.currency)}
+          value={realMoney(health.revenueYtd, health.currency)}
           icon={Receipt}
         />
         <Kpi
           label="Health"
-          value={`${score} · ${healthBand(score)}`}
+          value={`${health.score} · ${health.band}`}
           icon={Briefcase}
         />
       </div>
@@ -356,18 +412,260 @@ export function ClientCommercialPanel({ clientId, clientName }: Props) {
         <CardContent className="p-5 grid gap-4 sm:grid-cols-2">
           <Field
             label="Service lines"
-            value={rec.serviceLines.join(", ") || "—"}
+            value={health.serviceLines.join(", ") || "—"}
           />
-          <Field label="Risk rating" value={rec.riskRating} />
-          <Field label="Cost YTD" value={money(rec.costYtd, rec.currency)} />
-          <Field label="Satisfaction (CSAT)" value={`${rec.satisfaction}/5`} />
-          <Field label="Open tickets" value={String(rec.openTickets)} />
-          <Field label="Avg invoice days" value={String(rec.invoiceDaysAvg)} />
-          <Field label="Last interaction" value={rec.lastInteraction} />
-          <Field label="Notes" value={rec.notes || "—"} />
+          <Field label="Risk rating" value={health.riskRating || "—"} />
+          <Field
+            label="Cost YTD"
+            value={realMoney(health.costYtd, health.currency)}
+          />
+          <Field
+            label="Satisfaction (CSAT)"
+            value={
+              health.satisfaction == null
+                ? "Not yet recorded"
+                : `${health.satisfaction}/5`
+            }
+          />
+          <Field label="Open tickets" value={String(health.openTickets)} />
+          <Field
+            label="Avg invoice days"
+            value={
+              health.invoiceDaysAvg == null
+                ? "No paid invoices yet"
+                : String(health.invoiceDaysAvg)
+            }
+          />
+          <Field
+            label="Last interaction"
+            value={health.lastInteraction || "—"}
+          />
+          <Field label="Notes" value={health.notes || "—"} />
         </CardContent>
       </Card>
+
+      <CommercialEditDialog
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        health={health}
+        onSave={(payload) => mutation.mutate(payload)}
+        saving={mutation.isPending}
+      />
     </div>
+  );
+}
+
+function CommercialEditDialog({
+  open,
+  onOpenChange,
+  health,
+  onSave,
+  saving,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  health: ClientHealth;
+  onSave: (payload: UpdateClientCommercialPayload) => void;
+  saving: boolean;
+}) {
+  const [form, setForm] = useState<UpdateClientCommercialPayload>({
+    serviceLines: health.serviceLines,
+    riskRating: (health.riskRating as any) ?? undefined,
+    feeTier: health.feeTier ?? undefined,
+    slaProfileId: health.slaProfileId,
+    revenueYtd: health.revenueYtd,
+    costYtd: health.costYtd,
+    currency: health.currency,
+    satisfaction: health.satisfaction ?? undefined,
+    notes: health.notes,
+  });
+
+  const toggleServiceLine = (line: string) => {
+    setForm((f) => {
+      const lines = f.serviceLines ?? [];
+      return {
+        ...f,
+        serviceLines: lines.includes(line)
+          ? lines.filter((l) => l !== line)
+          : [...lines, line],
+      };
+    });
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Commercial details</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label>Service lines</Label>
+            <div className="flex flex-wrap gap-1.5">
+              {SERVICE_LINE_OPTIONS.map((line) => {
+                const active = form.serviceLines?.includes(line);
+                return (
+                  <button
+                    key={line}
+                    type="button"
+                    onClick={() => toggleServiceLine(line)}
+                    className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                      active
+                        ? "bg-primary/10 text-primary border-primary/30"
+                        : "bg-muted text-muted-foreground border-transparent"
+                    }`}
+                  >
+                    {line}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Risk rating</Label>
+              <Select
+                value={form.riskRating}
+                onValueChange={(v) =>
+                  setForm((f) => ({ ...f, riskRating: v as any }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Low">Low</SelectItem>
+                  <SelectItem value="Medium">Medium</SelectItem>
+                  <SelectItem value="High">High</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Fee tier</Label>
+              <Select
+                value={form.feeTier}
+                onValueChange={(v) =>
+                  setForm((f) => ({ ...f, feeTier: v as any }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Tier 1">Tier 1</SelectItem>
+                  <SelectItem value="Tier 2">Tier 2</SelectItem>
+                  <SelectItem value="Tier 3">Tier 3</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label>SLA profile</Label>
+            <Select
+              value={form.slaProfileId}
+              onValueChange={(v) => setForm((f) => ({ ...f, slaProfileId: v }))}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select" />
+              </SelectTrigger>
+              <SelectContent>
+                {slaProfiles.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.tier} — {p.serviceType}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="grid grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <Label>Revenue YTD</Label>
+              <Input
+                type="number"
+                min={0}
+                value={form.revenueYtd}
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    revenueYtd: Number(e.target.value),
+                  }))
+                }
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Cost YTD</Label>
+              <Input
+                type="number"
+                min={0}
+                value={form.costYtd}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, costYtd: Number(e.target.value) }))
+                }
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Currency</Label>
+              <Select
+                value={form.currency}
+                onValueChange={(v) => setForm((f) => ({ ...f, currency: v }))}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="USD">USD</SelectItem>
+                  <SelectItem value="RWF">RWF</SelectItem>
+                  <SelectItem value="KES">KES</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label>
+              Satisfaction (CSAT) — your own 0–5 assessment of this relationship
+            </Label>
+            <Input
+              type="number"
+              min={0}
+              max={5}
+              step={0.5}
+              value={form.satisfaction ?? ""}
+              onChange={(e) =>
+                setForm((f) => ({
+                  ...f,
+                  satisfaction: e.target.value
+                    ? Number(e.target.value)
+                    : undefined,
+                }))
+              }
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Notes</Label>
+            <Textarea
+              rows={3}
+              value={form.notes}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, notes: e.target.value }))
+              }
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button onClick={() => onSave(form)} disabled={saving}>
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -414,35 +712,29 @@ const bandClass: Record<string, string> = {
   "At risk": "text-destructive",
 };
 
-/** Deterministic demo signals used when no commercial record exists yet. */
-function demoCommercial(clientId: string, clientName: string) {
-  const seed = clientId.split("").reduce((a, c) => a + c.charCodeAt(0), 0);
-  const base = defaultCommercial(clientId, clientName);
-  return {
-    ...base,
-    satisfaction: 3 + (seed % 3) * 0.5,
-    openTickets: seed % 4,
-    invoiceDaysAvg: 28 + (seed % 5) * 6,
-    lastInteraction: new Date(Date.now() - (seed % 20) * 86400000)
-      .toISOString()
-      .slice(0, 10),
-  };
-}
-
 export function ClientHealthPanel({ clientId, clientName }: Props) {
-  const commercials = useClientCommercials();
-  const saved = commercials[clientId];
-  const rec = saved ?? demoCommercial(clientId, clientName);
-  const score = healthScore(rec);
-  const band = healthBand(score);
-  const factors = healthFactors(rec);
+  const { data: health, isLoading } = useQuery({
+    queryKey: ["client-health", clientId],
+    queryFn: () => fetchClientHealth(clientId),
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center p-10 text-muted-foreground">
+        <Loader2 className="h-5 w-5 animate-spin" />
+      </div>
+    );
+  }
+  if (!health) return <Empty text="Could not load health data." />;
+
+  const { score, band, factors } = health;
 
   return (
     <div className="space-y-4">
-      {!saved && (
+      {!health.hasRecord && (
         <p className="text-xs text-muted-foreground">
-          Indicative health — no commercial parameters saved for {clientName}
-          &nbsp;yet, so demo signals are shown.
+          No commercial parameters recorded for {clientName} yet — some factors
+          below default to 0 until they're set on the Commercial tab.
         </p>
       )}
       <div className="grid gap-4 md:grid-cols-3">
@@ -452,9 +744,9 @@ export function ClientHealthPanel({ clientId, clientName }: Props) {
             <p className={`text-4xl font-bold ${bandClass[band]}`}>{score}</p>
             <p className={`text-sm font-medium ${bandClass[band]}`}>{band}</p>
             <Progress value={score} className="h-2" />
-            {rec.relationshipManager && (
+            {health.relationshipManager && (
               <p className="text-xs text-muted-foreground">
-                RM {rec.relationshipManager}
+                RM {health.relationshipManager}
               </p>
             )}
           </CardContent>
@@ -482,18 +774,30 @@ export function ClientHealthPanel({ clientId, clientName }: Props) {
       <div className="grid gap-3 sm:grid-cols-4">
         <Kpi
           label="Satisfaction"
-          value={`${rec.satisfaction}/5`}
+          value={
+            health.satisfaction == null
+              ? "Not yet recorded"
+              : `${health.satisfaction}/5`
+          }
           icon={Handshake}
         />
-        <Kpi label="Open tickets" value={String(rec.openTickets)} icon={Briefcase} />
+        <Kpi
+          label="Open tickets"
+          value={String(health.openTickets)}
+          icon={Briefcase}
+        />
         <Kpi
           label="Avg invoice days"
-          value={String(rec.invoiceDaysAvg)}
+          value={
+            health.invoiceDaysAvg == null
+              ? "No paid invoices yet"
+              : String(health.invoiceDaysAvg)
+          }
           icon={Receipt}
         />
         <Kpi
           label="Last interaction"
-          value={rec.lastInteraction || "—"}
+          value={health.lastInteraction || "—"}
           icon={FolderKanban}
         />
       </div>

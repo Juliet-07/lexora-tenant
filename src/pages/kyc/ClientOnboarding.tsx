@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -18,7 +18,6 @@ import {
   User as UserIcon,
   RefreshCw,
   XCircle,
-  AlertTriangle,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -61,15 +60,6 @@ const fetchInProgress = async (): Promise<ApiClient[]> => {
   return Array.isArray(d) ? d : (d?.items ?? []);
 };
 
-const fetchEngagementDoc = async () => {
-  try {
-    const res = await api.get("/tenant/engagement/my-document");
-    return res.data?.data ?? res.data ?? null;
-  } catch {
-    return null;
-  }
-};
-
 const createClient = async (payload: {
   fullName: string;
   email: string;
@@ -87,7 +77,6 @@ const createClient = async (payload: {
 export default function ClientOnboarding() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const navigate = useNavigate();
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [newClient, setNewClient] = useState({
@@ -120,12 +109,6 @@ export default function ClientOnboarding() {
     staleTime: 30_000,
   });
 
-  const { data: engagementDoc, isLoading: engagementLoading } = useQuery({
-    queryKey: ["engagement-document"],
-    queryFn: fetchEngagementDoc,
-    staleTime: 60_000,
-  });
-
   const loading = pendingLoading || inProgressLoading;
   const refreshing =
     (pendingFetching && !pendingLoading) ||
@@ -136,21 +119,7 @@ export default function ClientOnboarding() {
     refetchInProgress();
   };
 
-  const engagementReady =
-    engagementDoc?.isActive === true || engagementDoc?.bypassSigning === true;
-
   const handleAddClientClick = () => {
-    if (!engagementReady) {
-      // Don't open the dialog — redirect to settings with a toast
-      toast({
-        title: "Engagement document required",
-        description:
-          "You must upload an engagement letter or terms & agreement before adding clients.",
-        variant: "destructive",
-      });
-      navigate("/settings?tab=engagement");
-      return;
-    }
     setDialogOpen(true);
   };
 
@@ -178,19 +147,6 @@ export default function ClientOnboarding() {
       });
     },
     onError: (err: any) => {
-      const message = err?.response?.data?.message ?? "Please try again";
-
-      if (err?.response?.status === 403 && message.includes("engagement")) {
-        toast({
-          title: "Setup required",
-          description: message,
-          variant: "destructive",
-        });
-        setDialogOpen(false);
-        navigate("/settings?tab=engagement");
-        return;
-      }
-
       toast({
         title: "Could not create client",
         description: err?.response?.data?.message ?? "Please try again.",
@@ -245,47 +201,16 @@ export default function ClientOnboarding() {
           <Button
             className="bg-gradient-to-r from-primary to-secondary"
             onClick={handleAddClientClick}
-            disabled={engagementLoading || !engagementReady}
-            title={
-              !engagementReady
-                ? "Upload an engagement document in Settings first"
-                : undefined
-            }
           >
-            {engagementLoading ? (
-              <Loader2 className="h-4 w-4 animate-spin mr-2" />
-            ) : (
-              <Plus className="h-4 w-4 mr-2" />
-            )}
+            <Plus className="h-4 w-4 mr-2" />
             Add Client
           </Button>
 
-          {/* <Dialog open={dialogOpen} onOpenChange={setDialogOpen}></Dialog> */}
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            {/* <DialogTrigger asChild>
-              <Button className="bg-gradient-to-r from-primary to-secondary">
-                <Plus className="h-4 w-4 mr-2" /> Add Client
-              </Button>
-            </DialogTrigger> */}
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>Invite New Client</DialogTitle>
               </DialogHeader>
-
-              {engagementDoc?.isActive && !engagementDoc?.bypassSigning && (
-                <div className="flex items-start gap-2 rounded-lg bg-primary/5 border border-primary/20 p-3 text-sm">
-                  <FileText className="h-4 w-4 text-primary mt-0.5 shrink-0" />
-                  <p className="text-muted-foreground">
-                    Your client will receive your{" "}
-                    <span className="font-medium text-foreground">
-                      {engagementDoc.documentType === "engagement_letter"
-                        ? "engagement letter"
-                        : "terms & agreement"}
-                    </span>{" "}
-                    to sign before they receive their login credentials.
-                  </p>
-                </div>
-              )}
 
               <div className="space-y-4">
                 <div className="space-y-2">
@@ -372,30 +297,6 @@ export default function ClientOnboarding() {
           </Dialog>
         </div>
       </div>
-
-      {!engagementLoading && !engagementReady && (
-        <Card className="border-amber-200 bg-amber-50/60">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between gap-4 flex-wrap">
-              <div className="flex items-center gap-3">
-                <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0" />
-                <p className="text-sm text-amber-800">
-                  <span className="font-semibold">Setup required:</span> Upload
-                  your engagement document before you can add clients.
-                </p>
-              </div>
-              <Button
-                size="sm"
-                variant="outline"
-                className="border-amber-300 text-amber-700 hover:bg-amber-100 shrink-0"
-                onClick={() => navigate("/settings?tab=engagement")}
-              >
-                Go to Settings →
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       {/* Tabs */}
       <Tabs defaultValue="pending">
