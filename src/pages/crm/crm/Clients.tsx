@@ -56,7 +56,6 @@ import {
   defaultCommercial,
   healthScore,
   healthBand,
-  healthFactors,
   SERVICE_LINES,
   type ClientCommercial,
   type ClientRisk,
@@ -76,12 +75,6 @@ const riskClass: Record<string, string> = {
   Low: "bg-success/15 text-success border-success/30",
   Medium: "bg-warning/15 text-warning border-warning/30",
   High: "bg-destructive/15 text-destructive border-destructive/30",
-};
-
-const bandClass: Record<string, string> = {
-  Healthy: "text-success",
-  Watch: "text-warning",
-  "At risk": "text-destructive",
 };
 
 const tierClass: Record<string, string> = {
@@ -208,9 +201,6 @@ export default function Clients() {
         rated.length
       ).toFixed(1)
     : "—";
-  const atRisk = assignedRows.filter(
-    (r) => healthScore(r.commercial as any) < 50,
-  ).length;
   const unassigned = rows.length - assignedRows.length;
 
   const slaName = (id?: string | null) => slaProfiles.find((p) => p._id === id);
