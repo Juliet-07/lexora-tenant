@@ -65,6 +65,14 @@ export function useCrossModuleMetrics(dashboardData: any) {
     pendingLeave: 0,
     score: 0,
   };
+  const finance = dashboardData?.finance ?? {
+    cashPosition: 0,
+    receivables: crm.receivables,
+    overdueInvoices: crm.overdueInvoices,
+    monthlyRevenue: 0,
+    openBills: 0,
+    score: 0,
+  };
   const attention: AttentionItem[] = dashboardData?.attention ?? [];
   const wins: { label: string; value: string | number; hint: string }[] =
     dashboardData?.wins ?? [];
@@ -138,6 +146,32 @@ export function useCrossModuleMetrics(dashboardData: any) {
           label: "Receivables",
           value: `$${Math.round(crm.receivables / 1000)}k`,
           tone: crm.overdueInvoices ? "bad" : "good",
+        },
+      ],
+    },
+    {
+      id: "finance",
+      name: "Finance",
+      accent: "from-amber-500 to-yellow-500",
+      to: "/finance/financials",
+      headline: `$${Math.round(finance.receivables / 1000)}k`,
+      headlineLabel: "Outstanding receivables",
+      score: finance.score,
+      metrics: [
+        {
+          label: "Overdue invoices",
+          value: finance.overdueInvoices,
+          tone: finance.overdueInvoices ? "bad" : "good",
+        },
+        {
+          label: "Monthly revenue",
+          value: `$${Math.round(finance.monthlyRevenue / 1000)}k`,
+          tone: "default",
+        },
+        {
+          label: "Open bills",
+          value: finance.openBills,
+          tone: finance.openBills ? "warn" : "good",
         },
       ],
     },
