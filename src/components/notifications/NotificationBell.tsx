@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,8 @@ import {
   Users,
   ExternalLink,
   Loader2,
+  Volume2,
+  VolumeX,
 } from "lucide-react";
 import {
   fetchMyNotifications,
@@ -29,6 +31,11 @@ import {
   type TenantNotification,
   type TenantNotificationType,
 } from "@/lib/notification-api";
+import {
+  playNotificationSound,
+  isNotificationSoundMuted,
+  setNotificationSoundMuted,
+} from "@/lib/notification-sound";
 
 const typeIcon: Record<TenantNotificationType, JSX.Element> = {
   Onboarding: <UserPlus className="h-4 w-4 text-primary" />,
@@ -55,6 +62,7 @@ export function NotificationBell() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
+  const [muted, setMuted] = useState(isNotificationSoundMuted());
 
   // Live, real unread badge — quietly refreshed in the background so
   // it stays current without the person needing to reopen the app.
@@ -64,6 +72,27 @@ export function NotificationBell() {
     refetchInterval: 60_000,
   });
   const unreadCount = unread?.count ?? 0;
+
+  // A sound plays only when the real count goes up compared to the
+  // last poll — never on first load, and never just because the
+  // popover was opened or something was marked read.
+  const previousCount = useRef<number | null>(null);
+  useEffect(() => {
+    if (unread == null) return;
+    if (
+      previousCount.current !== null &&
+      unread.count > previousCount.current
+    ) {
+      playNotificationSound();
+    }
+    previousCount.current = unread.count;
+  }, [unread]);
+
+  const toggleMuted = () => {
+    const next = !muted;
+    setMuted(next);
+    setNotificationSoundMuted(next);
+  };
 
   const { data: items = [], isLoading } = useQuery({
     queryKey: ["tenant-notifications"],
@@ -114,15 +143,32 @@ export function NotificationBell() {
       <PopoverContent align="end" className="w-96 p-0">
         <div className="flex items-center justify-between px-3 pt-3">
           <p className="text-sm font-semibold">Notifications</p>
-          <Button
-            variant="link"
-            size="sm"
-            className="h-auto p-0 text-xs"
-            onClick={() => readAllMutation.mutate()}
-            disabled={readAllMutation.isPending || unreadCount === 0}
-          >
-            Mark all as read
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              title={
+                muted ? "Unmute notification sound" : "Mute notification sound"
+              }
+              onClick={toggleMuted}
+            >
+              {muted ? (
+                <VolumeX className="h-3.5 w-3.5 text-muted-foreground" />
+              ) : (
+                <Volume2 className="h-3.5 w-3.5 text-muted-foreground" />
+              )}
+            </Button>
+            <Button
+              variant="link"
+              size="sm"
+              className="h-auto p-0 text-xs"
+              onClick={() => readAllMutation.mutate()}
+              disabled={readAllMutation.isPending || unreadCount === 0}
+            >
+              Mark all as read
+            </Button>
+          </div>
         </div>
         <Separator className="mt-2" />
         <ScrollArea className="h-[420px]">

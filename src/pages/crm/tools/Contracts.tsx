@@ -139,7 +139,7 @@ export default function Contracts() {
   });
   const { data: availableTemplates = [] } = useQuery({
     queryKey: ["available-templates"],
-    queryFn: fetchAvailableTemplates,
+    queryFn: () => fetchAvailableTemplates(),
   });
   const { data: templateFolders = [] } = useQuery({
     queryKey: ["template-folders"],
@@ -236,7 +236,6 @@ export default function Contracts() {
     useState<AvailableTemplate | null>(null);
   // Which category (folder) is selected in the template browser.
   const [activeFolder, setActiveFolder] = useState<string>("all");
-
 
   // ── Letterhead ────────────────────────────────────────────
   const uploadLetterheadMut = useMutation({
@@ -779,7 +778,6 @@ export default function Contracts() {
           })()}
         </TabsContent>
       </Tabs>
-
 
       {/* New contract */}
       <Dialog open={openNew} onOpenChange={setOpenNew}>

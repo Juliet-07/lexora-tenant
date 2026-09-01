@@ -11,7 +11,6 @@ import {
   Eye,
   FileText,
   Plus,
-  Send,
   Loader2,
   Clock,
   Building2,
@@ -21,28 +20,13 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   ApiClient,
   displayName,
   prettyLabel,
   toneFor,
 } from "@/lib/client/clients-api";
 import { api } from "@/lib/api";
+import AddClientWizard from "@/components/kyc/AddClientWizard";
 
 // ─────────────────────────────────────────────────────────────
 // API FETCHERS
@@ -60,31 +44,12 @@ const fetchInProgress = async (): Promise<ApiClient[]> => {
   return Array.isArray(d) ? d : (d?.items ?? []);
 };
 
-const createClient = async (payload: {
-  fullName: string;
-  email: string;
-  phoneNumber: string;
-  clientType: string;
-}) => {
-  const res = await api.post("/tenant/create-client", payload);
-  return res.data;
-};
-
 // ─────────────────────────────────────────────────────────────
 // MAIN COMPONENT
 // ─────────────────────────────────────────────────────────────
 
 export default function ClientOnboarding() {
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
-
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [newClient, setNewClient] = useState({
-    fullName: "",
-    email: "",
-    phone: "",
-    classification: "individual" as "individual" | "corporate",
-  });
+  const [wizardOpen, setWizardOpen] = useState(false);
 
   // ── Queries ───────────────────────────────────────────────
   const {
@@ -119,59 +84,6 @@ export default function ClientOnboarding() {
     refetchInProgress();
   };
 
-  const handleAddClientClick = () => {
-    setDialogOpen(true);
-  };
-
-  // ── Create client mutation ────────────────────────────────
-  const createMutation = useMutation({
-    mutationFn: createClient,
-    onSuccess: (data, variables) => {
-      const msg =
-        data?.message ?? `Onboarding invitation sent to ${variables.email}`;
-      toast({
-        title: "Client created",
-        description: msg,
-      });
-      setDialogOpen(false);
-      setNewClient({
-        fullName: "",
-        email: "",
-        phone: "",
-        classification: "individual",
-      });
-      // Invalidate both lists so they refetch
-      queryClient.invalidateQueries({ queryKey: ["tenant-pending-approvals"] });
-      queryClient.invalidateQueries({
-        queryKey: ["tenant-onboarding-in-progress"],
-      });
-    },
-    onError: (err: any) => {
-      toast({
-        title: "Could not create client",
-        description: err?.response?.data?.message ?? "Please try again.",
-        variant: "destructive",
-      });
-    },
-  });
-
-  const handleCreate = () => {
-    if (!newClient.email || !newClient.fullName) {
-      toast({
-        title: "Missing fields",
-        description: "Full name and email are required.",
-        variant: "destructive",
-      });
-      return;
-    }
-    createMutation.mutate({
-      fullName: newClient.fullName,
-      email: newClient.email,
-      phoneNumber: newClient.phone,
-      clientType: newClient.classification,
-    });
-  };
-
   // ─────────────────────────────────────────────────────────
   return (
     <div className="space-y-6">
@@ -200,101 +112,17 @@ export default function ClientOnboarding() {
 
           <Button
             className="bg-gradient-to-r from-primary to-secondary"
-            onClick={handleAddClientClick}
+            onClick={() => setWizardOpen(true)}
           >
             <Plus className="h-4 w-4 mr-2" />
             Add Client
           </Button>
 
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Invite New Client</DialogTitle>
-              </DialogHeader>
-
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Client Type</Label>
-                  <Select
-                    value={newClient.classification}
-                    onValueChange={(v: "individual" | "corporate") =>
-                      setNewClient({ ...newClient, classification: v })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="individual">Individual</SelectItem>
-                      <SelectItem value="corporate">
-                        Business / Corporate
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>
-                    {newClient.classification === "individual"
-                      ? "Full Name"
-                      : "Business Name"}
-                  </Label>
-                  <Input
-                    value={newClient.fullName}
-                    onChange={(e) =>
-                      setNewClient({ ...newClient, fullName: e.target.value })
-                    }
-                    placeholder={
-                      newClient.classification === "individual"
-                        ? "Jane Doe"
-                        : "Acme Holdings Ltd"
-                    }
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Email</Label>
-                  <Input
-                    type="email"
-                    value={newClient.email}
-                    onChange={(e) =>
-                      setNewClient({ ...newClient, email: e.target.value })
-                    }
-                    placeholder="client@email.com"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Phone Number</Label>
-                  <Input
-                    value={newClient.phone}
-                    onChange={(e) =>
-                      setNewClient({ ...newClient, phone: e.target.value })
-                    }
-                    placeholder="+1 234 567 8900"
-                  />
-                </div>
-
-                <Button
-                  className="w-full bg-gradient-to-r from-primary to-secondary"
-                  onClick={handleCreate}
-                  disabled={createMutation.isPending}
-                >
-                  {createMutation.isPending ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />{" "}
-                      Creating…
-                    </>
-                  ) : (
-                    <>
-                      <Send className="h-4 w-4 mr-2" /> Create & Send Onboarding
-                      Link
-                    </>
-                  )}
-                </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
+          <AddClientWizard
+            open={wizardOpen}
+            onClose={() => setWizardOpen(false)}
+            onDone={handleRefresh}
+          />
         </div>
       </div>
 

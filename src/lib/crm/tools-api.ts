@@ -651,6 +651,8 @@ export interface AvailableTemplate {
   source: "platform" | "tenant";
   category?: string;
   type?: ContractType;
+  moduleKey?: string;
+  areaKey?: string;
   // Real folder from the super admin's library — null/undefined
   // means uncategorized.
   folderId?: string | null;
@@ -672,10 +674,16 @@ export const fetchTenantTemplates = async (): Promise<
 };
 // The real picker for generating a new contract — every published
 // platform template, each carrying its real folderId.
-export const fetchAvailableTemplates = async (): Promise<
-  AvailableTemplate[]
-> => {
-  const res = await api.get("/tools/contract-templates/available");
+// The real picker for generating a new contract — every published
+// platform template, each carrying its real folderId. moduleKey
+// narrows to templates tagged for a specific real use (e.g.
+// 'kyc_aml' for client onboarding).
+export const fetchAvailableTemplates = async (
+  moduleKey?: string,
+): Promise<AvailableTemplate[]> => {
+  const res = await api.get("/tools/contract-templates/available", {
+    params: moduleKey ? { moduleKey } : undefined,
+  });
   const d = unwrap(res);
   return Array.isArray(d) ? d : [];
 };
