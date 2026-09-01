@@ -39,7 +39,9 @@ export default function RolesTab() {
     staleTime: 60_000,
   });
 
-  const rows = data?.items ?? [];
+  // Only employees who actually hold a role — an employee record
+  // with no roles yet isn't relevant to this page's purpose.
+  const rows = (data?.items ?? []).filter((u) => u.roles && u.roles.length > 0);
 
   return (
     <Card>
@@ -94,8 +96,8 @@ export default function RolesTab() {
                     className="py-10 text-center text-sm text-muted-foreground"
                   >
                     {q
-                      ? "No employees match your search."
-                      : "No employees added yet."}
+                      ? "No employees with an assigned role match your search."
+                      : "No employees have an assigned role yet."}
                   </TableCell>
                 </TableRow>
               ) : (
