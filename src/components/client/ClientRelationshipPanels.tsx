@@ -51,12 +51,8 @@ import {
   money as realMoney,
 } from "@/lib/crm/mandates-api";
 import { fetchTickets } from "@/lib/crm/service-desk-api";
-import {
-  pmInvoices,
-  invoiceTotal,
-  money,
-  ragClass,
-} from "@/data/crmPmMockData";
+import { fetchInvoices } from "@/lib/crm/finance-api";
+import { money } from "@/data/crmPmMockData";
 import { slaProfiles } from "@/data/crmClientMockData";
 import {
   fetchClientHealth,
@@ -85,8 +81,6 @@ interface Props {
   clientName: string;
 }
 
-const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
-
 function Empty({ text }: { text: string }) {
   return (
     <Card>
@@ -95,16 +89,6 @@ function Empty({ text }: { text: string }) {
       </CardContent>
     </Card>
   );
-}
-
-/** Fallback so the prototype pages always show a relationship picture:
- *  if nothing matches the real client name, key demo rows by index. */
-function pick<T>(rows: T[], match: (r: T) => boolean, clientId: string): T[] {
-  const hit = rows.filter(match);
-  if (hit.length) return hit;
-  if (!rows.length) return [];
-  const seed = clientId.split("").reduce((a, c) => a + c.charCodeAt(0), 0);
-  return [rows[seed % rows.length]];
 }
 
 // ─────────────────────────── Deals ──
@@ -276,25 +260,31 @@ export function ClientProjectsPanel({ clientId, clientName }: Props) {
 // ─────────────────────────── Invoices ──
 
 export function ClientInvoicesPanel({ clientId, clientName }: Props) {
-  const rows = pick(
-    pmInvoices,
-    (i) => norm(i.clientName) === norm(clientName),
-    clientId,
-  );
+  const { data: rows = [], isLoading } = useQuery({
+    queryKey: ["client-invoices", clientId],
+    queryFn: () => fetchInvoices({ clientUserId: clientId }),
+  });
 
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center p-10 text-muted-foreground">
+        <Loader2 className="h-5 w-5 animate-spin" />
+      </div>
+    );
+  }
   if (!rows.length) return <Empty text="No invoices for this client." />;
 
-  const billed = rows.reduce((s, i) => s + invoiceTotal(i).payable, 0);
+  const billed = rows.reduce((s, i) => s + i.payable, 0);
   const paid = rows.reduce((s, i) => s + i.paidAmount, 0);
 
   return (
     <div className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-3">
         <Kpi label="Invoices" value={String(rows.length)} icon={Receipt} />
-        <Kpi label="Billed" value={money(billed)} icon={Receipt} />
+        <Kpi label="Billed" value={realMoney(billed)} icon={Receipt} />
         <Kpi
           label="Outstanding"
-          value={money(Math.max(billed - paid, 0))}
+          value={realMoney(Math.max(billed - paid, 0))}
           icon={Receipt}
         />
       </div>
@@ -314,19 +304,23 @@ export function ClientInvoicesPanel({ clientId, clientName }: Props) {
             </TableHeader>
             <TableBody>
               {rows.map((i) => (
-                <TableRow key={i.id}>
-                  <TableCell className="font-medium">{i.id}</TableCell>
+                <TableRow key={i._id}>
+                  <TableCell className="font-medium">{i.ref}</TableCell>
                   <TableCell>{i.mandateName}</TableCell>
                   <TableCell>
                     <Badge variant="outline">{i.stage}</Badge>
                   </TableCell>
-                  <TableCell>{i.issuedOn}</TableCell>
-                  <TableCell>{i.dueOn}</TableCell>
-                  <TableCell className="text-right">
-                    {money(invoiceTotal(i).payable, i.currency)}
+                  <TableCell>
+                    {new Date(i.issuedOn).toLocaleDateString()}
+                  </TableCell>
+                  <TableCell>
+                    {new Date(i.dueOn).toLocaleDateString()}
                   </TableCell>
                   <TableCell className="text-right">
-                    {money(i.paidAmount, i.currency)}
+                    {realMoney(i.payable, i.currency)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {realMoney(i.paidAmount, i.currency)}
                   </TableCell>
                 </TableRow>
               ))}

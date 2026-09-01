@@ -14,6 +14,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   BarChart,
   Bar,
   LineChart,
@@ -41,6 +47,7 @@ import {
   Users,
   FileText,
   Clock,
+  ChevronDown,
 } from "lucide-react";
 import {
   fetchOperationalReport,
@@ -48,6 +55,7 @@ import {
   fetchRegulatoryDashboard,
   fetchTrendAnalysis,
   exportReport,
+  exportReportPdf,
   type OperationalReport,
   type RiskAnalyticsReport,
   type RegulatoryDashboard,
@@ -1050,12 +1058,26 @@ export default function Reports() {
           <Button variant="outline" size="icon" onClick={invalidate}>
             <RefreshCw className="h-4 w-4" />
           </Button>
-          <Button
-            className="bg-gradient-to-r from-primary to-secondary"
-            onClick={() => exportReport(exportMap[tab] ?? "operational")}
-          >
-            <Download className="h-4 w-4 mr-2" /> Export Report
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button className="bg-gradient-to-r from-primary to-secondary">
+                <Download className="h-4 w-4 mr-2" /> Export Report
+                <ChevronDown className="h-4 w-4 ml-2" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                onClick={() => exportReportPdf(exportMap[tab] ?? "operational")}
+              >
+                <FileText className="h-4 w-4 mr-2" /> Download PDF
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => exportReport(exportMap[tab] ?? "operational")}
+              >
+                <Download className="h-4 w-4 mr-2" /> Download CSV
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 

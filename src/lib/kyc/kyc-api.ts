@@ -781,3 +781,24 @@ export const exportReport = (
       URL.revokeObjectURL(a.href);
     });
 };
+
+// Triggers PDF download directly in the browser — same shared house
+// style used across CRM and GRC reports.
+export const exportReportPdf = (
+  type: "operational" | "risk" | "regulatory" | "trends",
+): void => {
+  const token = localStorage.getItem("tenantToken");
+  const base = import.meta.env.VITE_REACT_APP_BASE_URL;
+  const filename = `lexora-${type}-report-${new Date().toISOString().split("T")[0]}.pdf`;
+  fetch(`${base}/kyc/reports/export-pdf/${type}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+    .then((r) => r.blob())
+    .then((blob) => {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
+};

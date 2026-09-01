@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   Card,
   CardContent,
@@ -8,6 +9,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -18,104 +20,26 @@ import {
 } from "@/components/ui/table";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Search, ShieldCheck } from "lucide-react";
+import { fetchEmployees } from "@/lib/hr/hr-api";
+import { prettyLabel } from "@/lib/client/clients-api";
 
-interface RoleUser {
-  id: string;
-  name: string;
-  email: string;
-  department: string;
-  hierarchy: string;
-  roles: string[];
-  assignedOn: string;
-}
-
-const ROLE_USERS: RoleUser[] = [
-  {
-    id: "u1",
-    name: "Amina Okafor",
-    email: "amina.okafor@lexora.io",
-    department: "Executive",
-    hierarchy: "Owner",
-    roles: ["Tenant Owner"],
-    assignedOn: "2025-01-12",
-  },
-  {
-    id: "u2",
-    name: "David Mensah",
-    email: "david.mensah@lexora.io",
-    department: "Compliance",
-    hierarchy: "Head of Department",
-    roles: ["Tenant Admin", "Compliance Officer"],
-    assignedOn: "2025-02-04",
-  },
-  {
-    id: "u3",
-    name: "Sarah Ibrahim",
-    email: "sarah.ibrahim@lexora.io",
-    department: "Human Resources",
-    hierarchy: "Head of Department",
-    roles: ["HR Manager"],
-    assignedOn: "2025-02-18",
-  },
-  {
-    id: "u4",
-    name: "Tunde Bello",
-    email: "tunde.bello@lexora.io",
-    department: "Finance",
-    hierarchy: "Manager",
-    roles: ["Finance Manager", "Approver"],
-    assignedOn: "2025-03-06",
-  },
-  {
-    id: "u5",
-    name: "Grace Nwosu",
-    email: "grace.nwosu@lexora.io",
-    department: "Client Services",
-    hierarchy: "Manager",
-    roles: ["Relationship Manager"],
-    assignedOn: "2025-03-22",
-  },
-  {
-    id: "u6",
-    name: "Peter Adeyemi",
-    email: "peter.adeyemi@lexora.io",
-    department: "Legal & Governance",
-    hierarchy: "Manager",
-    roles: ["GRC Analyst", "Board Secretary"],
-    assignedOn: "2025-04-09",
-  },
-  {
-    id: "u7",
-    name: "Chidi Eze",
-    email: "chidi.eze@lexora.io",
-    department: "Operations",
-    hierarchy: "Regular",
-    roles: ["Service Desk Agent"],
-    assignedOn: "2025-05-15",
-  },
-];
-
-const initials = (n: string) =>
-  n
-    .split(" ")
-    .map((p) => p[0])
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
+const initials = (first: string, last: string) =>
+  `${first?.[0] ?? ""}${last?.[0] ?? ""}`.toUpperCase();
 
 export default function RolesTab() {
   const [q, setQ] = useState("");
 
-  const rows = useMemo(() => {
-    const s = q.trim().toLowerCase();
-    if (!s) return ROLE_USERS;
-    return ROLE_USERS.filter((u) =>
-      [u.name, u.department, u.hierarchy, ...u.roles]
-        .join(" ")
-        .toLowerCase()
-        .includes(s),
-    );
-  }, [q]);
+  // Real employee list, real roles pulled from each employee's
+  // linked user account — same data source the HR module itself
+  // uses. Search is server-side since the same endpoint already
+  // supports it.
+  const { data, isLoading } = useQuery({
+    queryKey: ["settings-roles", q],
+    queryFn: () => fetchEmployees({ search: q || undefined, limit: 100 }),
+    staleTime: 60_000,
+  });
+
+  const rows = data?.items ?? [];
 
   return (
     <Card>
@@ -136,7 +60,7 @@ export default function RolesTab() {
             <Input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Search name, department, role"
+              placeholder="Search name, team, role"
               className="pl-8"
             />
           </div>
@@ -148,57 +72,86 @@ export default function RolesTab() {
             <TableHeader>
               <TableRow>
                 <TableHead>Employee</TableHead>
-                <TableHead>Department</TableHead>
+                <TableHead>Team</TableHead>
                 <TableHead>Hierarchy</TableHead>
                 <TableHead>Role(s)</TableHead>
-                <TableHead className="text-right">Assigned</TableHead>
+                <TableHead className="text-right">Joined</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.map((u) => (
-                <TableRow key={u.id}>
-                  <TableCell>
-                    <div className="flex items-center gap-3">
-                      <Avatar className="h-8 w-8">
-                        <AvatarFallback className="text-xs">
-                          {initials(u.name)}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium">{u.name}</p>
-                        <p className="truncate text-xs text-muted-foreground">
-                          {u.email}
-                        </p>
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-sm">{u.department}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline">{u.hierarchy}</Badge>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-wrap gap-1">
-                      {u.roles.map((r) => (
-                        <Badge key={r} variant="secondary">
-                          {r}
-                        </Badge>
-                      ))}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-right text-xs text-muted-foreground">
-                    {new Date(u.assignedOn).toLocaleDateString()}
-                  </TableCell>
-                </TableRow>
-              ))}
-              {rows.length === 0 && (
+              {isLoading ? (
+                Array.from({ length: 5 }).map((_, i) => (
+                  <TableRow key={i}>
+                    <TableCell colSpan={5}>
+                      <Skeleton className="h-8 w-full" />
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : rows.length === 0 ? (
                 <TableRow>
                   <TableCell
                     colSpan={5}
                     className="py-10 text-center text-sm text-muted-foreground"
                   >
-                    No users match your search.
+                    {q
+                      ? "No employees match your search."
+                      : "No employees added yet."}
                   </TableCell>
                 </TableRow>
+              ) : (
+                rows.map((u) => {
+                  const team =
+                    typeof u.teamId === "object" && u.teamId
+                      ? u.teamId.name
+                      : null;
+                  return (
+                    <TableRow key={u._id}>
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          <Avatar className="h-8 w-8">
+                            <AvatarFallback className="text-xs">
+                              {initials(u.firstName, u.lastName)}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium">
+                              {u.firstName} {u.lastName}
+                            </p>
+                            <p className="truncate text-xs text-muted-foreground">
+                              {u.email}
+                            </p>
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-sm">{team ?? "—"}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline">
+                          {prettyLabel(u.hierarchyRole)}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-1">
+                          {u.roles && u.roles.length > 0 ? (
+                            u.roles.map((r) => (
+                              <Badge key={r} variant="secondary">
+                                {prettyLabel(r)}
+                              </Badge>
+                            ))
+                          ) : (
+                            <span className="text-xs text-muted-foreground">
+                              No roles assigned
+                            </span>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right text-xs text-muted-foreground">
+                        {u.startDate
+                          ? new Date(u.startDate).toLocaleDateString()
+                          : "—"}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
               )}
             </TableBody>
           </Table>

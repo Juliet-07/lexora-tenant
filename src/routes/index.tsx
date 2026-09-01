@@ -1,6 +1,8 @@
 import { Route, Routes } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import Login from "@/pages/Login";
+import ForgotPassword from "@/pages/ForgotPassword";
+import ResetPassword from "@/pages/ResetPassword";
 import NotFound from "@/pages/NotFound";
 import { coreRoutes } from "./core.routes";
 import { amlRoutes } from "./aml.routes";
@@ -30,6 +32,8 @@ const PUBLIC_ROUTE_PATTERNS = [
   /^\/policy-ack\/[^/]+$/,
   /^\/deal-review\/contract\/[^/]+$/,
   /^\/deal-review\/offer\/[^/]+$/,
+  /^\/forgot-password$/,
+  /^\/reset-password$/,
 ];
 
 export function AppRoutes() {
@@ -59,6 +63,8 @@ export function AppRoutes() {
           path="/deal-review/offer/:token"
           element={<DealOfferReviewPage />}
         />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
       </Routes>
     );
   }
