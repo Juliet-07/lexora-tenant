@@ -35,7 +35,6 @@ import { api } from "@/lib/api";
 import {
   fetchAvailableTemplates,
   fetchContract,
-  generateContractFromTemplate,
   sendContractForSignature,
   type AvailableTemplate,
   type SignableContract,
@@ -61,14 +60,25 @@ const STEPS: { n: Step; label: string }[] = [
   { n: 4, label: "Confirmation" },
 ];
 
-const createClient = async (payload: {
+interface CreateClientWithContractResponse {
+  success: boolean;
+  message: string;
+  data: { _id: string; email: string };
+  contract: SignableContract;
+}
+
+const createClientWithContract = async (payload: {
   fullName: string;
   email: string;
   phoneNumber: string;
   clientType: string;
-}) => {
+  templateId: string;
+  templateSource: "platform" | "tenant";
+  contractTitle: string;
+  contractType?: string;
+}): Promise<CreateClientWithContractResponse> => {
   const res = await api.post("/tenant/create-client", payload);
-  return res.data?.data ?? res.data;
+  return res.data;
 };
 
 export default function AddClientWizard({
@@ -144,21 +154,7 @@ export default function AddClientWizard({
     setTimeout(reset, 200);
   };
 
-  // ── Step 1 — Client Details ──────────────────────────────────
-  const createMutation = useMutation({
-    mutationFn: createClient,
-    onSuccess: (data) => {
-      setCreatedClient({ _id: data._id, email: data.email });
-      setStep(2);
-    },
-    onError: (err: any) =>
-      toast({
-        title: "Could not create client",
-        description: err?.response?.data?.message ?? "Please try again.",
-        variant: "destructive",
-      }),
-  });
-
+  // ── Step 1 — Client Details (local only — no backend call) ────
   const handleCreateClient = () => {
     if (!form.email || !form.fullName) {
       toast({
@@ -168,12 +164,7 @@ export default function AddClientWizard({
       });
       return;
     }
-    createMutation.mutate({
-      fullName: form.fullName,
-      email: form.email,
-      phoneNumber: form.phone,
-      clientType: form.classification,
-    });
+    setStep(2);
   };
 
   // ── Step 2 — Select Contract ──────────────────────────────────
@@ -183,29 +174,37 @@ export default function AddClientWizard({
     enabled: step === 2,
   });
 
-  const generateMutation = useMutation({
+  // Real, atomic call — creates the client and generates the real
+  // contract together in one backend transaction. Deliberately not
+  // split into two steps: doing so previously let a tenant create a
+  // real client on Step 1, then abandon the wizard before ever
+  // generating or sending a contract, leaving a permanently
+  // unreachable "ghost" client with no email ever sent. Now a client
+  // is never created without a contract already generated for them.
+  const createMutation = useMutation({
     mutationFn: () => {
-      if (!selectedTemplate || !createdClient) {
-        throw new Error("Missing template or client");
+      if (!selectedTemplate) {
+        throw new Error("Select a contract template first");
       }
-      const expiresOn = new Date();
-      expiresOn.setFullYear(expiresOn.getFullYear() + 1);
-      return generateContractFromTemplate({
+      return createClientWithContract({
+        fullName: form.fullName,
+        email: form.email,
+        phoneNumber: form.phone,
+        clientType: form.classification,
         templateId: selectedTemplate._id,
         templateSource: "platform",
-        title: `${selectedTemplate.title} — ${form.fullName}`,
-        type: selectedTemplate.type ?? "MSA",
-        clientId: createdClient._id,
-        expiresOn: expiresOn.toISOString(),
+        contractTitle: `${selectedTemplate.title} — ${form.fullName}`,
+        contractType: selectedTemplate.type ?? "MSA",
       });
     },
     onSuccess: (data) => {
-      setContract(data);
+      setCreatedClient({ _id: data.data._id, email: data.data.email });
+      setContract(data.contract);
       setStep(3);
     },
     onError: (err: any) =>
       toast({
-        title: "Could not generate contract",
+        title: "Could not create client",
         description: err?.response?.data?.message ?? "Please try again.",
         variant: "destructive",
       }),
@@ -358,19 +357,8 @@ export default function AddClientWizard({
                 <Button
                   className="w-full bg-gradient-to-r from-primary to-secondary"
                   onClick={handleCreateClient}
-                  disabled={createMutation.isPending}
                 >
-                  {createMutation.isPending ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />{" "}
-                      Creating…
-                    </>
-                  ) : (
-                    <>
-                      Continue to Contract{" "}
-                      <ArrowRight className="h-4 w-4 ml-2" />
-                    </>
-                  )}
+                  Continue to Contract <ArrowRight className="h-4 w-4 ml-2" />
                 </Button>
               </div>
             )}
@@ -444,11 +432,11 @@ export default function AddClientWizard({
                     <ArrowLeft className="h-4 w-4 mr-2" /> Back
                   </Button>
                   <Button
-                    onClick={() => generateMutation.mutate()}
-                    disabled={!selectedTemplate || generateMutation.isPending}
+                    onClick={() => createMutation.mutate()}
+                    disabled={!selectedTemplate || createMutation.isPending}
                     className="bg-gradient-to-r from-primary to-secondary"
                   >
-                    {generateMutation.isPending ? (
+                    {createMutation.isPending ? (
                       <>
                         <Loader2 className="h-4 w-4 mr-2 animate-spin" />{" "}
                         Preparing…
