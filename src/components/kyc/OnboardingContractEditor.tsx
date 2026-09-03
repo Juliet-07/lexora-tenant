@@ -8,14 +8,12 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Textarea } from "@/components/ui/textarea";
+import { DocumentEditorDialog } from "@/components/DocumentEditorDialog";
 import {
   Loader2,
   Send,
   FileText,
   Pencil,
-  Save,
-  X,
   CheckCircle2,
   Clock,
   XCircle,
@@ -79,8 +77,7 @@ export default function OnboardingContractEditor({
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const [editing, setEditing] = useState(false);
-  const [draftBody, setDraftBody] = useState("");
+  const [editorOpen, setEditorOpen] = useState(false);
 
   const { data: contract, isLoading } = useQuery({
     queryKey: ["onboarding-contract", contractId],
@@ -89,8 +86,7 @@ export default function OnboardingContractEditor({
   });
 
   useEffect(() => {
-    setEditing(false);
-    if (contract) setDraftBody(contract.renderedBody);
+    setEditorOpen(false);
   }, [contract?._id]);
 
   const invalidate = (updated?: SignableContract) => {
@@ -102,11 +98,11 @@ export default function OnboardingContractEditor({
   };
 
   const saveMutation = useMutation({
-    mutationFn: () =>
-      editContractBody(contractId!, { renderedBody: draftBody }),
+    mutationFn: (html: string) =>
+      editContractBody(contractId!, { renderedBody: html }),
     onSuccess: (updated) => {
       invalidate(updated);
-      setEditing(false);
+      setEditorOpen(false);
       toast({ title: "Changes saved" });
     },
     onError: (err: any) =>
@@ -158,155 +154,141 @@ export default function OnboardingContractEditor({
   const canCountersign = contract && contract.signatureStatus === "signed";
 
   return (
-    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-        {isLoading || !contract ? (
-          <div className="flex items-center justify-center py-16">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-          </div>
-        ) : (
-          <>
-            <DialogHeader>
-              <div className="flex items-center justify-between gap-3 pr-6">
-                <DialogTitle className="flex items-center gap-2">
-                  <FileText className="h-4 w-4 text-muted-foreground" />
-                  {contract.title}
-                </DialogTitle>
-                {meta && (
-                  <Badge className={`border ${meta.className} shrink-0`}>
-                    <span className="flex items-center gap-1">
-                      {meta.icon} {meta.label}
-                    </span>
-                  </Badge>
-                )}
-              </div>
-            </DialogHeader>
+    <>
+      <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          {isLoading || !contract ? (
+            <div className="flex items-center justify-center py-16">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <>
+              <DialogHeader>
+                <div className="flex items-center justify-between gap-3 pr-6">
+                  <DialogTitle className="flex items-center gap-2">
+                    <FileText className="h-4 w-4 text-muted-foreground" />
+                    {contract.title}
+                  </DialogTitle>
+                  {meta && (
+                    <Badge className={`border ${meta.className} shrink-0`}>
+                      <span className="flex items-center gap-1">
+                        {meta.icon} {meta.label}
+                      </span>
+                    </Badge>
+                  )}
+                </div>
+              </DialogHeader>
 
-            <p className="text-sm text-muted-foreground -mt-2">
-              For {contract.counterparty} · {contract.ref}
-            </p>
+              <p className="text-sm text-muted-foreground -mt-2">
+                For {contract.counterparty} · {contract.ref}
+              </p>
 
-            <div className="rounded-lg border">
-              <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/40">
-                <span className="text-xs text-muted-foreground">Document</span>
-                {canEdit && !editing && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 px-2 text-xs"
-                    onClick={() => setEditing(true)}
-                  >
-                    <Pencil className="h-3 w-3 mr-1" /> Edit
-                  </Button>
-                )}
-                {editing && (
-                  <div className="flex gap-1">
+              <div className="rounded-lg border">
+                <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/40">
+                  <span className="text-xs text-muted-foreground">
+                    Document
+                  </span>
+                  {canEdit && (
                     <Button
                       variant="ghost"
                       size="sm"
                       className="h-7 px-2 text-xs"
-                      onClick={() => {
-                        setDraftBody(contract.renderedBody);
-                        setEditing(false);
-                      }}
+                      onClick={() => setEditorOpen(true)}
                     >
-                      <X className="h-3 w-3 mr-1" /> Cancel
+                      <Pencil className="h-3 w-3 mr-1" /> Edit
                     </Button>
-                    <Button
-                      size="sm"
-                      className="h-7 px-2 text-xs bg-gradient-to-r from-primary to-secondary"
-                      onClick={() => saveMutation.mutate()}
-                      disabled={saveMutation.isPending}
-                    >
-                      {saveMutation.isPending ? (
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                      ) : (
-                        <>
-                          <Save className="h-3 w-3 mr-1" /> Save
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                )}
-              </div>
-              {editing ? (
-                <Textarea
-                  value={draftBody}
-                  onChange={(e) => setDraftBody(e.target.value)}
-                  className="min-h-[280px] border-0 rounded-none focus-visible:ring-0 font-mono text-xs"
-                />
-              ) : (
+                  )}
+                </div>
                 <div
                   className="p-4 max-h-72 overflow-y-auto text-sm prose prose-sm max-w-none"
                   dangerouslySetInnerHTML={{ __html: contract.renderedBody }}
                 />
-              )}
-            </div>
-
-            {contract.signatureStatus === "declined" && (
-              <div className="rounded-lg bg-destructive/5 border border-destructive/20 p-3 text-sm text-destructive">
-                Declined by the client
-                {contract.declineReason ? `: "${contract.declineReason}"` : "."}
               </div>
-            )}
 
-            {canSend && (
-              <Button
-                className="w-full bg-gradient-to-r from-primary to-secondary"
-                onClick={() => sendMutation.mutate()}
-                disabled={sendMutation.isPending || editing}
-              >
-                {sendMutation.isPending ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Sending…
-                  </>
-                ) : (
-                  <>
-                    <Send className="h-4 w-4 mr-2" /> Send Contract for Signing
-                  </>
-                )}
-              </Button>
-            )}
+              {contract.signatureStatus === "declined" && (
+                <div className="rounded-lg bg-destructive/5 border border-destructive/20 p-3 text-sm text-destructive">
+                  Declined by the client
+                  {contract.declineReason
+                    ? `: "${contract.declineReason}"`
+                    : "."}
+                </div>
+              )}
 
-            {canCountersign && (
-              <div className="space-y-2 rounded-lg border p-3">
-                <p className="text-sm">
-                  Signed by {contract.signature?.signerName} on{" "}
-                  {contract.signature &&
-                    new Date(contract.signature.signedAt).toLocaleDateString()}
-                  . Countersign to finalise and automatically activate the
-                  client.
-                </p>
-                <input
-                  className="w-full h-9 rounded-md border px-3 text-sm"
-                  placeholder="Your full name"
-                  value={signerName}
-                  onChange={(e) => setSignerName(e.target.value)}
-                />
+              {canSend && (
                 <Button
                   className="w-full bg-gradient-to-r from-primary to-secondary"
-                  onClick={() => countersignMutation.mutate()}
-                  disabled={!signerName.trim() || countersignMutation.isPending}
+                  onClick={() => sendMutation.mutate()}
+                  disabled={sendMutation.isPending || editorOpen}
                 >
-                  {countersignMutation.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
+                  {sendMutation.isPending ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Sending…
+                    </>
                   ) : (
-                    "Countersign & Activate Client"
+                    <>
+                      <Send className="h-4 w-4 mr-2" /> Send Contract for
+                      Signing
+                    </>
                   )}
                 </Button>
-              </div>
-            )}
+              )}
 
-            {contract.signatureStatus === "countersigned" && (
-              <div className="rounded-lg bg-success/5 border border-success/20 p-3 text-sm text-success flex items-center gap-2">
-                <CheckCircle2 className="h-4 w-4 shrink-0" />
-                Fully executed. The client's login credentials and onboarding
-                link were sent automatically.
-              </div>
-            )}
-          </>
-        )}
-      </DialogContent>
-    </Dialog>
+              {canCountersign && (
+                <div className="space-y-2 rounded-lg border p-3">
+                  <p className="text-sm">
+                    Signed by {contract.signature?.signerName} on{" "}
+                    {contract.signature &&
+                      new Date(
+                        contract.signature.signedAt,
+                      ).toLocaleDateString()}
+                    . Countersign to finalise and automatically activate the
+                    client.
+                  </p>
+                  <input
+                    className="w-full h-9 rounded-md border px-3 text-sm"
+                    placeholder="Your full name"
+                    value={signerName}
+                    onChange={(e) => setSignerName(e.target.value)}
+                  />
+                  <Button
+                    className="w-full bg-gradient-to-r from-primary to-secondary"
+                    onClick={() => countersignMutation.mutate()}
+                    disabled={
+                      !signerName.trim() || countersignMutation.isPending
+                    }
+                  >
+                    {countersignMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      "Countersign & Activate Client"
+                    )}
+                  </Button>
+                </div>
+              )}
+
+              {contract.signatureStatus === "countersigned" && (
+                <div className="rounded-lg bg-success/5 border border-success/20 p-3 text-sm text-success flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 shrink-0" />
+                  Fully executed. The client's login credentials and onboarding
+                  link were sent automatically.
+                </div>
+              )}
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {contract && (
+        <DocumentEditorDialog
+          open={editorOpen}
+          title={`Edit — ${contract.title}`}
+          subtitle={`For ${contract.counterparty}`}
+          value={contract.renderedBody}
+          onClose={() => setEditorOpen(false)}
+          onSave={(html) => saveMutation.mutate(html)}
+          saving={saveMutation.isPending}
+        />
+      )}
+    </>
   );
 }
