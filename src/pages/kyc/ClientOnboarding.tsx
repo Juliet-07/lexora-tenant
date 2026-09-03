@@ -376,7 +376,7 @@ function ClientCard({
                   {client.documents.map((doc: any, i: number) => (
                     <div
                       key={i}
-                      className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted/50 text-sm"
+                      className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/5 border border-primary/10 text-sm"
                     >
                       <FileText className="h-3.5 w-3.5 text-muted-foreground" />
                       <span>{doc.name}</span>
