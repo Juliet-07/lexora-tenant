@@ -88,49 +88,98 @@ export default function ClientOnboarding() {
   // ─────────────────────────────────────────────────────────
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-2xl font-bold">Client Onboarding</h1>
-          <p className="text-sm text-muted-foreground">
-            {loading
-              ? "Loading…"
-              : `${pending.length + inProgress.length} total client${pending.length + inProgress.length === 1 ? "" : "s"}`}
-          </p>
+      {/* Hero header */}
+      <div className="relative overflow-hidden rounded-2xl border bg-gradient-to-r from-primary/10 via-secondary/5 to-background p-6 sm:p-8">
+        <div className="absolute -right-16 -top-16 h-48 w-48 rounded-full bg-gradient-to-br from-primary/15 to-secondary/15 blur-2xl" />
+        <div className="relative flex items-center justify-between flex-wrap gap-4">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
+              Client Onboarding
+            </h1>
+            <p className="text-sm text-muted-foreground mt-1">
+              {loading
+                ? "Loading…"
+                : `${pending.length + inProgress.length} total client${pending.length + inProgress.length === 1 ? "" : "s"} across the onboarding pipeline`}
+            </p>
+          </div>
+
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="icon"
+              className="bg-background/60 backdrop-blur"
+              onClick={handleRefresh}
+              disabled={refreshing}
+            >
+              <RefreshCw
+                className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`}
+              />
+            </Button>
+
+            <Button
+              className="bg-gradient-to-r from-primary to-secondary text-white shadow-md shadow-primary/25"
+              onClick={() => setWizardOpen(true)}
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Add Client
+            </Button>
+
+            <AddClientWizard
+              open={wizardOpen}
+              onClose={() => setWizardOpen(false)}
+              onDone={handleRefresh}
+            />
+          </div>
         </div>
 
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleRefresh}
-            disabled={refreshing}
-          >
-            <RefreshCw
-              className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`}
-            />
-          </Button>
-
-          <Button
-            className="bg-gradient-to-r from-primary to-secondary"
-            onClick={() => setWizardOpen(true)}
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Add Client
-          </Button>
-
-          <AddClientWizard
-            open={wizardOpen}
-            onClose={() => setWizardOpen(false)}
-            onDone={handleRefresh}
-          />
+        {/* Pipeline stats */}
+        <div className="relative grid grid-cols-1 sm:grid-cols-3 gap-3 mt-6">
+          {[
+            {
+              label: "Not Started",
+              value: pending.length,
+              hint: "Awaiting first action",
+              icon: Clock,
+              accent: "text-primary bg-primary/10",
+            },
+            {
+              label: "Onboarding",
+              value: inProgress.length,
+              hint: "Forms in progress or submitted",
+              icon: Loader2,
+              accent: "text-warning bg-warning/10",
+            },
+            {
+              label: "Contracting",
+              value: "—",
+              hint: "See the Contracting tab",
+              icon: FileText,
+              accent: "text-secondary bg-secondary/10",
+            },
+          ].map((s) => (
+            <div
+              key={s.label}
+              className="flex items-center gap-3 rounded-xl border bg-background/70 backdrop-blur px-4 py-3"
+            >
+              <div className={`p-2.5 rounded-lg ${s.accent}`}>
+                <s.icon className="h-4 w-4" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-lg font-bold leading-none">{s.value}</p>
+                <p className="text-xs font-medium mt-1">{s.label}</p>
+                <p className="text-[11px] text-muted-foreground truncate">
+                  {s.hint}
+                </p>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
 
       {/* Tabs */}
       <Tabs defaultValue="pending">
-        <TabsList>
-          <TabsTrigger value="pending">
+        <TabsList className="bg-muted/60 p-1 rounded-xl">
+          <TabsTrigger value="pending" className="rounded-lg">
             Not Started
             {pending.length > 0 && (
               <span className="ml-2 rounded-full bg-primary/10 text-primary text-xs px-2 py-0.5">
@@ -138,7 +187,7 @@ export default function ClientOnboarding() {
               </span>
             )}
           </TabsTrigger>
-          <TabsTrigger value="inProgress">
+          <TabsTrigger value="inProgress" className="rounded-lg">
             Onboarding
             {inProgress.length > 0 && (
               <span className="ml-2 rounded-full bg-warning/10 text-warning text-xs px-2 py-0.5">
@@ -146,7 +195,9 @@ export default function ClientOnboarding() {
               </span>
             )}
           </TabsTrigger>
-          <TabsTrigger value="contracting">Contracting</TabsTrigger>
+          <TabsTrigger value="contracting" className="rounded-lg">
+            Contracting
+          </TabsTrigger>
         </TabsList>
 
         {/* Tab 1 — Not started */}
