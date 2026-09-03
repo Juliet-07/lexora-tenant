@@ -6,8 +6,9 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Loader2, Save, X } from "lucide-react";
+import { Loader2, Save, X, Pencil, Eye } from "lucide-react";
 import { RichTextEditor } from "@/components/RichTextEditor";
 
 interface DocumentEditorDialogProps {
@@ -38,26 +39,54 @@ export function DocumentEditorDialog({
   saving = false,
 }: DocumentEditorDialogProps) {
   const [draft, setDraft] = useState(value);
+  const [mode, setMode] = useState<"edit" | "preview">("edit");
 
-  // Reset the draft to the real current value each time the dialog
-  // opens, so a previous, unsaved edit never leaks into a later
-  // session.
+  // Reset the draft (and always land back on Edit) each time the
+  // dialog opens, so a previous, unsaved edit or a lingering preview
+  // never leaks into a later session.
   useEffect(() => {
-    if (open) setDraft(value);
+    if (open) {
+      setDraft(value);
+      setMode("edit");
+    }
   }, [open, value]);
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
         <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-          {subtitle && (
-            <p className="text-sm text-muted-foreground">{subtitle}</p>
-          )}
+          <div className="flex items-center justify-between gap-3 pr-6">
+            <div>
+              <DialogTitle>{title}</DialogTitle>
+              {subtitle && (
+                <p className="text-sm text-muted-foreground">{subtitle}</p>
+              )}
+            </div>
+            <Tabs
+              value={mode}
+              onValueChange={(v) => setMode(v as "edit" | "preview")}
+            >
+              <TabsList className="h-8">
+                <TabsTrigger value="edit" className="text-xs h-6 px-2.5">
+                  <Pencil className="h-3 w-3 mr-1" /> Edit
+                </TabsTrigger>
+                <TabsTrigger value="preview" className="text-xs h-6 px-2.5">
+                  <Eye className="h-3 w-3 mr-1" /> Preview
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </div>
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto">
-          <RichTextEditor value={draft} onChange={setDraft} minHeight={420} />
+          {mode === "edit" ? (
+            <RichTextEditor value={draft} onChange={setDraft} minHeight={420} />
+          ) : (
+            <div
+              className="prose prose-sm max-w-none rounded-md border bg-card p-6 text-sm leading-relaxed min-h-[420px]"
+              dangerouslySetInnerHTML={{ __html: draft }}
+            />
+          )}
         </div>
 
         <DialogFooter>

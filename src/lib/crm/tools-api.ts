@@ -868,6 +868,20 @@ export const downloadContractPdf = async (
   window.URL.revokeObjectURL(url);
 };
 
+// Real, fully-executed copy — only ever succeeds once the backend's
+// own guard confirms both parties have actually signed. Opens in a
+// new tab rather than downloading, since "view" and "download" are
+// different real needs.
+export const viewSignedContractPdf = async (id: string): Promise<void> => {
+  const res = await api.get(`/tools/contracts/${id}/pdf`, {
+    responseType: "blob",
+  });
+  const blob = new Blob([res.data], { type: "application/pdf" });
+  const url = window.URL.createObjectURL(blob);
+  window.open(url, "_blank", "noopener,noreferrer");
+  setTimeout(() => window.URL.revokeObjectURL(url), 30_000);
+};
+
 // Real document preview — works at any status (draft, sent,
 // signed...), showing the real letterhead and real current content
 // exactly as it stands. Opens in a new tab rather than downloading.
