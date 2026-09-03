@@ -279,16 +279,21 @@ function ClientCard({
   const Icon = isCorporate ? Building2 : UserIcon;
 
   return (
-    <Card className="hover:shadow-md transition-shadow">
+    <Card className="group hover:shadow-lg hover:shadow-primary/5 hover:border-primary/30 transition-all duration-200 overflow-hidden">
+      <div className="h-1 w-full bg-gradient-to-r from-primary/60 via-secondary/60 to-transparent" />
       <CardContent className="p-5">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div className="flex-1 space-y-3 min-w-[260px]">
             {/* Name + badges */}
             <div className="flex items-center gap-3 flex-wrap">
-              <div className="h-10 w-10 rounded-full bg-gradient-to-br from-primary/15 to-secondary/15 flex items-center justify-center text-primary">
-                <Icon className="h-5 w-5" />
+              <div className="h-11 w-11 rounded-xl bg-gradient-to-br from-primary to-secondary p-[1.5px] shadow-sm">
+                <div className="h-full w-full rounded-[10px] bg-background flex items-center justify-center text-primary">
+                  <Icon className="h-5 w-5" />
+                </div>
               </div>
-              <h3 className="text-lg font-semibold">{displayName(client)}</h3>
+              <h3 className="text-lg font-semibold group-hover:text-primary transition-colors">
+                {displayName(client)}
+              </h3>
               <Badge className={`border ${toneFor(client.status)}`}>
                 {prettyLabel(client.status)}
               </Badge>
