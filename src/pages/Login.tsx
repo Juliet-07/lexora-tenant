@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { AlertCircle, Loader2 } from "lucide-react";
-import loginBg from "@/assets/login-bg.jpg.asset.json";
+import loginBg from "@/assets/login-bg.jpg";
 
 export default function Login() {
   const { login, isLoading } = useAuth();
@@ -30,7 +30,7 @@ export default function Login() {
       {/* ── Left brand panel ─────────────────────────────── */}
       <div className="relative hidden lg:flex lg:w-[55%] flex-col justify-between overflow-hidden">
         <img
-          src={loginBg.url}
+          src={loginBg}
           alt="African business team collaborating in a modern office"
           className="absolute inset-0 h-full w-full object-cover"
         />
