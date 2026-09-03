@@ -87,6 +87,7 @@ export interface Contract {
   _id: string;
   ref: string;
   title: string;
+  createdAt: string;
   counterparty: string;
   type: ContractType;
   stage: ContractStage;
@@ -98,6 +99,9 @@ export interface Contract {
   autoRenew: boolean;
   owner: string;
   clientId: string | null;
+  // Real marker set at generation time — distinguishes a contract
+  // issued as part of KYC onboarding from an ordinary CRM contract.
+  origin?: "crm" | "kyc_onboarding";
   mandateId: string | null;
   mandateName: string;
   rounds: NegotiationRound[];
@@ -146,6 +150,17 @@ export const fetchContract = async (id: string): Promise<SignableContract> => {
     amendments: d.amendments ?? [],
     approvalChain: d.approvalChain ?? [],
   };
+};
+
+// Real, filtered list for the KYC onboarding module's own
+// Contracting tab — every contract issued as part of onboarding a
+// client, never the tenant's whole CRM contract book.
+export const fetchOnboardingContracts = async (): Promise<
+  SignableContract[]
+> => {
+  const res = await api.get("/tenant/onboarding-contracts");
+  const d = res.data?.data ?? res.data;
+  return Array.isArray(d) ? d : [];
 };
 export const fetchExpiringContracts = async (
   withinDays = 90,

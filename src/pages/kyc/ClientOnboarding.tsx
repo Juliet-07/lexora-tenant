@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useState } from "react";
+import { Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -27,6 +27,7 @@ import {
 } from "@/lib/client/clients-api";
 import { api } from "@/lib/api";
 import AddClientWizard from "@/components/kyc/AddClientWizard";
+import OnboardingContractingTab from "./OnboardingContractingTab";
 
 // ─────────────────────────────────────────────────────────────
 // API FETCHERS
@@ -50,24 +51,6 @@ const fetchInProgress = async (): Promise<ApiClient[]> => {
 
 export default function ClientOnboarding() {
   const [wizardOpen, setWizardOpen] = useState(false);
-  const [resumeContractId, setResumeContractId] = useState<string | null>(null);
-  const [searchParams, setSearchParams] = useSearchParams();
-
-  // Real resume — reached via "Return to Onboarding" from the CRM
-  // contract editor. Opens the wizard straight back up with the real
-  // (possibly just-edited) contract, then clears the query param so
-  // refreshing this page doesn't keep reopening it.
-  useEffect(() => {
-    const id = searchParams.get("resumeContract");
-    if (id) {
-      setResumeContractId(id);
-      setWizardOpen(true);
-      searchParams.delete("resumeContract");
-      searchParams.delete("resumeClient");
-      setSearchParams(searchParams, { replace: true });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   // ── Queries ───────────────────────────────────────────────
   const {
@@ -138,12 +121,8 @@ export default function ClientOnboarding() {
 
           <AddClientWizard
             open={wizardOpen}
-            onClose={() => {
-              setWizardOpen(false);
-              setResumeContractId(null);
-            }}
+            onClose={() => setWizardOpen(false)}
             onDone={handleRefresh}
-            resumeContractId={resumeContractId}
           />
         </div>
       </div>
@@ -167,6 +146,7 @@ export default function ClientOnboarding() {
               </span>
             )}
           </TabsTrigger>
+          <TabsTrigger value="contracting">Contracting</TabsTrigger>
         </TabsList>
 
         {/* Tab 1 — Not started */}
@@ -222,6 +202,11 @@ export default function ClientOnboarding() {
               ))}
             </div>
           )}
+        </TabsContent>
+
+        {/* Tab 3 — Contracting */}
+        <TabsContent value="contracting" className="mt-4">
+          <OnboardingContractingTab />
         </TabsContent>
       </Tabs>
     </div>

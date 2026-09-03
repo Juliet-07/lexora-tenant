@@ -1,10 +1,5 @@
 import { useMemo, useState } from "react";
-import {
-  Link,
-  useNavigate,
-  useParams,
-  useSearchParams,
-} from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -161,12 +156,6 @@ export default function ContractDetail() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const qc = useQueryClient();
-
-  // Real return-to-onboarding round trip — set only when reached
-  // from the KYC onboarding wizard's "Edit in CRM Editor" link.
-  const [searchParams] = useSearchParams();
-  const returnToOnboarding = searchParams.get("returnTo") === "onboarding";
-  const resumeClientId = searchParams.get("resumeClient") || "";
 
   const onErr = (title: string) => (err: any) =>
     toast({
@@ -519,30 +508,6 @@ export default function ContractDetail() {
           {contract.ref} · {contract.counterparty} · {contract.type}
         </span>
       </div>
-
-      {/* ── Return to onboarding — only shown when reached from the
-          KYC onboarding wizard's "Edit in CRM Editor" link ── */}
-      {returnToOnboarding && (
-        <Card className="border-primary/30 bg-primary/5">
-          <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
-            <p className="text-sm">
-              Editing this contract for a client still being onboarded. Make
-              your changes, then return to continue where you left off.
-            </p>
-            <Button
-              size="sm"
-              className="bg-gradient-to-r from-primary to-secondary shrink-0"
-              onClick={() =>
-                navigate(
-                  `/clients/onboarding?resumeContract=${id}&resumeClient=${resumeClientId}`,
-                )
-              }
-            >
-              <ArrowLeft className="mr-2 h-4 w-4" /> Return to Onboarding
-            </Button>
-          </CardContent>
-        </Card>
-      )}
 
       {/* ── Header ── */}
       <Card className="overflow-hidden">
