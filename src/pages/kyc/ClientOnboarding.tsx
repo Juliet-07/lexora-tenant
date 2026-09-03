@@ -308,7 +308,7 @@ function ClientCard({
             </div>
 
             {/* Info grid */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm rounded-xl bg-muted/40 border border-muted p-4">
               <div>
                 <span className="text-muted-foreground block text-xs">
                   Email
