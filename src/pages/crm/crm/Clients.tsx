@@ -39,6 +39,9 @@ import {
   Timer,
   UserCog,
   Link2,
+  Archive,
+  RotateCcw,
+  History,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
@@ -62,6 +65,13 @@ import {
   type UpsertClientCommercialPayload,
 } from "@/lib/crm/client-commercial-api";
 import { fetchEmployees } from "@/lib/hr/hr-api";
+import {
+  useExClients,
+  archiveClient,
+  restoreClient,
+  EXIT_REASONS,
+  type ExClient,
+} from "@/lib/crm/exClientsStore";
 
 const money = (n: number, c = "USD") =>
   n.toLocaleString(undefined, {
@@ -126,6 +136,12 @@ export default function Clients() {
   const [riskFilter, setRiskFilter] = useState("all");
   const [slaFilter, setSlaFilter] = useState("all");
   const [draft, setDraft] = useState<Draft | null>(null);
+  const exClients = useExClients();
+  const exList = Object.values(exClients);
+  const [exQ, setExQ] = useState("");
+  const [archiveDraft, setArchiveDraft] = useState<
+    (Omit<ExClient, "archivedAt"> & { archivedAt?: string }) | null
+  >(null);
 
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: ["clientCommercials"] });
@@ -262,6 +278,7 @@ export default function Clients() {
         <TabsList>
           <TabsTrigger value="clients">Clients</TabsTrigger>
           <TabsTrigger value="sla">SLA coverage</TabsTrigger>
+          <TabsTrigger value="ex">Ex-clients ({exList.length})</TabsTrigger>
         </TabsList>
 
         <TabsContent value="clients" className="pt-4">
@@ -441,14 +458,51 @@ export default function Clients() {
                               : "—"}
                           </TableCell>
                           <TableCell className="text-right">
-                            <Button
-                              size="sm"
-                              variant={assigned ? "outline" : "default"}
-                              onClick={() => setDraft(commercial)}
-                            >
-                              <UserCog className="mr-1 h-3 w-3" />
-                              {assigned ? "Edit" : "Assign"}
-                            </Button>
+                            <div className="flex justify-end gap-2">
+                              <Button
+                                size="sm"
+                                variant={assigned ? "outline" : "default"}
+                                onClick={() => setDraft(commercial)}
+                              >
+                                <UserCog className="mr-1 h-3 w-3" />
+                                {assigned ? "Edit" : "Assign"}
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() =>
+                                  setArchiveDraft({
+                                    clientId: client._id,
+                                    name,
+                                    email: client.email ?? "",
+                                    classification: prettyLabel(
+                                      client.classifications,
+                                    ),
+                                    country: client.country ?? "—",
+                                    relationshipManager:
+                                      commercial.relationshipManager || "—",
+                                    serviceLines:
+                                      commercial.serviceLines ?? [],
+                                    lifetimeRevenue:
+                                      commercial.revenueYtd ?? 0,
+                                    currency: commercial.currency ?? "USD",
+                                    relationshipFrom: new Date(
+                                      client.createdAt,
+                                    )
+                                      .toISOString()
+                                      .slice(0, 10),
+                                    relationshipTo: new Date()
+                                      .toISOString()
+                                      .slice(0, 10),
+                                    reason: EXIT_REASONS[0],
+                                    notes: "",
+                                  })
+                                }
+                              >
+                                <Archive className="mr-1 h-3 w-3" />
+                                Archive
+                              </Button>
+                            </div>
                           </TableCell>
                         </TableRow>
                       );
