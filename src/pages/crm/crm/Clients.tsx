@@ -189,6 +189,7 @@ export default function Clients() {
 
   const filtered = rows.filter(
     (r) =>
+      !exClients[r.client._id] &&
       (serviceFilter === "all" ||
         (r.commercial.serviceLines ?? []).includes(serviceFilter)) &&
       (rmFilter === "all" || r.commercial.relationshipManager === rmFilter) &&
@@ -590,7 +591,238 @@ export default function Clients() {
             })}
           </div>
         </TabsContent>
+
+        <TabsContent value="ex" className="space-y-4 pt-4">
+          <Card>
+            <CardContent className="space-y-4 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <History className="h-4 w-4" />
+                  Former clients. Their records stay retained here and can be
+                  restored to the active list at any time.
+                </p>
+                <div className="relative w-full sm:w-64">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    className="pl-9"
+                    placeholder="Search ex-clients…"
+                    value={exQ}
+                    onChange={(e) => setExQ(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Client</TableHead>
+                    <TableHead>Relationship</TableHead>
+                    <TableHead>Former RM</TableHead>
+                    <TableHead>Service lines</TableHead>
+                    <TableHead>Reason</TableHead>
+                    <TableHead className="text-right">
+                      Lifetime revenue
+                    </TableHead>
+                    <TableHead className="text-right">Action</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {exList
+                    .filter((x) =>
+                      `${x.name} ${x.email} ${x.reason}`
+                        .toLowerCase()
+                        .includes(exQ.toLowerCase()),
+                    )
+                    .map((x) => (
+                      <TableRow key={x.clientId}>
+                        <TableCell>
+                          <p className="text-sm font-medium">{x.name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {x.classification} · {x.email || "—"} ·{" "}
+                            {x.country}
+                          </p>
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground">
+                          {x.relationshipFrom} → {x.relationshipTo}
+                          <span className="block">
+                            Archived{" "}
+                            {new Date(x.archivedAt).toLocaleDateString()}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-sm">
+                          {x.relationshipManager}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap gap-1">
+                            {x.serviceLines.length ? (
+                              x.serviceLines.map((s) => (
+                                <Badge
+                                  key={s}
+                                  variant="secondary"
+                                  className="text-xs"
+                                >
+                                  {s}
+                                </Badge>
+                              ))
+                            ) : (
+                              <span className="text-xs text-muted-foreground">
+                                —
+                              </span>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-sm">
+                          {x.reason}
+                          {x.notes && (
+                            <span className="block text-xs text-muted-foreground">
+                              {x.notes}
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right text-sm">
+                          {money(x.lifetimeRevenue, x.currency)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              restoreClient(x.clientId);
+                              toast({
+                                title: "Client reactivated",
+                                description: `${x.name} is back on the active client list.`,
+                              });
+                            }}
+                          >
+                            <RotateCcw className="mr-1 h-3 w-3" />
+                            Restore
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  {exList.length === 0 && (
+                    <TableRow>
+                      <TableCell
+                        colSpan={7}
+                        className="py-8 text-center text-sm text-muted-foreground"
+                      >
+                        No ex-clients recorded yet. Archive a client from the
+                        Clients tab to keep their history here.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
+
+      <Dialog
+        open={!!archiveDraft}
+        onOpenChange={(o) => !o && setArchiveDraft(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Archive as ex-client — {archiveDraft?.name}</DialogTitle>
+          </DialogHeader>
+          {archiveDraft && (
+            <div className="grid gap-3">
+              <div>
+                <Label>Reason</Label>
+                <Select
+                  value={archiveDraft.reason}
+                  onValueChange={(v) =>
+                    setArchiveDraft({ ...archiveDraft, reason: v })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {EXIT_REASONS.map((r) => (
+                      <SelectItem key={r} value={r}>
+                        {r}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <Label>Relationship started</Label>
+                  <Input
+                    type="date"
+                    value={archiveDraft.relationshipFrom}
+                    onChange={(e) =>
+                      setArchiveDraft({
+                        ...archiveDraft,
+                        relationshipFrom: e.target.value,
+                      })
+                    }
+                  />
+                </div>
+                <div>
+                  <Label>Relationship ended</Label>
+                  <Input
+                    type="date"
+                    value={archiveDraft.relationshipTo}
+                    onChange={(e) =>
+                      setArchiveDraft({
+                        ...archiveDraft,
+                        relationshipTo: e.target.value,
+                      })
+                    }
+                  />
+                </div>
+              </div>
+              <div>
+                <Label>Lifetime revenue</Label>
+                <Input
+                  type="number"
+                  value={archiveDraft.lifetimeRevenue}
+                  onChange={(e) =>
+                    setArchiveDraft({
+                      ...archiveDraft,
+                      lifetimeRevenue: Number(e.target.value),
+                    })
+                  }
+                />
+              </div>
+              <div>
+                <Label>Closing notes</Label>
+                <Textarea
+                  rows={3}
+                  value={archiveDraft.notes}
+                  placeholder="Why the relationship ended, anything worth remembering if they return…"
+                  onChange={(e) =>
+                    setArchiveDraft({ ...archiveDraft, notes: e.target.value })
+                  }
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setArchiveDraft(null)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (!archiveDraft) return;
+                const { archivedAt, ...rest } = archiveDraft;
+                archiveClient(rest);
+                setArchiveDraft(null);
+                toast({
+                  title: "Moved to ex-clients",
+                  description: `${rest.name}'s record is retained and searchable.`,
+                });
+              }}
+            >
+              Archive client
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!draft} onOpenChange={(o) => !o && setDraft(null)}>
         <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
