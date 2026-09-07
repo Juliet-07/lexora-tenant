@@ -291,6 +291,12 @@ export default function AssignedClients() {
           )}
         </CardContent>
       </Card>
+        </TabsContent>
+
+        <TabsContent value="contacts" className="pt-4">
+          <MyContactsPanel />
+        </TabsContent>
+      </Tabs>
 
       <Sheet open={!!selected} onOpenChange={(o) => !o && setSelected(null)}>
         <SheetContent className="sm:max-w-lg overflow-y-auto">
