@@ -13,6 +13,7 @@ import {
   OnboardingProgressPill,
 } from "@/components/onboarding/OnboardingReminder";
 import { ViewSwitcher } from "./ViewSwitcher";
+import { FloatingTimer } from "@/components/crm/FloatingTimer";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -77,6 +78,7 @@ export function AppLayout({ children }: AppLayoutProps) {
           <main className="flex-1 overflow-auto p-6">{children}</main>
         </div>
         {!isAdmin && <OnboardingReminder />}
+        <FloatingTimer />
       </div>
     </SidebarProvider>
   );

@@ -28,6 +28,8 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Progress } from "@/components/ui/progress";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { MyContactsPanel } from "@/components/crm/MyContactsPanel";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Users,
@@ -148,6 +150,13 @@ export default function AssignedClients() {
         ))}
       </div>
 
+      <Tabs defaultValue="clients">
+        <TabsList>
+          <TabsTrigger value="clients">Clients</TabsTrigger>
+          <TabsTrigger value="contacts">Contacts</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="clients" className="pt-4">
       <Card>
         <CardHeader className="pb-3">
           <div className="flex flex-col md:flex-row md:items-center gap-3 md:justify-between">
@@ -282,6 +291,12 @@ export default function AssignedClients() {
           )}
         </CardContent>
       </Card>
+        </TabsContent>
+
+        <TabsContent value="contacts" className="pt-4">
+          <MyContactsPanel />
+        </TabsContent>
+      </Tabs>
 
       <Sheet open={!!selected} onOpenChange={(o) => !o && setSelected(null)}>
         <SheetContent className="sm:max-w-lg overflow-y-auto">
