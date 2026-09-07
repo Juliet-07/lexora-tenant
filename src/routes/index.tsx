@@ -2,6 +2,7 @@ import { Route, Routes } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import Login from "@/pages/Login";
 import ForgotPassword from "@/pages/ForgotPassword";
+import Reactivate from "@/pages/Reactivate";
 import ResetPassword from "@/pages/ResetPassword";
 import NotFound from "@/pages/NotFound";
 import { coreRoutes } from "./core.routes";
@@ -34,6 +35,7 @@ const PUBLIC_ROUTE_PATTERNS = [
   /^\/deal-review\/offer\/[^/]+$/,
   /^\/forgot-password$/,
   /^\/reset-password$/,
+  /^\/reactivate$/,
 ];
 
 export function AppRoutes() {
@@ -65,6 +67,7 @@ export function AppRoutes() {
         />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/reactivate" element={<Reactivate />} />
       </Routes>
     );
   }
