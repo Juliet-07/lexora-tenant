@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Card,
@@ -25,11 +25,18 @@ import {
   Check,
   AlertTriangle,
   CheckCircle2,
-  ExternalLink,
+  Send,
+  Mail,
+  Clock,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { useModule } from "@/contexts/ModuleContext";
 import { useToast } from "@/hooks/use-toast";
+import {
+  fetchMyTransactions,
+  requestUpgrade,
+  markPaymentClaimed,
+} from "@/lib/tenant-payments-api";
 
 // ─────────────────────────────────────────────────────────────
 // TYPES
@@ -52,35 +59,21 @@ interface ApiPlan {
 
 type Currency = "USD" | "RWF";
 
+const fmtAmount = (amount: number, currency: string) =>
+  currency === "RWF"
+    ? `RWF ${amount.toLocaleString()}`
+    : `$${amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
+
 // ─────────────────────────────────────────────────────────────
 // COMPONENT
 // ─────────────────────────────────────────────────────────────
 
 export default function PlanTab() {
-  const { subscription, refetchDashboard } = useModule();
+  const { subscription } = useModule();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const [selected, setSelected] = useState<string | null>(null);
-  const [currency, setCurrency] = useState<Currency>("RWF");
-  const [paymentSuccess, setPaymentSuccess] = useState(false);
-
-  // ── Check for payment return from DPO ──────────────────────
-  // DPO redirects back to ?payment=success&txn=...
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("payment") === "success") {
-      setPaymentSuccess(true);
-      // Clean up URL without reloading
-      window.history.replaceState({}, document.title, window.location.pathname);
-      // Refresh subscription data after a short delay
-      // (DPO callback may still be processing)
-      setTimeout(() => {
-        refetchDashboard();
-        queryClient.invalidateQueries({ queryKey: ["tenant-available-plans"] });
-      }, 2000);
-    }
-  }, []);
+  const [selectedCurrency, setSelectedCurrency] = useState<Currency>("RWF");
 
   // ── Fetch plans ───────────────────────────────────────────
   const {
@@ -97,39 +90,55 @@ export default function PlanTab() {
     staleTime: 5 * 60_000,
   });
 
-  // ── Upgrade mutation — initiates DPO payment ──────────────
-  // Returns { checkoutUrl, transactionId }
-  // We redirect the tenant to checkoutUrl (DPO hosted page)
-  const upgradeMutation = useMutation({
-    mutationFn: async (planKey: string) => {
-      const res = await api.post("/tenant/payments/initiate-upgrade", {
-        plan: planKey,
-        currency,
-      });
-      return res.data?.data ?? res.data;
-    },
-    onSuccess: (data) => {
-      if (data?.checkoutUrl) {
-        // Redirect to DPO hosted payment page
-        // DPO will redirect back to TENANT_APP_URL/settings/billing?payment=success
-        window.location.href = data.checkoutUrl;
-      } else {
-        toast({
-          title: "Payment initiation failed",
-          description: "No checkout URL returned. Please try again.",
-          variant: "destructive",
-        });
-        setSelected(null);
-      }
-    },
-    onError: (err: any) => {
+  // ── Fetch this tenant's own transactions — the real, no-gateway
+  // invoice flow reads its state entirely from here rather than a
+  // gateway redirect. ──
+  const { data: transactions = [], isLoading: txLoading } = useQuery({
+    queryKey: ["tenant-my-transactions"],
+    queryFn: fetchMyTransactions,
+    staleTime: 15_000,
+  });
+
+  // The real, single open invoice, if any — the backend itself
+  // never allows more than one at a time.
+  const openInvoice = transactions.find(
+    (t) => t.status === "awaiting_payment" || t.status === "payment_claimed",
+  );
+
+  const requestMutation = useMutation({
+    mutationFn: (planKey: string) => requestUpgrade(planKey, selectedCurrency),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tenant-my-transactions"] });
       toast({
-        title: "Could not initiate payment",
+        title: "Invoice sent",
+        description:
+          "Check your email for the invoice and payment instructions.",
+      });
+    },
+    onError: (err: any) =>
+      toast({
+        title: "Could not request upgrade",
         description: err?.response?.data?.message ?? "Please try again.",
         variant: "destructive",
+      }),
+  });
+
+  const markPaidMutation = useMutation({
+    mutationFn: (transactionId: string) => markPaymentClaimed(transactionId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tenant-my-transactions"] });
+      toast({
+        title: "Thanks — we've noted your payment",
+        description:
+          "Your account will be activated once our finance team confirms receipt.",
       });
-      setSelected(null);
     },
+    onError: (err: any) =>
+      toast({
+        title: "Could not update",
+        description: err?.response?.data?.message ?? "Please try again.",
+        variant: "destructive",
+      }),
   });
 
   const currentPlan = subscription?.plan?.toLowerCase();
@@ -146,23 +155,6 @@ export default function PlanTab() {
   // ─────────────────────────────────────────────────────────
   return (
     <div className="space-y-6">
-      {/* Payment success banner — shown after DPO redirect */}
-      {paymentSuccess && (
-        <div className="flex items-start gap-3 p-4 rounded-lg bg-success/5 border border-success/30">
-          <CheckCircle2 className="h-5 w-5 text-success shrink-0 mt-0.5" />
-          <div>
-            <p className="text-sm font-semibold text-success">
-              Payment received — your plan is being activated
-            </p>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              This usually takes a few seconds. Your subscription will update
-              automatically. If it doesn't refresh within a minute, reload the
-              page.
-            </p>
-          </div>
-        </div>
-      )}
-
       {/* Current subscription */}
       <Card>
         <CardHeader>
@@ -202,7 +194,6 @@ export default function PlanTab() {
             )}
           </div>
 
-          {/* Trial warning */}
           {isTrial && daysLeft !== null && daysLeft <= 7 && (
             <div className="flex items-center gap-2 p-3 rounded-lg bg-yellow-50 border border-yellow-200 text-sm">
               <AlertTriangle className="h-4 w-4 text-yellow-600 shrink-0" />
@@ -214,7 +205,6 @@ export default function PlanTab() {
             </div>
           )}
 
-          {/* Expired banner */}
           {isExpired && (
             <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/5 border border-destructive/20 text-sm">
               <AlertTriangle className="h-4 w-4 text-destructive shrink-0" />
@@ -227,6 +217,88 @@ export default function PlanTab() {
         </CardContent>
       </Card>
 
+      {/* Open invoice — the real, no-gateway flow's live state */}
+      {!txLoading && openInvoice && (
+        <Card className="border-primary/30 bg-primary/5">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Clock className="h-4 w-4 text-primary" />
+              Open Invoice — {openInvoice.invoiceNumber}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid sm:grid-cols-3 gap-3 text-sm">
+              <div>
+                <p className="text-muted-foreground">Plan</p>
+                <p className="font-medium capitalize">{openInvoice.plan}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Amount</p>
+                <p className="font-medium">
+                  {fmtAmount(openInvoice.amount, openInvoice.currency)}
+                </p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Status</p>
+                <Badge
+                  className={
+                    openInvoice.status === "payment_claimed"
+                      ? "bg-amber-100 text-amber-700 border-amber-200"
+                      : "bg-blue-100 text-blue-700 border-blue-200"
+                  }
+                >
+                  {openInvoice.status === "payment_claimed"
+                    ? "Payment Claimed"
+                    : "Awaiting Payment"}
+                </Badge>
+              </div>
+            </div>
+
+            {openInvoice.status === "awaiting_payment" ? (
+              <>
+                <div className="flex gap-2 rounded-lg bg-background border p-3 text-sm">
+                  <Mail className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+                  <p className="text-muted-foreground">
+                    An invoice has been emailed to you. Once you've made
+                    payment, email your Proof of Payment to{" "}
+                    <strong className="text-foreground">
+                      finance@lexoraafrica.com
+                    </strong>
+                    , quoting <strong>{openInvoice.invoiceNumber}</strong> as
+                    your reference — then confirm below.
+                  </p>
+                </div>
+                <Button
+                  className="w-full bg-gradient-to-r from-primary to-secondary"
+                  onClick={() => markPaidMutation.mutate(openInvoice._id)}
+                  disabled={markPaidMutation.isPending}
+                >
+                  {markPaidMutation.isPending ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />{" "}
+                      Updating…
+                    </>
+                  ) : (
+                    <>
+                      <Send className="h-4 w-4 mr-2" /> I've Made Payment
+                    </>
+                  )}
+                </Button>
+              </>
+            ) : (
+              <div className="flex items-center gap-2 rounded-lg bg-background border p-3 text-sm">
+                <CheckCircle2 className="h-4 w-4 text-success shrink-0" />
+                <p className="text-muted-foreground">
+                  Thanks — we've noted that you've made payment. Your account
+                  will be activated once our finance team confirms receipt of
+                  your Proof of Payment.
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       <Separator />
 
       {/* Currency selector */}
@@ -234,15 +306,15 @@ export default function PlanTab() {
         <div>
           <h3 className="text-base font-semibold">Available plans</h3>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Choose the plan that fits your business. You will be redirected to
-            complete payment securely.
+            Choose the plan that fits your business. We'll send you an invoice
+            by email with payment instructions.
           </p>
         </div>
         <div className="flex items-center gap-2">
           <Label className="text-sm text-muted-foreground">Currency</Label>
           <Select
-            value={currency}
-            onValueChange={(v) => setCurrency(v as Currency)}
+            value={selectedCurrency}
+            onValueChange={(v) => setSelectedCurrency(v as Currency)}
           >
             <SelectTrigger className="w-24 h-8 text-sm">
               <SelectValue />
@@ -284,12 +356,12 @@ export default function PlanTab() {
           {plans.map((plan) => {
             const isCurrent = currentPlan === plan.plan.toLowerCase();
             const isFree = plan.plan.toLowerCase() === "free";
-            const isSelected = selected === plan.plan;
-            const isPending = upgradeMutation.isPending && isSelected;
+            const isRequestingThis =
+              requestMutation.isPending &&
+              requestMutation.variables === plan.plan;
 
-            // Show price in selected currency
             const price =
-              currency === "RWF" && plan.priceMonthly
+              selectedCurrency === "RWF" && plan.priceMonthly
                 ? Math.round(
                     plan.priceMonthly *
                       (Number(import.meta.env.VITE_USD_TO_RWF_RATE) || 1350),
@@ -302,11 +374,9 @@ export default function PlanTab() {
                 className={`relative transition-all ${
                   isCurrent
                     ? "border-primary ring-1 ring-primary shadow-md"
-                    : isSelected
-                      ? "ring-2 ring-primary/50"
-                      : isFree
-                        ? "opacity-60"
-                        : "hover:border-primary/40 cursor-pointer"
+                    : isFree
+                      ? "opacity-60"
+                      : "hover:border-primary/40"
                 }`}
               >
                 {isCurrent && (
@@ -329,7 +399,7 @@ export default function PlanTab() {
                     ) : price !== undefined ? (
                       <>
                         <span className="text-2xl font-bold">
-                          {currency === "RWF"
+                          {selectedCurrency === "RWF"
                             ? `RWF ${price?.toLocaleString()}`
                             : `$${price}`}
                         </span>
@@ -344,7 +414,6 @@ export default function PlanTab() {
                 </CardHeader>
 
                 <CardContent className="space-y-4">
-                  {/* Limits */}
                   <div className="text-xs text-muted-foreground space-y-1">
                     {plan.maxClients !== undefined && (
                       <p>
@@ -371,7 +440,6 @@ export default function PlanTab() {
                       )}
                   </div>
 
-                  {/* Features */}
                   {plan.features && plan.features.length > 0 && (
                     <ul className="space-y-2 text-sm">
                       {plan.features.map((f) => (
@@ -390,34 +458,42 @@ export default function PlanTab() {
                         : ""
                     }`}
                     variant={isCurrent || isFree ? "outline" : "default"}
-                    disabled={isCurrent || isFree || upgradeMutation.isPending}
+                    disabled={
+                      isCurrent ||
+                      isFree ||
+                      !!openInvoice ||
+                      requestMutation.isPending
+                    }
                     onClick={() => {
-                      if (isCurrent || isFree) return;
-                      setSelected(plan.plan);
-                      upgradeMutation.mutate(plan.plan);
+                      if (isCurrent || isFree || openInvoice) return;
+                      requestMutation.mutate(plan.plan);
                     }}
                   >
                     {isCurrent ? (
                       "Current plan"
                     ) : isFree ? (
                       "Contact your administrator"
-                    ) : isPending ? (
+                    ) : isRequestingThis ? (
                       <>
                         <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Redirecting to payment…
+                        Sending invoice…
                       </>
                     ) : (
                       <>
-                        <ExternalLink className="h-3.5 w-3.5 mr-2" />
-                        Upgrade — Pay securely
+                        <Send className="h-3.5 w-3.5 mr-2" /> Request Upgrade
                       </>
                     )}
                   </Button>
 
-                  {/* Payment note — only for non-free non-current plans */}
-                  {!isCurrent && !isFree && (
+                  {!isCurrent && !isFree && !openInvoice && (
                     <p className="text-[10px] text-muted-foreground text-center">
-                      You will be redirected to a secure payment page.
+                      We'll email you an invoice with payment instructions.
+                    </p>
+                  )}
+                  {!isCurrent && !isFree && openInvoice && (
+                    <p className="text-[10px] text-muted-foreground text-center">
+                      Resolve your open invoice above before requesting another
+                      upgrade.
                     </p>
                   )}
                 </CardContent>
