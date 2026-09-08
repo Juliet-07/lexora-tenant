@@ -1,5 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -51,6 +49,20 @@
     --warning-foreground: 0 0% 100%;
     --info: 210 100% 52%;
     --info-foreground: 0 0% 100%;
+
+    --intro: 270 50% 5%;
+    --intro-foreground: 0 0% 100%;
+    --intro-muted: 255 12% 70%;
+    --intro-primary: 264 80% 55%;
+    --intro-accent: 320 86% 70%;
+    --intro-highlight: 254 100% 86%;
+    --intro-surface: 267 34% 10%;
+    --intro-success: 159 72% 48%;
+    --intro-soft: 270 20% 97%;
+    --intro-soft-foreground: 270 35% 10%;
+    --intro-soft-muted: 265 10% 40%;
+    --intro-soft-raised: 0 0% 100%;
+    --intro-soft-border: 264 15% 86%;
   }
 
   .dark {
@@ -106,6 +118,37 @@
   }
   body {
     @apply bg-background text-foreground;
-    font-family: 'Inter', system-ui, sans-serif;
+    font-family: 'Work Sans', system-ui, sans-serif;
   }
+}
+
+@layer utilities {
+  .font-display {
+    font-family: 'Instrument Serif', Georgia, serif;
+    letter-spacing: 0;
+  }
+
+  .intro-grid {
+    background-image:
+      linear-gradient(hsl(var(--intro-foreground) / 0.045) 1px, transparent 1px),
+      linear-gradient(90deg, hsl(var(--intro-foreground) / 0.045) 1px, transparent 1px);
+    background-size: 72px 72px;
+  }
+
+  .intro-reveal {
+    animation: intro-reveal 800ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .intro-delay {
+    animation-delay: 140ms;
+  }
+}
+
+@keyframes intro-reveal {
+  from { opacity: 0; transform: translateY(18px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .intro-reveal { animation: none; }
 }
