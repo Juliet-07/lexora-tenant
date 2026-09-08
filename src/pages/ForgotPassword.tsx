@@ -36,7 +36,7 @@ export default function ForgotPassword() {
         <div className="text-center space-y-2">
           <div className="mx-auto h-14 w-14 rounded-2xl bg-gradient-to-br from-primary to-secondary flex items-center justify-center shadow-lg">
             <span className="text-xl font-bold text-primary-foreground">
-              CP
+              L
             </span>
           </div>
           <h1 className="text-2xl font-heading font-bold text-foreground">

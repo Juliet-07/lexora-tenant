@@ -1,10 +1,12 @@
 import { useMemo, useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
   SelectContent,
@@ -26,29 +28,59 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { Search, Mail, Phone, Building2, Clock, Plus } from "lucide-react";
+import {
+  Search,
+  Mail,
+  Phone,
+  Building2,
+  Clock,
+  Plus,
+  Loader2,
+} from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
-  useMyContacts,
+  fetchMyContacts,
   logMyContactActivity,
-  updateMyContactNotes,
-  lastTouch,
-  MY_ACTIVITY_TYPES,
-  type MyActivityType,
-} from "@/lib/crm/myContactsStore";
+  type Contact,
+  type ActivityType,
+} from "@/lib/crm/crm-contacts-api";
+
+const MY_ACTIVITY_TYPES: ActivityType[] = [
+  "Email",
+  "Call",
+  "Meeting",
+  "Document",
+  "Note",
+];
 
 const when = (iso: string | null) =>
   iso ? new Date(iso).toLocaleDateString() : "No activity yet";
 
+// Real "last activity" — the most recent entry in the actual
+// activity array, not assumed to be pre-sorted either direction.
+const lastTouch = (c: Contact): string | null => {
+  if (!c.activity.length) return null;
+  return c.activity.reduce(
+    (latest, a) => (a.at > latest ? a.at : latest),
+    c.activity[0].at,
+  );
+};
+
 export function MyContactsPanel() {
-  const contacts = useMyContacts();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [q, setQ] = useState("");
   const [openId, setOpenId] = useState<string | null>(null);
-  const [entry, setEntry] = useState<{
-    type: MyActivityType;
-    summary: string;
-  }>({ type: "Call", summary: "" });
+  const [entry, setEntry] = useState<{ type: ActivityType; summary: string }>({
+    type: "Call",
+    summary: "",
+  });
+
+  const { data: contacts = [], isLoading } = useQuery({
+    queryKey: ["my-contacts"],
+    queryFn: fetchMyContacts,
+    staleTime: 30_000,
+  });
 
   const filtered = useMemo(
     () =>
@@ -60,17 +92,43 @@ export function MyContactsPanel() {
     [contacts, q],
   );
 
-  const selected = contacts.find((c) => c.id === openId) ?? null;
+  const selected = contacts.find((c) => c._id === openId) ?? null;
+
+  const activityMut = useMutation({
+    mutationFn: () =>
+      logMyContactActivity(selected!._id, {
+        type: entry.type,
+        summary: entry.summary.trim(),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["my-contacts"] });
+      setEntry({ type: "Call", summary: "" });
+      toast({ title: "Activity recorded", description: selected?.name });
+    },
+    onError: (err: any) =>
+      toast({
+        title: "Could not record activity",
+        description: err?.response?.data?.message ?? "Please try again.",
+        variant: "destructive",
+      }),
+  });
 
   const record = () => {
     if (!selected || !entry.summary.trim()) return;
-    logMyContactActivity(selected.id, {
-      type: entry.type,
-      summary: entry.summary.trim(),
-    });
-    setEntry({ type: "Call", summary: "" });
-    toast({ title: "Activity recorded", description: selected.name });
+    activityMut.mutate();
   };
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardContent className="p-4 space-y-2">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-12 w-full" />
+          ))}
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <>
@@ -98,7 +156,7 @@ export function MyContactsPanel() {
             </TableHeader>
             <TableBody>
               {filtered.map((c) => (
-                <TableRow key={c.id}>
+                <TableRow key={c._id}>
                   <TableCell>
                     <p className="text-sm font-medium">{c.name}</p>
                     <p className="text-xs text-muted-foreground">
@@ -113,7 +171,7 @@ export function MyContactsPanel() {
                   </TableCell>
                   <TableCell>
                     <div className="flex flex-wrap gap-1">
-                      {c.tags.map((t) => (
+                      {[...c.tags, ...c.roleTags].map((t) => (
                         <Badge key={t} variant="secondary" className="text-xs">
                           {t}
                         </Badge>
@@ -124,7 +182,7 @@ export function MyContactsPanel() {
                     {when(lastTouch(c))}
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button size="sm" onClick={() => setOpenId(c.id)}>
+                    <Button size="sm" onClick={() => setOpenId(c._id)}>
                       <Plus className="mr-1 h-3 w-3" /> Record activity
                     </Button>
                   </TableCell>
@@ -136,7 +194,9 @@ export function MyContactsPanel() {
                     colSpan={5}
                     className="py-8 text-center text-sm text-muted-foreground"
                   >
-                    No contacts assigned to you match that search.
+                    {contacts.length === 0
+                      ? "No contacts assigned to you yet."
+                      : "No contacts assigned to you match that search."}
                   </TableCell>
                 </TableRow>
               )}
@@ -161,29 +221,29 @@ export function MyContactsPanel() {
                     <Mail className="h-4 w-4 text-muted-foreground" />
                     {selected.email}
                   </p>
-                  <p className="flex items-center gap-2">
-                    <Phone className="h-4 w-4 text-muted-foreground" />
-                    {selected.phone}
-                  </p>
+                  {selected.phone && (
+                    <p className="flex items-center gap-2">
+                      <Phone className="h-4 w-4 text-muted-foreground" />
+                      {selected.phone}
+                    </p>
+                  )}
                 </div>
 
-                <div className="space-y-2">
-                  <Label>Notes</Label>
-                  <Textarea
-                    rows={3}
-                    value={selected.notes}
-                    onChange={(e) =>
-                      updateMyContactNotes(selected.id, e.target.value)
-                    }
-                  />
-                </div>
+                {selected.notes && (
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">
+                      Notes
+                    </Label>
+                    <p className="text-sm">{selected.notes}</p>
+                  </div>
+                )}
 
                 <div className="space-y-2 rounded-lg border p-3">
                   <Label>Record an interaction</Label>
                   <Select
                     value={entry.type}
                     onValueChange={(v) =>
-                      setEntry({ ...entry, type: v as MyActivityType })
+                      setEntry({ ...entry, type: v as ActivityType })
                     }
                   >
                     <SelectTrigger>
@@ -207,10 +267,14 @@ export function MyContactsPanel() {
                   />
                   <Button
                     className="w-full"
-                    disabled={!entry.summary.trim()}
+                    disabled={!entry.summary.trim() || activityMut.isPending}
                     onClick={record}
                   >
-                    Add to timeline
+                    {activityMut.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      "Add to timeline"
+                    )}
                   </Button>
                 </div>
 
@@ -221,22 +285,27 @@ export function MyContactsPanel() {
                       Nothing recorded yet.
                     </p>
                   )}
-                  {selected.activity.map((a) => (
-                    <div key={a.id} className="flex gap-3 text-sm">
-                      <Clock className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-                      <div>
-                        <p>
-                          <Badge variant="outline" className="mr-2 text-[10px]">
-                            {a.type}
-                          </Badge>
-                          {a.summary}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {a.by} · {new Date(a.at).toLocaleString()}
-                        </p>
+                  {[...selected.activity]
+                    .sort((a, b) => (a.at < b.at ? 1 : -1))
+                    .map((a, i) => (
+                      <div key={i} className="flex gap-3 text-sm">
+                        <Clock className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                        <div>
+                          <p>
+                            <Badge
+                              variant="outline"
+                              className="mr-2 text-[10px]"
+                            >
+                              {a.type}
+                            </Badge>
+                            {a.summary}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {a.by || "You"} · {new Date(a.at).toLocaleString()}
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
                 </div>
               </div>
             </>

@@ -61,10 +61,12 @@ import {
   dismissDuplicate,
   bulkTagContacts,
   logContactActivity,
+  assignContact,
   type Contact,
   type ContactSource,
   type ActivityType,
 } from "@/lib/crm/crm-contacts-api";
+import { fetchEmployees } from "@/lib/hr/hr-api";
 
 const SOURCES: ContactSource[] = [
   "Referral",
@@ -101,6 +103,18 @@ export default function Contacts() {
     queryKey: ["crmContacts"],
     queryFn: fetchContacts,
   });
+
+  // Real, active employees with a login-capable user account — only
+  // these can actually be assigned, since assignedTo enforces access
+  // by matching the logged-in user's own id.
+  const { data: employeesPage } = useQuery({
+    queryKey: ["hr-employees-for-assign"],
+    queryFn: () => fetchEmployees({ limit: 200 }),
+    staleTime: 5 * 60_000,
+  });
+  const assignableEmployees = (employeesPage?.items ?? []).filter(
+    (e) => !!e.userId,
+  );
 
   const [q, setQ] = useState("");
   const [orgFilter, setOrgFilter] = useState("all");
@@ -206,6 +220,26 @@ export default function Contacts() {
   const dismissMut = useMutation({
     mutationFn: (id: string) => dismissDuplicate(id),
     onSuccess: () => invalidate(),
+  });
+
+  const assignMut = useMutation({
+    mutationFn: ({
+      id,
+      employeeId,
+      employeeName,
+    }: {
+      id: string;
+      employeeId: string | null;
+      employeeName?: string;
+    }) => assignContact(id, employeeId, employeeName),
+    onSuccess: (updated) => {
+      invalidate();
+      setSelected(updated);
+      toast({
+        title: updated.assignedTo ? "Contact assigned" : "Contact unassigned",
+      });
+    },
+    onError: onErr("Failed to update assignment"),
   });
 
   const bulkTagMut = useMutation({
@@ -316,17 +350,6 @@ export default function Contacts() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button
-            variant="outline"
-            onClick={() => mockAction("Import started")}
-          >
-            <Upload className="mr-2 h-4 w-4" />
-            Import
-          </Button>
-          <Button variant="outline" onClick={() => mockAction("CSV exported")}>
-            <Download className="mr-2 h-4 w-4" />
-            Export CSV
-          </Button>
           <Button onClick={openCreate}>
             <Plus className="mr-2 h-4 w-4" />
             New contact
@@ -542,13 +565,36 @@ export default function Contacts() {
                 onChange={(e) => setDraft({ ...draft, name: e.target.value })}
               />
             </div>
-            {/* <div>
-              <Label>Title / role</Label>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Email</Label>
+                <Input
+                  value={draft.email}
+                  onChange={(e) =>
+                    setDraft({ ...draft, email: e.target.value })
+                  }
+                />
+              </div>
+              <div>
+                <Label>Phone</Label>
+                <Input
+                  value={draft.phone}
+                  onChange={(e) =>
+                    setDraft({ ...draft, phone: e.target.value })
+                  }
+                />
+              </div>
+            </div>
+            <div>
+              <Label>Organisation</Label>
               <Input
-                value={draft.title}
-                onChange={(e) => setDraft({ ...draft, title: e.target.value })}
+                value={draft.organisation}
+                onChange={(e) =>
+                  setDraft({ ...draft, organisation: e.target.value })
+                }
+                placeholder="Type the organisation name"
               />
-            </div> */}
+            </div>
             <div>
               <Label>Role at organisation</Label>
               <div className="flex flex-wrap gap-1.5 pt-1">
@@ -587,68 +633,6 @@ export default function Contacts() {
                 >
                   Add
                 </Button>
-              </div>
-            </div>
-            <div>
-              <Label>Organisation</Label>
-              <Input
-                value={draft.organisation}
-                onChange={(e) =>
-                  setDraft({ ...draft, organisation: e.target.value })
-                }
-                placeholder="Type the organisation name — not linked to any client record"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label>Email</Label>
-                <Input
-                  value={draft.email}
-                  onChange={(e) =>
-                    setDraft({ ...draft, email: e.target.value })
-                  }
-                />
-              </div>
-              <div>
-                <Label>Phone</Label>
-                <Input
-                  value={draft.phone}
-                  onChange={(e) =>
-                    setDraft({ ...draft, phone: e.target.value })
-                  }
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label>Source</Label>
-                <Select
-                  value={draft.source}
-                  onValueChange={(v) =>
-                    setDraft({ ...draft, source: v as ContactSource })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {SOURCES.map((s) => (
-                      <SelectItem key={s} value={s}>
-                        {s}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Owner</Label>
-                <Input
-                  value={draft.owner}
-                  onChange={(e) =>
-                    setDraft({ ...draft, owner: e.target.value })
-                  }
-                  placeholder="Who manages this contact"
-                />
               </div>
             </div>
             <div>
@@ -694,6 +678,27 @@ export default function Contacts() {
                 </Button>
               </div>
             </div>
+            <div>
+              <Label>Source</Label>
+              <Select
+                value={draft.source}
+                onValueChange={(v) =>
+                  setDraft({ ...draft, source: v as ContactSource })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {SOURCES.map((s) => (
+                    <SelectItem key={s} value={s}>
+                      {s}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             <div>
               <Label>Notes</Label>
               <Textarea
@@ -782,11 +787,43 @@ export default function Contacts() {
                           </span>
                         )}
                     </div>
-                    {selected.owner && (
-                      <div className="pt-1 text-xs text-muted-foreground">
-                        Owner: {selected.owner}
-                      </div>
-                    )}
+                    <div className="pt-2">
+                      <Label className="text-xs">Assigned To</Label>
+                      <Select
+                        value={selected.assignedTo ?? "unassigned"}
+                        onValueChange={(v) => {
+                          if (v === "unassigned") {
+                            assignMut.mutate({
+                              id: selected._id,
+                              employeeId: null,
+                            });
+                            return;
+                          }
+                          const emp = assignableEmployees.find(
+                            (e) => e.userId === v,
+                          );
+                          assignMut.mutate({
+                            id: selected._id,
+                            employeeId: v,
+                            employeeName: emp
+                              ? `${emp.firstName} ${emp.lastName}`
+                              : undefined,
+                          });
+                        }}
+                      >
+                        <SelectTrigger className="mt-1 h-8 text-sm">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="unassigned">Unassigned</SelectItem>
+                          {assignableEmployees.map((e) => (
+                            <SelectItem key={e.userId!} value={e.userId!}>
+                              {e.firstName} {e.lastName}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </CardContent>
                 </Card>
 

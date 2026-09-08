@@ -27,6 +27,7 @@ export interface Contact {
   tags: string[];
   roleTags: string[];
   owner: string;
+  assignedTo: string | null;
   notes: string;
   lastContact: string;
   duplicateOf: string | null;
@@ -83,6 +84,39 @@ export const mergeContact = async (id: string): Promise<Contact> => {
 
 export const dismissDuplicate = async (id: string): Promise<Contact> => {
   const res = await api.patch(`/crm/contacts/${id}/dismiss-duplicate`);
+  return unwrap(res);
+};
+
+// ── Employee-facing "My Contacts" — real, server-enforced scoping.
+// A plain employee only ever sees/acts on contacts assigned to them;
+// a tenant admin or role-bearing employee sees everyone's, matching
+// the same real access rule already used for "My Clients".
+export const fetchMyContacts = async (): Promise<Contact[]> => {
+  const res = await api.get("/tenant/my-contacts");
+  const d = unwrap(res);
+  return Array.isArray(d) ? d : [];
+};
+
+export const logMyContactActivity = async (
+  id: string,
+  dto: { type: ActivityType; summary: string },
+): Promise<Contact> => {
+  const res = await api.post(`/tenant/my-contacts/${id}/activity`, dto);
+  return unwrap(res);
+};
+
+// Assign a contact to a specific employee (or unassign with null) —
+// sets both the real, enforced relationship and the display owner
+// label together on the backend.
+export const assignContact = async (
+  id: string,
+  employeeId: string | null,
+  employeeName?: string,
+): Promise<Contact> => {
+  const res = await api.patch(`/crm/contacts/${id}/assign`, {
+    employeeId,
+    employeeName,
+  });
   return unwrap(res);
 };
 
