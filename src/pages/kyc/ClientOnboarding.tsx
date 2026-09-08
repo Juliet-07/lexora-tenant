@@ -28,6 +28,7 @@ import {
 import { api } from "@/lib/api";
 import AddClientWizard from "@/components/kyc/AddClientWizard";
 import OnboardingContractingTab from "./OnboardingContractingTab";
+import { fetchOnboardingContracts } from "@/lib/crm/tools-api";
 
 // ─────────────────────────────────────────────────────────────
 // API FETCHERS
@@ -74,6 +75,18 @@ export default function ClientOnboarding() {
     queryFn: fetchInProgress,
     staleTime: 30_000,
   });
+
+  // Shares the same cache key as OnboardingContractingTab's own
+  // query — no extra network request — just used here to compute
+  // the "awaiting signature" count for the tab badge.
+  const { data: contracts = [] } = useQuery({
+    queryKey: ["onboarding-contracts"],
+    queryFn: fetchOnboardingContracts,
+    staleTime: 30_000,
+  });
+  const awaitingSignatureCount = contracts.filter(
+    (c) => c.signatureStatus === "sent",
+  ).length;
 
   const loading = pendingLoading || inProgressLoading;
   const refreshing =
@@ -151,7 +164,7 @@ export default function ClientOnboarding() {
             },
             {
               label: "Contracting",
-              value: "—",
+              value: awaitingSignatureCount,
               hint: "See the Contracting tab",
               icon: FileText,
               accent: "text-secondary bg-secondary/10",
@@ -197,6 +210,11 @@ export default function ClientOnboarding() {
           </TabsTrigger>
           <TabsTrigger value="contracting" className="rounded-lg">
             Contracting
+            {awaitingSignatureCount > 0 && (
+              <span className="ml-2 rounded-full bg-blue-100 text-blue-700 text-xs px-2 py-0.5">
+                {awaitingSignatureCount}
+              </span>
+            )}
           </TabsTrigger>
         </TabsList>
 

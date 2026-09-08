@@ -3,6 +3,7 @@ import { useParams, Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { KycUpdatesSection } from "./KycUpdatesSection";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -290,19 +291,34 @@ export default function ClientProfile() {
         </TabsList>
 
         <TabsContent value="deals" className="mt-4">
-          <ClientDealsPanel clientId={client._id} clientName={displayName(client)} />
+          <ClientDealsPanel
+            clientId={client._id}
+            clientName={displayName(client)}
+          />
         </TabsContent>
         <TabsContent value="projects" className="mt-4">
-          <ClientProjectsPanel clientId={client._id} clientName={displayName(client)} />
+          <ClientProjectsPanel
+            clientId={client._id}
+            clientName={displayName(client)}
+          />
         </TabsContent>
         <TabsContent value="invoices" className="mt-4">
-          <ClientInvoicesPanel clientId={client._id} clientName={displayName(client)} />
+          <ClientInvoicesPanel
+            clientId={client._id}
+            clientName={displayName(client)}
+          />
         </TabsContent>
         <TabsContent value="commercial" className="mt-4">
-          <ClientCommercialPanel clientId={client._id} clientName={displayName(client)} />
+          <ClientCommercialPanel
+            clientId={client._id}
+            clientName={displayName(client)}
+          />
         </TabsContent>
         <TabsContent value="health" className="mt-4">
-          <ClientHealthPanel clientId={client._id} clientName={displayName(client)} />
+          <ClientHealthPanel
+            clientId={client._id}
+            clientName={displayName(client)}
+          />
         </TabsContent>
 
         {/* ── Overview ── */}
@@ -509,6 +525,12 @@ export default function ClientProfile() {
               )}
             </CardContent>
           </Card>
+
+          {client.kycStatus?.toLowerCase() === "approved" && (
+            <div className="mt-4">
+              <KycUpdatesSection clientId={client._id} />
+            </div>
+          )}
         </TabsContent>
 
         {/* ── Risk ── */}
