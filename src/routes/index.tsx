@@ -84,6 +84,13 @@ export function AppRoutes() {
     return (
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/platform" element={<Platform />} />
+        <Route path="/pricing" element={<Pricing />} />
+        <Route path="/solutions" element={<Solutions />} />
+        <Route path="/advisory" element={<Advisory />} />
+        <Route path="/insights" element={<MarketingInsights />} />
+        <Route path="/about" element={<AboutPage />} />
+        <Route path="/contact" element={<ContactPage />} />
         <Route path="*" element={<Intro />} />
       </Routes>
     );
