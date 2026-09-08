@@ -63,6 +63,8 @@
     --intro-soft-muted: 265 10% 40%;
     --intro-soft-raised: 0 0% 100%;
     --intro-soft-border: 264 15% 86%;
+    --intro-gold: 43 80% 46%;
+    --intro-gold-light: 45 85% 62%;
   }
 
   .dark {
@@ -151,4 +153,10 @@
 
 @media (prefers-reduced-motion: reduce) {
   .intro-reveal { animation: none; }
+}
+
+@layer components {
+  .intro-field {
+    @apply border-intro-foreground/15 bg-intro text-intro-foreground placeholder:text-intro-muted;
+  }
 }

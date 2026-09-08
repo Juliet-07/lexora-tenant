@@ -20,6 +20,13 @@ import DealContractReviewPage from "@/pages/grc/deals/DealContractReview";
 import DealOfferReviewPage from "@/pages/grc/deals/DealOfferReview";
 import SignToolContractPage from "@/pages/public/SignToolContractPage";
 import Intro from "@/pages/Intro";
+import Platform from "@/pages/marketing/Platform";
+import Pricing from "@/pages/marketing/Pricing";
+import Solutions from "@/pages/marketing/Solutions";
+import Advisory from "@/pages/marketing/Advisory";
+import MarketingInsights from "@/pages/marketing/Insights";
+import AboutPage from "@/pages/marketing/About";
+import ContactPage from "@/pages/marketing/Contact";
 
 /**
  * Top-level router. Module-specific routes live in their own files so
@@ -77,6 +84,13 @@ export function AppRoutes() {
     return (
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/platform" element={<Platform />} />
+        <Route path="/pricing" element={<Pricing />} />
+        <Route path="/solutions" element={<Solutions />} />
+        <Route path="/advisory" element={<Advisory />} />
+        <Route path="/insights" element={<MarketingInsights />} />
+        <Route path="/about" element={<AboutPage />} />
+        <Route path="/contact" element={<ContactPage />} />
         <Route path="*" element={<Intro />} />
       </Routes>
     );
