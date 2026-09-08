@@ -16,6 +16,13 @@ export interface ApiClient {
   isExClient?: boolean;
   exClientAt?: string | null;
   exClientReason?: string;
+  exClientRelationshipFrom?: string | null;
+  exClientRelationshipTo?: string | null;
+  exClientLifetimeRevenue?: number;
+  exClientCurrency?: string;
+  exClientRelationshipManager?: string;
+  exClientServiceLines?: string[];
+  exClientNotes?: string;
   createdAt: string;
   updatedAt?: string;
   documents?: Array<{
@@ -163,11 +170,32 @@ export async function reactivateClient(clientId: string): Promise<void> {
 
 // Real, separate lifecycle from reactivateClient above (which is
 // specifically for a client rejected during onboarding).
+export const EXIT_REASONS = [
+  "Engagement completed",
+  "Client-initiated exit",
+  "Firm-initiated exit",
+  "Non-payment",
+  "Risk / compliance concern",
+  "Merged or acquired",
+  "Dormant",
+];
+
+export interface MarkAsExClientPayload {
+  reason: string;
+  relationshipFrom?: string;
+  relationshipTo?: string;
+  lifetimeRevenue?: number;
+  currency?: string;
+  relationshipManager?: string;
+  serviceLines?: string[];
+  notes?: string;
+}
+
 export async function markAsExClient(
   clientId: string,
-  reason?: string,
+  payload: MarkAsExClientPayload,
 ): Promise<void> {
-  await api.patch(`/tenant/${clientId}/mark-ex-client`, { reason });
+  await api.patch(`/tenant/${clientId}/mark-ex-client`, payload);
 }
 
 export async function reactivateFromExClient(clientId: string): Promise<void> {

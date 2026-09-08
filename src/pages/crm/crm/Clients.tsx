@@ -42,14 +42,20 @@ import {
   Archive,
   RotateCcw,
   History,
+  Loader2,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import {
   fetchClients,
+  fetchClientsFiltered,
+  markAsExClient,
+  reactivateFromExClient,
+  EXIT_REASONS,
   displayName,
   prettyLabel,
   type ApiClient,
+  type MarkAsExClientPayload,
 } from "@/lib/client/clients-api";
 import { fetchSlaProfiles } from "@/lib/crm/sla-profiles-api";
 import {
@@ -65,13 +71,6 @@ import {
   type UpsertClientCommercialPayload,
 } from "@/lib/crm/client-commercial-api";
 import { fetchEmployees } from "@/lib/hr/hr-api";
-import {
-  useExClients,
-  archiveClient,
-  restoreClient,
-  EXIT_REASONS,
-  type ExClient,
-} from "@/lib/crm/exClientsStore";
 
 const money = (n: number, c = "USD") =>
   n.toLocaleString(undefined, {
@@ -136,15 +135,47 @@ export default function Clients() {
   const [riskFilter, setRiskFilter] = useState("all");
   const [slaFilter, setSlaFilter] = useState("all");
   const [draft, setDraft] = useState<Draft | null>(null);
-  const exClients = useExClients();
-  const exList = Object.values(exClients);
-  const [exQ, setExQ] = useState("");
-  const [archiveDraft, setArchiveDraft] = useState<
-    (Omit<ExClient, "archivedAt"> & { archivedAt?: string }) | null
-  >(null);
 
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: ["clientCommercials"] });
+  const invalidateClientLists = () => {
+    queryClient.invalidateQueries({ queryKey: ["clients-list"] });
+  };
+
+  const archiveMut = useMutation({
+    mutationFn: ({
+      clientId,
+      ...payload
+    }: { clientId: string } & MarkAsExClientPayload) =>
+      markAsExClient(clientId, payload),
+    onSuccess: (_data, variables) => {
+      invalidateClientLists();
+    },
+    onError: (err: any) =>
+      toast({
+        title: "Failed to archive",
+        description: err?.response?.data?.message ?? "Please try again.",
+        variant: "destructive",
+      }),
+  });
+
+  const restoreMut = useMutation({
+    mutationFn: ({ clientId }: { clientId: string; name: string }) =>
+      reactivateFromExClient(clientId),
+    onSuccess: (_data, variables) => {
+      invalidateClientLists();
+      toast({
+        title: "Client reactivated",
+        description: `${variables.name} is back on the active client list.`,
+      });
+    },
+    onError: (err: any) =>
+      toast({
+        title: "Failed to restore",
+        description: err?.response?.data?.message ?? "Please try again.",
+        variant: "destructive",
+      }),
+  });
 
   const saveMut = useMutation({
     mutationFn: (d: Draft) => {
@@ -189,7 +220,6 @@ export default function Clients() {
 
   const filtered = rows.filter(
     (r) =>
-      !exClients[r.client._id] &&
       (serviceFilter === "all" ||
         (r.commercial.serviceLines ?? []).includes(serviceFilter)) &&
       (rmFilter === "all" || r.commercial.relationshipManager === rmFilter) &&
@@ -279,7 +309,6 @@ export default function Clients() {
         <TabsList>
           <TabsTrigger value="clients">Clients</TabsTrigger>
           <TabsTrigger value="sla">SLA coverage</TabsTrigger>
-          <TabsTrigger value="ex">Ex-clients ({exList.length})</TabsTrigger>
         </TabsList>
 
         <TabsContent value="clients" className="pt-4">
@@ -468,41 +497,6 @@ export default function Clients() {
                                 <UserCog className="mr-1 h-3 w-3" />
                                 {assigned ? "Edit" : "Assign"}
                               </Button>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() =>
-                                  setArchiveDraft({
-                                    clientId: client._id,
-                                    name,
-                                    email: client.email ?? "",
-                                    classification: prettyLabel(
-                                      client.classifications,
-                                    ),
-                                    country: client.country ?? "—",
-                                    relationshipManager:
-                                      commercial.relationshipManager || "—",
-                                    serviceLines:
-                                      commercial.serviceLines ?? [],
-                                    lifetimeRevenue:
-                                      commercial.revenueYtd ?? 0,
-                                    currency: commercial.currency ?? "USD",
-                                    relationshipFrom: new Date(
-                                      client.createdAt,
-                                    )
-                                      .toISOString()
-                                      .slice(0, 10),
-                                    relationshipTo: new Date()
-                                      .toISOString()
-                                      .slice(0, 10),
-                                    reason: EXIT_REASONS[0],
-                                    notes: "",
-                                  })
-                                }
-                              >
-                                <Archive className="mr-1 h-3 w-3" />
-                                Archive
-                              </Button>
                             </div>
                           </TableCell>
                         </TableRow>
@@ -591,238 +585,7 @@ export default function Clients() {
             })}
           </div>
         </TabsContent>
-
-        <TabsContent value="ex" className="space-y-4 pt-4">
-          <Card>
-            <CardContent className="space-y-4 p-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <History className="h-4 w-4" />
-                  Former clients. Their records stay retained here and can be
-                  restored to the active list at any time.
-                </p>
-                <div className="relative w-full sm:w-64">
-                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    className="pl-9"
-                    placeholder="Search ex-clients…"
-                    value={exQ}
-                    onChange={(e) => setExQ(e.target.value)}
-                  />
-                </div>
-              </div>
-
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Client</TableHead>
-                    <TableHead>Relationship</TableHead>
-                    <TableHead>Former RM</TableHead>
-                    <TableHead>Service lines</TableHead>
-                    <TableHead>Reason</TableHead>
-                    <TableHead className="text-right">
-                      Lifetime revenue
-                    </TableHead>
-                    <TableHead className="text-right">Action</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {exList
-                    .filter((x) =>
-                      `${x.name} ${x.email} ${x.reason}`
-                        .toLowerCase()
-                        .includes(exQ.toLowerCase()),
-                    )
-                    .map((x) => (
-                      <TableRow key={x.clientId}>
-                        <TableCell>
-                          <p className="text-sm font-medium">{x.name}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {x.classification} · {x.email || "—"} ·{" "}
-                            {x.country}
-                          </p>
-                        </TableCell>
-                        <TableCell className="text-xs text-muted-foreground">
-                          {x.relationshipFrom} → {x.relationshipTo}
-                          <span className="block">
-                            Archived{" "}
-                            {new Date(x.archivedAt).toLocaleDateString()}
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-sm">
-                          {x.relationshipManager}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex flex-wrap gap-1">
-                            {x.serviceLines.length ? (
-                              x.serviceLines.map((s) => (
-                                <Badge
-                                  key={s}
-                                  variant="secondary"
-                                  className="text-xs"
-                                >
-                                  {s}
-                                </Badge>
-                              ))
-                            ) : (
-                              <span className="text-xs text-muted-foreground">
-                                —
-                              </span>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-sm">
-                          {x.reason}
-                          {x.notes && (
-                            <span className="block text-xs text-muted-foreground">
-                              {x.notes}
-                            </span>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-right text-sm">
-                          {money(x.lifetimeRevenue, x.currency)}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              restoreClient(x.clientId);
-                              toast({
-                                title: "Client reactivated",
-                                description: `${x.name} is back on the active client list.`,
-                              });
-                            }}
-                          >
-                            <RotateCcw className="mr-1 h-3 w-3" />
-                            Restore
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  {exList.length === 0 && (
-                    <TableRow>
-                      <TableCell
-                        colSpan={7}
-                        className="py-8 text-center text-sm text-muted-foreground"
-                      >
-                        No ex-clients recorded yet. Archive a client from the
-                        Clients tab to keep their history here.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
       </Tabs>
-
-      <Dialog
-        open={!!archiveDraft}
-        onOpenChange={(o) => !o && setArchiveDraft(null)}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Archive as ex-client — {archiveDraft?.name}</DialogTitle>
-          </DialogHeader>
-          {archiveDraft && (
-            <div className="grid gap-3">
-              <div>
-                <Label>Reason</Label>
-                <Select
-                  value={archiveDraft.reason}
-                  onValueChange={(v) =>
-                    setArchiveDraft({ ...archiveDraft, reason: v })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {EXIT_REASONS.map((r) => (
-                      <SelectItem key={r} value={r}>
-                        {r}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div>
-                  <Label>Relationship started</Label>
-                  <Input
-                    type="date"
-                    value={archiveDraft.relationshipFrom}
-                    onChange={(e) =>
-                      setArchiveDraft({
-                        ...archiveDraft,
-                        relationshipFrom: e.target.value,
-                      })
-                    }
-                  />
-                </div>
-                <div>
-                  <Label>Relationship ended</Label>
-                  <Input
-                    type="date"
-                    value={archiveDraft.relationshipTo}
-                    onChange={(e) =>
-                      setArchiveDraft({
-                        ...archiveDraft,
-                        relationshipTo: e.target.value,
-                      })
-                    }
-                  />
-                </div>
-              </div>
-              <div>
-                <Label>Lifetime revenue</Label>
-                <Input
-                  type="number"
-                  value={archiveDraft.lifetimeRevenue}
-                  onChange={(e) =>
-                    setArchiveDraft({
-                      ...archiveDraft,
-                      lifetimeRevenue: Number(e.target.value),
-                    })
-                  }
-                />
-              </div>
-              <div>
-                <Label>Closing notes</Label>
-                <Textarea
-                  rows={3}
-                  value={archiveDraft.notes}
-                  placeholder="Why the relationship ended, anything worth remembering if they return…"
-                  onChange={(e) =>
-                    setArchiveDraft({ ...archiveDraft, notes: e.target.value })
-                  }
-                />
-              </div>
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setArchiveDraft(null)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={() => {
-                if (!archiveDraft) return;
-                const { archivedAt, ...rest } = archiveDraft;
-                archiveClient(rest);
-                setArchiveDraft(null);
-                toast({
-                  title: "Moved to ex-clients",
-                  description: `${rest.name}'s record is retained and searchable.`,
-                });
-              }}
-            >
-              Archive client
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       <Dialog open={!!draft} onOpenChange={(o) => !o && setDraft(null)}>
         <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
