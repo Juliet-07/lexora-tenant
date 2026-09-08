@@ -62,6 +62,7 @@ import {
   reactivateClient,
   markAsExClient,
   reactivateFromExClient,
+  fetchClients,
 } from "@/lib/client/clients-api";
 
 export default function Clients() {
@@ -83,7 +84,9 @@ export default function Clients() {
     else setRefreshing(true);
     try {
       const [list, s] = await Promise.all([
-        fetchClientsFiltered({ exClientsOnly: viewMode === "exClients" }),
+        viewMode === "exClients"
+          ? fetchClientsFiltered({ exClientsOnly: true })
+          : fetchClients(),
         fetchClientStats(),
       ]);
       setClients(list);
