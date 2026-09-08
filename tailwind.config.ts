@@ -92,6 +92,8 @@ export default {
           "soft-muted": "hsl(var(--intro-soft-muted))",
           "soft-raised": "hsl(var(--intro-soft-raised))",
           "soft-border": "hsl(var(--intro-soft-border))",
+          gold: "hsl(var(--intro-gold))",
+          "gold-light": "hsl(var(--intro-gold-light))",
         },
       },
       borderRadius: {
