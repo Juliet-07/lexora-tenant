@@ -19,6 +19,7 @@ import PolicyAckPage from "@/pages/grc/compliance/PolicyAck";
 import DealContractReviewPage from "@/pages/grc/deals/DealContractReview";
 import DealOfferReviewPage from "@/pages/grc/deals/DealOfferReview";
 import SignToolContractPage from "@/pages/public/SignToolContractPage";
+import Intro from "@/pages/Intro";
 
 /**
  * Top-level router. Module-specific routes live in their own files so
@@ -72,7 +73,14 @@ export function AppRoutes() {
     );
   }
 
-  if (!user) return <Login />;
+  if (!user) {
+    return (
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route path="*" element={<Intro />} />
+      </Routes>
+    );
+  }
 
   const ctx = {
     isAdmin,

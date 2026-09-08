@@ -19,7 +19,8 @@ export default {
     },
     extend: {
       fontFamily: {
-        sans: ["Inter", "system-ui", "sans-serif"],
+        sans: ["Work Sans", "system-ui", "sans-serif"],
+        display: ["Instrument Serif", "Georgia", "serif"],
       },
       colors: {
         border: "hsl(var(--border))",
@@ -77,6 +78,21 @@ export default {
           DEFAULT: "hsl(var(--info))",
           foreground: "hsl(var(--info-foreground))",
         },
+        intro: {
+          DEFAULT: "hsl(var(--intro))",
+          foreground: "hsl(var(--intro-foreground))",
+          muted: "hsl(var(--intro-muted))",
+          primary: "hsl(var(--intro-primary))",
+          accent: "hsl(var(--intro-accent))",
+          highlight: "hsl(var(--intro-highlight))",
+          surface: "hsl(var(--intro-surface))",
+          success: "hsl(var(--intro-success))",
+          soft: "hsl(var(--intro-soft))",
+          "soft-foreground": "hsl(var(--intro-soft-foreground))",
+          "soft-muted": "hsl(var(--intro-soft-muted))",
+          "soft-raised": "hsl(var(--intro-soft-raised))",
+          "soft-border": "hsl(var(--intro-soft-border))",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",
@@ -96,6 +112,10 @@ export default {
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
+      },
+      boxShadow: {
+        "intro-glow": "0 14px 40px hsl(var(--intro-primary) / 0.32)",
+        "intro-deep": "0 30px 80px hsl(var(--intro) / 0.55)",
       },
     },
   },

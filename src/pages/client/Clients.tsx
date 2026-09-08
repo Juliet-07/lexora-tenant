@@ -195,7 +195,9 @@ export default function Clients() {
     if (!exClientTarget) return;
     setMarkingExClient(true);
     try {
-      await markAsExClient(exClientTarget._id, exClientReason.trim());
+      await markAsExClient(exClientTarget._id, {
+        reason: exClientReason.trim(),
+      });
       toast({
         title: "Client marked as ex-client",
         description: "All their records remain retained and searchable.",
