@@ -13,6 +13,9 @@ export interface ApiClient {
   riskLevel?: string; // low | medium | high
   country?: string;
   assignedOfficer?: { firstName?: string; lastName?: string } | string;
+  isExClient?: boolean;
+  exClientAt?: string | null;
+  exClientReason?: string;
   createdAt: string;
   updatedAt?: string;
   documents?: Array<{
@@ -114,6 +117,22 @@ export const fetchClients = async (): Promise<ApiClient[]> => {
   return data?.clients ?? data?.items ?? [];
 };
 
+// Separate function for the one real caller that needs the
+// ex-clients filter — deliberately not added as an optional param
+// on fetchClients above, since every other call site uses the
+// `queryFn: fetchClients` shorthand, which React Query calls with
+// its own context object (queryKey, signal, etc.), not undefined.
+// Giving fetchClients a parameter broke that shape everywhere it's
+// used this way.
+export const fetchClientsFiltered = async (params: {
+  exClientsOnly?: boolean;
+}): Promise<ApiClient[]> => {
+  const res = await api.get("/tenant/my-clients", { params });
+  const data = res.data?.data;
+  if (Array.isArray(data)) return data;
+  return data?.clients ?? data?.items ?? [];
+};
+
 export const fetchClientStats = async (): Promise<ClientStats> => {
   const res = await api.get("/tenant/client-stats");
   console.log(res.data.data);
@@ -141,6 +160,20 @@ export async function fetchClientById(id: string): Promise<ApiClientDetail> {
 export async function reactivateClient(clientId: string): Promise<void> {
   await api.patch(`/tenant/${clientId}/reactivate`);
 }
+
+// Real, separate lifecycle from reactivateClient above (which is
+// specifically for a client rejected during onboarding).
+export async function markAsExClient(
+  clientId: string,
+  reason?: string,
+): Promise<void> {
+  await api.patch(`/tenant/${clientId}/mark-ex-client`, { reason });
+}
+
+export async function reactivateFromExClient(clientId: string): Promise<void> {
+  await api.patch(`/tenant/${clientId}/reactivate-ex-client`);
+}
+
 // ─── Display helpers ────────────────────────────────────────
 export const displayName = (c: ApiClient): string => {
   if (c.businessName) return c.businessName;

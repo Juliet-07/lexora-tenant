@@ -19,6 +19,15 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import {
   Search,
   Eye,
@@ -32,6 +41,7 @@ import {
   ArrowUpRight,
   Loader2,
   RefreshCw,
+  UserX,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -44,12 +54,14 @@ import { useToast } from "@/hooks/use-toast";
 import {
   ApiClient,
   ClientStats,
-  fetchClients,
+  fetchClientsFiltered,
   fetchClientStats,
   displayName,
   prettyLabel,
   toneFor,
   reactivateClient,
+  markAsExClient,
+  reactivateFromExClient,
 } from "@/lib/client/clients-api";
 
 export default function Clients() {
@@ -61,12 +73,19 @@ export default function Clients() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
+  const [viewMode, setViewMode] = useState<"active" | "exClients">("active");
+  const [exClientTarget, setExClientTarget] = useState<ApiClient | null>(null);
+  const [exClientReason, setExClientReason] = useState("");
+  const [markingExClient, setMarkingExClient] = useState(false);
 
   const loadAll = async (silent = false) => {
     if (!silent) setLoading(true);
     else setRefreshing(true);
     try {
-      const [list, s] = await Promise.all([fetchClients(), fetchClientStats()]);
+      const [list, s] = await Promise.all([
+        fetchClientsFiltered({ exClientsOnly: viewMode === "exClients" }),
+        fetchClientStats(),
+      ]);
       setClients(list);
       setStats(s);
     } catch (err: any) {
@@ -83,7 +102,8 @@ export default function Clients() {
 
   useEffect(() => {
     loadAll();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewMode]);
 
   // Derive lists & filters
   const filtered = useMemo(() => {
@@ -168,6 +188,45 @@ export default function Clients() {
     }
   };
 
+  const handleMarkAsExClient = async () => {
+    if (!exClientTarget) return;
+    setMarkingExClient(true);
+    try {
+      await markAsExClient(exClientTarget._id, exClientReason.trim());
+      toast({
+        title: "Client marked as ex-client",
+        description: "All their records remain retained and searchable.",
+      });
+      setExClientTarget(null);
+      setExClientReason("");
+      loadAll(true);
+    } catch (err: any) {
+      toast({
+        title: "Could not mark as ex-client",
+        description: err?.response?.data?.message ?? "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setMarkingExClient(false);
+    }
+  };
+
+  const handleReactivateFromExClient = async (clientId: string) => {
+    try {
+      await reactivateFromExClient(clientId);
+      toast({
+        title: "Client restored to active status",
+      });
+      loadAll(true);
+    } catch (err: any) {
+      toast({
+        title: "Could not restore client",
+        description: err?.response?.data?.message ?? "Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -179,6 +238,24 @@ export default function Clients() {
           </p>
         </div>
         <div className="flex gap-2">
+          <div className="flex rounded-lg border p-0.5 bg-muted/40">
+            <Button
+              size="sm"
+              variant={viewMode === "active" ? "default" : "ghost"}
+              className="h-8"
+              onClick={() => setViewMode("active")}
+            >
+              Active
+            </Button>
+            <Button
+              size="sm"
+              variant={viewMode === "exClients" ? "default" : "ghost"}
+              className="h-8"
+              onClick={() => setViewMode("exClients")}
+            >
+              <UserX className="h-3.5 w-3.5 mr-1.5" /> Ex-Clients
+            </Button>
+          </div>
           <Button
             variant="outline"
             size="sm"
@@ -342,7 +419,11 @@ export default function Clients() {
           ) : filtered.length === 0 ? (
             <div className="py-12 text-center text-muted-foreground">
               <Users className="h-10 w-10 mx-auto mb-3 opacity-40" />
-              <p className="text-sm">No clients match your filters.</p>
+              <p className="text-sm">
+                {viewMode === "exClients"
+                  ? "No ex-clients recorded yet."
+                  : "No clients match your filters."}
+              </p>
             </div>
           ) : (
             <Table>
@@ -354,6 +435,9 @@ export default function Clients() {
                   <TableHead>Status</TableHead>
                   <TableHead>KYC</TableHead>
                   <TableHead>Created</TableHead>
+                  {viewMode === "exClients" && (
+                    <TableHead>Ex-Client Since</TableHead>
+                  )}
                   <TableHead className="w-12"></TableHead>
                 </TableRow>
               </TableHeader>
@@ -398,6 +482,20 @@ export default function Clients() {
                     <TableCell className="text-sm text-muted-foreground">
                       {new Date(c.createdAt).toLocaleDateString()}
                     </TableCell>
+                    {viewMode === "exClients" && (
+                      <TableCell className="text-sm">
+                        <p className="text-muted-foreground">
+                          {c.exClientAt
+                            ? new Date(c.exClientAt).toLocaleDateString()
+                            : "—"}
+                        </p>
+                        {c.exClientReason && (
+                          <p className="text-xs text-muted-foreground truncate max-w-[180px]">
+                            {c.exClientReason}
+                          </p>
+                        )}
+                      </TableCell>
+                    )}
                     <TableCell>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -420,6 +518,28 @@ export default function Clients() {
                               Client
                             </DropdownMenuItem>
                           )}
+                          {viewMode === "active" ? (
+                            <DropdownMenuItem
+                              onClick={() => {
+                                setExClientTarget(c);
+                                setExClientReason("");
+                              }}
+                              className="text-destructive focus:text-destructive"
+                            >
+                              <UserX className="h-4 w-4 mr-2" /> Mark as
+                              Ex-Client
+                            </DropdownMenuItem>
+                          ) : (
+                            <DropdownMenuItem
+                              onClick={() =>
+                                handleReactivateFromExClient(c._id)
+                              }
+                              className="text-emerald-600 focus:text-emerald-600"
+                            >
+                              <RefreshCw className="h-4 w-4 mr-2" /> Restore to
+                              Active
+                            </DropdownMenuItem>
+                          )}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>
@@ -430,6 +550,56 @@ export default function Clients() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog
+        open={!!exClientTarget}
+        onOpenChange={(o) => !o && setExClientTarget(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Mark as Ex-Client</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <p className="text-sm text-muted-foreground">
+              <strong>
+                {exClientTarget ? displayName(exClientTarget) : ""}
+              </strong>{" "}
+              will move to the Ex-Clients view. All their records — KYC data,
+              deals, invoices, contacts — remain fully retained and searchable
+              at any time.
+            </p>
+            <div className="space-y-2">
+              <Label>Reason (optional)</Label>
+              <Textarea
+                rows={3}
+                placeholder="e.g. Engagement concluded, relationship ended, client relocated…"
+                value={exClientReason}
+                onChange={(e) => setExClientReason(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setExClientTarget(null)}
+              disabled={markingExClient}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleMarkAsExClient}
+              disabled={markingExClient}
+            >
+              {markingExClient ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                "Mark as Ex-Client"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
