@@ -14,13 +14,13 @@ const App = () => (
     <TooltipProvider>
       <Toaster />
       <Sonner />
-      <AuthProvider>
-        <ModuleProvider>
-          <BrowserRouter>
+      <BrowserRouter>
+        <AuthProvider>
+          <ModuleProvider>
             <AppRoutes />
-          </BrowserRouter>
-        </ModuleProvider>
-      </AuthProvider>
+          </ModuleProvider>
+        </AuthProvider>
+      </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
 );
