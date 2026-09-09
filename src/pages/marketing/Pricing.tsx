@@ -9,6 +9,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { CtaBand, MarketingLayout, PageHero } from "@/components/marketing/MarketingLayout";
+import { ModuleGlyph } from "@/components/marketing/Brand";
 import { modules, plans, pricingFaq } from "@/data/marketingContent";
 import { cn } from "@/lib/utils";
 
@@ -114,13 +115,10 @@ export default function Pricing() {
           </p>
 
           <div className="mt-12 grid gap-4 lg:grid-cols-3">
-            {modules.map((module) => {
-              const Icon = module.icon;
+            {modules.map((module, index) => {
               return (
-                <div key={module.name} className="rounded-2xl border border-intro-foreground/10 bg-intro-surface p-6">
-                  <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-intro-primary/15 text-intro-accent">
-                    <Icon className="h-5 w-5" />
-                  </span>
+                <div key={module.name} className="border-t border-intro-foreground/15 py-7">
+                  <ModuleGlyph index={index} className="text-intro-accent" />
                   <h3 className="mt-5 text-lg font-semibold">{module.name}</h3>
                   <p className="mt-1.5 text-xs text-intro-muted">{module.short}</p>
                   <ul className="mt-5 space-y-1.5">

@@ -31,7 +31,7 @@ export default function Insights() {
             {featured.map((article) => (
               <article
                 key={article.title}
-                className="group rounded-2xl border border-intro-foreground/10 bg-gradient-to-br from-intro-surface to-intro p-8"
+                className="group border-t border-intro-gold/50 bg-intro-surface p-8"
               >
                 <span className="rounded-full bg-intro-accent/15 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-intro-accent">
                   Featured · {article.category}
@@ -68,7 +68,7 @@ export default function Insights() {
             {rest.map((article) => (
               <article
                 key={article.title}
-                className="group flex flex-col rounded-2xl border border-intro-foreground/10 bg-intro-surface p-6 transition-colors hover:border-intro-primary/40"
+                  className="group flex flex-col border-t border-intro-foreground/15 py-7 transition-colors hover:border-intro-gold"
               >
                 <span className="text-[10px] font-bold uppercase tracking-wide text-intro-accent">
                   {article.category}

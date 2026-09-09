@@ -82,7 +82,7 @@ export default function Contact() {
       <section className="py-16 sm:py-20">
         <div className="mx-auto grid max-w-[1320px] gap-8 px-5 sm:px-8 lg:grid-cols-[0.85fr_1.15fr]">
           <aside className="space-y-4">
-            <div className="rounded-2xl border border-intro-foreground/10 bg-intro-surface p-7">
+            <div className="border-t border-intro-foreground/15 py-7">
               <h2 className="text-lg font-semibold">How to reach us</h2>
               <ul className="mt-6 space-y-5 text-sm">
                 <li className="flex gap-3">
@@ -108,7 +108,7 @@ export default function Contact() {
                 </li>
               </ul>
             </div>
-            <div className="rounded-2xl border border-intro-primary/30 bg-intro-primary/10 p-7">
+            <div className="border-l border-intro-gold bg-intro-primary/10 p-7">
               <h3 className="text-sm font-semibold">Looking for a platform demo?</h3>
               <p className="mt-2 text-sm leading-6 text-intro-muted">
                 Select "Platform demo" in step 1 and choose the modules that interest you. We will arrange a
@@ -117,7 +117,7 @@ export default function Contact() {
             </div>
           </aside>
 
-          <div className="rounded-2xl border border-intro-foreground/10 bg-intro-surface p-7 sm:p-9">
+          <div className="border-t border-intro-foreground/15 bg-intro-surface p-7 sm:p-9">
             <div className="mb-8 flex items-center gap-2">
               {["Your details", "Your interests", "Select a time"].map((label, i) => (
                 <div key={label} className="flex flex-1 items-center gap-2">
