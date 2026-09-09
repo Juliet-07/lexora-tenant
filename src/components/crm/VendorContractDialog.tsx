@@ -111,9 +111,8 @@ export function VendorContractDialog({
   };
 
   const persist = (): string => {
-    const id = contract?.id;
-    saveContract(vendor.id, {
-      id,
+    return saveContract(vendor.id, {
+      id: contract?.id,
       title: title.trim(),
       templateId: template.id,
       templateName: template.name,
@@ -128,7 +127,6 @@ export function VendorContractDialog({
       signerName,
       signerEmail,
     });
-    return id ?? "";
   };
 
   const handleSaveDraft = () => {
@@ -143,32 +141,18 @@ export function VendorContractDialog({
       return;
     }
     setBusy(true);
-    persist();
-    // The contract may have just been created — find it by title.
+    const id = persist();
     setTimeout(() => {
-      const created = contract?.id;
-      if (created) {
-        advanceContract(vendor.id, created, "sent", `Sent to ${signerEmail}`);
-      } else {
-        // Newly created draft is the most recent one for this vendor.
-        const latest = vendor.contracts[0];
-        if (latest) {
-          advanceContract(
-            vendor.id,
-            latest.id,
-            "sent",
-            `Sent to ${signerEmail}`,
-          );
-        }
-      }
+      advanceContract(vendor.id, id, "sent", `Sent to ${signerEmail}`);
       setBusy(false);
       toast({
         title: "Contract sent",
         description: `${title} sent to ${signerName} (${signerEmail}) for signature.`,
       });
       onOpenChange(false);
-    }, 500);
+    }, 400);
   };
+
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
