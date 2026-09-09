@@ -3,7 +3,6 @@ import { useEffect, useState } from "react";
 import { ArrowRight, Building2, Mail, Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import lexoraLogo from "@/assets/lexora-logo.png.asset.json";
 
 export const marketingNav = [
   { label: "Home", to: "/" },
@@ -29,7 +28,7 @@ export function MarketingLayout({ children }: { children: React.ReactNode }) {
       <header className="fixed inset-x-0 top-0 z-50 border-b border-intro-foreground/10 bg-intro/85 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-[1320px] items-center gap-6 px-5 sm:px-8">
           <Link to="/" className="flex shrink-0 items-center" aria-label="Lexora home">
-            <img src={lexoraLogo.url} alt="Lexora Africa" className="h-11 w-auto object-contain" />
+            <img src="/lexora-logo.webp" alt="Lexora Africa" className="h-11 w-auto object-contain" />
           </Link>
 
           <nav className="hidden items-center gap-1 lg:flex" aria-label="Main navigation">
@@ -103,7 +102,7 @@ export function MarketingLayout({ children }: { children: React.ReactNode }) {
       <footer className="border-t border-intro-foreground/10 bg-intro px-5 py-14 sm:px-8">
         <div className="mx-auto grid max-w-[1320px] gap-10 lg:grid-cols-[1.4fr_1fr_1fr_1fr_1fr]">
           <div>
-            <img src={lexoraLogo.url} alt="Lexora Africa" className="h-14 w-auto object-contain" />
+            <img src="/lexora-logo.webp" alt="Lexora Africa" className="h-14 w-auto object-contain" />
             <p className="mt-4 max-w-xs text-sm leading-6 text-intro-muted">
               Governance, risk, and compliance platform built from first principles for African businesses.
             </p>

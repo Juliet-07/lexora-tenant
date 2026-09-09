@@ -6,8 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { AlertCircle, Loader2 } from "lucide-react";
 import loginBg from "@/assets/login-bg.jpg";
-import lexoraLogo from "@/assets/lexora-logo.png.asset.json";
-import lexoraIcon from "@/assets/lexora-icon.png.asset.json";
 
 export default function Login() {
   const { login, isLoading } = useAuth();
@@ -40,7 +38,7 @@ export default function Login() {
 
         {/* Logo */}
         <div className="relative z-10 p-10">
-          <img src={lexoraLogo.url} alt="Lexora Africa" className="h-20 w-auto object-contain" />
+          <img src="/lexora-logo.webp" alt="Lexora Africa" className="h-20 w-auto object-contain" />
         </div>
 
         {/* Hero copy */}
@@ -91,11 +89,11 @@ export default function Login() {
         <div className="w-full max-w-md space-y-8">
           {/* Mobile logo */}
           <div className="flex lg:hidden items-center justify-center">
-            <img src={lexoraLogo.url} alt="Lexora Africa" className="h-16 w-auto object-contain" />
+            <img src="/lexora-logo.webp" alt="Lexora Africa" className="h-16 w-auto object-contain" />
           </div>
 
           <div className="text-center space-y-2">
-            <img src={lexoraIcon.url} alt="" className="mb-2 hidden h-16 w-16 object-contain lg:inline-block" />
+            <img src="/lexora-icon.webp" alt="" className="mb-2 hidden h-16 w-16 object-contain lg:inline-block" />
             <h2 className="text-3xl font-bold tracking-tight">Welcome back</h2>
             <p className="text-sm text-muted-foreground">
               Sign in to your Lexora workspace

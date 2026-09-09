@@ -66,7 +66,6 @@ import {
 } from "@/components/ui/collapsible";
 import { useAuth } from "@/contexts/AuthContext";
 import { useModule } from "@/contexts/ModuleContext";
-import lexoraIcon from "@/assets/lexora-icon.png.asset.json";
 
 // ─────────────────────────────────────────────────────────────
 // Nav items keyed by backend module id.
@@ -489,7 +488,7 @@ export function AppSidebar() {
         <div className="p-4 border-b border-sidebar-border">
           {!collapsed ? (
             <div className="flex items-center gap-3">
-              <img src={lexoraIcon.url} alt="" className="h-9 w-9 rounded-lg object-contain" />
+              <img src="/lexora-icon.webp" alt="" className="h-9 w-9 rounded-lg object-contain" />
               <div className="min-w-0">
                 <h1 className="text-sm font-bold text-sidebar-accent-foreground tracking-tight truncate">
                   Lexora
@@ -500,7 +499,7 @@ export function AppSidebar() {
               </div>
             </div>
           ) : (
-            <img src={lexoraIcon.url} alt="Lexora" className="mx-auto h-9 w-9 rounded-lg object-contain" />
+            <img src="/lexora-icon.webp" alt="Lexora" className="mx-auto h-9 w-9 rounded-lg object-contain" />
           )}
         </div>
 
@@ -616,7 +615,7 @@ export function AppSidebar() {
               {isLoadingDashboard ? (
                 <Loader2 className="absolute inset-0 m-auto h-4 w-4 animate-spin text-sidebar-foreground" />
               ) : (
-                <img src={lexoraIcon.url} alt="" className="h-9 w-9 rounded-lg object-contain" />
+                <img src="/lexora-icon.webp" alt="" className="h-9 w-9 rounded-lg object-contain" />
               )}
             </div>
             <div className="min-w-0">
@@ -629,7 +628,7 @@ export function AppSidebar() {
             </div>
           </div>
         ) : (
-          <img src={lexoraIcon.url} alt="Lexora" className="mx-auto h-9 w-9 rounded-lg object-contain" />
+          <img src="/lexora-icon.webp" alt="Lexora" className="mx-auto h-9 w-9 rounded-lg object-contain" />
         )}
       </div>
 
