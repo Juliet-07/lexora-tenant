@@ -89,7 +89,7 @@ export default function Login() {
         <div className="w-full max-w-md space-y-8">
           {/* Mobile logo */}
           <div className="flex lg:hidden items-center justify-center">
-            <img src="/lexora-logo-light.png" alt="Lexora Africa" className="h-20 w-auto object-contain" />
+            <img src="/lexora-logo.png" alt="Lexora Africa" className="h-20 w-auto object-contain" />
           </div>
 
           <div className="text-center space-y-2">
