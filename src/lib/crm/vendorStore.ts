@@ -731,7 +731,8 @@ export function addVendorNote(vendorId: string, title: string, body: string) {
 export function saveContract(
   vendorId: string,
   contract: Omit<VendorContract, "id" | "history"> & { id?: string },
-) {
+): string {
+  const newId = contract.id ?? uid();
   update(vendorId, (v) => {
     const existing = contract.id
       ? v.contracts.find((c) => c.id === contract.id)
@@ -741,7 +742,7 @@ export function saveContract(
         {
           ...v,
           contracts: v.contracts.map((c) =>
-            c.id === existing.id ? { ...c, ...contract } as VendorContract : c,
+            c.id === existing.id ? ({ ...c, ...contract } as VendorContract) : c,
           ),
         },
         `Contract "${contract.title}" updated`,
@@ -749,7 +750,7 @@ export function saveContract(
     }
     const created: VendorContract = {
       ...contract,
-      id: uid(),
+      id: newId,
       history: [{ at: now(), label: "Draft created from template" }],
     };
     return logActivity(
@@ -757,7 +758,9 @@ export function saveContract(
       `Contract "${created.title}" drafted from ${created.templateName}`,
     );
   });
+  return newId;
 }
+
 
 export function advanceContract(
   vendorId: string,
