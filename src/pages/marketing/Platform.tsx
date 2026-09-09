@@ -1,4 +1,3 @@
-import { Check } from "lucide-react";
 import { ModuleGlyph } from "@/components/marketing/Brand";
 import { CtaBand, MarketingLayout, PageHero } from "@/components/marketing/MarketingLayout";
 import { modules } from "@/data/marketingContent";
@@ -30,9 +29,8 @@ export default function Platform() {
                 </div>
                 <ul className="grid grid-cols-1 gap-x-6 gap-y-2.5 self-center sm:grid-cols-2">
                   {module.features.map((feature) => (
-                    <li key={feature} className="flex items-start gap-2 text-sm text-intro-soft-foreground/90">
-                      <Check className="mt-0.5 h-4 w-4 shrink-0 text-intro-primary" />
-                      {feature}
+                    <li key={feature} className="flex items-start gap-3 text-sm text-intro-soft-foreground/90">
+                      <span className="mt-2 h-px w-4 shrink-0 bg-intro-primary" aria-hidden="true" />{feature}
                     </li>
                   ))}
                 </ul>

@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { CheckCircle2, Clock, Globe, Mail, MapPin } from "lucide-react";
+import { Clock } from "lucide-react";
+import { LexoraBrand } from "@/components/marketing/Brand";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -85,22 +86,19 @@ export default function Contact() {
             <div className="border-t border-intro-foreground/15 py-7">
               <h2 className="text-lg font-semibold">How to reach us</h2>
               <ul className="mt-6 space-y-5 text-sm">
-                <li className="flex gap-3">
-                  <Mail className="mt-0.5 h-4 w-4 text-intro-accent" />
+                <li className="border-t border-intro-foreground/10 pt-4">
                   <div>
                     <p className="text-xs uppercase tracking-wide text-intro-muted">Email</p>
                     <p>info@lexoraafrica.com</p>
                   </div>
                 </li>
-                <li className="flex gap-3">
-                  <MapPin className="mt-0.5 h-4 w-4 text-intro-accent" />
+                <li className="border-t border-intro-foreground/10 pt-4">
                   <div>
                     <p className="text-xs uppercase tracking-wide text-intro-muted">Location</p>
                     <p>Kigali, Rwanda</p>
                   </div>
                 </li>
-                <li className="flex gap-3">
-                  <Globe className="mt-0.5 h-4 w-4 text-intro-accent" />
+                <li className="border-t border-intro-foreground/10 pt-4">
                   <div>
                     <p className="text-xs uppercase tracking-wide text-intro-muted">Serving</p>
                     <p>East Africa and beyond</p>
@@ -124,7 +122,7 @@ export default function Contact() {
                   <span
                     className={cn(
                       "flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold",
-                      step > i ? "bg-intro-primary text-white" : "bg-intro-foreground/10 text-intro-muted",
+                      step > i ? "bg-intro-primary text-intro-foreground" : "bg-intro-foreground/10 text-intro-muted",
                     )}
                   >
                     {i + 1}
@@ -266,7 +264,7 @@ export default function Contact() {
 
             {step === 4 && (
               <div className="py-10 text-center">
-                <CheckCircle2 className="mx-auto h-12 w-12 text-intro-success" />
+                <LexoraBrand compact className="mx-auto h-14 w-14" />
                 <h3 className="mt-6 font-display text-3xl">You're all set.</h3>
                 <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-intro-muted">
                   A confirmation will be sent to your email with the meeting details and a calendar invite.
