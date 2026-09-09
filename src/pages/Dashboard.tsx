@@ -162,7 +162,7 @@ export default function Dashboard() {
   }[] = dashboardData?.recentActivity ?? [];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" style={{ fontFamily: "'Inter', system-ui, sans-serif" }}>
       {/* Hero */}
       <section className="relative overflow-hidden rounded-2xl border bg-gradient-to-br from-primary/10 via-card to-secondary/10 p-6">
         <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-primary/10 blur-3xl" />
