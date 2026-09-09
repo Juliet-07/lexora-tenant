@@ -62,6 +62,7 @@ import {
   type ClientBoardCard,
   type ClientType,
 } from "@/lib/crm/crm-pipeline-api";
+import { LeadDetailPanel } from "@/components/crm/LeadDetailPanel";
 
 // ─── Static config ──────────────────────────────────────────────
 
@@ -172,6 +173,7 @@ export default function Pipeline() {
     name: string;
   } | null>(null);
   const [lostTarget, setLostTarget] = useState<Lead | null>(null);
+  const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
 
   const invalidateAll = () => {
     queryClient.invalidateQueries({ queryKey: ["crm-leads"] });
@@ -754,6 +756,7 @@ export default function Pipeline() {
                             setDragging(null);
                             setDragOver(null);
                           }}
+                          onClick={() => isLead && setSelectedLead(it)}
                           className={`relative rounded-lg bg-background p-3 border border-border/50 hover:border-primary/50 cursor-grab active:cursor-grabbing transition-opacity group ${
                             dragging?.id === id ? "opacity-40" : ""
                           }`}
@@ -822,7 +825,11 @@ export default function Pipeline() {
                 </TableHeader>
                 <TableBody>
                   {leads.map((l) => (
-                    <TableRow key={l._id}>
+                    <TableRow
+                      key={l._id}
+                      className="cursor-pointer"
+                      onClick={() => setSelectedLead(l)}
+                    >
                       <TableCell>
                         <p className="font-medium text-sm">
                           {l.contactName ?? "—"}
@@ -930,6 +937,20 @@ export default function Pipeline() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* ── Lead side panel ───────────────────────────────── */}
+      <LeadDetailPanel
+        lead={selectedLead}
+        onClose={() => setSelectedLead(null)}
+        onConvert={(l) => {
+          setSelectedLead(null);
+          setConvertTarget(l);
+        }}
+        onMarkLost={(l) => {
+          setSelectedLead(null);
+          setLostTarget(l);
+        }}
+      />
 
       {/* ── Convert dialog ─────────────────────────────────── */}
       <ConvertLeadDialog

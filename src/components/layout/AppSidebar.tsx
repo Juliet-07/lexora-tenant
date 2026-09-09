@@ -256,6 +256,7 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
         { title: "Pipeline", url: "/crm/pipeline" },
         { title: "Client Management", url: "/crm/clients" },
         { title: "SLA Management", url: "/crm/sla" },
+        { title: "Vendor Management", url: "/crm/vendors" },
       ],
     },
     { title: "Clients", url: "/clients", icon: Users, adminOnly: true },
