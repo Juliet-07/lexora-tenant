@@ -83,7 +83,7 @@ export default function Reactivate() {
   // ── No token, or token invalid/expired — offer to resend ──
   if (!token || error) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/10 via-background to-secondary/10 p-4 font-inter">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/10 via-background to-secondary/10 p-4">
         <div className="w-full max-w-md space-y-6">
           <Logo />
           <Card className="shadow-xl border-0">
@@ -139,7 +139,7 @@ export default function Reactivate() {
 
   if (isLoading || !info) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/10 via-background to-secondary/10 font-inter">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/10 via-background to-secondary/10">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
       </div>
     );
@@ -148,7 +148,7 @@ export default function Reactivate() {
   const { openInvoice } = info;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary/10 via-background to-secondary/10 py-10 px-4 font-inter">
+    <div className="min-h-screen bg-gradient-to-br from-primary/10 via-background to-secondary/10 py-10 px-4">
       <div className="max-w-3xl mx-auto space-y-6">
         <Logo />
 

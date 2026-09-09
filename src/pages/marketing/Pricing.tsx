@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
+import { Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Accordion,
@@ -8,7 +9,6 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { CtaBand, MarketingLayout, PageHero } from "@/components/marketing/MarketingLayout";
-import { ModuleGlyph } from "@/components/marketing/Brand";
 import { modules, plans, pricingFaq } from "@/data/marketingContent";
 import { cn } from "@/lib/utils";
 
@@ -38,7 +38,7 @@ export default function Pricing() {
                   className={cn(
                     "rounded-lg px-5 py-2 text-xs font-semibold transition-colors",
                     annual === opt.value
-                      ? "bg-intro-primary text-intro-foreground"
+                      ? "bg-intro-primary text-white"
                       : "text-intro-soft-muted hover:text-intro-soft-foreground",
                   )}
                 >
@@ -61,7 +61,7 @@ export default function Pricing() {
                 )}
               >
                 {plan.highlight && (
-                    <span className="absolute -top-3 left-7 rounded-full bg-intro-primary px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-intro-foreground">
+                  <span className="absolute -top-3 left-7 rounded-full bg-intro-primary px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-white">
                     Most popular
                   </span>
                 )}
@@ -85,7 +85,7 @@ export default function Pricing() {
                   className={cn(
                     "mt-6 w-full",
                     plan.highlight
-                      ? "bg-intro-primary text-intro-foreground hover:bg-intro-primary/90"
+                      ? "bg-intro-primary text-white hover:bg-intro-primary/90"
                       : "border border-intro-soft-border bg-transparent text-intro-soft-foreground hover:bg-intro-soft",
                   )}
                 >
@@ -94,7 +94,8 @@ export default function Pricing() {
                 <ul className="mt-6 space-y-2 border-t border-intro-soft-border pt-5">
                   {plan.perks.map((perk) => (
                     <li key={perk} className="flex items-start gap-2 text-xs text-intro-soft-muted">
-                      <span className="mt-2 h-px w-3 shrink-0 bg-intro-gold" aria-hidden="true" />{perk}
+                      <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-intro-success" />
+                      {perk}
                     </li>
                   ))}
                 </ul>
@@ -113,16 +114,20 @@ export default function Pricing() {
           </p>
 
           <div className="mt-12 grid gap-4 lg:grid-cols-3">
-            {modules.map((module, index) => {
+            {modules.map((module) => {
+              const Icon = module.icon;
               return (
-                <div key={module.name} className="border-t border-intro-foreground/15 py-7">
-                  <ModuleGlyph index={index} className="text-intro-accent" />
+                <div key={module.name} className="rounded-2xl border border-intro-foreground/10 bg-intro-surface p-6">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-intro-primary/15 text-intro-accent">
+                    <Icon className="h-5 w-5" />
+                  </span>
                   <h3 className="mt-5 text-lg font-semibold">{module.name}</h3>
                   <p className="mt-1.5 text-xs text-intro-muted">{module.short}</p>
                   <ul className="mt-5 space-y-1.5">
                     {module.features.map((f) => (
                       <li key={f} className="flex items-start gap-2 text-xs text-intro-muted">
-                        <span className="mt-2 h-px w-3 shrink-0 bg-intro-gold" aria-hidden="true" />{f}
+                        <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-intro-success" />
+                        {f}
                       </li>
                     ))}
                   </ul>

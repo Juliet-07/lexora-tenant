@@ -21,7 +21,6 @@ export default {
       fontFamily: {
         sans: ["Work Sans", "system-ui", "sans-serif"],
         display: ["Instrument Serif", "Georgia", "serif"],
-        inter: ["Inter", "system-ui", "sans-serif"],
       },
       colors: {
         border: "hsl(var(--border))",
@@ -95,7 +94,6 @@ export default {
           "soft-border": "hsl(var(--intro-soft-border))",
           gold: "hsl(var(--intro-gold))",
           "gold-light": "hsl(var(--intro-gold-light))",
-          "deep-blue": "hsl(var(--intro-deep-blue))",
         },
       },
       borderRadius: {

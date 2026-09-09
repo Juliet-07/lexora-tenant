@@ -50,22 +50,21 @@
     --info: 210 100% 52%;
     --info-foreground: 0 0% 100%;
 
-    --intro: 236 33% 6%;
+    --intro: 270 50% 5%;
     --intro-foreground: 0 0% 100%;
-    --intro-muted: 230 12% 68%;
-    --intro-primary: 263 68% 35%;
-    --intro-accent: 262 72% 50%;
-    --intro-highlight: 42 79% 46%;
-    --intro-surface: 231 56% 17%;
+    --intro-muted: 255 12% 70%;
+    --intro-primary: 264 80% 55%;
+    --intro-accent: 320 86% 70%;
+    --intro-highlight: 254 100% 86%;
+    --intro-surface: 267 34% 10%;
     --intro-success: 159 72% 48%;
-    --intro-soft: 225 25% 97%;
-    --intro-soft-foreground: 234 31% 10%;
-    --intro-soft-muted: 229 12% 38%;
+    --intro-soft: 270 20% 97%;
+    --intro-soft-foreground: 270 35% 10%;
+    --intro-soft-muted: 265 10% 40%;
     --intro-soft-raised: 0 0% 100%;
-    --intro-soft-border: 228 15% 84%;
-    --intro-gold: 43 79% 46%;
-    --intro-gold-light: 43 77% 58%;
-    --intro-deep-blue: 227 66% 17%;
+    --intro-soft-border: 264 15% 86%;
+    --intro-gold: 43 80% 46%;
+    --intro-gold-light: 45 85% 62%;
   }
 
   .dark {
@@ -135,7 +134,7 @@
     background-image:
       linear-gradient(hsl(var(--intro-foreground) / 0.045) 1px, transparent 1px),
       linear-gradient(90deg, hsl(var(--intro-foreground) / 0.045) 1px, transparent 1px);
-    background-size: 96px 96px;
+    background-size: 72px 72px;
   }
 
   .intro-reveal {

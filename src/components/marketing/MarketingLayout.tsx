@@ -2,7 +2,6 @@ import { Link, NavLink, useLocation } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { ArrowRight, Building2, Mail, Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { LexoraBrand } from "@/components/marketing/Brand";
 import { cn } from "@/lib/utils";
 
 export const marketingNav = [
@@ -26,10 +25,13 @@ export function MarketingLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="intro-page min-h-screen overflow-x-hidden bg-intro text-intro-foreground">
-      <header className="fixed inset-x-0 top-0 z-50 border-b border-intro-foreground/10 bg-intro/95 backdrop-blur-xl">
-        <div className="mx-auto flex h-20 max-w-[1400px] items-center gap-8 px-5 sm:px-8">
+      <header className="fixed inset-x-0 top-0 z-50 border-b border-intro-foreground/10 bg-intro/85 backdrop-blur-xl">
+        <div className="mx-auto flex h-16 max-w-[1320px] items-center gap-6 px-5 sm:px-8">
           <Link to="/" className="flex items-center gap-2.5" aria-label="Lexora home">
-            <LexoraBrand className="h-10" />
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-intro-primary to-intro-accent text-sm font-bold text-intro-foreground">
+              L
+            </span>
+            <span className="text-lg font-semibold tracking-tight">Lexora</span>
           </Link>
 
           <nav className="hidden items-center gap-1 lg:flex" aria-label="Main navigation">
@@ -40,10 +42,10 @@ export function MarketingLayout({ children }: { children: React.ReactNode }) {
                 end={item.to === "/"}
                 className={({ isActive }) =>
                   cn(
-                    "border-b px-2 py-2 text-[12px] font-medium uppercase tracking-wide transition-colors",
+                    "rounded-md px-3 py-1.5 text-[13px] font-medium transition-colors",
                     isActive
-                      ? "border-intro-gold text-intro-foreground"
-                      : "border-transparent text-intro-muted hover:text-intro-foreground",
+                      ? "bg-intro-primary/15 text-intro-foreground"
+                      : "text-intro-muted hover:text-intro-foreground",
                   )
                 }
               >
@@ -56,15 +58,15 @@ export function MarketingLayout({ children }: { children: React.ReactNode }) {
             <Button
               asChild
               variant="outline"
-              className="h-10 rounded-sm border-intro-foreground/20 bg-transparent px-5 text-xs text-intro-muted hover:bg-intro-foreground/10 hover:text-intro-foreground"
+              className="h-9 rounded-lg border-intro-foreground/15 bg-transparent px-4 text-xs text-intro-muted hover:bg-intro-foreground/10 hover:text-intro-foreground"
             >
               <Link to="/login">Launch app <ArrowRight /></Link>
             </Button>
             <Button
               asChild
-              className="h-10 rounded-sm bg-intro-primary px-5 text-xs text-intro-foreground hover:bg-intro-accent"
+              className="h-9 rounded-lg bg-gradient-to-br from-intro-primary to-intro-accent px-4 text-xs text-intro-foreground shadow-intro-glow hover:opacity-90"
             >
-              <Link to="/contact">Request a demo</Link>
+              <Link to="/contact">Get in touch</Link>
             </Button>
           </div>
 
@@ -98,14 +100,17 @@ export function MarketingLayout({ children }: { children: React.ReactNode }) {
         )}
       </header>
 
-      <main className="pt-20">{children}</main>
+      <main className="pt-16">{children}</main>
 
       <footer className="border-t border-intro-foreground/10 bg-intro px-5 py-14 sm:px-8">
         <div className="mx-auto grid max-w-[1320px] gap-10 lg:grid-cols-[1.4fr_1fr_1fr_1fr_1fr]">
           <div>
-            <LexoraBrand className="h-14" />
+            <div className="flex items-center gap-2.5">
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-intro-primary to-intro-accent text-sm font-bold">L</span>
+              <span className="font-semibold">Lexora Africa</span>
+            </div>
             <p className="mt-4 max-w-xs text-sm leading-6 text-intro-muted">
-              Africa's integrated business governance platform. Built for institutions that need clarity, control and credible growth.
+              Governance, risk, and compliance platform built from first principles for African businesses.
             </p>
           </div>
           <FooterCol
@@ -186,16 +191,17 @@ export function PageHero({
   subtitle?: string;
 }) {
   return (
-    <section className="relative overflow-hidden border-b border-intro-foreground/10 py-24 sm:py-32">
+    <section className="relative overflow-hidden border-b border-intro-foreground/10 py-20 sm:py-24">
       <div className="absolute inset-0 intro-grid opacity-30" aria-hidden="true" />
-      <div className="relative mx-auto max-w-[1320px] px-5 sm:px-8">
+      <div className="absolute left-1/2 top-[-220px] h-[420px] w-[820px] -translate-x-1/2 rounded-full bg-intro-primary/20 blur-3xl" aria-hidden="true" />
+      <div className="relative mx-auto max-w-[900px] px-5 text-center sm:px-8">
         {eyebrow && (
-          <span className="inline-flex border-l border-intro-gold pl-3 text-[11px] font-semibold uppercase tracking-wide text-intro-gold">
+          <span className="inline-flex rounded-full border border-intro-accent/30 bg-intro-accent/10 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-intro-accent">
             {eyebrow}
           </span>
         )}
-        <h1 className="mt-7 max-w-4xl font-display text-5xl leading-[1.02] sm:text-7xl">{title}</h1>
-        {subtitle && <p className="mt-7 max-w-2xl text-base leading-7 text-intro-muted">{subtitle}</p>}
+        <h1 className="mt-6 font-display text-5xl leading-[1.02] sm:text-6xl">{title}</h1>
+        {subtitle && <p className="mx-auto mt-6 max-w-2xl text-base leading-7 text-intro-muted">{subtitle}</p>}
       </div>
     </section>
   );
@@ -213,14 +219,13 @@ export function CtaBand({
   primaryTo?: string;
 }) {
   return (
-    <section className="border-y border-intro-gold/30 bg-intro-deep-blue">
+    <section className="border-y border-intro-foreground/10 bg-intro-primary">
       <div className="mx-auto grid max-w-[1320px] gap-8 px-5 py-16 sm:px-8 lg:grid-cols-[1fr_auto] lg:items-center">
         <div>
-          <p className="mb-4 text-xs font-semibold uppercase text-intro-gold">A stronger operating foundation</p>
           <h2 className="max-w-3xl font-display text-4xl leading-none text-intro-foreground sm:text-5xl">{title}</h2>
           <p className="mt-4 max-w-xl text-sm text-intro-foreground/75">{copy}</p>
         </div>
-        <Button asChild size="lg" className="h-13 w-fit rounded-sm bg-intro-gold px-7 text-intro hover:bg-intro-gold-light">
+        <Button asChild size="lg" className="h-13 w-fit bg-intro-foreground px-7 text-intro hover:bg-intro-foreground/90">
           <Link to={primaryTo}>{primaryLabel} <ArrowRight /></Link>
         </Button>
       </div>
