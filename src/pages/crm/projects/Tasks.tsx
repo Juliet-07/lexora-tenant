@@ -249,7 +249,7 @@ export default function Tasks() {
             <LayoutGrid className="mr-2 h-4 w-4" /> Kanban
           </TabsTrigger>
           <TabsTrigger value="list">List</TabsTrigger>
-          <TabsTrigger value="templates">Templates &amp; recurring</TabsTrigger>
+          {/* <TabsTrigger value="templates">Templates &amp; recurring</TabsTrigger> */}
         </TabsList>
 
         <TabsContent value="board" className="pt-4">
@@ -388,7 +388,7 @@ export default function Tasks() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="templates" className="pt-4">
+        <TabsContent value="templates" className="hidden pt-4">
           <div className="grid gap-3 md:grid-cols-3">
             {taskTemplates.map((t) => (
               <Card key={t.id}>
