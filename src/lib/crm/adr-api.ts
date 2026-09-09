@@ -331,3 +331,22 @@ export const escalateAdrToLitigation = async (
   },
 ): Promise<{ adrCase: AdrCase; litigationCase: any }> =>
   unwrap(await api.post(`/crm/adr-cases/${id}/escalate`, dto));
+
+// Triggers PDF download directly in the browser — same shared house
+// style used across CRM, KYC, and GRC reports.
+export const exportAdrReportPdf = (): void => {
+  const token = localStorage.getItem("tenantToken");
+  const base = import.meta.env.VITE_REACT_APP_BASE_URL;
+  const filename = `adr-case-register-${new Date().toISOString().split("T")[0]}.pdf`;
+  fetch(`${base}/crm/adr-cases/report/export`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+    .then((r) => r.blob())
+    .then((blob) => {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
+};

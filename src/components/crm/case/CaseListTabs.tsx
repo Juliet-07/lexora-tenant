@@ -222,14 +222,44 @@ export interface CaseReportMetric {
 }
 
 /** Simple report surface: metric cards plus export actions. */
+/** Real CSV built from the same metrics/rows already computed live
+ * from the case register — opens directly in Excel. No backend
+ * round-trip needed since this data is already real and on-screen. */
+function downloadCsv(
+  filename: string,
+  metrics: CaseReportMetric[],
+  rows: { label: string; value: string }[],
+) {
+  const escape = (v: string) => `"${String(v).replace(/"/g, '""')}"`;
+  const lines = [
+    "Metric,Value",
+    ...metrics.map((m) => `${escape(m.label)},${escape(m.value)}`),
+    "",
+    "Breakdown,Value",
+    ...rows.map((r) => `${escape(r.label)},${escape(r.value)}`),
+  ];
+  const blob = new Blob([lines.join("\n")], {
+    type: "text/csv;charset=utf-8;",
+  });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
 export function CaseReportsPanel({
   title,
   metrics,
   rows,
+  onExportPdf,
 }: {
   title: string;
   metrics: CaseReportMetric[];
   rows: { label: string; value: string }[];
+  /** Real, house-style server PDF for this register — ADR and
+   * litigation each pass their own export function in. */
+  onExportPdf: () => void;
 }) {
   return (
     <div className="space-y-4">
@@ -238,10 +268,20 @@ export function CaseReportsPanel({
           {title} — computed live from the case register.
         </p>
         <div className="flex gap-2">
-          <Button size="sm" variant="outline" onClick={() => window.print()}>
+          <Button size="sm" variant="outline" onClick={onExportPdf}>
             <Download className="mr-1.5 h-4 w-4" /> Export PDF
           </Button>
-          <Button size="sm" variant="outline">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() =>
+              downloadCsv(
+                `${title.toLowerCase().replace(/\s+/g, "-")}-${new Date().toISOString().split("T")[0]}.csv`,
+                metrics,
+                rows,
+              )
+            }
+          >
             <FileSpreadsheet className="mr-1.5 h-4 w-4" /> Export Excel
           </Button>
         </div>

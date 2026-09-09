@@ -286,3 +286,22 @@ export const withdrawLitigationCase = async (
   reason?: string,
 ): Promise<LitigationCase> =>
   unwrap(await api.post(`/crm/litigation-cases/${id}/withdraw`, { reason }));
+
+// Triggers PDF download directly in the browser — same shared house
+// style used across CRM, KYC, and GRC reports.
+export const exportLitigationReportPdf = (): void => {
+  const token = localStorage.getItem("tenantToken");
+  const base = import.meta.env.VITE_REACT_APP_BASE_URL;
+  const filename = `litigation-case-register-${new Date().toISOString().split("T")[0]}.pdf`;
+  fetch(`${base}/crm/litigation-cases/report/export`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+    .then((r) => r.blob())
+    .then((blob) => {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
+};

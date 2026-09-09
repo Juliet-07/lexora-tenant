@@ -52,13 +52,7 @@ import {
   CaseReportsPanel,
 } from "@/components/crm/case/CaseListTabs";
 import type { LitigationCase } from "@/lib/crm/litigation-api";
-import {
-
-  Tabs,
-  TabsList,
-  TabsTrigger,
-  TabsContent,
-} from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   CaseCommunicationsTab,
   CaseDraftingTab,
@@ -83,6 +77,7 @@ import {
   recordLitigationOutcome,
   recordConsentJudgment,
   withdrawLitigationCase,
+  exportLitigationReportPdf,
   LITIGATION_STAGES,
   LITIGATION_STAGE_TASKS,
   LITIGATION_PARTY_ROLES,
@@ -471,8 +466,6 @@ export default function Litigation() {
       </Card>
     );
 
-
-
     return (
       <div className="space-y-6">
         <Button
@@ -532,12 +525,9 @@ export default function Litigation() {
                 <Button
                   size="sm"
                   disabled={stageMut.isPending}
-                  onClick={() =>
-                    stageMut.mutate(nextStage)
-                  }
+                  onClick={() => stageMut.mutate(nextStage)}
                 >
-                  Advance to {nextStage}{" "}
-                  <ArrowRight className="ml-2 h-4 w-4" />
+                  Advance to {nextStage} <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
               )}
 
@@ -652,402 +642,418 @@ export default function Litigation() {
           </TabsList>
 
           <TabsContent value="overview" className="pt-4">
-        <div className="grid gap-4 lg:grid-cols-3">
-          {/* ── Main column: timeline ──────────────────────── */}
-          <div className="space-y-4 lg:col-span-2">
-            <Card>
-              <CardHeader className="flex-row items-center justify-between pb-2">
-                <CardTitle className="text-base">Litigation timeline</CardTitle>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setNoteOpen(true)}
-                >
-                  <Plus className="mr-1 h-3.5 w-3.5" /> Add note
-                </Button>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-0">
-                  {[...c.timeline].reverse().map((tl, i) => (
-                    <div
-                      key={tl._id}
-                      className="relative flex gap-3 pb-6 last:pb-0"
+            <div className="grid gap-4 lg:grid-cols-3">
+              {/* ── Main column: timeline ──────────────────────── */}
+              <div className="space-y-4 lg:col-span-2">
+                <Card>
+                  <CardHeader className="flex-row items-center justify-between pb-2">
+                    <CardTitle className="text-base">
+                      Litigation timeline
+                    </CardTitle>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setNoteOpen(true)}
                     >
-                      {i < c.timeline.length - 1 && (
-                        <div className="absolute left-[5px] top-3 h-full w-px bg-border" />
-                      )}
+                      <Plus className="mr-1 h-3.5 w-3.5" /> Add note
+                    </Button>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-0">
+                      {[...c.timeline].reverse().map((tl, i) => (
+                        <div
+                          key={tl._id}
+                          className="relative flex gap-3 pb-6 last:pb-0"
+                        >
+                          {i < c.timeline.length - 1 && (
+                            <div className="absolute left-[5px] top-3 h-full w-px bg-border" />
+                          )}
+                          <div
+                            className={`relative z-10 mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${tl.source === "System" ? "bg-primary" : "bg-muted-foreground"}`}
+                          />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-baseline gap-2">
+                              <p className="text-xs text-muted-foreground">
+                                {new Date(tl.at).toLocaleDateString(undefined, {
+                                  day: "numeric",
+                                  month: "short",
+                                  year: "numeric",
+                                })}
+                              </p>
+                              {tl.source === "Manual" && (
+                                <Badge
+                                  variant="outline"
+                                  className="text-[10px]"
+                                >
+                                  Note
+                                </Badge>
+                              )}
+                            </div>
+                            <p className="text-sm font-medium">{tl.title}</p>
+                            {tl.description && (
+                              <p className="text-xs text-muted-foreground">
+                                {tl.description}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="flex-row items-center justify-between pb-2">
+                    <CardTitle className="text-base">
+                      Pleadings tracker
+                    </CardTitle>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setPleadingOpen(true)}
+                    >
+                      <Plus className="mr-1 h-3.5 w-3.5" /> Add
+                    </Button>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    {c.pleadings.map((p) => (
                       <div
-                        className={`relative z-10 mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${tl.source === "System" ? "bg-primary" : "bg-muted-foreground"}`}
-                      />
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-baseline gap-2">
-                          <p className="text-xs text-muted-foreground">
-                            {new Date(tl.at).toLocaleDateString(undefined, {
-                              day: "numeric",
-                              month: "short",
-                              year: "numeric",
-                            })}
-                          </p>
-                          {tl.source === "Manual" && (
-                            <Badge variant="outline" className="text-[10px]">
-                              Note
-                            </Badge>
+                        key={p._id}
+                        className="flex items-center justify-between rounded-lg border p-3 text-sm"
+                      >
+                        <div className="flex items-start gap-2.5">
+                          <FileText className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                          <div>
+                            <p className="font-medium">
+                              {p.type}
+                              {p.label && ` — ${p.label}`}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {p.filedOn
+                                ? `Filed ${p.filedOn.slice(0, 10)}`
+                                : p.dueOn
+                                  ? `Due ${p.dueOn.slice(0, 10)}`
+                                  : "No date set"}
+                              {p.note && ` · ${p.note}`}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-2">
+                          <Badge
+                            variant="outline"
+                            className={pleadingStatusTone[p.status]}
+                          >
+                            {p.status}
+                          </Badge>
+                          {canAct && p.status !== "Filed" && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => pleadingFileMut.mutate(p._id)}
+                            >
+                              Mark filed
+                            </Button>
                           )}
                         </div>
-                        <p className="text-sm font-medium">{tl.title}</p>
-                        {tl.description && (
-                          <p className="text-xs text-muted-foreground">
-                            {tl.description}
-                          </p>
-                        )}
                       </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+                    ))}
+                    {!c.pleadings.length && (
+                      <p className="text-sm text-muted-foreground">
+                        No pleadings tracked yet.
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
 
-            <Card>
-              <CardHeader className="flex-row items-center justify-between pb-2">
-                <CardTitle className="text-base">Pleadings tracker</CardTitle>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setPleadingOpen(true)}
-                >
-                  <Plus className="mr-1 h-3.5 w-3.5" /> Add
-                </Button>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                {c.pleadings.map((p) => (
-                  <div
-                    key={p._id}
-                    className="flex items-center justify-between rounded-lg border p-3 text-sm"
-                  >
-                    <div className="flex items-start gap-2.5">
-                      <FileText className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-                      <div>
-                        <p className="font-medium">
-                          {p.type}
-                          {p.label && ` — ${p.label}`}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {p.filedOn
-                            ? `Filed ${p.filedOn.slice(0, 10)}`
-                            : p.dueOn
-                              ? `Due ${p.dueOn.slice(0, 10)}`
-                              : "No date set"}
-                          {p.note && ` · ${p.note}`}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-2">
-                      <Badge
-                        variant="outline"
-                        className={pleadingStatusTone[p.status]}
+              {/* ── Sidebar ─────────────────────────────────────── */}
+              <div className="space-y-4">
+                <Card>
+                  <CardHeader className="flex-row items-center justify-between pb-2">
+                    <CardTitle className="text-base">Court details</CardTitle>
+                    {canAct && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => {
+                          setDetailsDraft({
+                            court: c.court,
+                            courtDivision: c.courtDivision,
+                            courtCaseNumber: c.courtCaseNumber || "",
+                            judge: c.judge,
+                            registry: c.registry,
+                            courtFeesPaid: c.courtFeesPaid,
+                          });
+                          setDetailsOpen(true);
+                        }}
                       >
-                        {p.status}
-                      </Badge>
-                      {canAct && p.status !== "Filed" && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => pleadingFileMut.mutate(p._id)}
-                        >
-                          Mark filed
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-                {!c.pleadings.length && (
-                  <p className="text-sm text-muted-foreground">
-                    No pleadings tracked yet.
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-          </div>
+                        Edit
+                      </Button>
+                    )}
+                  </CardHeader>
+                  <CardContent className="space-y-2 text-sm">
+                    {[
+                      ["Court", c.court || "—"],
+                      ["Division", c.courtDivision || "—"],
+                      ["Case number", c.courtCaseNumber || "Not yet assigned"],
+                      ["Judge", c.judge || "—"],
+                      ["Registry", c.registry || "—"],
+                      [
+                        "Court fees paid",
+                        money(
+                          c.courtFeesPaid,
+                          c.courtFeesCurrency || c.currency,
+                        ),
+                      ],
+                    ].map(([label, value]) => (
+                      <div key={label} className="flex justify-between gap-3">
+                        <span className="text-muted-foreground">{label}</span>
+                        <span className="text-right font-medium">{value}</span>
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
 
-          {/* ── Sidebar ─────────────────────────────────────── */}
-          <div className="space-y-4">
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="flex items-center gap-1.5 text-base">
+                      <CalendarIcon className="h-4 w-4" /> Court dates
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="w-full"
+                      onClick={() => setCourtDateOpen(true)}
+                    >
+                      <Plus className="mr-1 h-3.5 w-3.5" /> Add court date
+                    </Button>
+                    {[...c.courtDates]
+                      .sort((a, b) => a.date.localeCompare(b.date))
+                      .map((d) => (
+                        <div key={d._id} className="rounded border p-2.5">
+                          <div className="flex items-center justify-between">
+                            <p className="text-sm font-medium">{d.title}</p>
+                            {daysUntil(d.date) >= 0 && (
+                              <Badge className="bg-primary text-primary-foreground">
+                                {daysUntil(d.date)}d
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            {d.date?.slice(0, 10)}
+                            {d.time && ` · ${d.time}`}
+                            {d.location && ` · ${d.location}`}
+                          </p>
+                        </div>
+                      ))}
+                    {!c.courtDates.length && (
+                      <p className="text-sm text-muted-foreground">
+                        No court dates scheduled.
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base">Costs tracker</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2 text-sm">
+                    {t && c.adrCaseId && (
+                      <>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">
+                            ADR phase fees
+                          </span>
+                          <span className="font-medium">
+                            {money(t.adrFees, c.currency)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">
+                            ADR disbursements
+                          </span>
+                          <span className="font-medium">
+                            {money(t.adrDisbursed, c.currency)}
+                          </span>
+                        </div>
+                      </>
+                    )}
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">
+                        Litigation fees
+                      </span>
+                      <span className="font-medium">
+                        {money(t?.litigationFees ?? 0, c.currency)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">
+                        Litigation disbursements
+                      </span>
+                      <span className="font-medium">
+                        {money(t?.litigationDisbursed ?? 0, c.currency)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Court fees</span>
+                      <span className="font-medium">
+                        {money(
+                          c.courtFeesPaid,
+                          c.courtFeesCurrency || c.currency,
+                        )}
+                      </span>
+                    </div>
+                    <div className="flex justify-between border-t pt-2 font-semibold">
+                      <span>Total to date</span>
+                      <span>
+                        {money(
+                          (t?.combinedTotal ?? 0) + c.courtFeesPaid,
+                          c.currency,
+                        )}
+                      </span>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="flex items-center gap-1.5 text-base">
+                      <Users className="h-4 w-4" /> Parties
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2.5">
+                    {c.parties.map((p) => (
+                      <div
+                        key={p._id}
+                        className="flex items-center justify-between gap-2"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium">
+                            {p.name}
+                          </p>
+                          <p className="truncate text-xs text-muted-foreground">
+                            {p.organisation || "—"}
+                          </p>
+                        </div>
+                        <Badge
+                          variant="outline"
+                          className="shrink-0 text-[10px]"
+                        >
+                          {p.role}
+                        </Badge>
+                      </div>
+                    ))}
+                    {!c.parties.length && (
+                      <p className="text-sm text-muted-foreground">
+                        No parties recorded.
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="communications" className="pt-4">
+            <CaseCommunicationsTab caseId={c._id} />
+          </TabsContent>
+          <TabsContent value="drafting" className="pt-4">
+            <CaseDraftingTab />
+          </TabsContent>
+          <TabsContent value="hearings" className="space-y-4 pt-4">
+            {courtDatesCard}
+          </TabsContent>
+          <TabsContent value="documents" className="pt-4">
+            <CaseDocumentsTab caseId={c._id} />
+          </TabsContent>
+          <TabsContent value="deadlines" className="pt-4">
+            <CaseDeadlineRulesTab caseId={c._id} />
+          </TabsContent>
+          <TabsContent value="billing" className="space-y-4 pt-4">
+            <CaseTimeBillingTab
+              hours={`${(t?.litigationHours ?? 0).toFixed(1)} hrs`}
+              fees={money(t?.litigationFees ?? 0, c.currency)}
+              disbursed={money(t?.litigationDisbursed ?? 0, c.currency)}
+            />
+            {disbursementsCard}
+          </TabsContent>
+          <TabsContent value="resolution" className="space-y-4 pt-4">
+            <p className="text-sm text-muted-foreground">
+              How this matter ends. Settlement remains possible at any stage via
+              a consent judgment.
+            </p>
+            <div className="grid gap-3 lg:grid-cols-3">
+              <button
+                disabled={!canAct}
+                onClick={() => {
+                  setConsentTerms("");
+                  setConsentOpen(true);
+                }}
+                className="rounded-lg border p-4 text-left transition-colors hover:border-primary disabled:opacity-60"
+              >
+                <p className="text-sm font-semibold">Consent judgment</p>
+                <p className="text-xs text-muted-foreground">
+                  Settlement reached mid-litigation, entered as an order.
+                </p>
+              </button>
+              <button
+                disabled={!canAct}
+                onClick={() => {
+                  setOutcomeDraft("");
+                  setOutcomeOpen(true);
+                }}
+                className="rounded-lg border p-4 text-left transition-colors hover:border-primary disabled:opacity-60"
+              >
+                <p className="text-sm font-semibold">Judgment issued</p>
+                <p className="text-xs text-muted-foreground">
+                  Court decision, costs order, interest and appeal window.
+                </p>
+              </button>
+              <button
+                disabled={!canAct}
+                onClick={() => {
+                  setWithdrawReason("");
+                  setWithdrawOpen(true);
+                }}
+                className="rounded-lg border p-4 text-left transition-colors hover:border-primary disabled:opacity-60"
+              >
+                <p className="text-sm font-semibold">Withdrawn</p>
+                <p className="text-xs text-muted-foreground">
+                  Claim discontinued before judgment.
+                </p>
+              </button>
+            </div>
             <Card>
-              <CardHeader className="flex-row items-center justify-between pb-2">
-                <CardTitle className="text-base">Court details</CardTitle>
-                {canAct && (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => {
-                      setDetailsDraft({
-                        court: c.court,
-                        courtDivision: c.courtDivision,
-                        courtCaseNumber: c.courtCaseNumber || "",
-                        judge: c.judge,
-                        registry: c.registry,
-                        courtFeesPaid: c.courtFeesPaid,
-                      });
-                      setDetailsOpen(true);
-                    }}
-                  >
-                    Edit
-                  </Button>
-                )}
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Closure report</CardTitle>
               </CardHeader>
               <CardContent className="space-y-2 text-sm">
                 {[
-                  ["Court", c.court || "—"],
-                  ["Division", c.courtDivision || "—"],
-                  ["Case number", c.courtCaseNumber || "Not yet assigned"],
-                  ["Judge", c.judge || "—"],
-                  ["Registry", c.registry || "—"],
+                  ["Outcome", c.outcome || "Not yet recorded"],
+                  ["Litigation age", t ? `${t.litigationAgeDays} days` : "—"],
+                  ["Total age inc. ADR", t ? `${t.totalAgeDays} days` : "—"],
                   [
-                    "Court fees paid",
-                    money(c.courtFeesPaid, c.courtFeesCurrency || c.currency),
+                    "Combined cost",
+                    t ? money(t.combinedTotal, c.currency) : "—",
                   ],
-                ].map(([label, value]) => (
-                  <div key={label} className="flex justify-between gap-3">
-                    <span className="text-muted-foreground">{label}</span>
-                    <span className="text-right font-medium">{value}</span>
+                  ["Costs recovered", "To be recorded on closure"],
+                  ["Precedent / KB value", "To be flagged on closure"],
+                ].map(([l, v]) => (
+                  <div key={l} className="flex justify-between gap-3">
+                    <span className="text-muted-foreground">{l}</span>
+                    <span className="text-right font-medium">{v}</span>
                   </div>
                 ))}
               </CardContent>
             </Card>
-
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="flex items-center gap-1.5 text-base">
-                  <CalendarIcon className="h-4 w-4" /> Court dates
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="w-full"
-                  onClick={() => setCourtDateOpen(true)}
-                >
-                  <Plus className="mr-1 h-3.5 w-3.5" /> Add court date
-                </Button>
-                {[...c.courtDates]
-                  .sort((a, b) => a.date.localeCompare(b.date))
-                  .map((d) => (
-                    <div key={d._id} className="rounded border p-2.5">
-                      <div className="flex items-center justify-between">
-                        <p className="text-sm font-medium">{d.title}</p>
-                        {daysUntil(d.date) >= 0 && (
-                          <Badge className="bg-primary text-primary-foreground">
-                            {daysUntil(d.date)}d
-                          </Badge>
-                        )}
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        {d.date?.slice(0, 10)}
-                        {d.time && ` · ${d.time}`}
-                        {d.location && ` · ${d.location}`}
-                      </p>
-                    </div>
-                  ))}
-                {!c.courtDates.length && (
-                  <p className="text-sm text-muted-foreground">
-                    No court dates scheduled.
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">Costs tracker</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm">
-                {t && c.adrCaseId && (
-                  <>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">
-                        ADR phase fees
-                      </span>
-                      <span className="font-medium">
-                        {money(t.adrFees, c.currency)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">
-                        ADR disbursements
-                      </span>
-                      <span className="font-medium">
-                        {money(t.adrDisbursed, c.currency)}
-                      </span>
-                    </div>
-                  </>
-                )}
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Litigation fees</span>
-                  <span className="font-medium">
-                    {money(t?.litigationFees ?? 0, c.currency)}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">
-                    Litigation disbursements
-                  </span>
-                  <span className="font-medium">
-                    {money(t?.litigationDisbursed ?? 0, c.currency)}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Court fees</span>
-                  <span className="font-medium">
-                    {money(c.courtFeesPaid, c.courtFeesCurrency || c.currency)}
-                  </span>
-                </div>
-                <div className="flex justify-between border-t pt-2 font-semibold">
-                  <span>Total to date</span>
-                  <span>
-                    {money(
-                      (t?.combinedTotal ?? 0) + c.courtFeesPaid,
-                      c.currency,
-                    )}
-                  </span>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="flex items-center gap-1.5 text-base">
-                  <Users className="h-4 w-4" /> Parties
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2.5">
-                {c.parties.map((p) => (
-                  <div
-                    key={p._id}
-                    className="flex items-center justify-between gap-2"
-                  >
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium">{p.name}</p>
-                      <p className="truncate text-xs text-muted-foreground">
-                        {p.organisation || "—"}
-                      </p>
-                    </div>
-                    <Badge variant="outline" className="shrink-0 text-[10px]">
-                      {p.role}
-                    </Badge>
-                  </div>
-                ))}
-                {!c.parties.length && (
-                  <p className="text-sm text-muted-foreground">
-                    No parties recorded.
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-        </TabsContent>
-
-        <TabsContent value="communications" className="pt-4">
-          <CaseCommunicationsTab caseId={c._id} />
-        </TabsContent>
-        <TabsContent value="drafting" className="pt-4">
-          <CaseDraftingTab />
-        </TabsContent>
-        <TabsContent value="hearings" className="space-y-4 pt-4">
-          {courtDatesCard}
-        </TabsContent>
-        <TabsContent value="documents" className="pt-4">
-          <CaseDocumentsTab caseId={c._id} />
-        </TabsContent>
-        <TabsContent value="deadlines" className="pt-4">
-          <CaseDeadlineRulesTab caseId={c._id} />
-        </TabsContent>
-        <TabsContent value="billing" className="space-y-4 pt-4">
-          <CaseTimeBillingTab
-            hours={`${(t?.litigationHours ?? 0).toFixed(1)} hrs`}
-            fees={money(t?.litigationFees ?? 0, c.currency)}
-            disbursed={money(t?.litigationDisbursed ?? 0, c.currency)}
-          />
-          {disbursementsCard}
-        </TabsContent>
-        <TabsContent value="resolution" className="space-y-4 pt-4">
-          <p className="text-sm text-muted-foreground">
-            How this matter ends. Settlement remains possible at any stage via
-            a consent judgment.
-          </p>
-          <div className="grid gap-3 lg:grid-cols-3">
-            <button
-              disabled={!canAct}
-              onClick={() => {
-                setConsentTerms("");
-                setConsentOpen(true);
-              }}
-              className="rounded-lg border p-4 text-left transition-colors hover:border-primary disabled:opacity-60"
-            >
-              <p className="text-sm font-semibold">Consent judgment</p>
-              <p className="text-xs text-muted-foreground">
-                Settlement reached mid-litigation, entered as an order.
-              </p>
-            </button>
-            <button
-              disabled={!canAct}
-              onClick={() => {
-                setOutcomeDraft("");
-                setOutcomeOpen(true);
-              }}
-              className="rounded-lg border p-4 text-left transition-colors hover:border-primary disabled:opacity-60"
-            >
-              <p className="text-sm font-semibold">Judgment issued</p>
-              <p className="text-xs text-muted-foreground">
-                Court decision, costs order, interest and appeal window.
-              </p>
-            </button>
-            <button
-              disabled={!canAct}
-              onClick={() => {
-                setWithdrawReason("");
-                setWithdrawOpen(true);
-              }}
-              className="rounded-lg border p-4 text-left transition-colors hover:border-primary disabled:opacity-60"
-            >
-              <p className="text-sm font-semibold">Withdrawn</p>
-              <p className="text-xs text-muted-foreground">
-                Claim discontinued before judgment.
-              </p>
-            </button>
-          </div>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Closure report</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2 text-sm">
-              {[
-                ["Outcome", c.outcome || "Not yet recorded"],
-                ["Litigation age", t ? `${t.litigationAgeDays} days` : "—"],
-                [
-                  "Total age inc. ADR",
-                  t ? `${t.totalAgeDays} days` : "—",
-                ],
-                [
-                  "Combined cost",
-                  t ? money(t.combinedTotal, c.currency) : "—",
-                ],
-                ["Costs recovered", "To be recorded on closure"],
-                ["Precedent / KB value", "To be flagged on closure"],
-              ].map(([l, v]) => (
-                <div key={l} className="flex justify-between gap-3">
-                  <span className="text-muted-foreground">{l}</span>
-                  <span className="text-right font-medium">{v}</span>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-        </TabsContent>
-        <TabsContent value="audit" className="pt-4">
-          <CaseAuditAccessTab />
-        </TabsContent>
+          </TabsContent>
+          <TabsContent value="audit" className="pt-4">
+            <CaseAuditAccessTab />
+          </TabsContent>
         </Tabs>
-
 
         {/* ── Stage bar ──────────────────────────────────────── */}
         <Card>
@@ -1621,7 +1627,6 @@ export default function Litigation() {
     </Card>
   );
 
-
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1783,6 +1788,7 @@ export default function Litigation() {
         <TabsContent value="reports" className="pt-4">
           <CaseReportsPanel
             title="Litigation case register"
+            onExportPdf={exportLitigationReportPdf}
             metrics={[
               { label: "Active cases", value: String(active.length) },
               {
@@ -1803,8 +1809,6 @@ export default function Litigation() {
           />
         </TabsContent>
       </Tabs>
-
-
 
       <Dialog open={openNew} onOpenChange={setOpenNew}>
         <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
