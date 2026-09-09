@@ -5,6 +5,7 @@ import {
   useEffect,
   ReactNode,
 } from "react";
+import { useNavigate } from "react-router-dom";
 import { api } from "@/lib/api";
 
 // ─── Role mapping ─────────────────────────────────────────────
@@ -80,6 +81,7 @@ function mapUser(
 const viewModeKey = (userId: string) => `tenantViewMode:${userId}`;
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const navigate = useNavigate();
   const [user, setUser] = useState<AuthUser | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("admin");
   const [isLoading, setIsLoading] = useState(true);
@@ -139,6 +141,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem("tenantToken");
     localStorage.removeItem("tenantUser");
     setUser(null);
+    navigate("/login", { replace: true });
   };
 
   // ── View switch — no re-authentication, same session ──────
