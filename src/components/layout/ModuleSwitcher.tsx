@@ -68,7 +68,7 @@ export function ModuleSwitcher() {
               key={m.id}
               onClick={() => {
                 setModule(m.id);
-                navigate("/");
+                navigate("/dashboard");
               }}
               className="gap-3 py-3 cursor-pointer"
             >

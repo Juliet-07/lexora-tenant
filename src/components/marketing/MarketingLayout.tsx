@@ -26,12 +26,19 @@ export function MarketingLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="intro-page min-h-screen overflow-x-hidden bg-intro text-intro-foreground">
       <header className="fixed inset-x-0 top-0 z-50 border-b border-intro-foreground/10 bg-intro/85 backdrop-blur-xl">
-        <div className="mx-auto flex h-16 max-w-[1320px] items-center gap-6 px-5 sm:px-8">
-          <Link to="/" className="flex shrink-0 items-center" aria-label="Lexora home">
-            <img src="/lexora-logo.webp" alt="Lexora Africa" className="h-11 w-auto object-contain" />
+        <div className="w-full h-20 mx-auto grid grid-cols-2 items-center gap-6 px-5 sm:px-8 lg:grid-cols-[auto_1fr_auto] lg:justify-normal">
+          <Link to="/" aria-label="Lexora home">
+            <img
+              src="/lexora-logo.png"
+              alt="Lexora Africa"
+              className="h-16 w-auto object-contain"
+            />
           </Link>
 
-          <nav className="hidden items-center gap-1 lg:flex" aria-label="Main navigation">
+          <nav
+            className="hidden items-center justify-center gap-1 lg:flex lg:w-full"
+            aria-label="Main navigation"
+          >
             {marketingNav.map((item) => (
               <NavLink
                 key={item.to}
@@ -51,13 +58,15 @@ export function MarketingLayout({ children }: { children: React.ReactNode }) {
             ))}
           </nav>
 
-          <div className="ml-auto hidden items-center gap-2 lg:flex">
+          <div className="hidden items-center gap-2 lg:flex">
             <Button
               asChild
               variant="outline"
               className="h-9 rounded-lg border-intro-foreground/15 bg-transparent px-4 text-xs text-intro-muted hover:bg-intro-foreground/10 hover:text-intro-foreground"
             >
-              <Link to="/login">Launch app <ArrowRight /></Link>
+              <Link to="/login">
+                Launch app <ArrowRight />
+              </Link>
             </Button>
             <Button
               asChild
@@ -79,17 +88,31 @@ export function MarketingLayout({ children }: { children: React.ReactNode }) {
         </div>
 
         {menuOpen && (
-          <nav className="border-t border-intro-foreground/10 bg-intro px-5 py-5 lg:hidden" aria-label="Mobile navigation">
+          <nav
+            className="border-t border-intro-foreground/10 bg-intro px-5 py-5 lg:hidden"
+            aria-label="Mobile navigation"
+          >
             <div className="flex flex-col gap-3">
               {marketingNav.map((item) => (
-                <Link key={item.to} to={item.to} className="text-sm text-intro-muted">
+                <Link
+                  key={item.to}
+                  to={item.to}
+                  className="text-sm text-intro-muted"
+                >
                   {item.label}
                 </Link>
               ))}
-              <Button asChild variant="outline" className="mt-2 border-intro-foreground/15 bg-transparent text-intro-foreground hover:bg-intro-foreground/10">
+              <Button
+                asChild
+                variant="outline"
+                className="mt-2 border-intro-foreground/15 bg-transparent text-intro-foreground hover:bg-intro-foreground/10"
+              >
                 <Link to="/login">Launch app</Link>
               </Button>
-              <Button asChild className="bg-intro-primary text-intro-foreground hover:bg-intro-primary/90">
+              <Button
+                asChild
+                className="bg-intro-primary text-intro-foreground hover:bg-intro-primary/90"
+              >
                 <Link to="/contact">Get in touch</Link>
               </Button>
             </div>
@@ -102,9 +125,14 @@ export function MarketingLayout({ children }: { children: React.ReactNode }) {
       <footer className="border-t border-intro-foreground/10 bg-intro px-5 py-14 sm:px-8">
         <div className="mx-auto grid max-w-[1320px] gap-10 lg:grid-cols-[1.4fr_1fr_1fr_1fr_1fr]">
           <div>
-            <img src="/lexora-logo.webp" alt="Lexora Africa" className="h-14 w-auto object-contain" />
+            <img
+              src="/lexora-logo.png"
+              alt="Lexora Africa"
+              className="h-14 w-auto object-contain"
+            />
             <p className="mt-4 max-w-xs text-sm leading-6 text-intro-muted">
-              Governance, risk, and compliance platform built from first principles for African businesses.
+              Governance, risk, and compliance platform built from first
+              principles for African businesses.
             </p>
           </div>
           <FooterCol
@@ -147,10 +175,17 @@ export function MarketingLayout({ children }: { children: React.ReactNode }) {
           />
         </div>
         <div className="mx-auto mt-10 flex max-w-[1320px] flex-col gap-3 border-t border-intro-foreground/10 pt-6 text-xs text-intro-muted sm:flex-row sm:items-center sm:justify-between">
-          <p>© {new Date().getFullYear()} Lexora Africa (Limited). All rights reserved.</p>
+          <p>
+            © {new Date().getFullYear()} Lexora Africa (Limited). All rights
+            reserved.
+          </p>
           <div className="flex items-center gap-5">
-            <span className="flex items-center gap-1.5"><Mail className="h-3.5 w-3.5" /> info@lexoraafrica.com</span>
-            <span className="flex items-center gap-1.5"><Building2 className="h-3.5 w-3.5" /> Kigali, Rwanda</span>
+            <span className="flex items-center gap-1.5">
+              <Mail className="h-3.5 w-3.5" /> info@lexoraafrica.com
+            </span>
+            <span className="flex items-center gap-1.5">
+              <Building2 className="h-3.5 w-3.5" /> Kigali, Rwanda
+            </span>
           </div>
         </div>
       </footer>
@@ -158,14 +193,25 @@ export function MarketingLayout({ children }: { children: React.ReactNode }) {
   );
 }
 
-function FooterCol({ title, links }: { title: string; links: [string, string][] }) {
+function FooterCol({
+  title,
+  links,
+}: {
+  title: string;
+  links: [string, string][];
+}) {
   return (
     <div>
-      <p className="text-xs font-semibold uppercase tracking-wide text-intro-foreground">{title}</p>
+      <p className="text-xs font-semibold uppercase tracking-wide text-intro-foreground">
+        {title}
+      </p>
       <ul className="mt-4 space-y-2.5">
         {links.map(([label, to]) => (
           <li key={label}>
-            <Link to={to} className="text-sm text-intro-muted transition-colors hover:text-intro-foreground">
+            <Link
+              to={to}
+              className="text-sm text-intro-muted transition-colors hover:text-intro-foreground"
+            >
               {label}
             </Link>
           </li>
@@ -186,16 +232,28 @@ export function PageHero({
 }) {
   return (
     <section className="relative overflow-hidden border-b border-intro-foreground/10 py-20 sm:py-24">
-      <div className="absolute inset-0 intro-grid opacity-30" aria-hidden="true" />
-      <div className="absolute left-1/2 top-[-220px] h-[420px] w-[820px] -translate-x-1/2 rounded-full bg-intro-primary/20 blur-3xl" aria-hidden="true" />
+      <div
+        className="absolute inset-0 intro-grid opacity-30"
+        aria-hidden="true"
+      />
+      <div
+        className="absolute left-1/2 top-[-220px] h-[420px] w-[820px] -translate-x-1/2 rounded-full bg-intro-primary/20 blur-3xl"
+        aria-hidden="true"
+      />
       <div className="relative mx-auto max-w-[900px] px-5 text-center sm:px-8">
         {eyebrow && (
           <span className="inline-flex rounded-full border border-intro-accent/30 bg-intro-accent/10 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-intro-accent">
             {eyebrow}
           </span>
         )}
-        <h1 className="mt-6 font-display text-5xl leading-[1.02] sm:text-6xl">{title}</h1>
-        {subtitle && <p className="mx-auto mt-6 max-w-2xl text-base leading-7 text-intro-muted">{subtitle}</p>}
+        <h1 className="mt-6 font-display text-5xl leading-[1.02] sm:text-6xl">
+          {title}
+        </h1>
+        {subtitle && (
+          <p className="mx-auto mt-6 max-w-2xl text-base leading-7 text-intro-muted">
+            {subtitle}
+          </p>
+        )}
       </div>
     </section>
   );
@@ -216,11 +274,21 @@ export function CtaBand({
     <section className="border-y border-intro-foreground/10 bg-intro-primary">
       <div className="mx-auto grid max-w-[1320px] gap-8 px-5 py-16 sm:px-8 lg:grid-cols-[1fr_auto] lg:items-center">
         <div>
-          <h2 className="max-w-3xl font-display text-4xl leading-none text-intro-foreground sm:text-5xl">{title}</h2>
-          <p className="mt-4 max-w-xl text-sm text-intro-foreground/75">{copy}</p>
+          <h2 className="max-w-3xl font-display text-4xl leading-none text-intro-foreground sm:text-5xl">
+            {title}
+          </h2>
+          <p className="mt-4 max-w-xl text-sm text-intro-foreground/75">
+            {copy}
+          </p>
         </div>
-        <Button asChild size="lg" className="h-13 w-fit bg-intro-foreground px-7 text-intro hover:bg-intro-foreground/90">
-          <Link to={primaryTo}>{primaryLabel} <ArrowRight /></Link>
+        <Button
+          asChild
+          size="lg"
+          className="h-[40px] w-fit bg-intro-foreground px-7 text-intro hover:bg-intro-foreground/90"
+        >
+          <Link to={primaryTo}>
+            {primaryLabel} <ArrowRight />
+          </Link>
         </Button>
       </div>
     </section>

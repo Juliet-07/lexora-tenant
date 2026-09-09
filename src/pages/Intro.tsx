@@ -45,7 +45,7 @@ export default function Intro() {
         <div className="absolute inset-0 intro-grid opacity-30" aria-hidden="true" />
         <div className="relative mx-auto grid max-w-[1440px] items-center gap-14 px-5 py-16 sm:px-8 lg:grid-cols-[0.95fr_1.05fr] lg:px-12 lg:py-20">
           <div className="relative z-10 max-w-2xl intro-reveal">
-            <div className="mb-8 inline-flex items-center gap-2 rounded-full border border-intro-accent/30 bg-intro-accent/10 px-3 py-1.5 text-xs font-semibold uppercase text-intro-accent">
+            <div className="hidden mb-8 inline-flex items-center gap-2 rounded-full border border-intro-accent/30 bg-intro-accent/10 px-3 py-1.5 text-xs font-semibold uppercase text-intro-accent">
               <Sparkles className="h-3.5 w-3.5" /> Built from first principles for Africa
             </div>
             <h1 className="font-display text-5xl leading-[0.98] sm:text-6xl lg:text-[4.75rem]">
@@ -57,11 +57,11 @@ export default function Intro() {
               human resources, governance, risk, compliance workflows, advisory, capacity building, and performance
               measurement into a single system.
             </p>
-            <div className="mt-9 flex flex-wrap items-center gap-4">
-              <Button asChild size="lg" className="h-13 rounded-lg bg-intro-primary px-7 text-intro-foreground shadow-intro-glow hover:bg-intro-primary/90">
+            <div className="mt-9 flex flex-col md:flex-row md:items-center gap-4">
+              <Button asChild size="lg" className="h-[40px] rounded-lg bg-intro-primary px-7 text-intro-foreground shadow-intro-glow hover:bg-intro-primary/90">
                 <Link to="/contact">Get in touch <ArrowRight /></Link>
               </Button>
-              <Button asChild variant="outline" size="lg" className="h-13 border-intro-foreground/20 bg-intro-foreground/5 px-7 text-intro-foreground hover:bg-intro-foreground/10 hover:text-intro-foreground">
+              <Button asChild variant="outline" size="lg" className="h-[40px] border-intro-foreground/20 bg-intro-foreground/5 px-7 text-intro-foreground hover:bg-intro-foreground/10 hover:text-intro-foreground">
                 <Link to="/platform">Explore the platform</Link>
               </Button>
             </div>

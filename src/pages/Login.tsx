@@ -38,7 +38,7 @@ export default function Login() {
 
         {/* Logo */}
         <div className="relative z-10 p-10">
-          <img src="/lexora-logo.webp" alt="Lexora Africa" className="h-20 w-auto object-contain" />
+          <img src="/lexora-logo.png" alt="Lexora Africa" className="h-20 w-auto object-contain" />
         </div>
 
         {/* Hero copy */}
@@ -89,18 +89,18 @@ export default function Login() {
         <div className="w-full max-w-md space-y-8">
           {/* Mobile logo */}
           <div className="flex lg:hidden items-center justify-center">
-            <img src="/lexora-logo.webp" alt="Lexora Africa" className="h-16 w-auto object-contain" />
+            <img src="/lexora-logo.png" alt="Lexora Africa" className="h-20 w-auto object-contain" />
           </div>
 
           <div className="text-center space-y-2">
-            <img src="/lexora-icon.webp" alt="" className="mb-2 hidden h-16 w-16 object-contain lg:inline-block" />
+            <img src="/favicon.png" alt="" className="mb-2 hidden h-16 w-16 object-contain lg:inline-block" />
             <h2 className="text-3xl font-bold tracking-tight">Welcome back</h2>
             <p className="text-sm text-muted-foreground">
               Sign in to your Lexora workspace
             </p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={handleSubmit} className="space-y-2">
             {error && (
               <div className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 p-3 rounded-lg">
                 <AlertCircle className="h-4 w-4 shrink-0" />

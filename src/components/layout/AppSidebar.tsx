@@ -488,7 +488,7 @@ export function AppSidebar() {
         <div className="p-4 border-b border-sidebar-border">
           {!collapsed ? (
             <div className="flex items-center gap-3">
-              <img src="/lexora-icon.webp" alt="" className="h-9 w-9 rounded-lg object-contain" />
+              <img src="/favicon.png" alt="" className="h-10 w-10 rounded-lg object-contain" />
               <div className="min-w-0">
                 <h1 className="text-sm font-bold text-sidebar-accent-foreground tracking-tight truncate">
                   Lexora
@@ -499,7 +499,7 @@ export function AppSidebar() {
               </div>
             </div>
           ) : (
-            <img src="/lexora-icon.webp" alt="Lexora" className="mx-auto h-9 w-9 rounded-lg object-contain" />
+            <img src="/lexora-logo.png" alt="Lexora" className="mx-auto h-12 w-12 rounded-lg object-contain" />
           )}
         </div>
 
@@ -601,7 +601,7 @@ export function AppSidebar() {
 
   const navItems = (
     NAV_BY_MODULE[currentModule.id] ?? [
-      { title: "Dashboard", url: "/", icon: LayoutDashboard },
+      { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
     ]
   ).filter((n) => !n.adminOnly || isAdmin);
 
@@ -615,7 +615,7 @@ export function AppSidebar() {
               {isLoadingDashboard ? (
                 <Loader2 className="absolute inset-0 m-auto h-4 w-4 animate-spin text-sidebar-foreground" />
               ) : (
-                <img src="/lexora-icon.webp" alt="" className="h-9 w-9 rounded-lg object-contain" />
+                <img src="/favicon.png" alt="" className="h-10 w-10 rounded-lg object-contain" />
               )}
             </div>
             <div className="min-w-0">
@@ -628,7 +628,7 @@ export function AppSidebar() {
             </div>
           </div>
         ) : (
-          <img src="/lexora-icon.webp" alt="Lexora" className="mx-auto h-9 w-9 rounded-lg object-contain" />
+          <img src="/favicon.png" alt="Lexora" className="mx-auto h-10 w-10 rounded-lg object-contain" />
         )}
       </div>
 

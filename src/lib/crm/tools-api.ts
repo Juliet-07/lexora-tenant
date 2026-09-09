@@ -695,9 +695,10 @@ export const fetchTenantTemplates = async (): Promise<
 // 'kyc_aml' for client onboarding).
 export const fetchAvailableTemplates = async (
   moduleKey?: string,
+  areaKey?: string,
 ): Promise<AvailableTemplate[]> => {
   const res = await api.get("/tools/contract-templates/available", {
-    params: moduleKey ? { moduleKey } : undefined,
+    params: { moduleKey, areaKey },
   });
   const d = unwrap(res);
   return Array.isArray(d) ? d : [];

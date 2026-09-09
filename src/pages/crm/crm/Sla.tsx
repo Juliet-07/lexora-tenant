@@ -28,7 +28,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import {
   Timer,
@@ -40,6 +39,7 @@ import {
   Pencil,
   Plus,
   Link2,
+  Loader2,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
@@ -54,8 +54,13 @@ import {
 } from "@/lib/crm/sla-profiles-api";
 import { fetchClientCommercials } from "@/lib/crm/client-commercial-api";
 import { fetchClients, displayName } from "@/lib/client/clients-api";
-import { slaCompliance, slaTrend } from "@/data/crmClientMockData";
-import { tickets } from "@/data/crmPmMockData";
+import {
+  fetchTickets,
+  setTicketStatus,
+  fetchSlaSettings,
+  updateSlaSettings,
+  type Ticket,
+} from "@/lib/crm/service-desk-api";
 
 const PRIORITIES: SlaPriority[] = ["Critical", "High", "Medium", "Low"];
 const TIERS: SlaTier[] = ["Premium", "Standard", "Basic"];
@@ -70,6 +75,8 @@ const pctClass = (pct: number) =>
   pct >= 90 ? "text-destructive" : pct >= 75 ? "text-warning" : "text-success";
 const barClass = (pct: number) =>
   pct >= 90 ? "bg-destructive" : pct >= 75 ? "bg-warning" : "bg-success";
+const pctOf = (t: Ticket) =>
+  Math.min(100, Math.round((t.slaElapsedHrs / t.slaTargetHrs) * 100));
 
 const emptyDraft = (): SlaProfile => ({
   _id: "",
@@ -81,6 +88,9 @@ const emptyDraft = (): SlaProfile => ({
   createdAt: "",
   updatedAt: "",
 });
+
+const monthLabel = (d: Date) =>
+  d.toLocaleDateString(undefined, { month: "short" });
 
 export default function Sla() {
   const { toast } = useToast();
@@ -99,6 +109,19 @@ export default function Sla() {
     queryFn: fetchClients,
   });
 
+  // Real, live tickets — the same Service Desk backend now powers
+  // both the tenant's ticket queue and this SLA view.
+  const { data: allTickets = [], isLoading: ticketsLoading } = useQuery({
+    queryKey: ["tickets-for-sla"],
+    queryFn: () => fetchTickets(),
+    refetchInterval: 60_000, // real elapsed% only moves with time, not events
+  });
+
+  const { data: slaSettings } = useQuery({
+    queryKey: ["slaSettings"],
+    queryFn: fetchSlaSettings,
+  });
+
   const assignedClients = (profileId: string) =>
     Object.values(commercials)
       .filter((c) => c.slaProfileId === profileId)
@@ -110,34 +133,52 @@ export default function Sla() {
   const [formOpen, setFormOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<SlaProfile>(emptyDraft());
-
-  // ── Deferred to when Service Desk is real: tickets, breach
-  // notifications and the compliance trend all read from mock
-  // ticket data (crmPmMockData.ts) since there's no real Service
-  // Desk backend yet. ──────────────────────────────────────────
-  const [timers, setTimers] = useState(
-    tickets.map((t: any) => ({
-      ...t,
-      paused: t.status === "Pending Client",
-      pct: Math.min(100, Math.round((t.slaElapsedHrs / t.slaTargetHrs) * 100)),
-    })),
-  );
-  const [thresholds, setThresholds] = useState({
-    t75: true,
-    t90: true,
-    t100: true,
-  });
   const [scopeFilter, setScopeFilter] = useState("all");
 
-  const togglePause = (id: string) => {
-    setTimers((p) =>
-      p.map((t) => (t.id === id ? { ...t, paused: !t.paused } : t)),
-    );
-    toast({
-      title: "Timer updated",
-      description: "SLA clock paused/resumed for ticket.",
+  // Open, still-clocked tickets — Resolved/Closed have a frozen
+  // clock and don't belong in "active timers".
+  const activeTimers = useMemo(
+    () => allTickets.filter((t) => !["Resolved", "Closed"].includes(t.status)),
+    [allTickets],
+  );
+
+  const pauseMut = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: Ticket["status"] }) =>
+      setTicketStatus(id, status),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tickets-for-sla"] });
+      toast({
+        title: "Timer updated",
+        description: "SLA clock paused/resumed for ticket.",
+      });
+    },
+    onError: (err: any) =>
+      toast({
+        title: "Could not update ticket",
+        description: err?.response?.data?.message ?? "Please try again.",
+        variant: "destructive",
+      }),
+  });
+
+  const togglePause = (t: Ticket) => {
+    pauseMut.mutate({
+      id: t._id,
+      status: t.status === "Pending Client" ? "In Progress" : "Pending Client",
     });
   };
+
+  const settingsMut = useMutation({
+    mutationFn: (dto: Partial<typeof slaSettings>) => updateSlaSettings(dto!),
+    onSuccess: (saved) => {
+      queryClient.setQueryData(["slaSettings"], saved);
+      toast({ title: "Escalation settings saved" });
+    },
+    onError: () =>
+      toast({
+        title: "Could not save settings",
+        variant: "destructive",
+      }),
+  });
 
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: ["slaProfiles"] });
@@ -186,21 +227,86 @@ export default function Sla() {
     setFormOpen(true);
   };
 
-  const filteredCompliance = useMemo(
-    () =>
-      slaCompliance.filter(
-        (c) => scopeFilter === "all" || c.type === scopeFilter,
-      ),
-    [scopeFilter],
+  // ── Real compliance, computed live from the actual ticket list ──
+  const resolvedTickets = useMemo(
+    () => allTickets.filter((t) => ["Resolved", "Closed"].includes(t.status)),
+    [allTickets],
   );
 
-  const breachedCount = timers.filter((t) => t.pct >= 100).length;
-  const avgCompliance = Math.round(
-    slaCompliance.reduce((s, c) => s + c.actual, 0) / slaCompliance.length,
-  );
+  const complianceByScope = useMemo(() => {
+    const groups = new Map<
+      string,
+      { type: string; total: number; withinTarget: number; target: number }
+    >();
+    for (const t of resolvedTickets) {
+      const key =
+        scopeFilter === "Agent"
+          ? t.agent || "Unassigned"
+          : scopeFilter === "Service"
+            ? t.category
+            : t.clientName;
+      const g = groups.get(key) ?? {
+        type: scopeFilter === "all" ? "Client" : scopeFilter,
+        total: 0,
+        withinTarget: 0,
+        target: 95,
+      };
+      g.total += 1;
+      if (t.slaElapsedHrs <= t.slaTargetHrs) g.withinTarget += 1;
+      groups.set(key, g);
+    }
+    return Array.from(groups.entries()).map(([scope, g]) => ({
+      scope,
+      type: g.type,
+      target: g.target,
+      actual: g.total ? Math.round((g.withinTarget / g.total) * 100) : 100,
+      breaches: g.total - g.withinTarget,
+    }));
+  }, [resolvedTickets, scopeFilter]);
+
+  // Real, computed 6-month trend from actual ticket creation dates —
+  // no synthetic monthly figures.
+  const complianceTrend = useMemo(() => {
+    const months: {
+      key: string;
+      label: string;
+      total: number;
+      within: number;
+    }[] = [];
+    const now = new Date();
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      months.push({
+        key: `${d.getFullYear()}-${d.getMonth()}`,
+        label: monthLabel(d),
+        total: 0,
+        within: 0,
+      });
+    }
+    for (const t of resolvedTickets) {
+      const created = new Date(t.createdAt);
+      const key = `${created.getFullYear()}-${created.getMonth()}`;
+      const bucket = months.find((m) => m.key === key);
+      if (!bucket) continue;
+      bucket.total += 1;
+      if (t.slaElapsedHrs <= t.slaTargetHrs) bucket.within += 1;
+    }
+    return months.map((m) => ({
+      month: m.label,
+      pct: m.total ? Math.round((m.within / m.total) * 100) : 100,
+    }));
+  }, [resolvedTickets]);
+
+  const breachedCount = activeTimers.filter((t) => pctOf(t) >= 100).length;
+  const avgCompliance = complianceByScope.length
+    ? Math.round(
+        complianceByScope.reduce((s, c) => s + c.actual, 0) /
+          complianceByScope.length,
+      )
+    : 100;
   const kpis = [
     { l: "SLA profiles", v: profiles.length, icon: ClipboardCheck },
-    { l: "Active timers", v: timers.length, icon: Timer },
+    { l: "Active timers", v: activeTimers.length, icon: Timer },
     { l: "Currently breached", v: breachedCount, icon: ShieldAlert },
     { l: "Avg. compliance", v: `${avgCompliance}%`, icon: BarChart3 },
   ];
@@ -350,64 +456,89 @@ export default function Sla() {
         <TabsContent value="timers" className="pt-4">
           <Card>
             <CardContent className="p-4">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Ticket</TableHead>
-                    <TableHead>Priority</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="w-52">SLA elapsed</TableHead>
-                    <TableHead>Pause</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {timers.map((t) => (
-                    <TableRow key={t.id}>
-                      <TableCell>
-                        <p className="text-sm font-medium">{t.subject}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {t.id} · {t.clientName}
-                        </p>
-                      </TableCell>
-                      <TableCell className="text-sm">{t.priority}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{t.status}</Badge>
-                      </TableCell>
-                      <TableCell>
-                        <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-                          <div
-                            className={`h-full ${barClass(t.pct)}`}
-                            style={{ width: `${t.pct}%` }}
-                          />
-                        </div>
-                        <p
-                          className={`mt-1 text-xs font-medium ${pctClass(t.pct)}`}
-                        >
-                          {t.pct}%{t.paused ? " (paused)" : ""}
-                        </p>
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => togglePause(t.id)}
-                        >
-                          {t.paused ? (
-                            <Play className="mr-1 h-3 w-3" />
-                          ) : (
-                            <Pause className="mr-1 h-3 w-3" />
-                          )}
-                          {t.paused ? "Resume" : "Pending Client"}
-                        </Button>
-                      </TableCell>
+              {ticketsLoading ? (
+                <div className="flex justify-center py-10">
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Ticket</TableHead>
+                      <TableHead>Priority</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="w-52">SLA elapsed</TableHead>
+                      <TableHead>Pause</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-              <p className="mt-3 text-xs text-muted-foreground">
-                Illustrative — real ticket timers go live once Service Desk is
-                built.
-              </p>
+                  </TableHeader>
+                  <TableBody>
+                    {activeTimers.map((t) => {
+                      const pct = pctOf(t);
+                      const paused = t.status === "Pending Client";
+                      return (
+                        <TableRow key={t._id}>
+                          <TableCell>
+                            <p className="text-sm font-medium">{t.subject}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {t.ref} · {t.clientName}
+                            </p>
+                          </TableCell>
+                          <TableCell className="text-sm">
+                            {t.priority}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline">{t.status}</Badge>
+                          </TableCell>
+                          <TableCell>
+                            <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                              <div
+                                className={`h-full ${barClass(pct)}`}
+                                style={{ width: `${pct}%` }}
+                              />
+                            </div>
+                            <p
+                              className={`mt-1 text-xs font-medium ${pctClass(pct)}`}
+                            >
+                              {pct}%{paused ? " (paused)" : ""}
+                            </p>
+                          </TableCell>
+                          <TableCell>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={
+                                pauseMut.isPending &&
+                                pauseMut.variables?.id === t._id
+                              }
+                              onClick={() => togglePause(t)}
+                            >
+                              {pauseMut.isPending &&
+                              pauseMut.variables?.id === t._id ? (
+                                <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                              ) : paused ? (
+                                <Play className="mr-1 h-3 w-3" />
+                              ) : (
+                                <Pause className="mr-1 h-3 w-3" />
+                              )}
+                              {paused ? "Resume" : "Pending Client"}
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                    {!activeTimers.length && (
+                      <TableRow>
+                        <TableCell
+                          colSpan={5}
+                          className="py-8 text-center text-sm text-muted-foreground"
+                        >
+                          No open tickets with a running SLA clock.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -418,37 +549,40 @@ export default function Sla() {
               <CardTitle className="text-base">Escalation thresholds</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {[
-                {
-                  key: "t75" as const,
-                  label: "75% elapsed — notify team lead",
-                },
-                {
-                  key: "t90" as const,
-                  label: "90% elapsed — notify client manager",
-                },
-                {
-                  key: "t100" as const,
-                  label: "100% elapsed (breach) — notify partner",
-                },
-              ].map((r) => (
+              {(
+                [
+                  {
+                    key: "notifyAt75" as const,
+                    label: "75% elapsed — notify assigned agent",
+                  },
+                  {
+                    key: "notifyAt90" as const,
+                    label: "90% elapsed — notify assigned agent",
+                  },
+                  {
+                    key: "notifyAt100" as const,
+                    label: "100% elapsed (breach) — notify assigned agent",
+                  },
+                ] as const
+              ).map((r) => (
                 <div
                   key={r.key}
                   className="flex items-center justify-between rounded border p-3"
                 >
                   <span className="text-sm">{r.label}</span>
                   <Switch
-                    checked={thresholds[r.key]}
+                    checked={slaSettings?.[r.key] ?? true}
+                    disabled={!slaSettings || settingsMut.isPending}
                     onCheckedChange={(v) =>
-                      setThresholds({ ...thresholds, [r.key]: v })
+                      settingsMut.mutate({ ...slaSettings, [r.key]: v })
                     }
                   />
                 </div>
               ))}
               <p className="text-xs text-muted-foreground">
-                Escalation recipients: Team leads, client relationship managers,
-                and partners as configured per SLA profile. Notifications go
-                live once Service Desk is built.
+                Checked every 15 minutes. A ticket's assigned agent is notified
+                by portal and email the first time it crosses each enabled
+                threshold — never repeated for the same ticket.
               </p>
             </CardContent>
           </Card>
@@ -484,7 +618,7 @@ export default function Sla() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredCompliance.map((c) => (
+                  {complianceByScope.map((c) => (
                     <TableRow key={c.scope}>
                       <TableCell className="text-sm font-medium">
                         {c.scope}
@@ -513,11 +647,21 @@ export default function Sla() {
                       </TableCell>
                     </TableRow>
                   ))}
+                  {!complianceByScope.length && (
+                    <TableRow>
+                      <TableCell
+                        colSpan={6}
+                        className="py-8 text-center text-sm text-muted-foreground"
+                      >
+                        No resolved tickets yet to report on.
+                      </TableCell>
+                    </TableRow>
+                  )}
                 </TableBody>
               </Table>
               <p className="mt-3 text-xs text-muted-foreground">
-                Illustrative — real compliance reporting goes live once Service
-                Desk is built.
+                Computed live from resolved and closed tickets. Target is a 95%
+                compliance benchmark.
               </p>
             </CardContent>
           </Card>
@@ -529,7 +673,7 @@ export default function Sla() {
             </CardHeader>
             <CardContent>
               <div className="flex h-32 items-end gap-3">
-                {slaTrend.map((m) => (
+                {complianceTrend.map((m) => (
                   <div
                     key={m.month}
                     className="flex flex-1 flex-col items-center gap-1"

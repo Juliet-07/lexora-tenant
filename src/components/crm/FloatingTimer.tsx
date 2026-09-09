@@ -19,13 +19,20 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Play, Square, Timer } from "lucide-react";
+import { Play, Square, Timer, AlertCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { fetchMandates } from "@/lib/crm/mandates-api";
 import { createTimeEntry, logMyTime } from "@/lib/crm/time-tracking-api";
 
 const STORAGE_KEY = "lexora.crm.floating-timer.v1";
+// Tracks when the user last confirmed they're genuinely still
+// working — separate from startedAt, since that reflects the whole
+// session, not the last "yes, still working" check-in.
+const LAST_CONFIRMED_KEY = "lexora.crm.floating-timer.last-confirmed.v1";
+
+const CHECK_IN_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
+const IDLE_GRACE_MS = 5 * 60 * 1000; // 5 minutes to respond
 
 const fmt = (ms: number) => {
   const s = Math.floor(ms / 1000);
@@ -33,6 +40,13 @@ const fmt = (ms: number) => {
   const m = String(Math.floor((s % 3600) / 60)).padStart(2, "0");
   const sec = String(s % 60).padStart(2, "0");
   return `${h}:${m}:${sec}`;
+};
+
+const fmtCountdown = (ms: number) => {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  const m = Math.floor(s / 60);
+  const sec = String(s % 60).padStart(2, "0");
+  return `${m}:${sec}`;
 };
 
 export function FloatingTimer() {
@@ -45,6 +59,10 @@ export function FloatingTimer() {
     const raw = localStorage.getItem(STORAGE_KEY);
     return raw ? Number(raw) : null;
   });
+  const [lastConfirmedAt, setLastConfirmedAt] = useState<number | null>(() => {
+    const raw = localStorage.getItem(LAST_CONFIRMED_KEY);
+    return raw ? Number(raw) : null;
+  });
   const [now, setNow] = useState(Date.now());
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -53,6 +71,11 @@ export function FloatingTimer() {
     narrative: "",
     billable: true,
   });
+
+  // Real idle check-in — the popup itself, and the deadline for a
+  // response before we assume idle and stop the timer.
+  const [idlePromptOpen, setIdlePromptOpen] = useState(false);
+  const [idleDeadline, setIdleDeadline] = useState<number | null>(null);
 
   const inCrm = pathname.startsWith("/crm");
   const onTimesheets = pathname.startsWith("/crm/time");
@@ -71,14 +94,61 @@ export function FloatingTimer() {
     return () => clearInterval(t);
   }, [startedAt]);
 
+  // Real idle check-in — once an hour of confirmed work has passed,
+  // prompt; if there's no response within the grace period, treat it
+  // as idle and stop the timer rather than silently keep accumulating
+  // time nobody actually worked.
+  useEffect(() => {
+    if (!startedAt || !lastConfirmedAt) return;
+
+    if (!idlePromptOpen && now - lastConfirmedAt >= CHECK_IN_INTERVAL_MS) {
+      setIdlePromptOpen(true);
+      setIdleDeadline(now + IDLE_GRACE_MS);
+      return;
+    }
+
+    if (idlePromptOpen && idleDeadline && now >= idleDeadline) {
+      // Idle confirmed — real "stop running", not just a paused UI
+      // state. Discards the accumulated time, since the entire point
+      // of this check is that it likely isn't accurate work time.
+      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(LAST_CONFIRMED_KEY);
+      setStartedAt(null);
+      setLastConfirmedAt(null);
+      setIdlePromptOpen(false);
+      setIdleDeadline(null);
+      toast({
+        title: "Timer stopped",
+        description:
+          "No response to the check-in, so we assumed you'd stepped away.",
+      });
+    }
+  }, [now, startedAt, lastConfirmedAt, idlePromptOpen, idleDeadline, toast]);
+
   if (!visible) return null;
 
   const start = () => {
     const t = Date.now();
     localStorage.setItem(STORAGE_KEY, String(t));
+    localStorage.setItem(LAST_CONFIRMED_KEY, String(t));
     setStartedAt(t);
+    setLastConfirmedAt(t);
     setNow(t);
     toast({ title: "Timer started", description: "Tracking time in the CRM." });
+  };
+
+  const confirmStillWorking = () => {
+    const t = Date.now();
+    localStorage.setItem(LAST_CONFIRMED_KEY, String(t));
+    setLastConfirmedAt(t);
+    setIdlePromptOpen(false);
+    setIdleDeadline(null);
+  };
+
+  const stopFromIdlePrompt = () => {
+    setIdlePromptOpen(false);
+    setIdleDeadline(null);
+    setOpen(true);
   };
 
   const elapsedMs = startedAt ? now - startedAt : 0;
@@ -116,7 +186,9 @@ export function FloatingTimer() {
         description: "Saved as a draft on your timesheet.",
       });
       localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(LAST_CONFIRMED_KEY);
       setStartedAt(null);
+      setLastConfirmedAt(null);
       setOpen(false);
       setForm({ mandateId: "", narrative: "", billable: true });
     } catch (err: any) {
@@ -191,7 +263,9 @@ export function FloatingTimer() {
               <Textarea
                 value={form.narrative}
                 placeholder="What did you work on?"
-                onChange={(e) => setForm({ ...form, narrative: e.target.value })}
+                onChange={(e) =>
+                  setForm({ ...form, narrative: e.target.value })
+                }
               />
             </div>
             <label className="flex items-center justify-between rounded border p-3 text-sm">
@@ -207,7 +281,9 @@ export function FloatingTimer() {
               variant="outline"
               onClick={() => {
                 localStorage.removeItem(STORAGE_KEY);
+                localStorage.removeItem(LAST_CONFIRMED_KEY);
                 setStartedAt(null);
+                setLastConfirmedAt(null);
                 setOpen(false);
                 toast({ title: "Timer discarded" });
               }}
@@ -217,6 +293,36 @@ export function FloatingTimer() {
             <Button disabled={!form.mandateId || saving} onClick={save}>
               {saving ? "Saving…" : "Log time"}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={idlePromptOpen} onOpenChange={() => {}}>
+        <DialogContent
+          className="max-w-sm"
+          onInteractOutside={(e) => e.preventDefault()}
+          onEscapeKeyDown={(e) => e.preventDefault()}
+        >
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 text-warning" /> Still working?
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Your timer has been running for a while. If we don't hear from you
+            in{" "}
+            <span className="font-medium tabular-nums text-foreground">
+              {idleDeadline
+                ? fmtCountdown(Math.max(0, idleDeadline - now))
+                : "5:00"}
+            </span>
+            , we'll assume you stepped away and stop it.
+          </p>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={stopFromIdlePrompt}>
+              <Square className="mr-1 h-3 w-3" /> No, I'm done
+            </Button>
+            <Button onClick={confirmStillWorking}>Yes, still working</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

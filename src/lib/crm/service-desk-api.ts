@@ -106,6 +106,24 @@ export const setTicketStatus = async (
   return unwrap(res);
 };
 
+export interface SlaSettings {
+  notifyAt75: boolean;
+  notifyAt90: boolean;
+  notifyAt100: boolean;
+}
+
+export const fetchSlaSettings = async (): Promise<SlaSettings> => {
+  const res = await api.get("/crm/tickets/sla-settings");
+  return unwrap(res);
+};
+
+export const updateSlaSettings = async (
+  dto: Partial<SlaSettings>,
+): Promise<SlaSettings> => {
+  const res = await api.patch("/crm/tickets/sla-settings", dto);
+  return unwrap(res);
+};
+
 export const addTicketNote = async (
   id: string,
   author: string,
