@@ -83,7 +83,7 @@ export default function Reactivate() {
   // ── No token, or token invalid/expired — offer to resend ──
   if (!token || error) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/10 via-background to-secondary/10 p-4">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/10 via-background to-secondary/10 p-4 font-inter">
         <div className="w-full max-w-md space-y-6">
           <Logo />
           <Card className="shadow-xl border-0">
