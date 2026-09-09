@@ -92,7 +92,7 @@ type NavItem = {
 const NAV_BY_MODULE: Record<string, NavItem[]> = {
   // ── AML / KYC ──────────────────────────────────────────────
   kyc_aml: [
-    { title: "Dashboard", url: "/", icon: LayoutDashboard },
+    { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
     {
       title: "Onboarding & CDD",
       url: "/clients/onboarding",
@@ -140,7 +140,7 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
 
   // ── GRC ────────────────────────────────────────────────────
   grc: [
-    { title: "Dashboard", url: "/", icon: LayoutDashboard },
+    { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
     {
       title: "GRC Overview",
       url: "/grc/overview",
@@ -245,7 +245,7 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
 
   // ── CRM & Project Management ──────────────────────────────
   crm: [
-    { title: "Dashboard", url: "/", icon: LayoutDashboard },
+    { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
     { title: "CRM Overview", url: "/crm/overview", icon: BarChart3 },
     {
       title: "CRM",
@@ -296,7 +296,7 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
 
   // ── Finance ────────────────────────────────────────────────
   finance: [
-    { title: "Dashboard", url: "/", icon: LayoutDashboard },
+    { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
     {
       title: "Financials",
       url: "/finance/financials",
@@ -355,7 +355,7 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
 
   // ── HR & People Management ─────────────────────────────────
   hr_pm: [
-    { title: "Dashboard", url: "/", icon: LayoutDashboard },
+    { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
     {
       title: "HR Overview",
       url: "/hr/overview",
@@ -449,7 +449,7 @@ export function AppSidebar() {
   // ── Team members get a fixed, minimal sidebar — no module switching,
   //    no HR/admin areas. Just their workspace essentials.
   const TEAM_MEMBER_NAV = [
-    { title: "Dashboard", url: "/", icon: LayoutDashboard },
+    { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
     { title: "My Profile", url: "/my/profile", icon: UserCog },
     {
       title: "My Team",

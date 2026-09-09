@@ -21,7 +21,7 @@ export const coreRoutes = ({ isAdmin }: RouteContext) => {
   const HomeEl = isAdmin ? <Dashboard /> : <EmployeeDashboard />;
 
   const routes = [
-    <Route key="home" path="/" element={layout(HomeEl)} />,
+    <Route key="home" path="/dashboard" element={layout(HomeEl)} />,
     <Route
       key="clients"
       path="/clients"

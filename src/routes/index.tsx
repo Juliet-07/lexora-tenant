@@ -83,6 +83,7 @@ export function AppRoutes() {
   if (!user) {
     return (
       <Routes>
+        <Route path="/" element={<Intro />} />
         <Route path="/login" element={<Login />} />
         <Route path="/platform" element={<Platform />} />
         <Route path="/pricing" element={<Pricing />} />
@@ -91,7 +92,6 @@ export function AppRoutes() {
         <Route path="/insights" element={<MarketingInsights />} />
         <Route path="/about" element={<AboutPage />} />
         <Route path="/contact" element={<ContactPage />} />
-        <Route path="*" element={<Intro />} />
       </Routes>
     );
   }
