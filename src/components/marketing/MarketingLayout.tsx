@@ -27,11 +27,8 @@ export function MarketingLayout({ children }: { children: React.ReactNode }) {
     <div className="intro-page min-h-screen overflow-x-hidden bg-intro text-intro-foreground">
       <header className="fixed inset-x-0 top-0 z-50 border-b border-intro-foreground/10 bg-intro/85 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-[1320px] items-center gap-6 px-5 sm:px-8">
-          <Link to="/" className="flex items-center gap-2.5" aria-label="Lexora home">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-intro-primary to-intro-accent text-sm font-bold text-intro-foreground">
-              L
-            </span>
-            <span className="text-lg font-semibold tracking-tight">Lexora</span>
+          <Link to="/" className="flex shrink-0 items-center" aria-label="Lexora home">
+            <img src="/lexora-logo.webp" alt="Lexora Africa" className="h-11 w-auto object-contain" />
           </Link>
 
           <nav className="hidden items-center gap-1 lg:flex" aria-label="Main navigation">
@@ -105,10 +102,7 @@ export function MarketingLayout({ children }: { children: React.ReactNode }) {
       <footer className="border-t border-intro-foreground/10 bg-intro px-5 py-14 sm:px-8">
         <div className="mx-auto grid max-w-[1320px] gap-10 lg:grid-cols-[1.4fr_1fr_1fr_1fr_1fr]">
           <div>
-            <div className="flex items-center gap-2.5">
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-intro-primary to-intro-accent text-sm font-bold">L</span>
-              <span className="font-semibold">Lexora Africa</span>
-            </div>
+            <img src="/lexora-logo.webp" alt="Lexora Africa" className="h-14 w-auto object-contain" />
             <p className="mt-4 max-w-xs text-sm leading-6 text-intro-muted">
               Governance, risk, and compliance platform built from first principles for African businesses.
             </p>

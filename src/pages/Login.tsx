@@ -37,13 +37,8 @@ export default function Login() {
         <div className="absolute inset-0 bg-gradient-to-br from-[#1e1060]/90 via-[#2a1a6e]/80 to-[#12082e]/95" />
 
         {/* Logo */}
-        <div className="relative z-10 flex items-center gap-3 p-10">
-          <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-violet-400 to-purple-600 flex items-center justify-center shadow-lg shadow-purple-900/50">
-            <span className="text-white font-bold text-lg">L</span>
-          </div>
-          <span className="text-white text-xl font-semibold tracking-tight">
-            Lexora
-          </span>
+        <div className="relative z-10 p-10">
+          <img src="/lexora-logo.webp" alt="Lexora Africa" className="h-20 w-auto object-contain" />
         </div>
 
         {/* Hero copy */}
@@ -93,17 +88,12 @@ export default function Login() {
       <div className="flex-1 flex flex-col items-center justify-center p-6 sm:p-10 relative">
         <div className="w-full max-w-md space-y-8">
           {/* Mobile logo */}
-          <div className="flex lg:hidden items-center justify-center gap-2">
-            <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
-              <span className="text-white font-bold">L</span>
-            </div>
-            <span className="text-xl font-semibold">Lexora</span>
+          <div className="flex lg:hidden items-center justify-center">
+            <img src="/lexora-logo.webp" alt="Lexora Africa" className="h-16 w-auto object-contain" />
           </div>
 
           <div className="text-center space-y-2">
-            <div className="hidden lg:inline-flex h-14 w-14 rounded-2xl bg-gradient-to-br from-primary to-secondary items-center justify-center shadow-lg shadow-primary/30 mb-2">
-              <span className="text-white font-bold text-2xl">L</span>
-            </div>
+            <img src="/lexora-icon.webp" alt="" className="mb-2 hidden h-16 w-16 object-contain lg:inline-block" />
             <h2 className="text-3xl font-bold tracking-tight">Welcome back</h2>
             <p className="text-sm text-muted-foreground">
               Sign in to your Lexora workspace
