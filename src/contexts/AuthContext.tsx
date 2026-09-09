@@ -81,6 +81,7 @@ function mapUser(
 const viewModeKey = (userId: string) => `tenantViewMode:${userId}`;
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const navigate = useNavigate();
   const [user, setUser] = useState<AuthUser | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("admin");
   const [isLoading, setIsLoading] = useState(true);
