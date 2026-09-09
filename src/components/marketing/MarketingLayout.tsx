@@ -29,7 +29,7 @@ export function MarketingLayout({ children }: { children: React.ReactNode }) {
         <div className="w-full h-20 mx-auto grid grid-cols-2 items-center gap-6 px-5 sm:px-8 lg:grid-cols-[auto_1fr_auto] lg:justify-normal">
           <Link to="/" aria-label="Lexora home">
             <img
-              src="/lexora-logo.png"
+              src="/lexora-logo-light.png"
               alt="Lexora Africa"
               className="h-16 w-auto object-contain"
             />
@@ -126,7 +126,7 @@ export function MarketingLayout({ children }: { children: React.ReactNode }) {
         <div className="mx-auto grid max-w-[1320px] gap-10 lg:grid-cols-[1.4fr_1fr_1fr_1fr_1fr]">
           <div>
             <img
-              src="/lexora-logo.png"
+              src="/lexora-logo-light.png"
               alt="Lexora Africa"
               className="h-14 w-auto object-contain"
             />

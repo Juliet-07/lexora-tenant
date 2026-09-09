@@ -38,7 +38,7 @@ export default function Login() {
 
         {/* Logo */}
         <div className="relative z-10 p-10">
-          <img src="/lexora-logo.png" alt="Lexora Africa" className="h-20 w-auto object-contain" />
+          <img src="/lexora-logo-light.png" alt="Lexora Africa" className="h-20 w-auto object-contain" />
         </div>
 
         {/* Hero copy */}
