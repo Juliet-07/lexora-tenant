@@ -1,4 +1,3 @@
-import { Handshake, Plus } from "lucide-react";
 import { CtaBand, MarketingLayout, PageHero } from "@/components/marketing/MarketingLayout";
 import boardroomImage from "@/assets/intro-boardroom.jpg";
 import executiveImage from "@/assets/intro-executive.jpg";
@@ -22,7 +21,7 @@ export default function About() {
       <section className="border-b border-intro-foreground/10 py-14">
         <div className="mx-auto grid max-w-[1320px] grid-cols-2 gap-6 px-5 sm:px-8 lg:grid-cols-4">
           {stats.map((stat) => (
-            <div key={stat.label} className="rounded-2xl border border-intro-foreground/10 bg-intro-surface p-6">
+            <div key={stat.label} className="border-l border-intro-gold px-6 py-3">
               <p className="font-display text-4xl text-intro-highlight">{stat.value}</p>
               <p className="mt-2 text-xs uppercase tracking-wide text-intro-muted">{stat.label}</p>
             </div>
@@ -57,13 +56,13 @@ export default function About() {
               src={boardroomImage}
               alt="Lexora Africa leadership team in a Kigali boardroom"
               loading="lazy"
-              className="aspect-[5/3] w-full rounded-2xl border border-intro-foreground/10 object-cover"
+              className="aspect-[5/3] w-full border border-intro-foreground/10 object-cover"
             />
             <img
               src={executiveImage}
               alt="African business executive at work"
               loading="lazy"
-              className="aspect-[5/3] w-full rounded-2xl border border-intro-foreground/10 object-cover"
+              className="aspect-[5/3] w-full border border-intro-foreground/10 object-cover"
             />
           </div>
         </div>
@@ -74,9 +73,9 @@ export default function About() {
           <p className="text-xs font-semibold uppercase tracking-wide text-intro-primary">Partners</p>
           <h2 className="mt-4 font-display text-4xl">Strategic partnerships across Africa</h2>
           <div className="mt-10 grid gap-4 lg:grid-cols-2">
-            <article className="rounded-2xl border border-intro-soft-border bg-intro-soft-raised p-8">
+            <article className="border-t border-intro-soft-border py-8">
               <div className="flex items-center gap-4">
-                <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-intro-primary/10 text-sm font-bold text-intro-primary">
+                <span className="flex h-12 w-12 items-center justify-center border border-intro-primary/25 text-sm font-bold text-intro-primary">
                   GGA
                 </span>
                 <div>
@@ -90,18 +89,14 @@ export default function About() {
                 webinar series "Governing for Growth".
               </p>
             </article>
-            <article className="rounded-2xl border border-dashed border-intro-soft-border bg-transparent p-8">
-              <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-intro-soft-border/50 text-intro-soft-muted">
-                <Plus className="h-5 w-5" />
-              </span>
+            <article className="border-t border-intro-soft-border py-8">
+              <span className="text-xs font-semibold uppercase text-intro-primary">Partnerships</span>
               <h3 className="mt-5 text-lg font-semibold">Become a partner</h3>
               <p className="mt-3 text-sm leading-6 text-intro-soft-muted">
                 We are building a network of advisory firms, training institutions, and technology providers
                 committed to strengthening governance across Africa.
               </p>
-              <p className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-intro-primary">
-                <Handshake className="h-4 w-4" /> Partner enquiry
-              </p>
+              <p className="mt-5 text-sm font-semibold text-intro-primary">Partner enquiry →</p>
             </article>
           </div>
         </div>

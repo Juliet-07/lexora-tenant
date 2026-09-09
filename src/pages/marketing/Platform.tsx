@@ -1,4 +1,4 @@
-import { Check } from "lucide-react";
+import { ModuleGlyph } from "@/components/marketing/Brand";
 import { CtaBand, MarketingLayout, PageHero } from "@/components/marketing/MarketingLayout";
 import { modules } from "@/data/marketingContent";
 
@@ -13,18 +13,15 @@ export default function Platform() {
 
       <section className="bg-intro-soft py-20 text-intro-soft-foreground sm:py-24">
         <div className="mx-auto max-w-[1320px] space-y-6 px-5 sm:px-8">
-          {modules.map((module) => {
-            const Icon = module.icon;
+          {modules.map((module, index) => {
             return (
               <article
                 key={module.name}
-                className="grid gap-8 rounded-2xl border border-intro-soft-border bg-intro-soft-raised p-7 sm:p-10 lg:grid-cols-[1fr_1fr]"
+                className="grid gap-8 border-b border-intro-soft-border py-10 last:border-0 lg:grid-cols-[1fr_1fr]"
               >
                 <div>
                   <div className="flex items-center gap-4">
-                    <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-intro-primary/10 text-intro-primary">
-                      <Icon className="h-6 w-6" />
-                    </span>
+                    <ModuleGlyph index={index} className="text-intro-primary" />
                     <span className="text-xs font-semibold text-intro-soft-muted">{module.number}</span>
                   </div>
                   <h2 className="mt-6 font-display text-3xl leading-tight">{module.name}</h2>
@@ -32,9 +29,8 @@ export default function Platform() {
                 </div>
                 <ul className="grid grid-cols-1 gap-x-6 gap-y-2.5 self-center sm:grid-cols-2">
                   {module.features.map((feature) => (
-                    <li key={feature} className="flex items-start gap-2 text-sm text-intro-soft-foreground/90">
-                      <Check className="mt-0.5 h-4 w-4 shrink-0 text-intro-primary" />
-                      {feature}
+                    <li key={feature} className="flex items-start gap-3 text-sm text-intro-soft-foreground/90">
+                      <span className="mt-2 h-px w-4 shrink-0 bg-intro-primary" aria-hidden="true" />{feature}
                     </li>
                   ))}
                 </ul>
