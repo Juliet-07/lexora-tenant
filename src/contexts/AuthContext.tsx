@@ -5,6 +5,7 @@ import {
   useEffect,
   ReactNode,
 } from "react";
+import { useNavigate } from "react-router-dom";
 import { api } from "@/lib/api";
 
 // ─── Role mapping ─────────────────────────────────────────────
