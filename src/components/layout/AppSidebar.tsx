@@ -66,6 +66,7 @@ import {
 } from "@/components/ui/collapsible";
 import { useAuth } from "@/contexts/AuthContext";
 import { useModule } from "@/contexts/ModuleContext";
+import lexoraIcon from "@/assets/lexora-icon.png.asset.json";
 
 // ─────────────────────────────────────────────────────────────
 // Nav items keyed by backend module id.
@@ -488,9 +489,7 @@ export function AppSidebar() {
         <div className="p-4 border-b border-sidebar-border">
           {!collapsed ? (
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
-                <LayoutDashboard className="w-5 h-5 text-white" />
-              </div>
+              <img src={lexoraIcon.url} alt="" className="h-9 w-9 rounded-lg object-contain" />
               <div className="min-w-0">
                 <h1 className="text-sm font-bold text-sidebar-accent-foreground tracking-tight truncate">
                   Lexora
@@ -501,9 +500,7 @@ export function AppSidebar() {
               </div>
             </div>
           ) : (
-            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-primary to-secondary flex items-center justify-center mx-auto">
-              <LayoutDashboard className="w-5 h-5 text-white" />
-            </div>
+            <img src={lexoraIcon.url} alt="Lexora" className="mx-auto h-9 w-9 rounded-lg object-contain" />
           )}
         </div>
 
@@ -615,13 +612,11 @@ export function AppSidebar() {
       <div className="p-4 border-b border-sidebar-border">
         {!collapsed ? (
           <div className="flex items-center gap-3">
-            <div
-              className={`w-9 h-9 rounded-lg bg-gradient-to-br ${currentModule.color} flex items-center justify-center`}
-            >
+            <div className="relative h-9 w-9 shrink-0">
               {isLoadingDashboard ? (
-                <Loader2 className="w-4 h-4 text-white animate-spin" />
+                <Loader2 className="absolute inset-0 m-auto h-4 w-4 animate-spin text-sidebar-foreground" />
               ) : (
-                <Icon className="w-5 h-5 text-white" />
+                <img src={lexoraIcon.url} alt="" className="h-9 w-9 rounded-lg object-contain" />
               )}
             </div>
             <div className="min-w-0">
@@ -634,11 +629,7 @@ export function AppSidebar() {
             </div>
           </div>
         ) : (
-          <div
-            className={`w-9 h-9 rounded-lg bg-gradient-to-br ${currentModule.color} flex items-center justify-center mx-auto`}
-          >
-            <Icon className="w-5 h-5 text-white" />
-          </div>
+          <img src={lexoraIcon.url} alt="Lexora" className="mx-auto h-9 w-9 rounded-lg object-contain" />
         )}
       </div>
 
