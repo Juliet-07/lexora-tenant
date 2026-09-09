@@ -141,6 +141,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem("tenantToken");
     localStorage.removeItem("tenantUser");
     setUser(null);
+    navigate("/login", { replace: true });
   };
 
   // ── View switch — no re-authentication, same session ──────
