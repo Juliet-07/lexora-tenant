@@ -26,7 +26,7 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex bg-background">
+    <div className="min-h-screen flex bg-background font-inter">
       {/* ── Left brand panel ─────────────────────────────── */}
       <div className="relative hidden lg:flex lg:w-[55%] flex-col justify-between overflow-hidden">
         <img
