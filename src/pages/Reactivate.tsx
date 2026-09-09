@@ -139,7 +139,7 @@ export default function Reactivate() {
 
   if (isLoading || !info) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/10 via-background to-secondary/10">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/10 via-background to-secondary/10 font-inter">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
       </div>
     );
@@ -148,7 +148,7 @@ export default function Reactivate() {
   const { openInvoice } = info;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary/10 via-background to-secondary/10 py-10 px-4">
+    <div className="min-h-screen bg-gradient-to-br from-primary/10 via-background to-secondary/10 py-10 px-4 font-inter">
       <div className="max-w-3xl mx-auto space-y-6">
         <Logo />
 
