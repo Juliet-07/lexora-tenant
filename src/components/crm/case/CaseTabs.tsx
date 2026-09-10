@@ -8,6 +8,14 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { DocumentEditorDialog } from "@/components/DocumentEditorDialog";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -40,15 +48,21 @@ import {
   sendAdrMessage,
   sendAdrPartyEmail,
   addAdrTimelineEntry,
+  fetchAdrDrafts,
+  createAdrDraft,
+  saveAdrDraftVersion,
+  updateAdrDraftStatus,
+  fetchAdrDocuments,
+  uploadAdrDocument,
+  type AdrDraft,
+  type AdrDocument,
 } from "@/lib/crm/adr-api";
+import { fetchAvailableTemplates } from "@/lib/crm/tools-api";
 import {
-  mockDocFolders,
-  mockRecentDocs,
   mockDeadlineRules,
   mockTimeEntries,
   mockAuditTrail,
   mockAccessMatrix,
-  mockDrafting,
 } from "@/data/caseDetailMock";
 
 /** Internal notes + external correspondence in one thread. */
@@ -308,13 +322,86 @@ export function CaseCommunicationsTab({
 }
 
 /** Drafting workspace — documents being authored on this case. */
-export function CaseDraftingTab() {
-  const drafts = mockDrafting();
+export function CaseDraftingTab({
+  caseId,
+  caseType,
+}: {
+  caseId: string;
+  caseType: "ADR" | "Litigation";
+}) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  if (caseType === "Litigation") {
+    return (
+      <p className="py-8 text-center text-sm text-muted-foreground">
+        Litigation drafting is coming in the next phase of this build —
+        available today for ADR cases.
+      </p>
+    );
+  }
+
   const tone: Record<string, string> = {
     Final: "bg-emerald-100 text-emerald-700 border-emerald-200",
     "In review": "bg-amber-100 text-amber-700 border-amber-200",
     Draft: "bg-muted text-muted-foreground border-border",
   };
+
+  const { data: drafts = [] } = useQuery({
+    queryKey: ["adrDrafts", caseId],
+    queryFn: () => fetchAdrDrafts(caseId),
+  });
+  const { data: templates = [] } = useQuery({
+    queryKey: ["adr-litigation-templates"],
+    queryFn: () => fetchAvailableTemplates("crm", "adr-litigation"),
+    staleTime: 5 * 60_000,
+  });
+
+  const [newOpen, setNewOpen] = useState(false);
+  const [newTitle, setNewTitle] = useState("");
+  const [newTemplateId, setNewTemplateId] = useState<string>("blank");
+  const createMut = useMutation({
+    mutationFn: () =>
+      createAdrDraft(caseId, {
+        title: newTitle.trim(),
+        templateId: newTemplateId === "blank" ? undefined : newTemplateId,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["adrDrafts", caseId] });
+      setNewOpen(false);
+      setNewTitle("");
+      setNewTemplateId("blank");
+      toast({ title: "Draft created" });
+    },
+  });
+
+  const [editingDraft, setEditingDraft] = useState<AdrDraft | null>(null);
+  const [historyDraft, setHistoryDraft] = useState<AdrDraft | null>(null);
+  const saveMut = useMutation({
+    mutationFn: (content: string) =>
+      saveAdrDraftVersion(caseId, editingDraft!._id, content),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["adrDrafts", caseId] });
+      setEditingDraft(null);
+      toast({ title: "Version saved" });
+    },
+  });
+  const statusMut = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: AdrDraft["status"] }) =>
+      updateAdrDraftStatus(caseId, id, status),
+    onSuccess: (_data, vars) => {
+      queryClient.invalidateQueries({ queryKey: ["adrDrafts", caseId] });
+      queryClient.invalidateQueries({ queryKey: ["adrDocuments", caseId] });
+      queryClient.invalidateQueries({ queryKey: ["adrCase", caseId] });
+      toast({
+        title:
+          vars.status === "Final"
+            ? "Finalised — filed to Documents"
+            : `Status set to ${vars.status}`,
+      });
+    },
+  });
+
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -322,108 +409,322 @@ export function CaseDraftingTab() {
           Documents being drafted on this case. Finalised drafts move into
           Documents and lock a version.
         </p>
-        <Button size="sm">
+        <Button size="sm" onClick={() => setNewOpen(true)}>
           <Plus className="mr-1.5 h-4 w-4" /> New draft
         </Button>
       </div>
       {drafts.map((d) => (
-        <Card key={d.title}>
+        <Card key={d._id}>
           <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
             <div className="flex items-start gap-3">
               <FileText className="mt-0.5 h-4 w-4 text-muted-foreground" />
               <div>
                 <p className="text-sm font-semibold">{d.title}</p>
-                <p className="text-xs text-muted-foreground">{d.meta}</p>
+                <p className="text-xs text-muted-foreground">
+                  v{d.currentVersion}
+                  {d.sourceTemplateTitle && ` · from ${d.sourceTemplateTitle}`}
+                </p>
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <Badge variant="outline" className={tone[d.status]}>
-                {d.status}
-              </Badge>
-              <Button size="sm" variant="outline">
+              {d.status !== "Final" && (
+                <Select
+                  value={d.status}
+                  onValueChange={(v) =>
+                    statusMut.mutate({
+                      id: d._id,
+                      status: v as AdrDraft["status"],
+                    })
+                  }
+                >
+                  <SelectTrigger className="h-8 w-32 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Draft">Draft</SelectItem>
+                    <SelectItem value="In review">In review</SelectItem>
+                    <SelectItem value="Final">Final</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+              {d.status === "Final" && (
+                <Badge variant="outline" className={tone.Final}>
+                  Final
+                </Badge>
+              )}
+              {d.versions.length > 1 && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setHistoryDraft(d)}
+                >
+                  History
+                </Button>
+              )}
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setEditingDraft(d)}
+              >
                 Open editor
               </Button>
             </div>
           </CardContent>
         </Card>
       ))}
+      {!drafts.length && (
+        <p className="py-8 text-center text-sm text-muted-foreground">
+          No drafts started yet.
+        </p>
+      )}
+
+      <Dialog open={newOpen} onOpenChange={setNewOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>New draft</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label className="text-xs">Title</Label>
+              <Input
+                value={newTitle}
+                onChange={(e) => setNewTitle(e.target.value)}
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Start from</Label>
+              <Select value={newTemplateId} onValueChange={setNewTemplateId}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="blank">Blank document</SelectItem>
+                  {templates.map((t) => (
+                    <SelectItem key={t._id} value={t._id}>
+                      {t.title}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              disabled={createMut.isPending || !newTitle.trim()}
+              onClick={() => createMut.mutate()}
+            >
+              Create
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {editingDraft && (
+        <DocumentEditorDialog
+          open={!!editingDraft}
+          title={editingDraft.title}
+          subtitle={`v${editingDraft.currentVersion} → v${editingDraft.currentVersion + 1} on save`}
+          value={editingDraft.content}
+          saving={saveMut.isPending}
+          onClose={() => setEditingDraft(null)}
+          onSave={(html) => saveMut.mutate(html)}
+        />
+      )}
+
+      <Dialog
+        open={!!historyDraft}
+        onOpenChange={(o) => !o && setHistoryDraft(null)}
+      >
+        <DialogContent className="max-h-[80vh] max-w-2xl overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Version history — {historyDraft?.title}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            {historyDraft?.versions
+              .slice()
+              .reverse()
+              .map((v) => (
+                <div key={v._id} className="rounded border p-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-semibold">
+                      Version {v.versionNumber}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {v.savedBy} · {new Date(v.savedAt).toLocaleString()}
+                    </p>
+                  </div>
+                  <div
+                    className="prose prose-sm mt-2 max-h-40 max-w-none overflow-y-auto text-xs"
+                    dangerouslySetInnerHTML={{ __html: v.content }}
+                  />
+                </div>
+              ))}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
 
 /** Folder-organised case documents. */
-export function CaseDocumentsTab({ caseId }: { caseId: string }) {
-  const folders = mockDocFolders(caseId);
-  const recent = mockRecentDocs();
-  const total = folders.reduce((s, f) => s + f.count, 0);
+export function CaseDocumentsTab({
+  caseId,
+  caseType,
+}: {
+  caseId: string;
+  caseType: "ADR" | "Litigation";
+}) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  if (caseType === "Litigation") {
+    return (
+      <p className="py-8 text-center text-sm text-muted-foreground">
+        Litigation documents are coming in the next phase of this build —
+        available today for ADR cases.
+      </p>
+    );
+  }
+
+  const { data: documents = [] } = useQuery({
+    queryKey: ["adrDocuments", caseId],
+    queryFn: () => fetchAdrDocuments(caseId),
+  });
+
+  const uploadMut = useMutation({
+    mutationFn: (file: File) => uploadAdrDocument(caseId, "General", file),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["adrDocuments", caseId] });
+      toast({ title: "Document uploaded" });
+    },
+  });
+  const fileInputRef = { current: null as HTMLInputElement | null };
+
+  const [previewing, setPreviewing] = useState<AdrDocument | null>(null);
+
+  const folderCounts = documents.reduce<Record<string, number>>((acc, d) => {
+    acc[d.folder] = (acc[d.folder] ?? 0) + 1;
+    return acc;
+  }, {});
+  const folderTones = [
+    "bg-primary/10 text-primary",
+    "bg-emerald-100 text-emerald-700",
+    "bg-amber-100 text-amber-700",
+    "bg-violet-100 text-violet-700",
+  ];
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-muted-foreground">
-          {total} documents, organised into folders for this case. Folders keep
-          filing consistent across every ADR and litigation matter.
+          {documents.length} documents, organised into folders for this case.
         </p>
         <div className="flex gap-2">
-          <Button size="sm" variant="outline">
-            <Upload className="mr-1.5 h-4 w-4" /> Upload
-          </Button>
-          <Button size="sm">
-            <FolderPlus className="mr-1.5 h-4 w-4" /> New folder
+          <input
+            ref={(el) => (fileInputRef.current = el)}
+            type="file"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) uploadMut.mutate(file);
+              e.target.value = "";
+            }}
+          />
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={uploadMut.isPending}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <Upload className="mr-1.5 h-4 w-4" />
+            {uploadMut.isPending ? "Uploading…" : "Upload"}
           </Button>
         </div>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-        {folders.map((f) => (
-          <Card key={f.name} className="cursor-pointer hover:border-primary/50">
+        {Object.entries(folderCounts).map(([name, count], i) => (
+          <Card key={name}>
             <CardContent className="p-4">
               <div
-                className={`flex h-9 w-9 items-center justify-center rounded-lg ${f.tone}`}
+                className={`flex h-9 w-9 items-center justify-center rounded-lg ${folderTones[i % folderTones.length]}`}
               >
                 <Folder className="h-4.5 w-4.5" />
               </div>
-              <p className="mt-3 text-sm font-semibold">{f.name}</p>
-              <p className="text-xs text-muted-foreground">
-                {f.count} documents
-              </p>
+              <p className="mt-3 text-sm font-semibold">{name}</p>
+              <p className="text-xs text-muted-foreground">{count} documents</p>
             </CardContent>
           </Card>
         ))}
+        {!Object.keys(folderCounts).length && (
+          <p className="col-span-full py-4 text-center text-sm text-muted-foreground">
+            No documents yet.
+          </p>
+        )}
       </div>
 
-      <div>
-        <h4 className="mb-2 text-sm font-semibold">Recently added</h4>
-        <Card>
-          <CardContent className="divide-y p-0">
-            {recent.map((d) => (
-              <div
-                key={d.title}
-                className="flex flex-wrap items-start justify-between gap-3 p-4"
-              >
-                <div className="flex gap-3">
-                  <div className="h-9 w-7 shrink-0 rounded bg-muted" />
-                  <div>
-                    <p className="text-sm font-semibold">{d.title}</p>
-                    <p className="text-xs text-muted-foreground">{d.meta}</p>
-                    <div className="mt-1.5 flex flex-wrap gap-1.5">
-                      {d.tags.map((t) => (
-                        <Badge
-                          key={t}
-                          variant="outline"
-                          className="text-[10px]"
-                        >
-                          {t}
-                        </Badge>
-                      ))}
+      {!!documents.length && (
+        <div>
+          <h4 className="mb-2 text-sm font-semibold">All documents</h4>
+          <Card>
+            <CardContent className="divide-y p-0">
+              {documents.map((d) => (
+                <div
+                  key={d._id}
+                  className="flex flex-wrap items-start justify-between gap-3 p-4"
+                >
+                  <div className="flex gap-3">
+                    <div className="h-9 w-7 shrink-0 rounded bg-muted" />
+                    <div>
+                      <p className="text-sm font-semibold">{d.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {d.folder} ·{" "}
+                        {new Date(d.createdAt).toLocaleDateString()} ·{" "}
+                        {d.uploadedBy}
+                      </p>
                     </div>
                   </div>
+                  <div className="flex items-center gap-2">
+                    {d.content ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setPreviewing(d)}
+                      >
+                        View
+                      </Button>
+                    ) : (
+                      <a
+                        href={d.fileUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-primary underline"
+                      >
+                        Open
+                      </a>
+                    )}
+                  </div>
                 </div>
-                <span className="text-xs text-muted-foreground">{d.size}</span>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      </div>
+              ))}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      <Dialog
+        open={!!previewing}
+        onOpenChange={(o) => !o && setPreviewing(null)}
+      >
+        <DialogContent className="max-h-[80vh] max-w-2xl overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{previewing?.name}</DialogTitle>
+          </DialogHeader>
+          <div
+            className="prose prose-sm max-w-none"
+            dangerouslySetInnerHTML={{ __html: previewing?.content ?? "" }}
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

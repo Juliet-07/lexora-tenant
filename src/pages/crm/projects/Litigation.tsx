@@ -961,13 +961,13 @@ export default function Litigation() {
             <CaseCommunicationsTab caseId={c._id} caseType="Litigation" />
           </TabsContent>
           <TabsContent value="drafting" className="pt-4">
-            <CaseDraftingTab />
+            <CaseDraftingTab caseId={c._id} caseType="Litigation" />
           </TabsContent>
           <TabsContent value="hearings" className="space-y-4 pt-4">
             {courtDatesCard}
           </TabsContent>
           <TabsContent value="documents" className="pt-4">
-            <CaseDocumentsTab caseId={c._id} />
+            <CaseDocumentsTab caseId={c._id} caseType="Litigation" />
           </TabsContent>
           <TabsContent value="deadlines" className="pt-4">
             <CaseDeadlineRulesTab caseId={c._id} />

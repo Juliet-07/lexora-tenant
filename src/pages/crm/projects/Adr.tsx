@@ -1075,7 +1075,7 @@ export default function Adr() {
             <CaseCommunicationsTab caseId={c._id} caseType="ADR" />
           </TabsContent>
           <TabsContent value="drafting" className="pt-4">
-            <CaseDraftingTab />
+            <CaseDraftingTab caseId={c._id} caseType="ADR" />
           </TabsContent>
           <TabsContent value="hearings" className="space-y-4 pt-4">
             <p className="text-sm text-muted-foreground">
@@ -1085,7 +1085,7 @@ export default function Adr() {
             {sessionsCard}
           </TabsContent>
           <TabsContent value="documents" className="pt-4">
-            <CaseDocumentsTab caseId={c._id} />
+            <CaseDocumentsTab caseId={c._id} caseType="ADR" />
           </TabsContent>
           <TabsContent value="deadlines" className="pt-4">
             <CaseDeadlineRulesTab caseId={c._id} />

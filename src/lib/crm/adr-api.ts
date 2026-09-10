@@ -397,3 +397,96 @@ export const sendAdrPartyEmail = async (
   const res = await api.post(`/crm/adr-cases/${caseId}/party-email`, dto);
   return unwrap(res);
 };
+
+// ── Drafting ──────────────────────────────────────────────────
+export interface AdrDraftVersion {
+  _id: string;
+  versionNumber: number;
+  content: string;
+  savedBy: string;
+  savedAt: string;
+}
+export interface AdrDraft {
+  _id: string;
+  caseId: string;
+  title: string;
+  content: string;
+  status: "Draft" | "In review" | "Final";
+  sourceTemplateId: string;
+  sourceTemplateTitle: string;
+  versions: AdrDraftVersion[];
+  currentVersion: number;
+  documentId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const fetchAdrDrafts = async (caseId: string): Promise<AdrDraft[]> => {
+  const res = await api.get(`/crm/adr-cases/${caseId}/drafts`);
+  const d = unwrap(res);
+  return Array.isArray(d) ? d : [];
+};
+
+export const createAdrDraft = async (
+  caseId: string,
+  dto: { title: string; templateId?: string },
+): Promise<AdrDraft> =>
+  unwrap(await api.post(`/crm/adr-cases/${caseId}/drafts`, dto));
+
+export const saveAdrDraftVersion = async (
+  caseId: string,
+  draftId: string,
+  content: string,
+): Promise<AdrDraft> =>
+  unwrap(
+    await api.patch(`/crm/adr-cases/${caseId}/drafts/${draftId}`, { content }),
+  );
+
+export const updateAdrDraftStatus = async (
+  caseId: string,
+  draftId: string,
+  status: AdrDraft["status"],
+): Promise<AdrDraft> =>
+  unwrap(
+    await api.patch(`/crm/adr-cases/${caseId}/drafts/${draftId}/status`, {
+      status,
+    }),
+  );
+
+// ── Documents ─────────────────────────────────────────────────
+export interface AdrDocument {
+  _id: string;
+  caseId: string;
+  folder: string;
+  name: string;
+  content: string;
+  fileUrl: string;
+  size: number;
+  mimeType: string;
+  uploadedBy: string;
+  sourceDraftId: string | null;
+  createdAt: string;
+}
+
+export const fetchAdrDocuments = async (
+  caseId: string,
+): Promise<AdrDocument[]> => {
+  const res = await api.get(`/crm/adr-cases/${caseId}/documents`);
+  const d = unwrap(res);
+  return Array.isArray(d) ? d : [];
+};
+
+export const uploadAdrDocument = async (
+  caseId: string,
+  folder: string,
+  file: File,
+): Promise<AdrDocument> => {
+  const formData = new FormData();
+  formData.append("file", file);
+  const res = await api.post(
+    `/crm/adr-cases/${caseId}/documents?folder=${encodeURIComponent(folder)}`,
+    formData,
+    { headers: { "Content-Type": "multipart/form-data" } },
+  );
+  return unwrap(res);
+};
