@@ -32,6 +32,7 @@ export interface TimeEntry {
   mandateName: string;
   taskId: string | null;
   taskTitle: string;
+  adrCaseId: string | null;
   narrative: string;
   date: string;
   hours: number;
@@ -39,6 +40,13 @@ export interface TimeEntry {
   rate: number;
   currency: string;
   status: TimesheetStatus;
+  wipBillingStatus:
+    | "Unbilled"
+    | "Approved for billing"
+    | "Written down"
+    | "Written off"
+    | "Held"
+    | "Invoiced";
   rejectReason: string | null;
   createdAt: string;
   updatedAt: string;
@@ -86,6 +94,7 @@ export const fetchTimeEntries = async (filters?: {
   mandateId?: string;
   memberUserId?: string;
   status?: TimesheetStatus;
+  adrCaseId?: string;
 }): Promise<TimeEntry[]> => {
   const res = await api.get("/crm/time-entries", { params: filters });
   const d = unwrap(res);
@@ -131,6 +140,11 @@ export const rejectTimeEntry = async (
   reason: string,
 ): Promise<TimeEntry> => {
   const res = await api.post(`/crm/time-entries/${id}/reject`, { reason });
+  return unwrap(res);
+};
+
+export const approveForBilling = async (id: string): Promise<TimeEntry> => {
+  const res = await api.post(`/crm/time-entries/${id}/approve-for-billing`);
   return unwrap(res);
 };
 

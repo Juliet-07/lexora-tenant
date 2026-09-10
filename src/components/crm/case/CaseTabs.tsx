@@ -59,8 +59,13 @@ import {
 } from "@/lib/crm/adr-api";
 import { fetchAvailableTemplates } from "@/lib/crm/tools-api";
 import {
+  fetchTimeEntries,
+  approveTimeEntry,
+  rejectTimeEntry,
+  approveForBilling,
+} from "@/lib/crm/time-tracking-api";
+import {
   mockDeadlineRules,
-  mockTimeEntries,
   mockAuditTrail,
   mockAccessMatrix,
 } from "@/data/caseDetailMock";
@@ -772,30 +777,79 @@ export function CaseDeadlineRulesTab({ caseId }: { caseId: string }) {
 
 /** Time entries and disbursement summary for the case. */
 export function CaseTimeBillingTab({
+  caseId,
+  caseType,
   hours,
   fees,
   disbursed,
 }: {
+  caseId: string;
+  caseType: "ADR" | "Litigation";
   hours: string;
   fees: string;
   disbursed: string;
 }) {
-  const entries = mockTimeEntries();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  if (caseType === "Litigation") {
+    return (
+      <p className="py-8 text-center text-sm text-muted-foreground">
+        Litigation time & billing is coming in the next phase of this build —
+        available today for ADR cases.
+      </p>
+    );
+  }
+
+  const { data: entries = [] } = useQuery({
+    queryKey: ["adrTimeEntries", caseId],
+    queryFn: () => fetchTimeEntries({ adrCaseId: caseId }),
+  });
+
+  const statusTone: Record<string, string> = {
+    Draft: "bg-muted text-muted-foreground border-border",
+    Submitted: "bg-amber-100 text-amber-700 border-amber-200",
+    "Lead Approved": "bg-amber-100 text-amber-700 border-amber-200",
+    Approved: "bg-emerald-100 text-emerald-700 border-emerald-200",
+    Rejected: "bg-destructive/10 text-destructive border-destructive/20",
+  };
+
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: ["adrTimeEntries", caseId] });
+
+  const approveMut = useMutation({
+    mutationFn: (id: string) => approveTimeEntry(id),
+    onSuccess: () => {
+      invalidate();
+      toast({ title: "Entry approved" });
+    },
+  });
+  const billMut = useMutation({
+    mutationFn: (id: string) => approveForBilling(id),
+    onSuccess: () => {
+      invalidate();
+      toast({ title: "Approved for billing" });
+    },
+  });
+  const [rejectingId, setRejectingId] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
+  const rejectMut = useMutation({
+    mutationFn: () => rejectTimeEntry(rejectingId!, rejectReason.trim()),
+    onSuccess: () => {
+      invalidate();
+      setRejectingId(null);
+      setRejectReason("");
+      toast({ title: "Entry rejected" });
+    },
+  });
+
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-muted-foreground">
-          {hours} logged · {fees} fees · {disbursed} disbursements. Entries sync
-          to the firm timesheet automatically.
+          {hours} logged · {fees} fees · {disbursed} disbursements. Time is
+          logged by the assigned team from their own Cases view.
         </p>
-        <div className="flex gap-2">
-          <Button size="sm" variant="outline">
-            <Phone className="mr-1.5 h-4 w-4" /> Log call
-          </Button>
-          <Button size="sm">
-            <Plus className="mr-1.5 h-4 w-4" /> Log time
-          </Button>
-        </div>
       </div>
       <Card>
         <CardContent className="p-0">
@@ -804,40 +858,106 @@ export function CaseTimeBillingTab({
               <TableRow>
                 <TableHead>Date</TableHead>
                 <TableHead>Timekeeper</TableHead>
-                <TableHead>Activity</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Duration</TableHead>
+                <TableHead>Narrative</TableHead>
+                <TableHead>Hours</TableHead>
                 <TableHead>Amount</TableHead>
-                <TableHead>Billable</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Billing</TableHead>
+                <TableHead className="text-right">Action</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {entries.map((e, i) => (
-                <TableRow key={i}>
-                  <TableCell className="text-sm">{e.date}</TableCell>
-                  <TableCell className="text-sm">{e.timekeeper}</TableCell>
-                  <TableCell className="text-sm">{e.activity}</TableCell>
-                  <TableCell className="text-sm">{e.type}</TableCell>
-                  <TableCell className="text-sm">{e.duration}</TableCell>
-                  <TableCell className="text-sm">{e.amount}</TableCell>
+              {entries.map((e) => (
+                <TableRow key={e._id}>
+                  <TableCell className="text-sm">
+                    {e.date?.slice(0, 10)}
+                  </TableCell>
+                  <TableCell className="text-sm">{e.member}</TableCell>
+                  <TableCell className="text-sm">
+                    {e.narrative || e.taskTitle}
+                  </TableCell>
+                  <TableCell className="text-sm">{e.hours}</TableCell>
+                  <TableCell className="text-sm">
+                    {(e.hours * e.rate).toLocaleString(undefined, {
+                      style: "currency",
+                      currency: e.currency || "USD",
+                    })}
+                  </TableCell>
                   <TableCell>
-                    <Badge
-                      variant="outline"
-                      className={
-                        e.billable
-                          ? "bg-emerald-100 text-emerald-700 border-emerald-200"
-                          : "bg-muted text-muted-foreground border-border"
-                      }
-                    >
-                      {e.billable ? "Yes" : "No"}
+                    <Badge variant="outline" className={statusTone[e.status]}>
+                      {e.status}
                     </Badge>
+                  </TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
+                    {e.wipBillingStatus}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {e.status === "Submitted" && (
+                      <div className="flex justify-end gap-1">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => approveMut.mutate(e._id)}
+                        >
+                          Approve
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setRejectingId(e._id)}
+                        >
+                          Reject
+                        </Button>
+                      </div>
+                    )}
+                    {e.status === "Approved" &&
+                      e.wipBillingStatus === "Unbilled" && (
+                        <Button size="sm" onClick={() => billMut.mutate(e._id)}>
+                          Approve for billing
+                        </Button>
+                      )}
                   </TableCell>
                 </TableRow>
               ))}
+              {!entries.length && (
+                <TableRow>
+                  <TableCell
+                    colSpan={8}
+                    className="py-8 text-center text-sm text-muted-foreground"
+                  >
+                    No time logged on this case yet.
+                  </TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
         </CardContent>
       </Card>
+
+      <Dialog
+        open={!!rejectingId}
+        onOpenChange={(o) => !o && setRejectingId(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reject time entry</DialogTitle>
+          </DialogHeader>
+          <Textarea
+            placeholder="Reason…"
+            value={rejectReason}
+            onChange={(e) => setRejectReason(e.target.value)}
+          />
+          <DialogFooter>
+            <Button
+              variant="destructive"
+              disabled={rejectMut.isPending || !rejectReason.trim()}
+              onClick={() => rejectMut.mutate()}
+            >
+              Reject
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

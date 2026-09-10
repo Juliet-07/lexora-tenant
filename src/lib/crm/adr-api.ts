@@ -490,3 +490,26 @@ export const uploadAdrDocument = async (
   );
   return unwrap(res);
 };
+
+// ── My Cases (employee-facing) ──────────────────────────────────
+export const fetchMyCases = async (): Promise<AdrCase[]> => {
+  const res = await api.get("/crm/my-cases");
+  const d = unwrap(res);
+  return Array.isArray(d) ? d : [];
+};
+
+export const fetchMyCaseDetail = async (id: string): Promise<AdrCase> =>
+  unwrap(await api.get(`/crm/my-cases/${id}`));
+
+export const logMyCaseTime = async (
+  caseId: string,
+  dto: { narrative?: string; date: string; hours: number; billable?: boolean },
+): Promise<void> => {
+  await api.post(`/crm/my-cases/${caseId}/time`, dto);
+};
+
+export const logMyCaseCall = async (
+  caseId: string,
+  summary: string,
+): Promise<AdrCase> =>
+  unwrap(await api.post(`/crm/my-cases/${caseId}/call`, { summary }));

@@ -974,6 +974,8 @@ export default function Litigation() {
           </TabsContent>
           <TabsContent value="billing" className="space-y-4 pt-4">
             <CaseTimeBillingTab
+              caseId={c._id}
+              caseType="Litigation"
               hours={`${(t?.litigationHours ?? 0).toFixed(1)} hrs`}
               fees={money(t?.litigationFees ?? 0, c.currency)}
               disbursed={money(t?.litigationDisbursed ?? 0, c.currency)}
