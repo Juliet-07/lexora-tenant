@@ -151,6 +151,8 @@ export interface AdrCase {
   type: AdrType;
   mandateId: string | null;
   mandateName: string;
+  teamId: string | null;
+  teamName: string;
   parties: AdrParty[];
   neutralUserId: string | null;
   neutral: string;
@@ -200,6 +202,8 @@ export const createAdrCase = async (dto: {
   mandateId?: string;
   neutralUserId?: string;
   neutral?: string;
+  teamId?: string;
+  teamName?: string;
   claimValue?: number;
   currency?: string;
   category?: string;
@@ -215,6 +219,8 @@ export const updateAdrCaseDetails = async (
   id: string,
   dto: Partial<{
     category: string;
+    teamId: string;
+    teamName: string;
     settlementTargetMin: number;
     settlementTargetMax: number;
     venue: string;

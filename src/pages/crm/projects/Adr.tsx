@@ -51,6 +51,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { fetchMandates } from "@/lib/crm/mandates-api";
+import { fetchTeams } from "@/lib/hr/hr-api";
 import {
   fetchAdrCases,
   fetchAdrCase,
@@ -155,6 +156,10 @@ export default function Adr() {
     queryKey: ["adr-mandates"],
     queryFn: fetchMandates,
   });
+  const { data: teams = [] } = useQuery({
+    queryKey: ["adr-teams"],
+    queryFn: fetchTeams,
+  });
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const { data: detail } = useQuery({
@@ -185,6 +190,8 @@ export default function Adr() {
     governingLaw: "",
     adrClause: "",
     escalationPath: "",
+    teamId: "",
+    teamName: "",
   });
   const [draftParties, setDraftParties] = useState([{ ...emptyParty }]);
 
@@ -241,6 +248,8 @@ export default function Adr() {
         governingLaw: draft.governingLaw,
         adrClause: draft.adrClause,
         escalationPath: draft.escalationPath,
+        teamId: draft.teamId || undefined,
+        teamName: draft.teamName || undefined,
         parties: draftParties.filter((p) => p.name.trim()),
       }),
     onSuccess: (c) => {
@@ -256,6 +265,8 @@ export default function Adr() {
         governingLaw: "",
         adrClause: "",
         escalationPath: "",
+        teamId: "",
+        teamName: "",
       });
       setDraftParties([{ ...emptyParty }]);
       toast({ title: "Case filed", description: `${c.ref} · Stage: Intake` });
@@ -693,6 +704,7 @@ export default function Adr() {
             <p className="text-sm text-muted-foreground">
               {c.ref} · {c.type}
               {c.mandateName && ` · Mandate: ${c.mandateName}`}
+              {c.teamName && ` · Team: ${c.teamName}`}
               {c.category && ` · ${c.category}`}
             </p>
           </div>
@@ -2030,6 +2042,41 @@ export default function Adr() {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+            <div>
+              <Label>Team handling this case</Label>
+              {teams.length > 0 ? (
+                <Select
+                  value={draft.teamId}
+                  onValueChange={(v) => {
+                    const t = teams.find((x) => x._id === v);
+                    setDraft({
+                      ...draft,
+                      teamId: v,
+                      teamName: t?.name ?? "",
+                    });
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select team..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {teams.map((t) => (
+                      <SelectItem key={t._id} value={t._id}>
+                        {t.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input
+                  placeholder="Team name"
+                  value={draft.teamName}
+                  onChange={(e) =>
+                    setDraft({ ...draft, teamName: e.target.value })
+                  }
+                />
+              )}
             </div>
             <div>
               <Label>Category</Label>
