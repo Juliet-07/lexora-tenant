@@ -468,6 +468,18 @@ export interface AdrDocument {
   createdAt: string;
 }
 
+export const fetchAdrFolders = async (caseId: string): Promise<string[]> => {
+  const res = await api.get(`/crm/adr-cases/${caseId}/folders`);
+  const d = unwrap(res);
+  return Array.isArray(d) ? d : ["General"];
+};
+
+export const createAdrFolder = async (
+  caseId: string,
+  name: string,
+): Promise<string[]> =>
+  unwrap(await api.post(`/crm/adr-cases/${caseId}/folders`, { name }));
+
 export const fetchAdrDocuments = async (
   caseId: string,
 ): Promise<AdrDocument[]> => {

@@ -54,6 +54,8 @@ import {
   updateAdrDraftStatus,
   fetchAdrDocuments,
   uploadAdrDocument,
+  fetchAdrFolders,
+  createAdrFolder,
   type AdrDraft,
   type AdrDocument,
 } from "@/lib/crm/adr-api";
@@ -595,15 +597,38 @@ export function CaseDocumentsTab({
     queryKey: ["adrDocuments", caseId],
     queryFn: () => fetchAdrDocuments(caseId),
   });
+  const { data: folders = ["General"] } = useQuery({
+    queryKey: ["adrFolders", caseId],
+    queryFn: () => fetchAdrFolders(caseId),
+  });
 
+  const [activeFolder, setActiveFolder] = useState<string | null>(null);
+
+  const [newFolderOpen, setNewFolderOpen] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
+  const folderMut = useMutation({
+    mutationFn: () => createAdrFolder(caseId, newFolderName.trim()),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["adrFolders", caseId] });
+      setNewFolderOpen(false);
+      setNewFolderName("");
+      toast({ title: "Folder created" });
+    },
+  });
+
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [uploadFolder, setUploadFolder] = useState("General");
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const fileInputRef = { current: null as HTMLInputElement | null };
   const uploadMut = useMutation({
-    mutationFn: (file: File) => uploadAdrDocument(caseId, "General", file),
+    mutationFn: () => uploadAdrDocument(caseId, uploadFolder, pendingFile!),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["adrDocuments", caseId] });
+      setUploadOpen(false);
+      setPendingFile(null);
       toast({ title: "Document uploaded" });
     },
   });
-  const fileInputRef = { current: null as HTMLInputElement | null };
 
   const [previewing, setPreviewing] = useState<AdrDocument | null>(null);
 
@@ -617,6 +642,9 @@ export function CaseDocumentsTab({
     "bg-amber-100 text-amber-700",
     "bg-violet-100 text-violet-700",
   ];
+  const visibleDocs = activeFolder
+    ? documents.filter((d) => d.folder === activeFolder)
+    : documents;
 
   return (
     <div className="space-y-4">
@@ -631,25 +659,34 @@ export function CaseDocumentsTab({
             className="hidden"
             onChange={(e) => {
               const file = e.target.files?.[0];
-              if (file) uploadMut.mutate(file);
+              if (file) {
+                setPendingFile(file);
+                setUploadFolder(activeFolder ?? folders[0] ?? "General");
+                setUploadOpen(true);
+              }
               e.target.value = "";
             }}
           />
           <Button
             size="sm"
             variant="outline"
-            disabled={uploadMut.isPending}
-            onClick={() => fileInputRef.current?.click()}
+            onClick={() => setNewFolderOpen(true)}
           >
-            <Upload className="mr-1.5 h-4 w-4" />
-            {uploadMut.isPending ? "Uploading…" : "Upload"}
+            <FolderPlus className="mr-1.5 h-4 w-4" /> New folder
+          </Button>
+          <Button size="sm" onClick={() => fileInputRef.current?.click()}>
+            <Upload className="mr-1.5 h-4 w-4" /> Upload
           </Button>
         </div>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-        {Object.entries(folderCounts).map(([name, count], i) => (
-          <Card key={name}>
+        {folders.map((name, i) => (
+          <Card
+            key={name}
+            className={`cursor-pointer transition-colors ${activeFolder === name ? "border-primary ring-1 ring-primary" : "hover:border-primary/50"}`}
+            onClick={() => setActiveFolder(activeFolder === name ? null : name)}
+          >
             <CardContent className="p-4">
               <div
                 className={`flex h-9 w-9 items-center justify-center rounded-lg ${folderTones[i % folderTones.length]}`}
@@ -657,64 +694,128 @@ export function CaseDocumentsTab({
                 <Folder className="h-4.5 w-4.5" />
               </div>
               <p className="mt-3 text-sm font-semibold">{name}</p>
-              <p className="text-xs text-muted-foreground">{count} documents</p>
+              <p className="text-xs text-muted-foreground">
+                {folderCounts[name] ?? 0} documents
+              </p>
             </CardContent>
           </Card>
         ))}
-        {!Object.keys(folderCounts).length && (
-          <p className="col-span-full py-4 text-center text-sm text-muted-foreground">
-            No documents yet.
-          </p>
-        )}
       </div>
 
-      {!!documents.length && (
-        <div>
-          <h4 className="mb-2 text-sm font-semibold">All documents</h4>
-          <Card>
-            <CardContent className="divide-y p-0">
-              {documents.map((d) => (
-                <div
-                  key={d._id}
-                  className="flex flex-wrap items-start justify-between gap-3 p-4"
-                >
-                  <div className="flex gap-3">
-                    <div className="h-9 w-7 shrink-0 rounded bg-muted" />
-                    <div>
-                      <p className="text-sm font-semibold">{d.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {d.folder} ·{" "}
-                        {new Date(d.createdAt).toLocaleDateString()} ·{" "}
-                        {d.uploadedBy}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {d.content ? (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setPreviewing(d)}
-                      >
-                        View
-                      </Button>
-                    ) : (
-                      <a
-                        href={d.fileUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-xs text-primary underline"
-                      >
-                        Open
-                      </a>
-                    )}
+      <div>
+        <div className="mb-2 flex items-center justify-between">
+          <h4 className="text-sm font-semibold">
+            {activeFolder ? `"${activeFolder}"` : "All documents"}
+          </h4>
+          {activeFolder && (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setActiveFolder(null)}
+            >
+              Clear filter
+            </Button>
+          )}
+        </div>
+        <Card>
+          <CardContent className="divide-y p-0">
+            {visibleDocs.map((d) => (
+              <div
+                key={d._id}
+                className="flex flex-wrap items-start justify-between gap-3 p-4"
+              >
+                <div className="flex gap-3">
+                  <div className="h-9 w-7 shrink-0 rounded bg-muted" />
+                  <div>
+                    <p className="text-sm font-semibold">{d.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {d.folder} · {new Date(d.createdAt).toLocaleDateString()}{" "}
+                      · {d.uploadedBy}
+                    </p>
                   </div>
                 </div>
-              ))}
-            </CardContent>
-          </Card>
-        </div>
-      )}
+                <div className="flex items-center gap-2">
+                  {d.content ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setPreviewing(d)}
+                    >
+                      View
+                    </Button>
+                  ) : (
+                    <a
+                      href={d.fileUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-primary underline"
+                    >
+                      Open
+                    </a>
+                  )}
+                </div>
+              </div>
+            ))}
+            {!visibleDocs.length && (
+              <p className="py-8 text-center text-sm text-muted-foreground">
+                No documents here yet.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <Dialog open={newFolderOpen} onOpenChange={setNewFolderOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>New folder</DialogTitle>
+          </DialogHeader>
+          <Input
+            placeholder="Folder name"
+            value={newFolderName}
+            onChange={(e) => setNewFolderName(e.target.value)}
+          />
+          <DialogFooter>
+            <Button
+              disabled={folderMut.isPending || !newFolderName.trim()}
+              onClick={() => folderMut.mutate()}
+            >
+              Create
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={uploadOpen} onOpenChange={setUploadOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Upload — {pendingFile?.name}</DialogTitle>
+          </DialogHeader>
+          <div>
+            <Label className="text-xs">Folder</Label>
+            <Select value={uploadFolder} onValueChange={setUploadFolder}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {folders.map((f) => (
+                  <SelectItem key={f} value={f}>
+                    {f}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter>
+            <Button
+              disabled={uploadMut.isPending}
+              onClick={() => uploadMut.mutate()}
+            >
+              {uploadMut.isPending ? "Uploading…" : "Upload"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={!!previewing}
