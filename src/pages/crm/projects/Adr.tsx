@@ -60,6 +60,9 @@ import {
   addAdrSession,
   updateAdrSession,
   recordAdrSettlement,
+  linkAdrSettlementDeed,
+  recordAdrClosure,
+  fetchAdrDocuments,
   recordAdrOutcome,
   restartAdrAsType,
   withdrawAdrCase,
@@ -209,6 +212,16 @@ export default function Adr() {
     amount: 0,
     terms: "",
   });
+  const [deedOpen, setDeedOpen] = useState(false);
+  const [deedDocumentId, setDeedDocumentId] = useState("");
+  const [closureOpen, setClosureOpen] = useState(false);
+  const [closureDraft, setClosureDraft] = useState({
+    clientSatisfaction: "" as "" | "Excellent" | "Good" | "Fair" | "Poor",
+    clientSatisfactionNotes: "",
+    lessonsLearned: "",
+    precedentValue: false,
+    precedentNotes: "",
+  });
   const [outcomeOpen, setOutcomeOpen] = useState(false);
   const [outcomeDraft, setOutcomeDraft] = useState("");
   const [restartOpen, setRestartOpen] = useState(false);
@@ -326,6 +339,32 @@ export default function Adr() {
       toast({ title: "Settlement recorded" });
     },
     onError: onErr("Failed to record settlement"),
+  });
+
+  const { data: caseDocuments = [] } = useQuery({
+    queryKey: ["adrDocuments", detail?._id],
+    queryFn: () => fetchAdrDocuments(detail!._id),
+    enabled: !!detail?._id,
+  });
+  const deedMut = useMutation({
+    mutationFn: () => linkAdrSettlementDeed(detail!._id, deedDocumentId),
+    onSuccess: () => {
+      invalidate();
+      setDeedOpen(false);
+      setDeedDocumentId("");
+      toast({ title: "Settlement deed linked" });
+    },
+    onError: onErr("Failed to link settlement deed"),
+  });
+
+  const closureMut = useMutation({
+    mutationFn: () => recordAdrClosure(detail!._id, closureDraft),
+    onSuccess: () => {
+      invalidate();
+      setClosureOpen(false);
+      toast({ title: "Closure details recorded" });
+    },
+    onError: onErr("Failed to record closure details"),
   });
 
   const outcomeMut = useMutation({
@@ -1159,33 +1198,74 @@ export default function Adr() {
                   <CardTitle className="text-base">Settlement terms</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-2 text-sm">
-                  {[
-                    [
-                      "Settlement value",
-                      c.settlement
-                        ? money(c.settlement.amount, c.currency)
-                        : "Not yet agreed",
-                    ],
-                    [
-                      "Payment schedule",
-                      "50% on execution, 50% in 60 days (dummy)",
-                    ],
-                    [
-                      "Settlement deed",
-                      "Draft in Documents → Contracts & signed",
-                    ],
-                    ["Release of claims", "Mutual, full and final"],
-                  ].map(([l, v]) => (
-                    <div key={l} className="flex justify-between gap-3">
-                      <span className="text-muted-foreground">{l}</span>
-                      <span className="text-right font-medium">{v}</span>
-                    </div>
-                  ))}
+                  {!c.settlement ? (
+                    <p className="text-sm text-muted-foreground">
+                      Not yet agreed.
+                    </p>
+                  ) : (
+                    <>
+                      <div className="flex justify-between gap-3">
+                        <span className="text-muted-foreground">
+                          Settlement value
+                        </span>
+                        <span className="text-right font-medium">
+                          {money(c.settlement.amount, c.currency)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between gap-3">
+                        <span className="text-muted-foreground">Terms</span>
+                        <span className="text-right font-medium">
+                          {c.settlement.terms || "Not specified"}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-muted-foreground">
+                          Settlement deed
+                        </span>
+                        {c.settlement.deedDocumentId ? (
+                          <span className="text-right font-medium">
+                            {caseDocuments.find(
+                              (d) => d._id === c.settlement!.deedDocumentId,
+                            )?.name ?? "Linked document"}
+                          </span>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setDeedOpen(true)}
+                          >
+                            Link deed
+                          </Button>
+                        )}
+                      </div>
+                    </>
+                  )}
                 </CardContent>
               </Card>
               <Card>
-                <CardHeader className="pb-2">
+                <CardHeader className="flex flex-row items-center justify-between pb-2">
                   <CardTitle className="text-base">Closure report</CardTitle>
+                  {c.status !== "Active" && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        if (c.closure) {
+                          setClosureDraft({
+                            clientSatisfaction: c.closure.clientSatisfaction,
+                            clientSatisfactionNotes:
+                              c.closure.clientSatisfactionNotes,
+                            lessonsLearned: c.closure.lessonsLearned,
+                            precedentValue: c.closure.precedentValue,
+                            precedentNotes: c.closure.precedentNotes,
+                          });
+                        }
+                        setClosureOpen(true);
+                      }}
+                    >
+                      {c.closure ? "Edit closure details" : "Record closure"}
+                    </Button>
+                  )}
                 </CardHeader>
                 <CardContent className="space-y-2 text-sm">
                   {[
@@ -1201,9 +1281,22 @@ export default function Adr() {
                       "Disbursements",
                       money(c.totals?.disbursed ?? 0, c.currency),
                     ],
-                    ["Client satisfaction", "To be recorded on closure"],
-                    ["Lessons learned", "To be recorded on closure"],
-                    ["Precedent / KB value", "To be flagged on closure"],
+                    [
+                      "Client satisfaction",
+                      c.closure?.clientSatisfaction || "Not yet recorded",
+                    ],
+                    [
+                      "Lessons learned",
+                      c.closure?.lessonsLearned || "Not yet recorded",
+                    ],
+                    [
+                      "Precedent / KB value",
+                      c.closure
+                        ? c.closure.precedentValue
+                          ? "Yes"
+                          : "No"
+                        : "Not yet flagged",
+                    ],
                   ].map(([l, v]) => (
                     <div key={l} className="flex justify-between gap-3">
                       <span className="text-muted-foreground">{l}</span>
@@ -1388,6 +1481,139 @@ export default function Adr() {
                 onClick={() => settlementMut.mutate()}
               >
                 Save
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={deedOpen} onOpenChange={setDeedOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Link settlement deed</DialogTitle>
+            </DialogHeader>
+            <div>
+              <Label className="text-xs">
+                Choose a document already filed on this case
+              </Label>
+              <Select value={deedDocumentId} onValueChange={setDeedDocumentId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select document…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {caseDocuments.map((d) => (
+                    <SelectItem key={d._id} value={d._id}>
+                      {d.name} ({d.folder})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {!caseDocuments.length && (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  No documents filed yet — upload the signed deed under
+                  Documents first.
+                </p>
+              )}
+            </div>
+            <DialogFooter>
+              <Button
+                disabled={!deedDocumentId || deedMut.isPending}
+                onClick={() => deedMut.mutate()}
+              >
+                Link
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={closureOpen} onOpenChange={setClosureOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Closure details</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div>
+                <Label className="text-xs">Client satisfaction</Label>
+                <Select
+                  value={closureDraft.clientSatisfaction || "unset"}
+                  onValueChange={(v) =>
+                    setClosureDraft({
+                      ...closureDraft,
+                      clientSatisfaction:
+                        v === "unset"
+                          ? ""
+                          : (v as typeof closureDraft.clientSatisfaction),
+                    })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="unset">Not recorded</SelectItem>
+                    <SelectItem value="Excellent">Excellent</SelectItem>
+                    <SelectItem value="Good">Good</SelectItem>
+                    <SelectItem value="Fair">Fair</SelectItem>
+                    <SelectItem value="Poor">Poor</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs">Satisfaction notes</Label>
+                <Textarea
+                  value={closureDraft.clientSatisfactionNotes}
+                  onChange={(e) =>
+                    setClosureDraft({
+                      ...closureDraft,
+                      clientSatisfactionNotes: e.target.value,
+                    })
+                  }
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Lessons learned</Label>
+                <Textarea
+                  value={closureDraft.lessonsLearned}
+                  onChange={(e) =>
+                    setClosureDraft({
+                      ...closureDraft,
+                      lessonsLearned: e.target.value,
+                    })
+                  }
+                />
+              </div>
+              <label className="flex items-center gap-2 text-sm">
+                <Checkbox
+                  checked={closureDraft.precedentValue}
+                  onCheckedChange={(v) =>
+                    setClosureDraft({
+                      ...closureDraft,
+                      precedentValue: !!v,
+                    })
+                  }
+                />
+                Flag this case as having precedent / knowledge-base value
+              </label>
+              {closureDraft.precedentValue && (
+                <div>
+                  <Label className="text-xs">Precedent notes</Label>
+                  <Textarea
+                    value={closureDraft.precedentNotes}
+                    onChange={(e) =>
+                      setClosureDraft({
+                        ...closureDraft,
+                        precedentNotes: e.target.value,
+                      })
+                    }
+                  />
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button
+                disabled={closureMut.isPending}
+                onClick={() => closureMut.mutate()}
+              >
+                Save closure details
               </Button>
             </DialogFooter>
           </DialogContent>

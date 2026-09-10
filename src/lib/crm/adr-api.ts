@@ -111,6 +111,16 @@ export interface AdrSettlement {
   amount: number;
   date: string;
   terms: string;
+  deedDocumentId: string | null;
+}
+export interface AdrClosureDetails {
+  clientSatisfaction: "" | "Excellent" | "Good" | "Fair" | "Poor";
+  clientSatisfactionNotes: string;
+  lessonsLearned: string;
+  precedentValue: boolean;
+  precedentNotes: string;
+  recordedBy: string;
+  recordedAt: string | null;
 }
 export type AdrTimelineSource = "System" | "Manual";
 export interface AdrTimelineEntry {
@@ -170,6 +180,7 @@ export interface AdrCase {
   escalationPath: string;
   sessions: AdrSession[];
   settlement: AdrSettlement | null;
+  closure: AdrClosureDetails | null;
   outcome: string | null;
   timeline: AdrTimelineEntry[];
   checklist: AdrChecklistItem[];
@@ -271,6 +282,26 @@ export const recordAdrSettlement = async (
   terms?: string,
 ): Promise<AdrCase> =>
   unwrap(await api.post(`/crm/adr-cases/${id}/settlement`, { amount, terms }));
+
+export const linkAdrSettlementDeed = async (
+  id: string,
+  documentId: string,
+): Promise<AdrCase> =>
+  unwrap(
+    await api.post(`/crm/adr-cases/${id}/settlement/deed`, { documentId }),
+  );
+
+export const recordAdrClosure = async (
+  id: string,
+  dto: Partial<{
+    clientSatisfaction: string;
+    clientSatisfactionNotes: string;
+    lessonsLearned: string;
+    precedentValue: boolean;
+    precedentNotes: string;
+  }>,
+): Promise<AdrCase> =>
+  unwrap(await api.post(`/crm/adr-cases/${id}/closure`, dto));
 
 export const recordAdrOutcome = async (
   id: string,
