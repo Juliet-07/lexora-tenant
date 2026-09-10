@@ -56,8 +56,15 @@ import {
   uploadAdrDocument,
   fetchAdrFolders,
   createAdrFolder,
+  fetchAdrDeadlineRules,
+  createAdrDeadlineRule,
+  updateAdrDeadlineRule,
+  markAdrDeadlineRuleMet,
   type AdrDraft,
   type AdrDocument,
+  type AdrDeadlineRule,
+  type CreateAdrDeadlineRulePayload,
+  type DeadlineTriggerSource,
 } from "@/lib/crm/adr-api";
 import { fetchAvailableTemplates } from "@/lib/crm/tools-api";
 import {
@@ -66,11 +73,7 @@ import {
   rejectTimeEntry,
   approveForBilling,
 } from "@/lib/crm/time-tracking-api";
-import {
-  mockDeadlineRules,
-  mockAuditTrail,
-  mockAccessMatrix,
-} from "@/data/caseDetailMock";
+import { mockAuditTrail, mockAccessMatrix } from "@/data/caseDetailMock";
 
 /** Internal notes + external correspondence in one thread. */
 export function CaseCommunicationsTab({
@@ -836,13 +839,97 @@ export function CaseDocumentsTab({
 }
 
 /** Computed deadlines driven by trigger + rule, never typed in. */
-export function CaseDeadlineRulesTab({ caseId }: { caseId: string }) {
-  const rules = mockDeadlineRules(caseId);
+export function CaseDeadlineRulesTab({
+  caseId,
+  caseType,
+}: {
+  caseId: string;
+  caseType: "ADR" | "Litigation";
+}) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  if (caseType === "Litigation") {
+    return (
+      <p className="py-8 text-center text-sm text-muted-foreground">
+        Litigation deadline rules are coming in the next phase of this build —
+        available today for ADR cases.
+      </p>
+    );
+  }
+
   const tone: Record<string, string> = {
     met: "bg-emerald-100 text-emerald-700 border-emerald-200",
     due: "bg-amber-100 text-amber-700 border-amber-200",
-    idle: "bg-muted text-muted-foreground border-border",
+    overdue: "bg-destructive/10 text-destructive border-destructive/20",
+    not_triggered: "bg-muted text-muted-foreground border-border",
   };
+  const statusLabel: Record<string, (r: AdrDeadlineRule) => string> = {
+    met: (r) => `Met — ${new Date(r.metAt!).toLocaleDateString()}`,
+    due: (r) => `Due ${new Date(r.dueDate!).toLocaleDateString()}`,
+    overdue: (r) =>
+      `Overdue — was ${new Date(r.dueDate!).toLocaleDateString()}`,
+    not_triggered: () => "Not yet triggered",
+  };
+
+  const { data: rules = [] } = useQuery({
+    queryKey: ["adrDeadlineRules", caseId],
+    queryFn: () => fetchAdrDeadlineRules(caseId),
+  });
+  const { data: c } = useQuery({
+    queryKey: ["adrCase", caseId],
+    queryFn: () => fetchAdrCase(caseId),
+  });
+
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: ["adrDeadlineRules", caseId] });
+
+  const emptyDraft: CreateAdrDeadlineRulePayload = {
+    triggerLabel: "",
+    triggerSource: "case_filed",
+    ruleLabel: "",
+    windowDays: 14,
+  };
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState<CreateAdrDeadlineRulePayload>(emptyDraft);
+
+  const saveMut = useMutation({
+    mutationFn: () =>
+      editingId
+        ? updateAdrDeadlineRule(caseId, editingId, draft)
+        : createAdrDeadlineRule(caseId, draft),
+    onSuccess: () => {
+      invalidate();
+      setOpen(false);
+      setDraft(emptyDraft);
+      setEditingId(null);
+      toast({ title: editingId ? "Rule updated" : "Rule added" });
+    },
+  });
+
+  const metMut = useMutation({
+    mutationFn: (ruleId: string) => markAdrDeadlineRuleMet(caseId, ruleId),
+    onSuccess: () => {
+      invalidate();
+      toast({ title: "Marked as met" });
+    },
+  });
+
+  const openEdit = (r: AdrDeadlineRule) => {
+    setEditingId(r._id);
+    setDraft({
+      triggerLabel: r.triggerLabel,
+      triggerSource: r.triggerSource,
+      triggerSessionIndex: r.triggerSessionIndex ?? undefined,
+      cascadeFromRuleId: r.cascadeFromRuleId ?? undefined,
+      customTriggerDate: r.customTriggerDate ?? undefined,
+      ruleLabel: r.ruleLabel,
+      windowDays: r.windowDays,
+    });
+    setOpen(true);
+  };
+
   return (
     <div className="space-y-3">
       <p className="text-sm text-muted-foreground">
@@ -851,27 +938,191 @@ export function CaseDeadlineRulesTab({ caseId }: { caseId: string }) {
         — updates itself.
       </p>
       {rules.map((r) => (
-        <Card key={r.id}>
+        <Card key={r._id}>
           <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
             <p className="text-sm">
               <span className="font-semibold">Trigger: </span>
-              {r.trigger}
+              {r.triggerLabel}
+              {r.triggerDate &&
+                ` (${new Date(r.triggerDate).toLocaleDateString()})`}
             </p>
-            <p className="text-sm text-muted-foreground">→ {r.rule}</p>
+            <p className="text-sm text-muted-foreground">→ {r.ruleLabel}</p>
             <div className="flex items-center gap-2">
-              <Badge variant="outline" className={tone[r.tone]}>
-                {r.status}
+              <Badge variant="outline" className={tone[r.status]}>
+                {statusLabel[r.status](r)}
               </Badge>
-              <Button size="sm" variant="outline">
+              {(r.status === "due" || r.status === "overdue") && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => metMut.mutate(r._id)}
+                >
+                  Mark met
+                </Button>
+              )}
+              <Button size="sm" variant="outline" onClick={() => openEdit(r)}>
                 Edit rule
               </Button>
             </div>
           </CardContent>
         </Card>
       ))}
-      <Button size="sm">
+      {!rules.length && (
+        <p className="py-6 text-center text-sm text-muted-foreground">
+          No deadline rules yet.
+        </p>
+      )}
+      <Button
+        size="sm"
+        onClick={() => {
+          setEditingId(null);
+          setDraft(emptyDraft);
+          setOpen(true);
+        }}
+      >
         <Plus className="mr-1.5 h-4 w-4" /> Add deadline rule
       </Button>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {editingId ? "Edit deadline rule" : "Add deadline rule"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label className="text-xs">Trigger label</Label>
+              <Input
+                placeholder="e.g. Notice served"
+                value={draft.triggerLabel}
+                onChange={(e) =>
+                  setDraft({ ...draft, triggerLabel: e.target.value })
+                }
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Trigger event</Label>
+              <Select
+                value={draft.triggerSource}
+                onValueChange={(v) =>
+                  setDraft({
+                    ...draft,
+                    triggerSource: v as DeadlineTriggerSource,
+                  })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="case_filed">Case filed</SelectItem>
+                  <SelectItem value="session_date">A session's date</SelectItem>
+                  <SelectItem value="settlement">
+                    Settlement recorded
+                  </SelectItem>
+                  <SelectItem value="cascade">
+                    Cascades from another rule's due date
+                  </SelectItem>
+                  <SelectItem value="custom">Custom date</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {draft.triggerSource === "session_date" && (
+              <div>
+                <Label className="text-xs">Which session</Label>
+                <Select
+                  value={String(draft.triggerSessionIndex ?? "")}
+                  onValueChange={(v) =>
+                    setDraft({ ...draft, triggerSessionIndex: Number(v) })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select session…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(c?.sessions ?? []).map((s, i) => (
+                      <SelectItem key={i} value={String(i)}>
+                        Session {i + 1} — {s.date?.slice(0, 10)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            {draft.triggerSource === "cascade" && (
+              <div>
+                <Label className="text-xs">From which rule's due date</Label>
+                <Select
+                  value={draft.cascadeFromRuleId ?? ""}
+                  onValueChange={(v) =>
+                    setDraft({ ...draft, cascadeFromRuleId: v })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select rule…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {rules
+                      .filter((r) => r._id !== editingId)
+                      .map((r) => (
+                        <SelectItem key={r._id} value={r._id}>
+                          {r.triggerLabel} → {r.ruleLabel}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            {draft.triggerSource === "custom" && (
+              <div>
+                <Label className="text-xs">Trigger date</Label>
+                <Input
+                  type="date"
+                  value={draft.customTriggerDate?.slice(0, 10) ?? ""}
+                  onChange={(e) =>
+                    setDraft({ ...draft, customTriggerDate: e.target.value })
+                  }
+                />
+              </div>
+            )}
+            <div>
+              <Label className="text-xs">Rule</Label>
+              <Input
+                placeholder="e.g. contract cl. 18.2 — 14-day response window"
+                value={draft.ruleLabel}
+                onChange={(e) =>
+                  setDraft({ ...draft, ruleLabel: e.target.value })
+                }
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Window (days)</Label>
+              <Input
+                type="number"
+                min={1}
+                value={draft.windowDays}
+                onChange={(e) =>
+                  setDraft({ ...draft, windowDays: Number(e.target.value) })
+                }
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              disabled={
+                saveMut.isPending ||
+                !draft.triggerLabel.trim() ||
+                !draft.ruleLabel.trim() ||
+                draft.windowDays < 1
+              }
+              onClick={() => saveMut.mutate()}
+            >
+              {editingId ? "Save changes" : "Add rule"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

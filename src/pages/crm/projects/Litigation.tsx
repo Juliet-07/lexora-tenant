@@ -970,7 +970,7 @@ export default function Litigation() {
             <CaseDocumentsTab caseId={c._id} caseType="Litigation" />
           </TabsContent>
           <TabsContent value="deadlines" className="pt-4">
-            <CaseDeadlineRulesTab caseId={c._id} />
+            <CaseDeadlineRulesTab caseId={c._id} caseType="Litigation" />
           </TabsContent>
           <TabsContent value="billing" className="space-y-4 pt-4">
             <CaseTimeBillingTab

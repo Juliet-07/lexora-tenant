@@ -1088,7 +1088,7 @@ export default function Adr() {
             <CaseDocumentsTab caseId={c._id} caseType="ADR" />
           </TabsContent>
           <TabsContent value="deadlines" className="pt-4">
-            <CaseDeadlineRulesTab caseId={c._id} />
+            <CaseDeadlineRulesTab caseId={c._id} caseType="ADR" />
           </TabsContent>
           <TabsContent value="billing" className="space-y-4 pt-4">
             <CaseTimeBillingTab

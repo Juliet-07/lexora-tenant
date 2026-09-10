@@ -525,3 +525,70 @@ export const logMyCaseCall = async (
   summary: string,
 ): Promise<AdrCase> =>
   unwrap(await api.post(`/crm/my-cases/${caseId}/call`, { summary }));
+
+// ── Deadline rules ───────────────────────────────────────────────
+export type DeadlineTriggerSource =
+  | "case_filed"
+  | "session_date"
+  | "settlement"
+  | "cascade"
+  | "custom";
+
+export interface AdrDeadlineRule {
+  _id: string;
+  caseId: string;
+  triggerLabel: string;
+  triggerSource: DeadlineTriggerSource;
+  triggerSessionIndex: number | null;
+  cascadeFromRuleId: string | null;
+  customTriggerDate: string | null;
+  ruleLabel: string;
+  windowDays: number;
+  metAt: string | null;
+  triggerDate: string | null;
+  dueDate: string | null;
+  status: "not_triggered" | "due" | "overdue" | "met";
+}
+
+export interface CreateAdrDeadlineRulePayload {
+  triggerLabel: string;
+  triggerSource: DeadlineTriggerSource;
+  triggerSessionIndex?: number;
+  cascadeFromRuleId?: string;
+  customTriggerDate?: string;
+  ruleLabel: string;
+  windowDays: number;
+}
+
+export const fetchAdrDeadlineRules = async (
+  caseId: string,
+): Promise<AdrDeadlineRule[]> => {
+  const res = await api.get(`/crm/adr-cases/${caseId}/deadline-rules`);
+  const d = unwrap(res);
+  return Array.isArray(d) ? d : [];
+};
+
+export const createAdrDeadlineRule = async (
+  caseId: string,
+  dto: CreateAdrDeadlineRulePayload,
+): Promise<AdrDeadlineRule> =>
+  unwrap(await api.post(`/crm/adr-cases/${caseId}/deadline-rules`, dto));
+
+export const updateAdrDeadlineRule = async (
+  caseId: string,
+  ruleId: string,
+  dto: Partial<CreateAdrDeadlineRulePayload>,
+): Promise<AdrDeadlineRule> =>
+  unwrap(
+    await api.patch(`/crm/adr-cases/${caseId}/deadline-rules/${ruleId}`, dto),
+  );
+
+export const markAdrDeadlineRuleMet = async (
+  caseId: string,
+  ruleId: string,
+): Promise<AdrDeadlineRule> =>
+  unwrap(
+    await api.post(
+      `/crm/adr-cases/${caseId}/deadline-rules/${ruleId}/mark-met`,
+    ),
+  );
