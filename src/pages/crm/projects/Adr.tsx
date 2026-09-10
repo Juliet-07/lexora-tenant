@@ -1072,7 +1072,7 @@ export default function Adr() {
           </TabsContent>
 
           <TabsContent value="communications" className="pt-4">
-            <CaseCommunicationsTab caseId={c._id} />
+            <CaseCommunicationsTab caseId={c._id} caseType="ADR" />
           </TabsContent>
           <TabsContent value="drafting" className="pt-4">
             <CaseDraftingTab />

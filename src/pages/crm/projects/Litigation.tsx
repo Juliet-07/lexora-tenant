@@ -958,7 +958,7 @@ export default function Litigation() {
           </TabsContent>
 
           <TabsContent value="communications" className="pt-4">
-            <CaseCommunicationsTab caseId={c._id} />
+            <CaseCommunicationsTab caseId={c._id} caseType="Litigation" />
           </TabsContent>
           <TabsContent value="drafting" className="pt-4">
             <CaseDraftingTab />

@@ -1,9 +1,12 @@
 import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -27,11 +30,18 @@ import {
   Plus,
   FileText,
   Download,
+  Send,
+  Mail,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
-  mockCommsThread,
-  mockThreadMembers,
+  fetchAdrCase,
+  fetchAdrMessages,
+  sendAdrMessage,
+  sendAdrPartyEmail,
+  addAdrTimelineEntry,
+} from "@/lib/crm/adr-api";
+import {
   mockDocFolders,
   mockRecentDocs,
   mockDeadlineRules,
@@ -39,136 +49,260 @@ import {
   mockAuditTrail,
   mockAccessMatrix,
   mockDrafting,
-  type MockMessage,
 } from "@/data/caseDetailMock";
 
-const kindTone: Record<string, string> = {
-  internal: "bg-muted text-muted-foreground border-border",
-  sent: "bg-primary/10 text-primary border-primary/20",
-  received: "bg-emerald-100 text-emerald-700 border-emerald-200",
-};
-const kindLabel: Record<string, string> = {
-  internal: "INTERNAL",
-  sent: "EMAIL — SENT",
-  received: "EMAIL — RECEIVED",
-};
-
 /** Internal notes + external correspondence in one thread. */
-export function CaseCommunicationsTab({ caseId }: { caseId: string }) {
+export function CaseCommunicationsTab({
+  caseId,
+  caseType,
+}: {
+  caseId: string;
+  caseType: "ADR" | "Litigation";
+}) {
+  const queryClient = useQueryClient();
   const { toast } = useToast();
-  const [messages, setMessages] = useState<MockMessage[]>(() =>
-    mockCommsThread(caseId),
-  );
-  const [kind, setKind] = useState("internal");
-  const [body, setBody] = useState("");
-  const members = mockThreadMembers();
 
-  const send = () => {
-    if (!body.trim()) return;
-    setMessages((m) => [
-      ...m,
-      {
-        id: `${caseId}-${m.length + 1}`,
-        kind: kind as MockMessage["kind"],
-        author: "You",
-        at: "Just now",
-        body: body.trim(),
-      },
-    ]);
-    setBody("");
-    toast({
-      title: kind === "internal" ? "Internal note added" : "Email sent",
-      description:
-        kind === "internal"
-          ? "Visible to the case team only."
-          : "Logged to the audit trail automatically.",
-    });
-  };
+  if (caseType === "Litigation") {
+    return (
+      <p className="py-8 text-center text-sm text-muted-foreground">
+        Litigation communication is coming in the next phase of this build —
+        available today for ADR cases.
+      </p>
+    );
+  }
+
+  // Shares the same query key the parent case page already uses, so
+  // this reads from cache rather than firing a duplicate fetch.
+  const { data: c } = useQuery({
+    queryKey: ["adrCase", caseId],
+    queryFn: () => fetchAdrCase(caseId),
+  });
+  const { data: messages = [] } = useQuery({
+    queryKey: ["adrMessages", caseId],
+    queryFn: () => fetchAdrMessages(caseId),
+  });
+
+  const [clientText, setClientText] = useState("");
+  const clientMsgMut = useMutation({
+    mutationFn: () => sendAdrMessage(caseId, "You", clientText.trim()),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["adrMessages", caseId] });
+      setClientText("");
+      toast({ title: "Message sent to client" });
+    },
+    onError: (err: any) =>
+      toast({
+        title: "Could not send message",
+        description: err?.response?.data?.message,
+        variant: "destructive",
+      }),
+  });
+
+  const [noteTitle, setNoteTitle] = useState("");
+  const noteMut = useMutation({
+    mutationFn: () => addAdrTimelineEntry(caseId, { title: noteTitle.trim() }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["adrCase", caseId] });
+      setNoteTitle("");
+      toast({ title: "Internal note added" });
+    },
+  });
+
+  const [selectedPartyIds, setSelectedPartyIds] = useState<string[]>([]);
+  const [emailSubject, setEmailSubject] = useState("");
+  const [emailBody, setEmailBody] = useState("");
+  const partiesWithEmail = (c?.parties ?? []).filter((p) => p.email);
+  const partyEmailMut = useMutation({
+    mutationFn: () =>
+      sendAdrPartyEmail(caseId, {
+        partyIds: selectedPartyIds,
+        subject: emailSubject.trim(),
+        body: emailBody.trim(),
+      }),
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: ["adrCase", caseId] });
+      setSelectedPartyIds([]);
+      setEmailSubject("");
+      setEmailBody("");
+      toast({
+        title: "Email sent",
+        description: `Sent to ${res.sentTo.join(", ")}`,
+      });
+    },
+    onError: (err: any) =>
+      toast({
+        title: "Could not send email",
+        description: err?.response?.data?.message,
+        variant: "destructive",
+      }),
+  });
+
+  const internalNotes = (c?.timeline ?? []).filter(
+    (t) => t.source === "Manual",
+  );
+  const partyEmailLog = (c?.timeline ?? []).filter((t) =>
+    t.title.startsWith("Email sent to"),
+  );
 
   return (
     <div className="grid gap-4 lg:grid-cols-3">
-      <div className="space-y-3 lg:col-span-2">
-        <p className="text-sm text-muted-foreground">
-          Internal team discussion and external client/counterparty
-          correspondence, in one thread. Internal notes are never visible to the
-          client portal or opposing counsel.
+      <div className="space-y-3">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Client
         </p>
-        {messages.map((m) => (
-          <div
-            key={m.id}
-            className={`rounded-lg border p-3 ${
-              m.kind === "sent" ? "bg-primary/5" : "bg-muted/30"
-            }`}
-          >
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge
-                  variant="outline"
-                  className={`text-[10px] ${kindTone[m.kind]}`}
-                >
-                  {kindLabel[m.kind]}
-                </Badge>
-                <span className="text-sm font-semibold">
-                  {m.author}
-                  {m.to && ` → ${m.to}`}
+        <div className="max-h-72 space-y-2 overflow-y-auto rounded border p-3">
+          {!messages.length && (
+            <p className="text-sm text-muted-foreground">No messages yet.</p>
+          )}
+          {messages.map((m) => (
+            <div
+              key={m._id}
+              className={`rounded-lg p-2.5 text-sm ${m.direction === "tenant" ? "bg-primary/5" : "bg-muted/40"}`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-semibold">{m.author}</span>
+                <span className="text-[10px] text-muted-foreground">
+                  {new Date(m.createdAt).toLocaleString()}
                 </span>
               </div>
-              <span className="text-xs text-muted-foreground">{m.at}</span>
-            </div>
-            <p className="mt-1.5 text-sm">{m.body}</p>
-          </div>
-        ))}
-
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <Select value={kind} onValueChange={setKind}>
-            <SelectTrigger className="sm:w-56">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="internal">Internal note</SelectItem>
-              <SelectItem value="sent">Email → client</SelectItem>
-              <SelectItem value="received">Email → opposing counsel</SelectItem>
-            </SelectContent>
-          </Select>
-          <Textarea
-            className="flex-1"
-            rows={2}
-            placeholder="Write a note or an email — internal notes stay inside the case team; emails send externally and log automatically."
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-          />
-          <Button onClick={send} disabled={!body.trim()}>
-            Send
-          </Button>
-        </div>
-      </div>
-
-      <Card className="h-fit">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">Who's on this thread</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          {members.map((p) => (
-            <div key={p.name} className="flex items-center justify-between gap-2">
-              <span className="text-sm">{p.name}</span>
-              <Badge
-                variant="outline"
-                className={`shrink-0 text-[10px] ${
-                  p.reach === "Email only"
-                    ? "bg-amber-100 text-amber-700 border-amber-200"
-                    : "bg-emerald-100 text-emerald-700 border-emerald-200"
-                }`}
-              >
-                {p.reach}
-              </Badge>
+              <p className="mt-1">{m.body}</p>
             </div>
           ))}
-          <p className="pt-2 text-xs text-muted-foreground">
-            Every outbound email logs to the audit trail automatically. Internal
-            notes never leave the case team.
+        </div>
+        {!c?.mandateName ? (
+          <p className="text-xs text-muted-foreground">
+            No mandate linked — nothing to message here.
           </p>
-        </CardContent>
-      </Card>
+        ) : (
+          <div className="flex gap-2">
+            <Textarea
+              className="min-h-[60px] flex-1"
+              placeholder="Message the client…"
+              value={clientText}
+              onChange={(e) => setClientText(e.target.value)}
+            />
+            <Button
+              disabled={clientMsgMut.isPending || !clientText.trim()}
+              onClick={() => clientMsgMut.mutate()}
+              className="self-end"
+            >
+              <Send className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-3">
+        <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          <Mail className="h-3.5 w-3.5" /> Parties
+        </p>
+        <div className="max-h-72 space-y-2 overflow-y-auto rounded border p-3">
+          {!partyEmailLog.length && (
+            <p className="text-sm text-muted-foreground">
+              No emails sent to parties yet.
+            </p>
+          )}
+          {partyEmailLog.map((t, i) => (
+            <div key={i} className="rounded-lg bg-muted/40 p-2.5 text-sm">
+              <p className="text-xs font-semibold">{t.title}</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {t.description}
+              </p>
+              <p className="mt-1 text-[10px] text-muted-foreground">
+                {new Date(t.at).toLocaleString()}
+              </p>
+            </div>
+          ))}
+        </div>
+        {!partiesWithEmail.length ? (
+          <p className="text-xs text-muted-foreground">
+            No parties on this case have an email on file.
+          </p>
+        ) : (
+          <div className="space-y-2 rounded border p-2">
+            {partiesWithEmail.map((p) => (
+              <label key={p._id} className="flex items-center gap-2 text-xs">
+                <Checkbox
+                  checked={selectedPartyIds.includes(p._id)}
+                  onCheckedChange={() =>
+                    setSelectedPartyIds((ids) =>
+                      ids.includes(p._id)
+                        ? ids.filter((x) => x !== p._id)
+                        : [...ids, p._id],
+                    )
+                  }
+                />
+                {p.name} ({p.role})
+              </label>
+            ))}
+            <Input
+              placeholder="Subject"
+              className="h-8 text-xs"
+              value={emailSubject}
+              onChange={(e) => setEmailSubject(e.target.value)}
+            />
+            <Textarea
+              placeholder="Message…"
+              className="min-h-[60px] text-xs"
+              value={emailBody}
+              onChange={(e) => setEmailBody(e.target.value)}
+            />
+            <Button
+              size="sm"
+              className="w-full"
+              disabled={
+                partyEmailMut.isPending ||
+                !selectedPartyIds.length ||
+                !emailSubject.trim() ||
+                !emailBody.trim()
+              }
+              onClick={() => partyEmailMut.mutate()}
+            >
+              Send
+            </Button>
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-3">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Internal notes
+        </p>
+        <div className="max-h-72 space-y-2 overflow-y-auto rounded border p-3">
+          {!internalNotes.length && (
+            <p className="text-sm text-muted-foreground">No notes yet.</p>
+          )}
+          {internalNotes.map((t, i) => (
+            <div key={i} className="rounded-lg bg-muted/40 p-2.5 text-sm">
+              <p>{t.title}</p>
+              {t.description && (
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {t.description}
+                </p>
+              )}
+              <p className="mt-1 text-[10px] text-muted-foreground">
+                {new Date(t.at).toLocaleString()}
+              </p>
+            </div>
+          ))}
+        </div>
+        <div className="flex gap-2">
+          <Input
+            placeholder="Note for the case team…"
+            value={noteTitle}
+            onChange={(e) => setNoteTitle(e.target.value)}
+          />
+          <Button
+            disabled={noteMut.isPending || !noteTitle.trim()}
+            onClick={() => noteMut.mutate()}
+          >
+            Add
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Visible to the case team only — never sent to the client or parties.
+        </p>
+      </div>
     </div>
   );
 }
@@ -305,9 +439,9 @@ export function CaseDeadlineRulesTab({ caseId }: { caseId: string }) {
   return (
     <div className="space-y-3">
       <p className="text-sm text-muted-foreground">
-        Deadlines here are computed from rules, not typed in. Set a trigger event
-        and a rule once; the due date — and anything that cascades from it —
-        updates itself.
+        Deadlines here are computed from rules, not typed in. Set a trigger
+        event and a rule once; the due date — and anything that cascades from it
+        — updates itself.
       </p>
       {rules.map((r) => (
         <Card key={r.id}>
@@ -440,13 +574,21 @@ export function CaseAuditAccessTab() {
 
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">Confidentiality &amp; access</CardTitle>
+          <CardTitle className="text-base">
+            Confidentiality &amp; access
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-2.5">
           {access.map((a) => (
-            <div key={a.who} className="flex items-center justify-between gap-2">
+            <div
+              key={a.who}
+              className="flex items-center justify-between gap-2"
+            >
               <span className="text-sm">{a.who}</span>
-              <Badge variant="outline" className={`shrink-0 text-[10px] ${a.tone}`}>
+              <Badge
+                variant="outline"
+                className={`shrink-0 text-[10px] ${a.tone}`}
+              >
                 {a.level}
               </Badge>
             </div>

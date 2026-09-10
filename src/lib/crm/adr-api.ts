@@ -359,3 +359,41 @@ export const exportAdrReportPdf = (): void => {
       URL.revokeObjectURL(a.href);
     });
 };
+
+// ── Communication ────────────────────────────────────────────
+export interface AdrCaseMessage {
+  _id: string;
+  caseId: string;
+  direction: "tenant" | "client";
+  author: string;
+  body: string;
+  createdAt: string;
+}
+
+export const fetchAdrMessages = async (
+  caseId: string,
+): Promise<AdrCaseMessage[]> => {
+  const res = await api.get(`/crm/adr-cases/${caseId}/messages`);
+  const d = unwrap(res);
+  return Array.isArray(d) ? d : [];
+};
+
+export const sendAdrMessage = async (
+  caseId: string,
+  author: string,
+  body: string,
+): Promise<AdrCaseMessage> => {
+  const res = await api.post(`/crm/adr-cases/${caseId}/messages`, {
+    author,
+    body,
+  });
+  return unwrap(res);
+};
+
+export const sendAdrPartyEmail = async (
+  caseId: string,
+  dto: { partyIds: string[]; subject: string; body: string },
+): Promise<{ success: boolean; sentTo: string[] }> => {
+  const res = await api.post(`/crm/adr-cases/${caseId}/party-email`, dto);
+  return unwrap(res);
+};
