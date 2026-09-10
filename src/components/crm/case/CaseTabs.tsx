@@ -60,6 +60,7 @@ import {
   createAdrDeadlineRule,
   updateAdrDeadlineRule,
   markAdrDeadlineRuleMet,
+  exportAdrAuditTrailPdf,
   type AdrDraft,
   type AdrDocument,
   type AdrDeadlineRule,
@@ -73,7 +74,6 @@ import {
   rejectTimeEntry,
   approveForBilling,
 } from "@/lib/crm/time-tracking-api";
-import { mockAuditTrail, mockAccessMatrix } from "@/data/caseDetailMock";
 
 /** Internal notes + external correspondence in one thread. */
 export function CaseCommunicationsTab({
@@ -1315,63 +1315,73 @@ export function CaseTimeBillingTab({
 }
 
 /** Audit trail plus confidentiality / access matrix. */
-export function CaseAuditAccessTab() {
-  const trail = mockAuditTrail();
-  const access = mockAccessMatrix();
-  return (
-    <div className="grid gap-4 lg:grid-cols-2">
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">Audit trail</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {trail.map((t) => (
-            <div key={t.title} className="flex gap-3">
-              <div
-                className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${t.tone}`}
-              />
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <p className="text-sm font-semibold">{t.title}</p>
-                  <span className="text-xs text-muted-foreground">{t.at}</span>
-                </div>
-                <p className="text-xs text-muted-foreground">{t.detail}</p>
-              </div>
-            </div>
-          ))}
-          <Button variant="link" size="sm" className="px-0">
-            <Download className="mr-1.5 h-3.5 w-3.5" /> Export full audit trail
-          </Button>
-        </CardContent>
-      </Card>
+export function CaseAuditAccessTab({
+  caseId,
+  caseType,
+}: {
+  caseId: string;
+  caseType: "ADR" | "Litigation";
+}) {
+  if (caseType === "Litigation") {
+    return (
+      <p className="py-8 text-center text-sm text-muted-foreground">
+        Litigation audit trail is coming in the next phase of this build —
+        available today for ADR cases.
+      </p>
+    );
+  }
 
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">
-            Confidentiality &amp; access
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2.5">
-          {access.map((a) => (
-            <div
-              key={a.who}
-              className="flex items-center justify-between gap-2"
-            >
-              <span className="text-sm">{a.who}</span>
-              <Badge
-                variant="outline"
-                className={`shrink-0 text-[10px] ${a.tone}`}
-              >
-                {a.level}
-              </Badge>
-            </div>
-          ))}
-          <Button variant="outline" size="sm" className="w-full">
-            <Plus className="mr-1.5 h-4 w-4" /> Manage access
+  const { data: c } = useQuery({
+    queryKey: ["adrCase", caseId],
+    queryFn: () => fetchAdrCase(caseId),
+  });
+
+  const trail = [...(c?.timeline ?? [])].sort((a, b) =>
+    b.at.localeCompare(a.at),
+  );
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between pb-2">
+        <CardTitle className="text-base">Audit trail</CardTitle>
+        {!!c && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => exportAdrAuditTrailPdf(caseId, c.ref)}
+          >
+            <Download className="mr-1.5 h-3.5 w-3.5" /> Export audit trail
           </Button>
-        </CardContent>
-      </Card>
-    </div>
+        )}
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <p className="text-xs text-muted-foreground">
+          A complete, chronological record of every recorded event on this case
+          — filing, sessions, stage moves, communications, and resolution.
+        </p>
+        {trail.map((t, i) => (
+          <div key={i} className="flex gap-3">
+            <div className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-primary" />
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <p className="text-sm font-semibold">{t.title}</p>
+                <span className="text-xs text-muted-foreground">
+                  {new Date(t.at).toLocaleString()}
+                </span>
+              </div>
+              {t.description && (
+                <p className="text-xs text-muted-foreground">{t.description}</p>
+              )}
+            </div>
+          </div>
+        ))}
+        {!trail.length && (
+          <p className="py-8 text-center text-sm text-muted-foreground">
+            No events recorded yet.
+          </p>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

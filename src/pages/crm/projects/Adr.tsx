@@ -817,7 +817,7 @@ export default function Adr() {
             <TabsTrigger value="deadlines">Deadline rules</TabsTrigger>
             <TabsTrigger value="billing">Time &amp; billing</TabsTrigger>
             <TabsTrigger value="resolution">Resolution</TabsTrigger>
-            <TabsTrigger value="audit">Audit &amp; access</TabsTrigger>
+            <TabsTrigger value="audit">Audit Trail</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="pt-4">
@@ -1215,7 +1215,7 @@ export default function Adr() {
             </div>
           </TabsContent>
           <TabsContent value="audit" className="pt-4">
-            <CaseAuditAccessTab />
+            <CaseAuditAccessTab caseId={c._id} caseType="ADR" />
           </TabsContent>
         </Tabs>
 

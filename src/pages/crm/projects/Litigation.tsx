@@ -1053,7 +1053,7 @@ export default function Litigation() {
             </Card>
           </TabsContent>
           <TabsContent value="audit" className="pt-4">
-            <CaseAuditAccessTab />
+            <CaseAuditAccessTab caseId={c._id} caseType="Litigation" />
           </TabsContent>
         </Tabs>
 

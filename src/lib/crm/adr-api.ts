@@ -360,6 +360,26 @@ export const exportAdrReportPdf = (): void => {
     });
 };
 
+export const exportAdrAuditTrailPdf = (
+  caseId: string,
+  caseRef: string,
+): void => {
+  const token = localStorage.getItem("tenantToken");
+  const base = import.meta.env.VITE_REACT_APP_BASE_URL;
+  const filename = `audit-trail-${caseRef}-${new Date().toISOString().split("T")[0]}.pdf`;
+  fetch(`${base}/crm/adr-cases/${caseId}/audit-trail/export`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+    .then((r) => r.blob())
+    .then((blob) => {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
+};
+
 // ── Communication ────────────────────────────────────────────
 export interface AdrCaseMessage {
   _id: string;
