@@ -80,7 +80,12 @@ import { useModule } from "@/contexts/ModuleContext";
 //   hr_pm     → "hr_pm"     (was "hr" — mismatch fixed)
 // ─────────────────────────────────────────────────────────────
 
-type NavChild = { title: string; url: string; adminOnly?: boolean };
+type NavChild = {
+  title: string;
+  url: string;
+  adminOnly?: boolean;
+  employeeOnly?: boolean;
+};
 type NavItem = {
   title: string;
   url?: string;
@@ -270,7 +275,7 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
         { title: "Timesheets", url: "/crm/time" },
         { title: "Service Desk", url: "/crm/service-desk" },
         { title: "ADR", url: "/crm/adr" },
-        { title: "My Cases", url: "/crm/my-cases" },
+        { title: "My Cases", url: "/crm/my-cases", employeeOnly: true },
         { title: "Litigation", url: "/crm/litigation" },
         { title: "PMO", url: "/crm/pmo" },
         { title: "Contracts", url: "/crm/contracts" },
@@ -461,6 +466,7 @@ export function AppSidebar() {
     },
     { title: "Clients", url: "/clients", icon: Users },
     { title: "Projects", url: "/projects", icon: FolderKanban },
+    { title: "Cases", url: "/my/cases", icon: Scale },
     { title: "Time", url: "/my/time", icon: Clock },
     { title: "Leave", url: "/my/leave", icon: CalendarDays },
     { title: "Performance", url: "/my/performance", icon: BarChart3 },
@@ -660,7 +666,9 @@ export function AppSidebar() {
               {navItems.map((item) => {
                 if (item.children && item.children.length > 0) {
                   const kids = item.children.filter(
-                    (c) => !c.adminOnly || isAdmin,
+                    (c) =>
+                      (!c.adminOnly || isAdmin) &&
+                      (!c.employeeOnly || !isAdmin),
                   );
                   const isBranchActive = kids.some((c) =>
                     pathname.startsWith(c.url),

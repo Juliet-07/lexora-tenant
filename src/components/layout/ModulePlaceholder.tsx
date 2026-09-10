@@ -95,6 +95,19 @@ const CAPABILITIES: Record<string, { title: string; items: string[] }[]> = {
 
 export function ModulePlaceholder() {
   const { currentModule, setModule } = useModule();
+
+  // Real defensive guard — currentModule is genuinely nullable
+  // (before any module has ever been selected, or right after
+  // login before the module list finishes loading), and this
+  // component was assuming it was always set.
+  if (!currentModule) {
+    return (
+      <div className="max-w-2xl space-y-3 py-12 text-center text-muted-foreground">
+        <p>No module selected yet.</p>
+      </div>
+    );
+  }
+
   const Icon = currentModule.icon;
   const caps = CAPABILITIES[currentModule.id] ?? [];
 
@@ -123,8 +136,8 @@ export function ModulePlaceholder() {
           Module preview
         </div>
         <p className="text-sm text-muted-foreground">
-          Detailed screens for this module are being built. Below is the scope of
-          capabilities planned for {currentModule.shortName}.
+          Detailed screens for this module are being built. Below is the scope
+          of capabilities planned for {currentModule.shortName}.
         </p>
       </Card>
 
