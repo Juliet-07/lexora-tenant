@@ -94,6 +94,7 @@ export interface AdrParty {
   name: string;
   role: AdrPartyRole;
   organisation: string;
+  email: string;
   userId: string | null;
 }
 export interface AdrSession {
@@ -193,6 +194,7 @@ export const createAdrCase = async (dto: {
     name: string;
     role: AdrPartyRole;
     organisation?: string;
+    email?: string;
     userId?: string;
   }[];
   mandateId?: string;
@@ -224,6 +226,7 @@ export const updateAdrCaseDetails = async (
       name: string;
       role: AdrPartyRole;
       organisation?: string;
+      email?: string;
       userId?: string;
     }[];
   }>,

@@ -133,6 +133,7 @@ const emptyParty = {
   name: "",
   role: "Claimant" as AdrPartyRole,
   organisation: "",
+  email: "",
 };
 
 export default function Adr() {
@@ -1026,6 +1027,7 @@ export default function Adr() {
                           </p>
                           <p className="truncate text-xs text-muted-foreground">
                             {p.organisation || "—"}
+                            {p.email && ` · ${p.email}`}
                           </p>
                         </div>
                         <Badge
@@ -2083,9 +2085,16 @@ export default function Adr() {
 
             <div>
               <Label>Parties</Label>
+              <p className="mb-2 text-xs text-muted-foreground">
+                Each party with an email gets a filing notice — independent of
+                whether they're linked to the mandate's own client.
+              </p>
               <div className="space-y-2">
                 {draftParties.map((p, i) => (
-                  <div key={i} className="grid grid-cols-[1fr_1fr_auto] gap-2">
+                  <div
+                    key={i}
+                    className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2"
+                  >
                     <Input
                       placeholder="Name"
                       value={p.name}
@@ -2093,6 +2102,18 @@ export default function Adr() {
                         setDraftParties(
                           draftParties.map((x, j) =>
                             j === i ? { ...x, name: e.target.value } : x,
+                          ),
+                        )
+                      }
+                    />
+                    <Input
+                      type="email"
+                      placeholder="Email (for filing notice)"
+                      value={p.email}
+                      onChange={(e) =>
+                        setDraftParties(
+                          draftParties.map((x, j) =>
+                            j === i ? { ...x, email: e.target.value } : x,
                           ),
                         )
                       }
