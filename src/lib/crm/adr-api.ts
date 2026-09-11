@@ -643,3 +643,17 @@ export const markAdrDeadlineRuleMet = async (
       `/crm/adr-cases/${caseId}/deadline-rules/${ruleId}/mark-met`,
     ),
   );
+
+// ── Tenant time logging ───────────────────────────────────────────
+export const logAdrTenantTime = async (
+  caseId: string,
+  dto: {
+    narrative?: string;
+    date: string;
+    hours: number;
+    billable?: boolean;
+    rate: number;
+  },
+): Promise<void> => {
+  await api.post(`/crm/adr-cases/${caseId}/time`, dto);
+};

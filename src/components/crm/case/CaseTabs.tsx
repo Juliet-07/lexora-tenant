@@ -61,6 +61,7 @@ import {
   updateAdrDeadlineRule,
   markAdrDeadlineRuleMet,
   exportAdrAuditTrailPdf,
+  logAdrTenantTime,
   type AdrDraft,
   type AdrDocument,
   type AdrDeadlineRule,
@@ -1213,13 +1214,41 @@ export function CaseTimeBillingTab({
       }),
   });
 
+  const [logTimeOpen, setLogTimeOpen] = useState(false);
+  const emptyLogDraft = {
+    date: new Date().toISOString().slice(0, 10),
+    hours: 1,
+    narrative: "",
+    billable: true,
+    rate: 0,
+  };
+  const [logDraft, setLogDraft] = useState(emptyLogDraft);
+  const logTimeMut = useMutation({
+    mutationFn: () => logAdrTenantTime(caseId, logDraft),
+    onSuccess: () => {
+      invalidate();
+      setLogTimeOpen(false);
+      setLogDraft(emptyLogDraft);
+      toast({ title: "Time logged" });
+    },
+    onError: (err: any) =>
+      toast({
+        title: "Could not log time",
+        description: err?.response?.data?.message,
+        variant: "destructive",
+      }),
+  });
+
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-muted-foreground">
-          {hours} logged · {fees} fees · {disbursed} disbursements. Time is
+          {hours} logged · {fees} fees · {disbursed} disbursements. Time is also
           logged by the assigned team from their own Cases view.
         </p>
+        <Button size="sm" onClick={() => setLogTimeOpen(true)}>
+          <Plus className="mr-1.5 h-4 w-4" /> Log time
+        </Button>
       </div>
       <Card>
         <CardContent className="p-0">
@@ -1381,6 +1410,79 @@ export function CaseTimeBillingTab({
               onClick={() => rateMut.mutate()}
             >
               Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={logTimeOpen} onOpenChange={setLogTimeOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Log your time</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs">Date</Label>
+                <Input
+                  type="date"
+                  value={logDraft.date}
+                  onChange={(e) =>
+                    setLogDraft({ ...logDraft, date: e.target.value })
+                  }
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Hours</Label>
+                <Input
+                  type="number"
+                  step="0.25"
+                  min="0.25"
+                  value={logDraft.hours}
+                  onChange={(e) =>
+                    setLogDraft({ ...logDraft, hours: Number(e.target.value) })
+                  }
+                />
+              </div>
+            </div>
+            <div>
+              <Label className="text-xs">Narrative</Label>
+              <Textarea
+                value={logDraft.narrative}
+                onChange={(e) =>
+                  setLogDraft({ ...logDraft, narrative: e.target.value })
+                }
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Rate per hour</Label>
+              <Input
+                type="number"
+                min={0}
+                step="0.01"
+                value={logDraft.rate}
+                onChange={(e) =>
+                  setLogDraft({ ...logDraft, rate: Number(e.target.value) })
+                }
+                disabled={!logDraft.billable}
+              />
+            </div>
+            <label className="flex items-center gap-2 text-sm">
+              <Checkbox
+                checked={logDraft.billable}
+                onCheckedChange={(v) =>
+                  setLogDraft({ ...logDraft, billable: !!v })
+                }
+              />
+              Billable
+            </label>
+          </div>
+          <DialogFooter>
+            <Button
+              disabled={logTimeMut.isPending || logDraft.hours <= 0}
+              onClick={() => logTimeMut.mutate()}
+            >
+              {logTimeMut.isPending ? "Saving…" : "Log time"}
             </Button>
           </DialogFooter>
         </DialogContent>
