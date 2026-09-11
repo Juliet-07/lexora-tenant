@@ -21,13 +21,23 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Search, ArrowLeft, Clock, Phone, Plus, Scale } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Search,
+  ArrowLeft,
+  Clock,
+  Phone,
+  Plus,
+  Scale,
+  MessageSquare,
+} from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
   fetchMyCases,
   fetchMyCaseDetail,
   logMyCaseTime,
   logMyCaseCall,
+  addMyCaseNote,
   type AdrCase,
 } from "@/lib/crm/adr-api";
 import { fetchMyTimeEntries } from "@/lib/crm/time-tracking-api";
@@ -177,7 +187,24 @@ function MyCaseDetailView({ c, onBack }: { c: AdrCase; onBack: () => void }) {
     },
   });
 
+  const [noteText, setNoteText] = useState("");
+  const noteMut = useMutation({
+    mutationFn: () => addMyCaseNote(c._id, noteText.trim()),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["myCaseDetail", c._id] });
+      setNoteText("");
+      toast({ title: "Note added" });
+    },
+    onError: (err: any) =>
+      toast({
+        title: "Could not add note",
+        description: err?.response?.data?.message,
+        variant: "destructive",
+      }),
+  });
+
   const timeline = [...c.timeline].sort((a, b) => b.at.localeCompare(a.at));
+  const notes = timeline.filter((t) => t.source === "Manual");
 
   return (
     <div className="space-y-6">
@@ -202,75 +229,138 @@ function MyCaseDetailView({ c, onBack }: { c: AdrCase; onBack: () => void }) {
         </div>
       </div>
 
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="flex items-center gap-1.5 text-base">
-            <Clock className="h-4 w-4" /> My time on this case
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Date</TableHead>
-                <TableHead>Narrative</TableHead>
-                <TableHead>Hours</TableHead>
-                <TableHead>Status</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {caseEntries.map((e) => (
-                <TableRow key={e._id}>
-                  <TableCell className="text-sm">
-                    {e.date?.slice(0, 10)}
-                  </TableCell>
-                  <TableCell className="text-sm">
-                    {e.narrative || "—"}
-                  </TableCell>
-                  <TableCell className="text-sm">{e.hours}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline">{e.status}</Badge>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {!caseEntries.length && (
-                <TableRow>
-                  <TableCell
-                    colSpan={4}
-                    className="py-6 text-center text-sm text-muted-foreground"
-                  >
-                    No time logged yet.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+      <Tabs defaultValue="time">
+        <TabsList>
+          <TabsTrigger value="time">My Time</TabsTrigger>
+          <TabsTrigger value="notes">Notes</TabsTrigger>
+          <TabsTrigger value="timeline">Timeline</TabsTrigger>
+        </TabsList>
 
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">Timeline</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {timeline.map((t, i) => (
-            <div key={i} className="border-b pb-2 last:border-0">
-              <p className="text-sm font-medium">{t.title}</p>
-              {t.description && (
-                <p className="text-xs text-muted-foreground">{t.description}</p>
-              )}
+        <TabsContent value="time" className="mt-4">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center gap-1.5 text-base">
+                <Clock className="h-4 w-4" /> My time on this case
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Narrative</TableHead>
+                    <TableHead>Hours</TableHead>
+                    <TableHead>Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {caseEntries.map((e) => (
+                    <TableRow key={e._id}>
+                      <TableCell className="text-sm">
+                        {e.date?.slice(0, 10)}
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {e.narrative || "—"}
+                      </TableCell>
+                      <TableCell className="text-sm">{e.hours}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{e.status}</Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {!caseEntries.length && (
+                    <TableRow>
+                      <TableCell
+                        colSpan={4}
+                        className="py-6 text-center text-sm text-muted-foreground"
+                      >
+                        No time logged yet.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="notes" className="mt-4">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center gap-1.5 text-base">
+                <MessageSquare className="h-4 w-4" /> Notes
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
               <p className="text-xs text-muted-foreground">
-                {new Date(t.at).toLocaleString()}
+                Notes from the tenant and your own team appear here — visible to
+                everyone on the case, not sent to the client.
               </p>
-            </div>
-          ))}
-          {!timeline.length && (
-            <p className="py-4 text-center text-sm text-muted-foreground">
-              No activity yet.
-            </p>
-          )}
-        </CardContent>
-      </Card>
+              {notes.map((t, i) => (
+                <div key={i} className="rounded-lg bg-muted/40 p-3">
+                  <p className="text-sm font-medium">{t.title}</p>
+                  {t.description && (
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {t.description}
+                    </p>
+                  )}
+                  <p className="mt-1 text-[10px] text-muted-foreground">
+                    {new Date(t.at).toLocaleString()}
+                  </p>
+                </div>
+              ))}
+              {!notes.length && (
+                <p className="py-6 text-center text-sm text-muted-foreground">
+                  No notes yet.
+                </p>
+              )}
+              <div className="flex gap-2 pt-2">
+                <Textarea
+                  placeholder="Add a note the tenant will see…"
+                  className="min-h-[60px]"
+                  value={noteText}
+                  onChange={(e) => setNoteText(e.target.value)}
+                />
+                <Button
+                  disabled={noteMut.isPending || !noteText.trim()}
+                  onClick={() => noteMut.mutate()}
+                  className="self-end"
+                >
+                  Add
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="timeline" className="mt-4">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Timeline</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {timeline.map((t, i) => (
+                <div key={i} className="border-b pb-2 last:border-0">
+                  <p className="text-sm font-medium">{t.title}</p>
+                  {t.description && (
+                    <p className="text-xs text-muted-foreground">
+                      {t.description}
+                    </p>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    {new Date(t.at).toLocaleString()}
+                  </p>
+                </div>
+              ))}
+              {!timeline.length && (
+                <p className="py-4 text-center text-sm text-muted-foreground">
+                  No activity yet.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
 
       <Dialog open={timeOpen} onOpenChange={setTimeOpen}>
         <DialogContent>

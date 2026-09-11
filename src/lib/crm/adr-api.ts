@@ -577,6 +577,12 @@ export const logMyCaseCall = async (
 ): Promise<AdrCase> =>
   unwrap(await api.post(`/crm/my-cases/${caseId}/call`, { summary }));
 
+export const addMyCaseNote = async (
+  caseId: string,
+  note: string,
+): Promise<AdrCase> =>
+  unwrap(await api.post(`/crm/my-cases/${caseId}/notes`, { note }));
+
 // ── Deadline rules ───────────────────────────────────────────────
 export type DeadlineTriggerSource =
   | "case_filed"
@@ -657,3 +663,19 @@ export const logAdrTenantTime = async (
 ): Promise<void> => {
   await api.post(`/crm/adr-cases/${caseId}/time`, dto);
 };
+
+// ── Mandate budget consumption ────────────────────────────────────
+export interface AdrMandateSpend {
+  budget: number;
+  timeSpent: number;
+  disbursementSpent: number;
+  totalSpent: number;
+  remaining: number;
+  percentUsed: number;
+  currency: string;
+}
+
+export const fetchAdrMandateSpend = async (
+  mandateId: string,
+): Promise<AdrMandateSpend> =>
+  unwrap(await api.get(`/crm/adr-cases/mandate-spend/${mandateId}`));

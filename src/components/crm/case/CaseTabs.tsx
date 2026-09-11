@@ -62,6 +62,7 @@ import {
   markAdrDeadlineRuleMet,
   exportAdrAuditTrailPdf,
   logAdrTenantTime,
+  fetchAdrMandateSpend,
   type AdrDraft,
   type AdrDocument,
   type AdrDeadlineRule,
@@ -1133,12 +1134,14 @@ export function CaseDeadlineRulesTab({
 export function CaseTimeBillingTab({
   caseId,
   caseType,
+  mandateId,
   hours,
   fees,
   disbursed,
 }: {
   caseId: string;
   caseType: "ADR" | "Litigation";
+  mandateId: string | null;
   hours: string;
   fees: string;
   disbursed: string;
@@ -1158,6 +1161,11 @@ export function CaseTimeBillingTab({
   const { data: entries = [] } = useQuery({
     queryKey: ["adrTimeEntries", caseId],
     queryFn: () => fetchTimeEntries({ adrCaseId: caseId }),
+  });
+  const { data: spend } = useQuery({
+    queryKey: ["adrMandateSpend", mandateId],
+    queryFn: () => fetchAdrMandateSpend(mandateId!),
+    enabled: !!mandateId,
   });
 
   const statusTone: Record<string, string> = {
@@ -1250,6 +1258,58 @@ export function CaseTimeBillingTab({
           <Plus className="mr-1.5 h-4 w-4" /> Log time
         </Button>
       </div>
+
+      {spend && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Mandate budget</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+              <div
+                className={`h-full ${spend.percentUsed >= 100 ? "bg-destructive" : spend.percentUsed >= 80 ? "bg-amber-500" : "bg-primary"}`}
+                style={{ width: `${Math.min(spend.percentUsed, 100)}%` }}
+              />
+            </div>
+            <div className="flex flex-wrap justify-between gap-2 text-xs text-muted-foreground">
+              <span>
+                {spend.totalSpent.toLocaleString(undefined, {
+                  style: "currency",
+                  currency: spend.currency,
+                })}{" "}
+                of{" "}
+                {spend.budget.toLocaleString(undefined, {
+                  style: "currency",
+                  currency: spend.currency,
+                })}{" "}
+                spent ({spend.percentUsed.toFixed(0)}%)
+              </span>
+              <span>
+                {spend.remaining.toLocaleString(undefined, {
+                  style: "currency",
+                  currency: spend.currency,
+                })}{" "}
+                remaining
+              </span>
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              Time:{" "}
+              {spend.timeSpent.toLocaleString(undefined, {
+                style: "currency",
+                currency: spend.currency,
+              })}
+              {" · "}
+              Disbursements:{" "}
+              {spend.disbursementSpent.toLocaleString(undefined, {
+                style: "currency",
+                currency: spend.currency,
+              })}
+              {" — across the whole mandate, not just this case."}
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardContent className="p-0">
           <Table>

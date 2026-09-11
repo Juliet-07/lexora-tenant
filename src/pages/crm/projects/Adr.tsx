@@ -1133,6 +1133,7 @@ export default function Adr() {
             <CaseTimeBillingTab
               caseId={c._id}
               caseType="ADR"
+              mandateId={c.mandateId}
               hours={`${(c.totals?.hours ?? 0).toFixed(1)} hrs`}
               fees={money(c.totals?.fees ?? 0, c.currency)}
               disbursed={money(c.totals?.disbursed ?? 0, c.currency)}
