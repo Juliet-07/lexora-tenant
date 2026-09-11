@@ -60,6 +60,24 @@ import { CommunicationsTab } from "./CommunicationsTab";
 import { NotesTab } from "./NotesTab";
 import { DocumentsTab } from "./DocumentsTab";
 
+// Real currency choice at mandate creation — a pan-African
+// practice regularly bills in more than just USD.
+const MANDATE_CURRENCIES = [
+  "USD",
+  "EUR",
+  "GBP",
+  "KES",
+  "NGN",
+  "ZAR",
+  "GHS",
+  "RWF",
+  "UGX",
+  "TZS",
+  "EGP",
+  "XOF",
+  "XAF",
+];
+
 export default function Mandates() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -89,6 +107,7 @@ export default function Mandates() {
     teamId: "",
     teamName: "",
     budget: 0,
+    currency: "USD",
     feeStructure: "Fixed fee" as FeeStructure,
     targetDate: "",
   });
@@ -125,6 +144,7 @@ export default function Mandates() {
         teamId: draft.teamId || undefined,
         teamName: draft.teamName || undefined,
         budget: Number(draft.budget) || 0,
+        currency: draft.currency,
         feeStructure: draft.feeStructure,
         targetDate: draft.targetDate || "2026-12-31",
         templateName: tpl?.name,
@@ -416,9 +436,9 @@ export default function Mandates() {
                 </Select>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-[2fr_1fr_1fr] gap-3">
               <div>
-                <Label>Budget (USD)</Label>
+                <Label>Budget</Label>
                 <Input
                   type="number"
                   value={draft.budget}
@@ -426,6 +446,24 @@ export default function Mandates() {
                     setDraft({ ...draft, budget: Number(e.target.value) })
                   }
                 />
+              </div>
+              <div>
+                <Label>Currency</Label>
+                <Select
+                  value={draft.currency}
+                  onValueChange={(v) => setDraft({ ...draft, currency: v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {MANDATE_CURRENCIES.map((c) => (
+                      <SelectItem key={c} value={c}>
+                        {c}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div>
                 <Label>Target date</Label>

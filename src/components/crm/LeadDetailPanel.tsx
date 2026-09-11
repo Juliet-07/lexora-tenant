@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Sheet,
   SheetContent,
@@ -13,14 +14,31 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { CalendarPlus, MessageSquarePlus, StickyNote } from "lucide-react";
-import type { Lead } from "@/lib/crm/crm-pipeline-api";
+import {
+  CalendarPlus,
+  MessageSquarePlus,
+  StickyNote,
+  Pencil,
+} from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import {
+  updateLead,
+  type Lead,
+  type LeadSource,
+} from "@/lib/crm/crm-pipeline-api";
 import {
   addLeadNote,
   buildTimeline,
@@ -39,17 +57,30 @@ const CHANNELS: { value: CommChannel; label: string }[] = [
   { value: "meeting_note", label: "Meeting follow-up" },
 ];
 
+const SOURCE_OPTIONS: { value: LeadSource; label: string }[] = [
+  { value: "event", label: "Event" },
+  { value: "referral", label: "Referral" },
+  { value: "web", label: "Web" },
+  { value: "cold_outreach", label: "Cold Outreach" },
+  { value: "partner", label: "Partner" },
+  { value: "other", label: "Other" },
+];
+
 export function LeadDetailPanel({
   lead,
   onClose,
   onConvert,
   onMarkLost,
+  onUpdate,
 }: {
   lead: Lead | null;
   onClose: () => void;
   onConvert: (lead: Lead) => void;
   onMarkLost: (lead: Lead) => void;
+  onUpdate?: (lead: Lead) => void;
 }) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
   const ws = useLeadWorkspace(lead?._id ?? null);
   const [comm, setComm] = useState({
     channel: "email" as CommChannel,
@@ -69,6 +100,47 @@ export function LeadDetailPanel({
   const [note, setNote] = useState({ title: "", body: "" });
   const [outcomeFor, setOutcomeFor] = useState<string | null>(null);
   const [outcome, setOutcome] = useState("");
+
+  const [editOpen, setEditOpen] = useState(false);
+  const [editDraft, setEditDraft] = useState({
+    contactName: "",
+    companyName: "",
+    contactEmail: "",
+    contactPhone: "",
+    industry: "",
+    source: "other" as LeadSource,
+    sourceNote: "",
+    notes: "",
+  });
+  const openEdit = () => {
+    if (!lead) return;
+    setEditDraft({
+      contactName: lead.contactName ?? "",
+      companyName: lead.companyName ?? "",
+      contactEmail: lead.contactEmail ?? "",
+      contactPhone: lead.contactPhone ?? "",
+      industry: lead.industry ?? "",
+      source: lead.source,
+      sourceNote: lead.sourceNote ?? "",
+      notes: lead.notes ?? "",
+    });
+    setEditOpen(true);
+  };
+  const updateMut = useMutation({
+    mutationFn: () => updateLead(lead!._id, editDraft),
+    onSuccess: (updated) => {
+      queryClient.invalidateQueries({ queryKey: ["crm-leads"] });
+      onUpdate?.(updated);
+      setEditOpen(false);
+      toast({ title: "Lead details updated" });
+    },
+    onError: (err: any) =>
+      toast({
+        title: "Could not update lead",
+        description: err?.response?.data?.message,
+        variant: "destructive",
+      }),
+  });
 
   if (!lead) return null;
   const title = lead.contactName || lead.companyName || "Untitled lead";
@@ -96,6 +168,11 @@ export function LeadDetailPanel({
 
           {/* Overview */}
           <TabsContent value="overview" className="mt-4 space-y-4">
+            <div className="flex justify-end">
+              <Button size="sm" variant="outline" onClick={openEdit}>
+                <Pencil className="mr-1.5 h-3.5 w-3.5" /> Edit details
+              </Button>
+            </div>
             <div className="rounded-lg border border-border/60 divide-y">
               {[
                 ["Organisation", lead.companyName ?? "—"],
@@ -492,6 +569,115 @@ export function LeadDetailPanel({
           </TabsContent>
         </Tabs>
       </SheetContent>
+
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit lead details</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs">Contact name</Label>
+                <Input
+                  value={editDraft.contactName}
+                  onChange={(e) =>
+                    setEditDraft({ ...editDraft, contactName: e.target.value })
+                  }
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Organisation</Label>
+                <Input
+                  value={editDraft.companyName}
+                  onChange={(e) =>
+                    setEditDraft({ ...editDraft, companyName: e.target.value })
+                  }
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs">Email</Label>
+                <Input
+                  type="email"
+                  value={editDraft.contactEmail}
+                  onChange={(e) =>
+                    setEditDraft({ ...editDraft, contactEmail: e.target.value })
+                  }
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Phone</Label>
+                <Input
+                  value={editDraft.contactPhone}
+                  onChange={(e) =>
+                    setEditDraft({ ...editDraft, contactPhone: e.target.value })
+                  }
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs">Industry</Label>
+                <Input
+                  value={editDraft.industry}
+                  onChange={(e) =>
+                    setEditDraft({ ...editDraft, industry: e.target.value })
+                  }
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Source</Label>
+                <Select
+                  value={editDraft.source}
+                  onValueChange={(v) =>
+                    setEditDraft({ ...editDraft, source: v as LeadSource })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SOURCE_OPTIONS.map((s) => (
+                      <SelectItem key={s.value} value={s.value}>
+                        {s.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div>
+              <Label className="text-xs">Source note</Label>
+              <Input
+                value={editDraft.sourceNote}
+                onChange={(e) =>
+                  setEditDraft({ ...editDraft, sourceNote: e.target.value })
+                }
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Capture notes</Label>
+              <Textarea
+                rows={3}
+                value={editDraft.notes}
+                onChange={(e) =>
+                  setEditDraft({ ...editDraft, notes: e.target.value })
+                }
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              disabled={updateMut.isPending}
+              onClick={() => updateMut.mutate()}
+            >
+              {updateMut.isPending ? "Saving…" : "Save changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Sheet>
   );
 }

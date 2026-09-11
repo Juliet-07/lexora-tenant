@@ -950,6 +950,7 @@ export default function Pipeline() {
           setSelectedLead(null);
           setLostTarget(l);
         }}
+        onUpdate={(l) => setSelectedLead(l)}
       />
 
       {/* ── Convert dialog ─────────────────────────────────── */}

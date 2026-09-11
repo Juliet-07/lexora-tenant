@@ -106,6 +106,26 @@ export const moveLeadStage = async (
   return res.data?.data ?? res.data;
 };
 
+export interface UpdateLeadPayload {
+  contactName?: string;
+  companyName?: string;
+  contactEmail?: string;
+  contactPhone?: string;
+  industry?: string;
+  source?: LeadSource;
+  sourceNote?: string;
+  notes?: string;
+  assignedToUserId?: string;
+}
+
+export const updateLead = async (
+  id: string,
+  dto: UpdateLeadPayload,
+): Promise<Lead> => {
+  const res = await api.patch(`/crm/leads/${id}`, dto);
+  return res.data?.data ?? res.data;
+};
+
 export const markLeadLost = async (
   id: string,
   reason?: string,
