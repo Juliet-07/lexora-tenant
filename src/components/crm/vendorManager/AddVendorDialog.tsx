@@ -12,7 +12,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -27,7 +26,6 @@ import {
   JURISDICTIONS,
   ENGAGEMENT_TYPES,
   PAYMENT_TERMS,
-  MODULE_OPTIONS,
   DD_CHECKLIST_LABELS,
   type VendorCategory,
   type VendorRisk,
@@ -85,20 +83,12 @@ export function AddVendorDialog({
     currency: "USD",
     paymentTerms: PAYMENT_TERMS[0],
     budgetCode: "",
-    usedByModules: [] as string[],
     risk: "Low" as VendorRisk,
     reviewFrequency: "Annual",
     justification: "",
   });
 
   const set = (k: keyof typeof f, v: any) => setF((p) => ({ ...p, [k]: v }));
-  const toggleModule = (m: string) =>
-    setF((p) => ({
-      ...p,
-      usedByModules: p.usedByModules.includes(m)
-        ? p.usedByModules.filter((x) => x !== m)
-        : [...p.usedByModules, m],
-    }));
 
   const reset = () => setStep(0);
 
@@ -122,7 +112,6 @@ export function AddVendorDialog({
         currency: f.currency,
         paymentTerms: f.paymentTerms,
         budgetCode: f.budgetCode,
-        usedByModules: f.usedByModules,
         risk: f.risk,
         reviewFrequency: f.reviewFrequency,
         justification: f.justification,
@@ -339,19 +328,6 @@ export function AddVendorDialog({
                 value={f.budgetCode}
                 onChange={(e) => set("budgetCode", e.target.value)}
               />
-            </Field>
-            <Field label="Used by modules" className="sm:col-span-2">
-              <div className="flex flex-wrap gap-3 rounded-lg border border-border/60 p-3">
-                {MODULE_OPTIONS.map((m) => (
-                  <label key={m} className="flex items-center gap-1.5 text-xs">
-                    <Checkbox
-                      checked={f.usedByModules.includes(m)}
-                      onCheckedChange={() => toggleModule(m)}
-                    />
-                    {m}
-                  </label>
-                ))}
-              </div>
             </Field>
           </div>
         )}
