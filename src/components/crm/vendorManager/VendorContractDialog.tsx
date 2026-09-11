@@ -25,11 +25,12 @@ import {
   MERGE_FIELDS,
   VENDOR_CONTRACT_TEMPLATES,
   renderTemplate,
-  saveContract,
-  advanceContract,
+  saveVendorContract,
+  advanceVendorContract,
   type Vendor,
   type VendorContract,
-} from "@/lib/crm/vendorStore";
+} from "@/lib/crm/vendor-api";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 type Step = "template" | "terms" | "edit" | "send";
 
@@ -58,6 +59,7 @@ export function VendorContractDialog({
   onOpenChange: (o: boolean) => void;
 }) {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const today = new Date().toISOString().slice(0, 10);
 
   const [step, setStep] = useState<Step>("template");
@@ -68,9 +70,15 @@ export function VendorContractDialog({
   const [value, setValue] = useState(
     String(contract?.value ?? vendor.annualValue ?? 0),
   );
-  const [currency, setCurrency] = useState(contract?.currency ?? vendor.currency);
-  const [startDate, setStartDate] = useState(contract?.startDate ?? today);
-  const [endDate, setEndDate] = useState(contract?.endDate ?? plusYear(today));
+  const [currency, setCurrency] = useState(
+    contract?.currency ?? vendor.currency,
+  );
+  const [startDate, setStartDate] = useState(
+    contract?.startDate?.slice(0, 10) ?? today,
+  );
+  const [endDate, setEndDate] = useState(
+    contract?.endDate?.slice(0, 10) ?? plusYear(today),
+  );
   const [signerName, setSignerName] = useState(
     contract?.signerName ?? vendor.contactName,
   );
@@ -78,7 +86,82 @@ export function VendorContractDialog({
     contract?.signerEmail ?? vendor.contactEmail,
   );
   const [body, setBody] = useState(contract?.body ?? "");
-  const [busy, setBusy] = useState(false);
+
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ["vendor", vendor._id] });
+    queryClient.invalidateQueries({ queryKey: ["vendors"] });
+  };
+
+  const saveMut = useMutation({
+    mutationFn: () =>
+      saveVendorContract(vendor._id, {
+        contractId: contract?._id,
+        title: title.trim(),
+        templateId: template.id,
+        templateName: template.name,
+        body,
+        value: Number(value) || 0,
+        currency,
+        startDate,
+        endDate,
+        signerName,
+        signerEmail,
+      }),
+    onSuccess: () => {
+      invalidate();
+      toast({ title: "Draft saved", description: title });
+      onOpenChange(false);
+    },
+    onError: (err: any) =>
+      toast({
+        title: "Could not save contract",
+        description: err?.response?.data?.message,
+        variant: "destructive",
+      }),
+  });
+
+  const sendMut = useMutation({
+    mutationFn: async () => {
+      const saved = await saveVendorContract(vendor._id, {
+        contractId: contract?._id,
+        title: title.trim(),
+        templateId: template.id,
+        templateName: template.name,
+        body,
+        value: Number(value) || 0,
+        currency,
+        startDate,
+        endDate,
+        signerName,
+        signerEmail,
+      });
+      // Editing: the id is already known. Creating: the backend
+      // unshifts new contracts, so the new one is reliably at [0].
+      const targetId = contract?._id ?? saved.contracts[0]?._id;
+      if (targetId) {
+        await advanceVendorContract(
+          vendor._id,
+          targetId,
+          "sent",
+          `Sent to ${signerEmail}`,
+        );
+      }
+    },
+    onSuccess: () => {
+      invalidate();
+      toast({
+        title: "Contract sent",
+        description: `${title} sent to ${signerName} (${signerEmail}) for signature.`,
+      });
+      onOpenChange(false);
+    },
+    onError: (err: any) =>
+      toast({
+        title: "Could not send contract",
+        description: err?.response?.data?.message,
+        variant: "destructive",
+      }),
+  });
 
   const template = useMemo(
     () =>
@@ -110,49 +193,15 @@ export function VendorContractDialog({
     setStep("edit");
   };
 
-  const persist = (): string => {
-    return saveContract(vendor.id, {
-      id: contract?.id,
-      title: title.trim(),
-      templateId: template.id,
-      templateName: template.name,
-      body,
-      status: contract?.status ?? "draft",
-      value: Number(value) || 0,
-      currency,
-      startDate,
-      endDate,
-      sentAt: contract?.sentAt ?? null,
-      signedAt: contract?.signedAt ?? null,
-      signerName,
-      signerEmail,
-    });
-  };
-
-  const handleSaveDraft = () => {
-    persist();
-    toast({ title: "Draft saved", description: title });
-    onOpenChange(false);
-  };
+  const handleSaveDraft = () => saveMut.mutate();
 
   const handleSend = () => {
     if (!signerEmail.trim()) {
       toast({ title: "Add a signer email", variant: "destructive" });
       return;
     }
-    setBusy(true);
-    const id = persist();
-    setTimeout(() => {
-      advanceContract(vendor.id, id, "sent", `Sent to ${signerEmail}`);
-      setBusy(false);
-      toast({
-        title: "Contract sent",
-        description: `${title} sent to ${signerName} (${signerEmail}) for signature.`,
-      });
-      onOpenChange(false);
-    }, 400);
+    sendMut.mutate();
   };
-
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -333,7 +382,11 @@ export function VendorContractDialog({
           </div>
           <div className="flex gap-2">
             {(step === "edit" || step === "send") && (
-              <Button variant="outline" onClick={handleSaveDraft}>
+              <Button
+                variant="outline"
+                onClick={handleSaveDraft}
+                disabled={saveMut.isPending}
+              >
                 <Save className="h-4 w-4 mr-1" /> Save draft
               </Button>
             )}
@@ -353,8 +406,8 @@ export function VendorContractDialog({
               </Button>
             )}
             {step === "send" && (
-              <Button onClick={handleSend} disabled={busy}>
-                {busy ? (
+              <Button onClick={handleSend} disabled={sendMut.isPending}>
+                {sendMut.isPending ? (
                   <Loader2 className="h-4 w-4 mr-1 animate-spin" />
                 ) : (
                   <Send className="h-4 w-4 mr-1" />
