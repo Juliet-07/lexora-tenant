@@ -69,6 +69,29 @@ import {
   type CreateAdrDeadlineRulePayload,
   type DeadlineTriggerSource,
 } from "@/lib/crm/adr-api";
+import {
+  fetchLitigationCase,
+  fetchLitigationMessages,
+  sendLitigationMessage,
+  sendLitigationPartyEmail,
+  addLitigationTimelineEntry,
+  fetchLitigationDrafts,
+  createLitigationDraft,
+  saveLitigationDraftVersion,
+  updateLitigationDraftStatus,
+  fetchLitigationDocuments,
+  uploadLitigationDocument,
+  fetchLitigationFolders,
+  createLitigationFolder,
+  fetchLitigationDeadlineRules,
+  createLitigationDeadlineRule,
+  updateLitigationDeadlineRule,
+  markLitigationDeadlineRuleMet,
+  exportLitigationAuditTrailPdf,
+  logLitigationTenantTime,
+  type LitigationDraft,
+  type LitigationDocument,
+} from "@/lib/crm/litigation-api";
 import { fetchAvailableTemplates } from "@/lib/crm/tools-api";
 import {
   fetchTimeEntries,
@@ -88,32 +111,32 @@ export function CaseCommunicationsTab({
 }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
-
-  if (caseType === "Litigation") {
-    return (
-      <p className="py-8 text-center text-sm text-muted-foreground">
-        Litigation communication is coming in the next phase of this build —
-        available today for ADR cases.
-      </p>
-    );
-  }
+  const isAdr = caseType === "ADR";
 
   // Shares the same query key the parent case page already uses, so
   // this reads from cache rather than firing a duplicate fetch.
-  const { data: c } = useQuery({
-    queryKey: ["adrCase", caseId],
-    queryFn: () => fetchAdrCase(caseId),
+  const { data: c } = useQuery<any>({
+    queryKey: isAdr ? ["adrCase", caseId] : ["litigationCase", caseId],
+    queryFn: () => (isAdr ? fetchAdrCase(caseId) : fetchLitigationCase(caseId)),
   });
   const { data: messages = [] } = useQuery({
-    queryKey: ["adrMessages", caseId],
-    queryFn: () => fetchAdrMessages(caseId),
+    queryKey: isAdr ? ["adrMessages", caseId] : ["litigationMessages", caseId],
+    queryFn: () =>
+      isAdr ? fetchAdrMessages(caseId) : fetchLitigationMessages(caseId),
   });
 
   const [clientText, setClientText] = useState("");
   const clientMsgMut = useMutation({
-    mutationFn: () => sendAdrMessage(caseId, "You", clientText.trim()),
+    mutationFn: () =>
+      isAdr
+        ? sendAdrMessage(caseId, "You", clientText.trim())
+        : sendLitigationMessage(caseId, "You", clientText.trim()),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["adrMessages", caseId] });
+      queryClient.invalidateQueries({
+        queryKey: isAdr
+          ? ["adrMessages", caseId]
+          : ["litigationMessages", caseId],
+      });
       setClientText("");
       toast({ title: "Message sent to client" });
     },
@@ -126,10 +149,15 @@ export function CaseCommunicationsTab({
   });
 
   const [noteTitle, setNoteTitle] = useState("");
-  const noteMut = useMutation({
-    mutationFn: () => addAdrTimelineEntry(caseId, { title: noteTitle.trim() }),
+  const noteMut = useMutation<any, Error, void>({
+    mutationFn: () =>
+      isAdr
+        ? addAdrTimelineEntry(caseId, { title: noteTitle.trim() })
+        : addLitigationTimelineEntry(caseId, { title: noteTitle.trim() }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["adrCase", caseId] });
+      queryClient.invalidateQueries({
+        queryKey: isAdr ? ["adrCase", caseId] : ["litigationCase", caseId],
+      });
       setNoteTitle("");
       toast({ title: "Internal note added" });
     },
@@ -140,14 +168,20 @@ export function CaseCommunicationsTab({
   const [emailBody, setEmailBody] = useState("");
   const partiesWithEmail = (c?.parties ?? []).filter((p) => p.email);
   const partyEmailMut = useMutation({
-    mutationFn: () =>
-      sendAdrPartyEmail(caseId, {
+    mutationFn: () => {
+      const dto = {
         partyIds: selectedPartyIds,
         subject: emailSubject.trim(),
         body: emailBody.trim(),
-      }),
+      };
+      return isAdr
+        ? sendAdrPartyEmail(caseId, dto)
+        : sendLitigationPartyEmail(caseId, dto);
+    },
     onSuccess: (res) => {
-      queryClient.invalidateQueries({ queryKey: ["adrCase", caseId] });
+      queryClient.invalidateQueries({
+        queryKey: isAdr ? ["adrCase", caseId] : ["litigationCase", caseId],
+      });
       setSelectedPartyIds([]);
       setEmailSubject("");
       setEmailBody("");
@@ -344,15 +378,7 @@ export function CaseDraftingTab({
 }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
-
-  if (caseType === "Litigation") {
-    return (
-      <p className="py-8 text-center text-sm text-muted-foreground">
-        Litigation drafting is coming in the next phase of this build —
-        available today for ADR cases.
-      </p>
-    );
-  }
+  const isAdr = caseType === "ADR";
 
   const tone: Record<string, string> = {
     Final: "bg-emerald-100 text-emerald-700 border-emerald-200",
@@ -360,9 +386,13 @@ export function CaseDraftingTab({
     Draft: "bg-muted text-muted-foreground border-border",
   };
 
+  const draftsKey = isAdr
+    ? ["adrDrafts", caseId]
+    : ["litigationDrafts", caseId];
   const { data: drafts = [] } = useQuery({
-    queryKey: ["adrDrafts", caseId],
-    queryFn: () => fetchAdrDrafts(caseId),
+    queryKey: draftsKey,
+    queryFn: () =>
+      isAdr ? fetchAdrDrafts(caseId) : fetchLitigationDrafts(caseId),
   });
   const { data: templates = [] } = useQuery({
     queryKey: ["adr-litigation-templates"],
@@ -374,13 +404,17 @@ export function CaseDraftingTab({
   const [newTitle, setNewTitle] = useState("");
   const [newTemplateId, setNewTemplateId] = useState<string>("blank");
   const createMut = useMutation({
-    mutationFn: () =>
-      createAdrDraft(caseId, {
+    mutationFn: () => {
+      const dto = {
         title: newTitle.trim(),
         templateId: newTemplateId === "blank" ? undefined : newTemplateId,
-      }),
+      };
+      return isAdr
+        ? createAdrDraft(caseId, dto)
+        : createLitigationDraft(caseId, dto);
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["adrDrafts", caseId] });
+      queryClient.invalidateQueries({ queryKey: draftsKey });
       setNewOpen(false);
       setNewTitle("");
       setNewTemplateId("blank");
@@ -388,24 +422,38 @@ export function CaseDraftingTab({
     },
   });
 
-  const [editingDraft, setEditingDraft] = useState<AdrDraft | null>(null);
-  const [historyDraft, setHistoryDraft] = useState<AdrDraft | null>(null);
+  const [editingDraft, setEditingDraft] = useState<
+    AdrDraft | LitigationDraft | null
+  >(null);
+  const [historyDraft, setHistoryDraft] = useState<
+    AdrDraft | LitigationDraft | null
+  >(null);
   const saveMut = useMutation({
     mutationFn: (content: string) =>
-      saveAdrDraftVersion(caseId, editingDraft!._id, content),
+      isAdr
+        ? saveAdrDraftVersion(caseId, editingDraft!._id, content)
+        : saveLitigationDraftVersion(caseId, editingDraft!._id, content),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["adrDrafts", caseId] });
+      queryClient.invalidateQueries({ queryKey: draftsKey });
       setEditingDraft(null);
       toast({ title: "Version saved" });
     },
   });
   const statusMut = useMutation({
     mutationFn: ({ id, status }: { id: string; status: AdrDraft["status"] }) =>
-      updateAdrDraftStatus(caseId, id, status),
+      isAdr
+        ? updateAdrDraftStatus(caseId, id, status)
+        : updateLitigationDraftStatus(caseId, id, status),
     onSuccess: (_data, vars) => {
-      queryClient.invalidateQueries({ queryKey: ["adrDrafts", caseId] });
-      queryClient.invalidateQueries({ queryKey: ["adrDocuments", caseId] });
-      queryClient.invalidateQueries({ queryKey: ["adrCase", caseId] });
+      queryClient.invalidateQueries({ queryKey: draftsKey });
+      queryClient.invalidateQueries({
+        queryKey: isAdr
+          ? ["adrDocuments", caseId]
+          : ["litigationDocuments", caseId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: isAdr ? ["adrCase", caseId] : ["litigationCase", caseId],
+      });
       toast({
         title:
           vars.status === "Final"
@@ -589,23 +637,24 @@ export function CaseDocumentsTab({
 }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const isAdr = caseType === "ADR";
 
-  if (caseType === "Litigation") {
-    return (
-      <p className="py-8 text-center text-sm text-muted-foreground">
-        Litigation documents are coming in the next phase of this build —
-        available today for ADR cases.
-      </p>
-    );
-  }
+  const docsKey = isAdr
+    ? ["adrDocuments", caseId]
+    : ["litigationDocuments", caseId];
+  const foldersKey = isAdr
+    ? ["adrFolders", caseId]
+    : ["litigationFolders", caseId];
 
   const { data: documents = [] } = useQuery({
-    queryKey: ["adrDocuments", caseId],
-    queryFn: () => fetchAdrDocuments(caseId),
+    queryKey: docsKey,
+    queryFn: () =>
+      isAdr ? fetchAdrDocuments(caseId) : fetchLitigationDocuments(caseId),
   });
   const { data: folders = ["General"] } = useQuery({
-    queryKey: ["adrFolders", caseId],
-    queryFn: () => fetchAdrFolders(caseId),
+    queryKey: foldersKey,
+    queryFn: () =>
+      isAdr ? fetchAdrFolders(caseId) : fetchLitigationFolders(caseId),
   });
 
   const [activeFolder, setActiveFolder] = useState<string | null>(null);
@@ -613,9 +662,12 @@ export function CaseDocumentsTab({
   const [newFolderOpen, setNewFolderOpen] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
   const folderMut = useMutation({
-    mutationFn: () => createAdrFolder(caseId, newFolderName.trim()),
+    mutationFn: () =>
+      isAdr
+        ? createAdrFolder(caseId, newFolderName.trim())
+        : createLitigationFolder(caseId, newFolderName.trim()),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["adrFolders", caseId] });
+      queryClient.invalidateQueries({ queryKey: foldersKey });
       setNewFolderOpen(false);
       setNewFolderName("");
       toast({ title: "Folder created" });
@@ -627,16 +679,21 @@ export function CaseDocumentsTab({
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const fileInputRef = { current: null as HTMLInputElement | null };
   const uploadMut = useMutation({
-    mutationFn: () => uploadAdrDocument(caseId, uploadFolder, pendingFile!),
+    mutationFn: () =>
+      isAdr
+        ? uploadAdrDocument(caseId, uploadFolder, pendingFile!)
+        : uploadLitigationDocument(caseId, uploadFolder, pendingFile!),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["adrDocuments", caseId] });
+      queryClient.invalidateQueries({ queryKey: docsKey });
       setUploadOpen(false);
       setPendingFile(null);
       toast({ title: "Document uploaded" });
     },
   });
 
-  const [previewing, setPreviewing] = useState<AdrDocument | null>(null);
+  const [previewing, setPreviewing] = useState<
+    AdrDocument | LitigationDocument | null
+  >(null);
 
   const folderCounts = documents.reduce<Record<string, number>>((acc, d) => {
     acc[d.folder] = (acc[d.folder] ?? 0) + 1;
@@ -851,15 +908,7 @@ export function CaseDeadlineRulesTab({
 }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
-
-  if (caseType === "Litigation") {
-    return (
-      <p className="py-8 text-center text-sm text-muted-foreground">
-        Litigation deadline rules are coming in the next phase of this build —
-        available today for ADR cases.
-      </p>
-    );
-  }
+  const isAdr = caseType === "ADR";
 
   const tone: Record<string, string> = {
     met: "bg-emerald-100 text-emerald-700 border-emerald-200",
@@ -875,19 +924,31 @@ export function CaseDeadlineRulesTab({
     not_triggered: () => "Not yet triggered",
   };
 
-  const { data: rules = [] } = useQuery({
-    queryKey: ["adrDeadlineRules", caseId],
-    queryFn: () => fetchAdrDeadlineRules(caseId),
+  const rulesKey = isAdr
+    ? ["adrDeadlineRules", caseId]
+    : ["litigationDeadlineRules", caseId];
+  const { data: rules = [] } = useQuery<any[]>({
+    queryKey: rulesKey,
+    queryFn: () =>
+      isAdr
+        ? fetchAdrDeadlineRules(caseId)
+        : fetchLitigationDeadlineRules(caseId),
   });
-  const { data: c } = useQuery({
-    queryKey: ["adrCase", caseId],
-    queryFn: () => fetchAdrCase(caseId),
+  const { data: c } = useQuery<any>({
+    queryKey: isAdr ? ["adrCase", caseId] : ["litigationCase", caseId],
+    queryFn: () => (isAdr ? fetchAdrCase(caseId) : fetchLitigationCase(caseId)),
   });
 
   const invalidate = () =>
-    queryClient.invalidateQueries({ queryKey: ["adrDeadlineRules", caseId] });
+    queryClient.invalidateQueries({ queryKey: rulesKey });
 
-  const emptyDraft: CreateAdrDeadlineRulePayload = {
+  const dateTriggerSource = isAdr ? "session_date" : "court_date";
+  const dateTriggerLabel = isAdr ? "A session's date" : "A court date";
+  const eventTriggerSource = isAdr ? "settlement" : "outcome";
+  const eventTriggerLabel = isAdr ? "Settlement recorded" : "Outcome recorded";
+  const dateEntries = isAdr ? (c?.sessions ?? []) : (c?.courtDates ?? []);
+
+  const emptyDraft: any = {
     triggerLabel: "",
     triggerSource: "case_filed",
     ruleLabel: "",
@@ -895,13 +956,24 @@ export function CaseDeadlineRulesTab({
   };
   const [editingId, setEditingId] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
-  const [draft, setDraft] = useState<CreateAdrDeadlineRulePayload>(emptyDraft);
+  const [draft, setDraft] = useState<any>(emptyDraft);
 
-  const saveMut = useMutation({
-    mutationFn: () =>
-      editingId
-        ? updateAdrDeadlineRule(caseId, editingId, draft)
-        : createAdrDeadlineRule(caseId, draft),
+  const saveMut = useMutation<any, Error, void>({
+    mutationFn: () => {
+      if (isAdr) {
+        return editingId
+          ? updateAdrDeadlineRule(caseId, editingId, draft)
+          : createAdrDeadlineRule(caseId, draft);
+      }
+      const litDto = {
+        ...draft,
+        triggerCourtDateIndex: draft.triggerSessionIndex,
+      };
+      delete litDto.triggerSessionIndex;
+      return editingId
+        ? updateLitigationDeadlineRule(caseId, editingId, litDto)
+        : createLitigationDeadlineRule(caseId, litDto);
+    },
     onSuccess: () => {
       invalidate();
       setOpen(false);
@@ -911,20 +983,24 @@ export function CaseDeadlineRulesTab({
     },
   });
 
-  const metMut = useMutation({
-    mutationFn: (ruleId: string) => markAdrDeadlineRuleMet(caseId, ruleId),
+  const metMut = useMutation<any, Error, string>({
+    mutationFn: (ruleId: string) =>
+      isAdr
+        ? markAdrDeadlineRuleMet(caseId, ruleId)
+        : markLitigationDeadlineRuleMet(caseId, ruleId),
     onSuccess: () => {
       invalidate();
       toast({ title: "Marked as met" });
     },
   });
 
-  const openEdit = (r: AdrDeadlineRule) => {
+  const openEdit = (r: any) => {
     setEditingId(r._id);
     setDraft({
       triggerLabel: r.triggerLabel,
       triggerSource: r.triggerSource,
-      triggerSessionIndex: r.triggerSessionIndex ?? undefined,
+      triggerSessionIndex:
+        r.triggerSessionIndex ?? r.triggerCourtDateIndex ?? undefined,
       cascadeFromRuleId: r.cascadeFromRuleId ?? undefined,
       customTriggerDate: r.customTriggerDate ?? undefined,
       ruleLabel: r.ruleLabel,
@@ -952,7 +1028,7 @@ export function CaseDeadlineRulesTab({
             <p className="text-sm text-muted-foreground">→ {r.ruleLabel}</p>
             <div className="flex items-center gap-2">
               <Badge variant="outline" className={tone[r.status]}>
-                {statusLabel[r.status](r)}
+                {statusLabel[r.status](r as any)}
               </Badge>
               {(r.status === "due" || r.status === "overdue") && (
                 <Button
@@ -997,7 +1073,9 @@ export function CaseDeadlineRulesTab({
             <div>
               <Label className="text-xs">Trigger label</Label>
               <Input
-                placeholder="e.g. Notice served"
+                placeholder={
+                  isAdr ? "e.g. Notice served" : "e.g. Statement of claim filed"
+                }
                 value={draft.triggerLabel}
                 onChange={(e) =>
                   setDraft({ ...draft, triggerLabel: e.target.value })
@@ -1008,21 +1086,18 @@ export function CaseDeadlineRulesTab({
               <Label className="text-xs">Trigger event</Label>
               <Select
                 value={draft.triggerSource}
-                onValueChange={(v) =>
-                  setDraft({
-                    ...draft,
-                    triggerSource: v as DeadlineTriggerSource,
-                  })
-                }
+                onValueChange={(v) => setDraft({ ...draft, triggerSource: v })}
               >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="case_filed">Case filed</SelectItem>
-                  <SelectItem value="session_date">A session's date</SelectItem>
-                  <SelectItem value="settlement">
-                    Settlement recorded
+                  <SelectItem value={dateTriggerSource}>
+                    {dateTriggerLabel}
+                  </SelectItem>
+                  <SelectItem value={eventTriggerSource}>
+                    {eventTriggerLabel}
                   </SelectItem>
                   <SelectItem value="cascade">
                     Cascades from another rule's due date
@@ -1031,9 +1106,11 @@ export function CaseDeadlineRulesTab({
                 </SelectContent>
               </Select>
             </div>
-            {draft.triggerSource === "session_date" && (
+            {draft.triggerSource === dateTriggerSource && (
               <div>
-                <Label className="text-xs">Which session</Label>
+                <Label className="text-xs">
+                  {isAdr ? "Which session" : "Which court date"}
+                </Label>
                 <Select
                   value={String(draft.triggerSessionIndex ?? "")}
                   onValueChange={(v) =>
@@ -1041,12 +1118,13 @@ export function CaseDeadlineRulesTab({
                   }
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Select session…" />
+                    <SelectValue placeholder="Select…" />
                   </SelectTrigger>
                   <SelectContent>
-                    {(c?.sessions ?? []).map((s, i) => (
+                    {dateEntries.map((s: any, i: number) => (
                       <SelectItem key={i} value={String(i)}>
-                        Session {i + 1} — {s.date?.slice(0, 10)}
+                        {isAdr ? `Session ${i + 1}` : s.title} —{" "}
+                        {s.date?.slice(0, 10)}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -1148,22 +1226,18 @@ export function CaseTimeBillingTab({
 }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const isAdr = caseType === "ADR";
 
-  if (caseType === "Litigation") {
-    return (
-      <p className="py-8 text-center text-sm text-muted-foreground">
-        Litigation time & billing is coming in the next phase of this build —
-        available today for ADR cases.
-      </p>
-    );
-  }
-
+  const entriesKey = ["timeEntries", caseType, caseId];
   const { data: entries = [] } = useQuery({
-    queryKey: ["adrTimeEntries", caseId],
-    queryFn: () => fetchTimeEntries({ adrCaseId: caseId }),
+    queryKey: entriesKey,
+    queryFn: () =>
+      isAdr
+        ? fetchTimeEntries({ adrCaseId: caseId })
+        : fetchTimeEntries({ litigationCaseId: caseId }),
   });
   const { data: spend } = useQuery({
-    queryKey: ["adrMandateSpend", mandateId],
+    queryKey: ["mandateSpend", mandateId],
     queryFn: () => fetchAdrMandateSpend(mandateId!),
     enabled: !!mandateId,
   });
@@ -1177,7 +1251,7 @@ export function CaseTimeBillingTab({
   };
 
   const invalidate = () =>
-    queryClient.invalidateQueries({ queryKey: ["adrTimeEntries", caseId] });
+    queryClient.invalidateQueries({ queryKey: entriesKey });
 
   const approveMut = useMutation({
     mutationFn: (id: string) => approveTimeEntry(id),
@@ -1232,7 +1306,10 @@ export function CaseTimeBillingTab({
   };
   const [logDraft, setLogDraft] = useState(emptyLogDraft);
   const logTimeMut = useMutation({
-    mutationFn: () => logAdrTenantTime(caseId, logDraft),
+    mutationFn: () =>
+      isAdr
+        ? logAdrTenantTime(caseId, logDraft)
+        : logLitigationTenantTime(caseId, logDraft),
     onSuccess: () => {
       invalidate();
       setLogTimeOpen(false);
@@ -1559,18 +1636,10 @@ export function CaseAuditAccessTab({
   caseId: string;
   caseType: "ADR" | "Litigation";
 }) {
-  if (caseType === "Litigation") {
-    return (
-      <p className="py-8 text-center text-sm text-muted-foreground">
-        Litigation audit trail is coming in the next phase of this build —
-        available today for ADR cases.
-      </p>
-    );
-  }
-
-  const { data: c } = useQuery({
-    queryKey: ["adrCase", caseId],
-    queryFn: () => fetchAdrCase(caseId),
+  const isAdr = caseType === "ADR";
+  const { data: c } = useQuery<any>({
+    queryKey: isAdr ? ["adrCase", caseId] : ["litigationCase", caseId],
+    queryFn: () => (isAdr ? fetchAdrCase(caseId) : fetchLitigationCase(caseId)),
   });
 
   const trail = [...(c?.timeline ?? [])].sort((a, b) =>
@@ -1585,7 +1654,11 @@ export function CaseAuditAccessTab({
           <Button
             variant="outline"
             size="sm"
-            onClick={() => exportAdrAuditTrailPdf(caseId, c.ref)}
+            onClick={() =>
+              isAdr
+                ? exportAdrAuditTrailPdf(caseId, c.ref)
+                : exportLitigationAuditTrailPdf(caseId, c.ref)
+            }
           >
             <Download className="mr-1.5 h-3.5 w-3.5" /> Export audit trail
           </Button>

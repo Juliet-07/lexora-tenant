@@ -33,6 +33,7 @@ export interface TimeEntry {
   taskId: string | null;
   taskTitle: string;
   adrCaseId: string | null;
+  litigationCaseId: string | null;
   narrative: string;
   date: string;
   hours: number;
@@ -95,6 +96,7 @@ export const fetchTimeEntries = async (filters?: {
   memberUserId?: string;
   status?: TimesheetStatus;
   adrCaseId?: string;
+  litigationCaseId?: string;
 }): Promise<TimeEntry[]> => {
   const res = await api.get("/crm/time-entries", { params: filters });
   const d = unwrap(res);

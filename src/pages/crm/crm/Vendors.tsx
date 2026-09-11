@@ -1005,10 +1005,7 @@ function VendorSheet({
                       <Progress
                         value={
                           (e.amount /
-                            Math.max(
-                              ...vendor.spend.map((s) => s.amount),
-                              1,
-                            )) *
+                            Math.max(...vendor.spend.map((s) => s.amount), 1)) *
                           100
                         }
                         className="h-2 flex-1"
@@ -1067,7 +1064,10 @@ function VendorSheet({
                   Activity
                 </p>
                 {vendor.activity.map((a) => (
-                  <div key={a.id} className="flex gap-2 py-1.5 border-b last:border-0">
+                  <div
+                    key={a.id}
+                    className="flex gap-2 py-1.5 border-b last:border-0"
+                  >
                     <span className="text-xs flex-1">{a.text}</span>
                     <span className="text-[10px] text-muted-foreground">
                       {new Date(a.at).toLocaleDateString()}
@@ -1158,7 +1158,6 @@ function AddVendorDialog({
     currency: "USD",
     paymentTerms: PAYMENT_TERMS[0],
     budgetCode: "",
-    usedByModules: [] as string[],
     risk: "Low" as VendorRisk,
     reviewFrequency: "Annual",
     justification: "",
@@ -1210,7 +1209,6 @@ function AddVendorDialog({
       currency: f.currency,
       paymentTerms: f.paymentTerms,
       budgetCode: f.budgetCode,
-      usedByModules: f.usedByModules,
       risk: f.risk,
       reviewFrequency: f.reviewFrequency,
       status: ddDone.every(Boolean) ? "Pending approval" : "Pending DD",
@@ -1407,29 +1405,6 @@ function AddVendorDialog({
                 value={f.budgetCode}
                 onChange={(e) => set("budgetCode", e.target.value)}
               />
-            </Field>
-            <Field label="Which module or function uses this vendor?" className="sm:col-span-2">
-              <div className="flex flex-wrap gap-3">
-                {MODULE_OPTIONS.map((m) => (
-                  <label
-                    key={m}
-                    className="flex items-center gap-2 text-xs cursor-pointer"
-                  >
-                    <Checkbox
-                      checked={f.usedByModules.includes(m)}
-                      onCheckedChange={(c) =>
-                        set(
-                          "usedByModules",
-                          c
-                            ? [...f.usedByModules, m]
-                            : f.usedByModules.filter((x) => x !== m),
-                        )
-                      }
-                    />
-                    {m}
-                  </label>
-                ))}
-              </div>
             </Field>
           </div>
         )}

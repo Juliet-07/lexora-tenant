@@ -63,6 +63,7 @@ import {
 } from "@/components/crm/case/CaseTabs";
 import { useToast } from "@/hooks/use-toast";
 import { fetchMandates } from "@/lib/crm/mandates-api";
+import { fetchTeams } from "@/lib/hr/hr-api";
 import {
   fetchLitigationCases,
   fetchLitigationCase,
@@ -130,6 +131,7 @@ const emptyParty = {
   name: "",
   role: "Plaintiff" as LitigationPartyRole,
   organisation: "",
+  email: "",
 };
 
 export default function Litigation() {
@@ -152,6 +154,10 @@ export default function Litigation() {
     queryKey: ["litigation-mandates"],
     queryFn: fetchMandates,
   });
+  const { data: teams = [] } = useQuery({
+    queryKey: ["litigation-teams"],
+    queryFn: fetchTeams,
+  });
   const { data: detail } = useQuery({
     queryKey: ["litigationCase", id],
     queryFn: () => fetchLitigationCase(id!),
@@ -172,6 +178,8 @@ export default function Litigation() {
     court: "",
     courtDivision: "",
     registry: "",
+    teamId: "",
+    teamName: "",
   });
   const [draftParties, setDraftParties] = useState([{ ...emptyParty }]);
 
@@ -225,6 +233,8 @@ export default function Litigation() {
         court: draft.court,
         courtDivision: draft.courtDivision,
         registry: draft.registry,
+        teamId: draft.teamId || undefined,
+        teamName: draft.teamName || undefined,
         parties: draftParties.filter((p) => p.name.trim()),
       }),
     onSuccess: (c) => {
@@ -237,6 +247,8 @@ export default function Litigation() {
         court: "",
         courtDivision: "",
         registry: "",
+        teamId: "",
+        teamName: "",
       });
       setDraftParties([{ ...emptyParty }]);
       toast({ title: "Litigation case filed", description: c.ref });
@@ -514,6 +526,8 @@ export default function Litigation() {
             </div>
             <p className="text-sm text-muted-foreground">
               {c.ref}
+              {c.mandateName && ` · Mandate: ${c.mandateName}`}
+              {c.teamName && ` · Team: ${c.teamName}`}
               {c.court && ` · ${c.court}`}
               {c.courtDivision && `, ${c.courtDivision}`}
               {c.courtCaseNumber && ` · Case No. ${c.courtCaseNumber}`}
@@ -638,7 +652,7 @@ export default function Litigation() {
             <TabsTrigger value="deadlines">Deadline rules</TabsTrigger>
             <TabsTrigger value="billing">Time &amp; billing</TabsTrigger>
             <TabsTrigger value="resolution">Resolution</TabsTrigger>
-            <TabsTrigger value="audit">Audit &amp; access</TabsTrigger>
+            <TabsTrigger value="audit">Audit Trail</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="pt-4">
@@ -1889,10 +1903,53 @@ export default function Litigation() {
             </div>
 
             <div>
+              <Label>Team handling this case</Label>
+              {teams.length > 0 ? (
+                <Select
+                  value={draft.teamId}
+                  onValueChange={(v) => {
+                    const t = teams.find((x) => x._id === v);
+                    setDraft({
+                      ...draft,
+                      teamId: v,
+                      teamName: t?.name ?? "",
+                    });
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select team..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {teams.map((t) => (
+                      <SelectItem key={t._id} value={t._id}>
+                        {t.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input
+                  placeholder="Team name"
+                  value={draft.teamName}
+                  onChange={(e) =>
+                    setDraft({ ...draft, teamName: e.target.value })
+                  }
+                />
+              )}
+            </div>
+
+            <div>
               <Label>Parties</Label>
+              <p className="mb-2 text-xs text-muted-foreground">
+                Each party's email is required for filing and court-date
+                notifications.
+              </p>
               <div className="space-y-2">
                 {draftParties.map((p, i) => (
-                  <div key={i} className="grid grid-cols-[1fr_1fr_auto] gap-2">
+                  <div
+                    key={i}
+                    className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2"
+                  >
                     <Input
                       placeholder="Name"
                       value={p.name}
@@ -1900,6 +1957,18 @@ export default function Litigation() {
                         setDraftParties(
                           draftParties.map((x, j) =>
                             j === i ? { ...x, name: e.target.value } : x,
+                          ),
+                        )
+                      }
+                    />
+                    <Input
+                      type="email"
+                      placeholder="Email"
+                      value={p.email}
+                      onChange={(e) =>
+                        setDraftParties(
+                          draftParties.map((x, j) =>
+                            j === i ? { ...x, email: e.target.value } : x,
                           ),
                         )
                       }
@@ -1956,7 +2025,11 @@ export default function Litigation() {
           </div>
           <DialogFooter>
             <Button
-              disabled={createMut.isPending || !draft.title}
+              disabled={
+                createMut.isPending ||
+                !draft.title ||
+                draftParties.some((p) => p.name.trim() && !p.email.trim())
+              }
               onClick={() => createMut.mutate()}
             >
               {createMut.isPending ? "Filing…" : "File case"}

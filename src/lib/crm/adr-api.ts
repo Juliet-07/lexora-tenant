@@ -555,33 +555,70 @@ export const uploadAdrDocument = async (
 };
 
 // ── My Cases (employee-facing) ──────────────────────────────────
-export const fetchMyCases = async (): Promise<AdrCase[]> => {
+// Real, combined shape for the employee's case list — an ADR or
+// litigation case is genuinely a different document shape, but this
+// list view only ever needs the fields common to both.
+export interface MyCombinedCase {
+  _id: string;
+  caseType: "ADR" | "Litigation";
+  ref: string;
+  title: string;
+  stage: string;
+  status: string;
+  mandateId: string | null;
+  mandateName: string;
+  claimValue: number;
+  currency: string;
+  timeline: AdrTimelineEntry[];
+}
+
+export const fetchMyCases = async (): Promise<MyCombinedCase[]> => {
   const res = await api.get("/crm/my-cases");
   const d = unwrap(res);
   return Array.isArray(d) ? d : [];
 };
 
-export const fetchMyCaseDetail = async (id: string): Promise<AdrCase> =>
-  unwrap(await api.get(`/crm/my-cases/${id}`));
+export const fetchMyCaseDetail = async (
+  id: string,
+  caseType: "adr" | "litigation" = "adr",
+): Promise<MyCombinedCase> =>
+  unwrap(await api.get(`/crm/my-cases/${id}`, { params: { caseType } }));
 
 export const logMyCaseTime = async (
   caseId: string,
   dto: { narrative?: string; date: string; hours: number; billable?: boolean },
+  caseType: "adr" | "litigation" = "adr",
 ): Promise<void> => {
-  await api.post(`/crm/my-cases/${caseId}/time`, dto);
+  await api.post(`/crm/my-cases/${caseId}/time`, dto, {
+    params: { caseType },
+  });
 };
 
 export const logMyCaseCall = async (
   caseId: string,
   summary: string,
-): Promise<AdrCase> =>
-  unwrap(await api.post(`/crm/my-cases/${caseId}/call`, { summary }));
+  caseType: "adr" | "litigation" = "adr",
+): Promise<MyCombinedCase> =>
+  unwrap(
+    await api.post(
+      `/crm/my-cases/${caseId}/call`,
+      { summary },
+      { params: { caseType } },
+    ),
+  );
 
 export const addMyCaseNote = async (
   caseId: string,
   note: string,
-): Promise<AdrCase> =>
-  unwrap(await api.post(`/crm/my-cases/${caseId}/notes`, { note }));
+  caseType: "adr" | "litigation" = "adr",
+): Promise<MyCombinedCase> =>
+  unwrap(
+    await api.post(
+      `/crm/my-cases/${caseId}/notes`,
+      { note },
+      { params: { caseType } },
+    ),
+  );
 
 // ── Deadline rules ───────────────────────────────────────────────
 export type DeadlineTriggerSource =

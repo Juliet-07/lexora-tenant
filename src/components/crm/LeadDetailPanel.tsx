@@ -28,7 +28,6 @@ import {
   completeMeeting,
   logComm,
   scheduleMeeting,
-  setLeadTemperature,
   useLeadWorkspace,
   type CommChannel,
 } from "@/lib/crm/leadWorkspaceStore";
@@ -39,12 +38,6 @@ const CHANNELS: { value: CommChannel; label: string }[] = [
   { value: "whatsapp", label: "WhatsApp" },
   { value: "meeting_note", label: "Meeting follow-up" },
 ];
-
-const TEMPS = [
-  { value: "hot", label: "🔥 Hot" },
-  { value: "warm", label: "🌤 Warm" },
-  { value: "cold", label: "❄️ Cold" },
-] as const;
 
 export function LeadDetailPanel({
   lead,
@@ -123,24 +116,6 @@ export function LeadDetailPanel({
                   </span>
                 </div>
               ))}
-            </div>
-
-            <div>
-              <p className="text-[11px] font-semibold uppercase text-muted-foreground mb-2">
-                Temperature
-              </p>
-              <div className="flex gap-2">
-                {TEMPS.map((t) => (
-                  <Button
-                    key={t.value}
-                    size="sm"
-                    variant={ws.temperature === t.value ? "default" : "outline"}
-                    onClick={() => setLeadTemperature(lead._id, t.value)}
-                  >
-                    {t.label}
-                  </Button>
-                ))}
-              </div>
             </div>
 
             {lead.notes && (
@@ -374,7 +349,8 @@ export function LeadDetailPanel({
                   </Badge>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  {m.date} {m.time} · {m.mode === "virtual" ? "Virtual" : "In person"}
+                  {m.date} {m.time} ·{" "}
+                  {m.mode === "virtual" ? "Virtual" : "In person"}
                   {m.location ? ` · ${m.location}` : ""}
                 </p>
                 {m.attendees && (
@@ -493,7 +469,10 @@ export function LeadDetailPanel({
                 </span>
               </div>
               {timeline.map((t) => (
-                <div key={t.id} className="flex gap-3 py-2 border-b last:border-0">
+                <div
+                  key={t.id}
+                  className="flex gap-3 py-2 border-b last:border-0"
+                >
                   <span
                     className={`h-1.5 w-1.5 rounded-full mt-1.5 ${
                       t.kind === "comm"

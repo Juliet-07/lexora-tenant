@@ -87,6 +87,7 @@ export interface LitigationParty {
   name: string;
   role: LitigationPartyRole;
   organisation: string;
+  email: string;
   userId: string | null;
 }
 export type LitigationTimelineSource = "System" | "Manual";
@@ -139,6 +140,9 @@ export interface LitigationCase {
   adrCaseId: string | null;
   mandateId: string | null;
   mandateName: string;
+  teamId: string | null;
+  teamName: string;
+  folders: string[];
   parties: LitigationParty[];
   stage: LitigationStage;
   status: LitigationCaseStatus;
@@ -182,6 +186,7 @@ export const createLitigationCase = async (dto: {
     name: string;
     role: LitigationPartyRole;
     organisation?: string;
+    email: string;
     userId?: string;
   }[];
   claimValue?: number;
@@ -189,6 +194,8 @@ export const createLitigationCase = async (dto: {
   court?: string;
   courtDivision?: string;
   registry?: string;
+  teamId?: string;
+  teamName?: string;
 }): Promise<LitigationCase> =>
   unwrap(await api.post("/crm/litigation-cases", dto));
 
@@ -203,10 +210,13 @@ export const updateLitigationDetails = async (
     courtFeesPaid: number;
     courtFeesCurrency: string;
     claimValue: number;
+    teamId: string;
+    teamName: string;
     parties: {
       name: string;
       role: LitigationPartyRole;
       organisation?: string;
+      email: string;
       userId?: string;
     }[];
   }>,
@@ -304,4 +314,263 @@ export const exportLitigationReportPdf = (): void => {
       a.click();
       URL.revokeObjectURL(a.href);
     });
+};
+
+// ── Communication ────────────────────────────────────────────────
+export interface LitigationCaseMessage {
+  _id: string;
+  caseId: string;
+  direction: "tenant" | "client";
+  author: string;
+  body: string;
+  createdAt: string;
+}
+
+export const fetchLitigationMessages = async (
+  caseId: string,
+): Promise<LitigationCaseMessage[]> => {
+  const res = await api.get(`/crm/litigation-cases/${caseId}/messages`);
+  const d = unwrap(res);
+  return Array.isArray(d) ? d : [];
+};
+
+export const sendLitigationMessage = async (
+  caseId: string,
+  author: string,
+  body: string,
+): Promise<LitigationCaseMessage> => {
+  const res = await api.post(`/crm/litigation-cases/${caseId}/messages`, {
+    author,
+    body,
+  });
+  return unwrap(res);
+};
+
+export const sendLitigationPartyEmail = async (
+  caseId: string,
+  dto: { partyIds: string[]; subject: string; body: string },
+): Promise<{ success: boolean; sentTo: string[] }> => {
+  const res = await api.post(
+    `/crm/litigation-cases/${caseId}/party-email`,
+    dto,
+  );
+  return unwrap(res);
+};
+
+// ── Drafting ─────────────────────────────────────────────────────
+export interface LitigationDraftVersion {
+  _id: string;
+  versionNumber: number;
+  content: string;
+  savedBy: string;
+  savedAt: string;
+}
+export interface LitigationDraft {
+  _id: string;
+  caseId: string;
+  title: string;
+  content: string;
+  status: "Draft" | "In review" | "Final";
+  sourceTemplateId: string;
+  sourceTemplateTitle: string;
+  versions: LitigationDraftVersion[];
+  currentVersion: number;
+  documentId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const fetchLitigationDrafts = async (
+  caseId: string,
+): Promise<LitigationDraft[]> => {
+  const res = await api.get(`/crm/litigation-cases/${caseId}/drafts`);
+  const d = unwrap(res);
+  return Array.isArray(d) ? d : [];
+};
+
+export const createLitigationDraft = async (
+  caseId: string,
+  dto: { title: string; templateId?: string },
+): Promise<LitigationDraft> =>
+  unwrap(await api.post(`/crm/litigation-cases/${caseId}/drafts`, dto));
+
+export const saveLitigationDraftVersion = async (
+  caseId: string,
+  draftId: string,
+  content: string,
+): Promise<LitigationDraft> =>
+  unwrap(
+    await api.patch(`/crm/litigation-cases/${caseId}/drafts/${draftId}`, {
+      content,
+    }),
+  );
+
+export const updateLitigationDraftStatus = async (
+  caseId: string,
+  draftId: string,
+  status: LitigationDraft["status"],
+): Promise<LitigationDraft> =>
+  unwrap(
+    await api.patch(
+      `/crm/litigation-cases/${caseId}/drafts/${draftId}/status`,
+      { status },
+    ),
+  );
+
+// ── Folders ───────────────────────────────────────────────────────
+export const fetchLitigationFolders = async (
+  caseId: string,
+): Promise<string[]> => {
+  const res = await api.get(`/crm/litigation-cases/${caseId}/folders`);
+  const d = unwrap(res);
+  return Array.isArray(d) ? d : ["General"];
+};
+
+export const createLitigationFolder = async (
+  caseId: string,
+  name: string,
+): Promise<string[]> =>
+  unwrap(await api.post(`/crm/litigation-cases/${caseId}/folders`, { name }));
+
+// ── Documents ─────────────────────────────────────────────────────
+export interface LitigationDocument {
+  _id: string;
+  caseId: string;
+  folder: string;
+  name: string;
+  content: string;
+  fileUrl: string;
+  size: number;
+  mimeType: string;
+  uploadedBy: string;
+  sourceDraftId: string | null;
+  createdAt: string;
+}
+
+export const fetchLitigationDocuments = async (
+  caseId: string,
+): Promise<LitigationDocument[]> => {
+  const res = await api.get(`/crm/litigation-cases/${caseId}/documents`);
+  const d = unwrap(res);
+  return Array.isArray(d) ? d : [];
+};
+
+export const uploadLitigationDocument = async (
+  caseId: string,
+  folder: string,
+  file: File,
+): Promise<LitigationDocument> => {
+  const formData = new FormData();
+  formData.append("file", file);
+  const res = await api.post(
+    `/crm/litigation-cases/${caseId}/documents?folder=${encodeURIComponent(folder)}`,
+    formData,
+    { headers: { "Content-Type": "multipart/form-data" } },
+  );
+  return unwrap(res);
+};
+
+// ── Deadline rules ───────────────────────────────────────────────
+export type LitigationDeadlineTriggerSource =
+  | "case_filed"
+  | "court_date"
+  | "outcome"
+  | "cascade"
+  | "custom";
+
+export interface LitigationDeadlineRule {
+  _id: string;
+  caseId: string;
+  triggerLabel: string;
+  triggerSource: LitigationDeadlineTriggerSource;
+  triggerCourtDateIndex: number | null;
+  cascadeFromRuleId: string | null;
+  customTriggerDate: string | null;
+  ruleLabel: string;
+  windowDays: number;
+  metAt: string | null;
+  triggerDate: string | null;
+  dueDate: string | null;
+  status: "not_triggered" | "due" | "overdue" | "met";
+}
+
+export interface CreateLitigationDeadlineRulePayload {
+  triggerLabel: string;
+  triggerSource: LitigationDeadlineTriggerSource;
+  triggerCourtDateIndex?: number;
+  cascadeFromRuleId?: string;
+  customTriggerDate?: string;
+  ruleLabel: string;
+  windowDays: number;
+}
+
+export const fetchLitigationDeadlineRules = async (
+  caseId: string,
+): Promise<LitigationDeadlineRule[]> => {
+  const res = await api.get(`/crm/litigation-cases/${caseId}/deadline-rules`);
+  const d = unwrap(res);
+  return Array.isArray(d) ? d : [];
+};
+
+export const createLitigationDeadlineRule = async (
+  caseId: string,
+  dto: CreateLitigationDeadlineRulePayload,
+): Promise<LitigationDeadlineRule> =>
+  unwrap(await api.post(`/crm/litigation-cases/${caseId}/deadline-rules`, dto));
+
+export const updateLitigationDeadlineRule = async (
+  caseId: string,
+  ruleId: string,
+  dto: Partial<CreateLitigationDeadlineRulePayload>,
+): Promise<LitigationDeadlineRule> =>
+  unwrap(
+    await api.patch(
+      `/crm/litigation-cases/${caseId}/deadline-rules/${ruleId}`,
+      dto,
+    ),
+  );
+
+export const markLitigationDeadlineRuleMet = async (
+  caseId: string,
+  ruleId: string,
+): Promise<LitigationDeadlineRule> =>
+  unwrap(
+    await api.post(
+      `/crm/litigation-cases/${caseId}/deadline-rules/${ruleId}/mark-met`,
+    ),
+  );
+
+// ── Audit trail ────────────────────────────────────────────────────
+export const exportLitigationAuditTrailPdf = (
+  caseId: string,
+  caseRef: string,
+): void => {
+  const token = localStorage.getItem("tenantToken");
+  const base = import.meta.env.VITE_REACT_APP_BASE_URL;
+  const filename = `audit-trail-${caseRef}-${new Date().toISOString().split("T")[0]}.pdf`;
+  fetch(`${base}/crm/litigation-cases/${caseId}/audit-trail/export`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+    .then((r) => r.blob())
+    .then((blob) => {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
+};
+
+// ── Tenant time logging ──────────────────────────────────────────
+export const logLitigationTenantTime = async (
+  caseId: string,
+  dto: {
+    narrative?: string;
+    date: string;
+    hours: number;
+    billable?: boolean;
+    rate: number;
+  },
+): Promise<void> => {
+  await api.post(`/crm/litigation-cases/${caseId}/time`, dto);
 };

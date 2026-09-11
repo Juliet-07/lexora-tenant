@@ -38,7 +38,7 @@ import {
   logMyCaseTime,
   logMyCaseCall,
   addMyCaseNote,
-  type AdrCase,
+  type MyCombinedCase,
 } from "@/lib/crm/adr-api";
 import { fetchMyTimeEntries } from "@/lib/crm/time-tracking-api";
 
@@ -51,6 +51,9 @@ const statusTone: Record<string, string> = {
 
 export default function MyCases() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedCaseType, setSelectedCaseType] = useState<
+    "ADR" | "Litigation"
+  >("ADR");
   const [query, setQuery] = useState("");
 
   const { data: cases = [], isLoading } = useQuery({
@@ -59,8 +62,12 @@ export default function MyCases() {
   });
 
   const { data: detail } = useQuery({
-    queryKey: ["myCaseDetail", selectedId],
-    queryFn: () => fetchMyCaseDetail(selectedId!),
+    queryKey: ["myCaseDetail", selectedId, selectedCaseType],
+    queryFn: () =>
+      fetchMyCaseDetail(
+        selectedId!,
+        selectedCaseType === "ADR" ? "adr" : "litigation",
+      ),
     enabled: !!selectedId,
   });
 
@@ -73,7 +80,13 @@ export default function MyCases() {
   );
 
   if (selectedId && detail) {
-    return <MyCaseDetailView c={detail} onBack={() => setSelectedId(null)} />;
+    return (
+      <MyCaseDetailView
+        c={detail}
+        caseType={selectedCaseType}
+        onBack={() => setSelectedId(null)}
+      />
+    );
   }
 
   return (
@@ -83,7 +96,7 @@ export default function MyCases() {
           <Scale className="h-6 w-6" /> My Cases
         </h1>
         <p className="text-sm text-muted-foreground">
-          ADR cases your team is assigned to handle.
+          ADR and litigation cases your team is assigned to handle.
         </p>
       </div>
 
@@ -103,15 +116,20 @@ export default function MyCases() {
         <div className="grid gap-3 md:grid-cols-2">
           {filtered.map((c) => (
             <Card
-              key={c._id}
+              key={`${c.caseType}-${c._id}`}
               className="cursor-pointer hover:border-primary/50"
-              onClick={() => setSelectedId(c._id)}
+              onClick={() => {
+                setSelectedCaseType(c.caseType);
+                setSelectedId(c._id);
+              }}
             >
               <CardContent className="space-y-2 p-4">
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <p className="text-sm font-semibold">{c.title}</p>
-                    <p className="text-xs text-muted-foreground">{c.ref}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {c.ref} · {c.caseType}
+                    </p>
                   </div>
                   <Badge
                     variant="outline"
@@ -137,15 +155,26 @@ export default function MyCases() {
   );
 }
 
-function MyCaseDetailView({ c, onBack }: { c: AdrCase; onBack: () => void }) {
+function MyCaseDetailView({
+  c,
+  caseType,
+  onBack,
+}: {
+  c: MyCombinedCase;
+  caseType: "ADR" | "Litigation";
+  onBack: () => void;
+}) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const apiCaseType = caseType === "ADR" ? "adr" : "litigation";
 
   const { data: myEntries = [] } = useQuery({
     queryKey: ["myTimeEntries", c._id],
     queryFn: () => fetchMyTimeEntries(),
   });
-  const caseEntries = myEntries.filter((e) => e.adrCaseId === c._id);
+  const caseEntries = myEntries.filter((e) =>
+    caseType === "ADR" ? e.adrCaseId === c._id : e.litigationCaseId === c._id,
+  );
 
   const [timeOpen, setTimeOpen] = useState(false);
   const [timeDraft, setTimeDraft] = useState({
@@ -155,7 +184,7 @@ function MyCaseDetailView({ c, onBack }: { c: AdrCase; onBack: () => void }) {
     billable: true,
   });
   const timeMut = useMutation({
-    mutationFn: () => logMyCaseTime(c._id, timeDraft),
+    mutationFn: () => logMyCaseTime(c._id, timeDraft, apiCaseType),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["myTimeEntries", c._id] });
       setTimeOpen(false);
@@ -178,9 +207,11 @@ function MyCaseDetailView({ c, onBack }: { c: AdrCase; onBack: () => void }) {
   const [callOpen, setCallOpen] = useState(false);
   const [callSummary, setCallSummary] = useState("");
   const callMut = useMutation({
-    mutationFn: () => logMyCaseCall(c._id, callSummary.trim()),
+    mutationFn: () => logMyCaseCall(c._id, callSummary.trim(), apiCaseType),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["myCaseDetail", c._id] });
+      queryClient.invalidateQueries({
+        queryKey: ["myCaseDetail", c._id, caseType],
+      });
       setCallOpen(false);
       setCallSummary("");
       toast({ title: "Call logged" });
@@ -189,9 +220,11 @@ function MyCaseDetailView({ c, onBack }: { c: AdrCase; onBack: () => void }) {
 
   const [noteText, setNoteText] = useState("");
   const noteMut = useMutation({
-    mutationFn: () => addMyCaseNote(c._id, noteText.trim()),
+    mutationFn: () => addMyCaseNote(c._id, noteText.trim(), apiCaseType),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["myCaseDetail", c._id] });
+      queryClient.invalidateQueries({
+        queryKey: ["myCaseDetail", c._id, caseType],
+      });
       setNoteText("");
       toast({ title: "Note added" });
     },
@@ -216,7 +249,8 @@ function MyCaseDetailView({ c, onBack }: { c: AdrCase; onBack: () => void }) {
         <div>
           <h1 className="text-xl font-bold">{c.title}</h1>
           <p className="text-sm text-muted-foreground">
-            {c.ref} · {c.stage} · {c.mandateName || "No mandate linked"}
+            {c.ref} · {caseType} · {c.stage} ·{" "}
+            {c.mandateName || "No mandate linked"}
           </p>
         </div>
         <div className="flex gap-2">
