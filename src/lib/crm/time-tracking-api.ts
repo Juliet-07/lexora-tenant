@@ -143,6 +143,14 @@ export const rejectTimeEntry = async (
   return unwrap(res);
 };
 
+export const setTimeEntryRate = async (
+  id: string,
+  rate: number,
+): Promise<TimeEntry> => {
+  const res = await api.patch(`/crm/time-entries/${id}/rate`, { rate });
+  return unwrap(res);
+};
+
 export const approveForBilling = async (id: string): Promise<TimeEntry> => {
   const res = await api.post(`/crm/time-entries/${id}/approve-for-billing`);
   return unwrap(res);

@@ -73,6 +73,7 @@ import {
   approveTimeEntry,
   rejectTimeEntry,
   approveForBilling,
+  setTimeEntryRate,
 } from "@/lib/crm/time-tracking-api";
 
 /** Internal notes + external correspondence in one thread. */
@@ -1195,6 +1196,23 @@ export function CaseTimeBillingTab({
     },
   });
 
+  const [ratingId, setRatingId] = useState<string | null>(null);
+  const [rateDraft, setRateDraft] = useState(0);
+  const rateMut = useMutation({
+    mutationFn: () => setTimeEntryRate(ratingId!, rateDraft),
+    onSuccess: () => {
+      invalidate();
+      setRatingId(null);
+      toast({ title: "Value allocated" });
+    },
+    onError: (err: any) =>
+      toast({
+        title: "Could not set rate",
+        description: err?.response?.data?.message,
+        variant: "destructive",
+      }),
+  });
+
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1230,10 +1248,20 @@ export function CaseTimeBillingTab({
                   </TableCell>
                   <TableCell className="text-sm">{e.hours}</TableCell>
                   <TableCell className="text-sm">
-                    {(e.hours * e.rate).toLocaleString(undefined, {
-                      style: "currency",
-                      currency: e.currency || "USD",
-                    })}
+                    <div className="flex items-center gap-1.5">
+                      {(e.hours * e.rate).toLocaleString(undefined, {
+                        style: "currency",
+                        currency: e.currency || "USD",
+                      })}
+                      {e.rate === 0 && (
+                        <Badge
+                          variant="outline"
+                          className="border-amber-200 bg-amber-100 text-[10px] text-amber-700"
+                        >
+                          No rate set
+                        </Badge>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell>
                     <Badge variant="outline" className={statusTone[e.status]}>
@@ -1244,30 +1272,47 @@ export function CaseTimeBillingTab({
                     {e.wipBillingStatus}
                   </TableCell>
                   <TableCell className="text-right">
-                    {e.status === "Submitted" && (
-                      <div className="flex justify-end gap-1">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => approveMut.mutate(e._id)}
-                        >
-                          Approve
-                        </Button>
+                    <div className="flex justify-end gap-1">
+                      {e.wipBillingStatus !== "Invoiced" && (
                         <Button
                           size="sm"
                           variant="ghost"
-                          onClick={() => setRejectingId(e._id)}
+                          onClick={() => {
+                            setRatingId(e._id);
+                            setRateDraft(e.rate);
+                          }}
                         >
-                          Reject
-                        </Button>
-                      </div>
-                    )}
-                    {e.status === "Approved" &&
-                      e.wipBillingStatus === "Unbilled" && (
-                        <Button size="sm" onClick={() => billMut.mutate(e._id)}>
-                          Approve for billing
+                          {e.rate === 0 ? "Set rate" : "Edit rate"}
                         </Button>
                       )}
+                      {e.status === "Submitted" && (
+                        <>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => approveMut.mutate(e._id)}
+                          >
+                            Approve
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => setRejectingId(e._id)}
+                          >
+                            Reject
+                          </Button>
+                        </>
+                      )}
+                      {e.status === "Approved" &&
+                        e.wipBillingStatus === "Unbilled" && (
+                          <Button
+                            size="sm"
+                            onClick={() => billMut.mutate(e._id)}
+                          >
+                            Approve for billing
+                          </Button>
+                        )}
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
@@ -1306,6 +1351,36 @@ export function CaseTimeBillingTab({
               onClick={() => rejectMut.mutate()}
             >
               Reject
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!ratingId} onOpenChange={(o) => !o && setRatingId(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Allocate value to this time</DialogTitle>
+          </DialogHeader>
+          <div>
+            <Label className="text-xs">Rate per hour</Label>
+            <Input
+              type="number"
+              min={0}
+              step="0.01"
+              value={rateDraft}
+              onChange={(e) => setRateDraft(Number(e.target.value))}
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              This sets the rate directly on this entry, independent of any rate
+              card. Locked once the entry is invoiced.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button
+              disabled={rateMut.isPending}
+              onClick={() => rateMut.mutate()}
+            >
+              Save
             </Button>
           </DialogFooter>
         </DialogContent>
