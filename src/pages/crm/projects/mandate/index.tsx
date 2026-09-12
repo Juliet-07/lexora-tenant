@@ -530,11 +530,11 @@ export default function Mandates() {
                   <TabsTrigger value="tasks">Tasks</TabsTrigger>
                   <TabsTrigger value="milestones">Milestones</TabsTrigger>
                   <TabsTrigger value="pl">Mandate P&amp;L</TabsTrigger>
-                  <TabsTrigger value="closure">Closure</TabsTrigger>
                   <TabsTrigger value="collab">Collaboration</TabsTrigger>
                   <TabsTrigger value="comms">Communications</TabsTrigger>
                   <TabsTrigger value="notes">Notes</TabsTrigger>
                   <TabsTrigger value="docs">Documents</TabsTrigger>
+                  <TabsTrigger value="closure">Closure</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="workspace" className="pt-4">

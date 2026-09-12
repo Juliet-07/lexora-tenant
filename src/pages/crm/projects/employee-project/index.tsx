@@ -29,6 +29,7 @@ import {
   fetchMyMandate,
   fetchMyTasks,
   fetchMandateBoardTasks,
+  fetchMyThreadUnreadCount,
 } from "@/lib/crm/mandates-api";
 import { ragClass, type MandateStage } from "@/lib/crm/mandates-api";
 
@@ -289,6 +290,14 @@ export function MyProjectDetail() {
     queryFn: () => fetchMandateBoardTasks(id as string),
     enabled: !!id,
   });
+  const { data: unreadCount = 0 } = useQuery({
+    queryKey: ["myThreadUnread", id],
+    queryFn: () => fetchMyThreadUnreadCount(id as string),
+    enabled: !!id,
+    // Keeps the tab indicator current even while the person is
+    // looking at other tabs and a new message comes in.
+    refetchInterval: 30_000,
+  });
 
   if (isLoading) {
     return (
@@ -408,7 +417,14 @@ export function MyProjectDetail() {
           <TabsTrigger value="time">Time</TabsTrigger>
           <TabsTrigger value="files">Files</TabsTrigger>
           <TabsTrigger value="activity">Activity</TabsTrigger>
-          <TabsTrigger value="collaboration">Collaboration</TabsTrigger>
+          <TabsTrigger value="collaboration" className="relative">
+            Collaboration
+            {unreadCount > 0 && (
+              <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-semibold text-destructive-foreground">
+                {unreadCount}
+              </span>
+            )}
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="my-tasks" className="mt-4">

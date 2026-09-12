@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -7,6 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   fetchMyCollabMessages,
   sendMyCollabMessage,
+  markMyThreadRead,
 } from "@/lib/crm/mandates-api";
 
 export function CollaborationTab({ mandateId }: { mandateId: string }) {
@@ -17,6 +18,17 @@ export function CollaborationTab({ mandateId }: { mandateId: string }) {
     queryFn: () => fetchMyCollabMessages(mandateId),
   });
   const [text, setText] = useState("");
+
+  // Opening this tab is what "reading" it means — mark read as soon
+  // as it mounts, and again whenever a new message arrives while
+  // it's already open.
+  useEffect(() => {
+    markMyThreadRead(mandateId).then(() =>
+      queryClient.invalidateQueries({
+        queryKey: ["myThreadUnread", mandateId],
+      }),
+    );
+  }, [mandateId, thread.length, queryClient]);
 
   const sendMut = useMutation({
     mutationFn: () => sendMyCollabMessage(mandateId, "You", text.trim()),

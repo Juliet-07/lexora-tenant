@@ -243,6 +243,27 @@ export const sendEmployeeMessage = async (
   return unwrap(res);
 };
 
+// Real unread count per employee thread on this mandate — keyed by
+// employee id, for a badge on each @mention recipient plus the
+// overall Collaboration tab indicator.
+export const fetchEmployeeThreadUnreadSummary = async (
+  mandateId: string,
+): Promise<Record<string, number>> => {
+  const res = await api.get(
+    `/crm/mandates/${mandateId}/employee-messages/unread-summary`,
+  );
+  return unwrap(res) ?? {};
+};
+
+export const markEmployeeThreadReadByTenant = async (
+  mandateId: string,
+  employeeUserId: string,
+): Promise<void> => {
+  await api.post(
+    `/crm/mandates/${mandateId}/employee-messages/${employeeUserId}/read`,
+  );
+};
+
 export const addMilestone = async (
   mandateId: string,
   name: string,
@@ -479,4 +500,17 @@ export const sendMyCollabMessage = async (
     body,
   });
   return unwrap(res);
+};
+
+export const fetchMyThreadUnreadCount = async (
+  mandateId: string,
+): Promise<number> => {
+  const res = await api.get(
+    `/crm/my-mandates/${mandateId}/messages/unread-count`,
+  );
+  return unwrap(res) ?? 0;
+};
+
+export const markMyThreadRead = async (mandateId: string): Promise<void> => {
+  await api.post(`/crm/my-mandates/${mandateId}/messages/read`);
 };
