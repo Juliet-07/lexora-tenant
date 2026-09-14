@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -49,6 +49,25 @@ import {
   toneFor,
   type ApiClient,
 } from "@/lib/client/clients-api";
+import { fetchMyProfile } from "@/lib/hr/hr-api";
+import {
+  fetchMyVendorApprovals,
+  fetchMyVendorApproval,
+  decideMyVendorApproval,
+  DD_CHECKLIST_LABELS,
+  vendorSpendYtd,
+  type Vendor,
+} from "@/lib/crm/vendor-api";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { useToast } from "@/hooks/use-toast";
+import { ClipboardCheck } from "lucide-react";
 
 const riskStyle: Record<string, string> = {
   low: "bg-success/10 text-success",
@@ -71,6 +90,24 @@ export default function AssignedClients() {
     queryKey: ["my-assigned-clients"],
     queryFn: fetchClients,
   });
+
+  // Gates the Vendors tab — only shown to a genuine Head of
+  // Department or Manager, matching what the backend actually
+  // enforces (a regular employee's approvals list is just empty).
+  const { data: profile } = useQuery({
+    queryKey: ["my-employee-profile"],
+    queryFn: fetchMyProfile,
+  });
+  const isApprover =
+    profile?.hierarchyRole === "manager" ||
+    profile?.hierarchyRole === "head_of_department";
+
+  const { data: vendorApprovals = { pending: [], approved: [] } } = useQuery({
+    queryKey: ["my-vendor-approvals"],
+    queryFn: fetchMyVendorApprovals,
+    enabled: isApprover,
+  });
+  const [selectedVendorId, setSelectedVendorId] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
     return clients.filter((c) => {
@@ -154,149 +191,236 @@ export default function AssignedClients() {
         <TabsList>
           <TabsTrigger value="clients">Clients</TabsTrigger>
           <TabsTrigger value="contacts">Contacts</TabsTrigger>
+          {isApprover && (
+            <TabsTrigger value="vendors">
+              Vendors
+              {vendorApprovals.pending.length > 0 && (
+                <span className="ml-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-semibold text-destructive-foreground">
+                  {vendorApprovals.pending.length}
+                </span>
+              )}
+            </TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value="clients" className="pt-4">
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex flex-col md:flex-row md:items-center gap-3 md:justify-between">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Users className="h-4 w-4 text-primary" />
-              Client list
-            </CardTitle>
-            <div className="flex flex-col sm:flex-row gap-2">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search name or email"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  className="pl-9 w-full sm:w-64 h-9"
-                />
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex flex-col md:flex-row md:items-center gap-3 md:justify-between">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Users className="h-4 w-4 text-primary" />
+                  Client list
+                </CardTitle>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search name or email"
+                      value={query}
+                      onChange={(e) => setQuery(e.target.value)}
+                      className="pl-9 w-full sm:w-64 h-9"
+                    />
+                  </div>
+                  <Select value={statusFilter} onValueChange={setStatusFilter}>
+                    <SelectTrigger className="w-full sm:w-36 h-9">
+                      <SelectValue placeholder="Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All status</SelectItem>
+                      <SelectItem value="active">Active</SelectItem>
+                      <SelectItem value="pending">Pending</SelectItem>
+                      <SelectItem value="suspended">Suspended</SelectItem>
+                      <SelectItem value="invited">Invited</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select value={riskFilter} onValueChange={setRiskFilter}>
+                    <SelectTrigger className="w-full sm:w-32 h-9">
+                      <SelectValue placeholder="Risk" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All risk</SelectItem>
+                      <SelectItem value="low">Low</SelectItem>
+                      <SelectItem value="medium">Medium</SelectItem>
+                      <SelectItem value="high">High</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-full sm:w-36 h-9">
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All status</SelectItem>
-                  <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="suspended">Suspended</SelectItem>
-                  <SelectItem value="invited">Invited</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select value={riskFilter} onValueChange={setRiskFilter}>
-                <SelectTrigger className="w-full sm:w-32 h-9">
-                  <SelectValue placeholder="Risk" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All risk</SelectItem>
-                  <SelectItem value="low">Low</SelectItem>
-                  <SelectItem value="medium">Medium</SelectItem>
-                  <SelectItem value="high">High</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <div className="space-y-2">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <Skeleton key={i} className="h-12 w-full" />
-              ))}
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Client</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Risk</TableHead>
-                  <TableHead>KYC</TableHead>
-                  <TableHead className="text-right">Country</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filtered.map((c) => (
-                  <TableRow
-                    key={c._id}
-                    className="cursor-pointer hover:bg-accent/40"
-                    onClick={() => setSelected(c)}
-                  >
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        {c.classifications === "corporate" ? (
-                          <Building2 className="h-4 w-4 text-muted-foreground" />
-                        ) : (
-                          <Users className="h-4 w-4 text-muted-foreground" />
-                        )}
-                        <div>
-                          <p className="font-medium text-sm">
-                            {displayName(c)}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {c.email}
-                          </p>
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell className="capitalize text-sm">
-                      {prettyLabel(c.classifications)}
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant="outline"
-                        className={`text-[10px] ${toneFor(c.status)}`}
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <div className="space-y-2">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <Skeleton key={i} className="h-12 w-full" />
+                  ))}
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Client</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Risk</TableHead>
+                      <TableHead>KYC</TableHead>
+                      <TableHead className="text-right">Country</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filtered.map((c) => (
+                      <TableRow
+                        key={c._id}
+                        className="cursor-pointer hover:bg-accent/40"
+                        onClick={() => setSelected(c)}
                       >
-                        {prettyLabel(c.status)}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        className={`text-[10px] capitalize ${riskStyle[(c.riskLevel ?? "").toLowerCase()] ?? "bg-muted text-muted-foreground"}`}
-                      >
-                        {c.riskLevel ?? "Unrated"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant="outline"
-                        className={`text-[10px] ${toneFor(c.kycStatus)}`}
-                      >
-                        {prettyLabel(c.kycStatus)}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right text-sm text-muted-foreground">
-                      {c.country ?? "—"}
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {filtered.length === 0 && (
-                  <TableRow>
-                    <TableCell
-                      colSpan={6}
-                      className="text-center text-sm text-muted-foreground py-8"
-                    >
-                      {clients.length === 0
-                        ? "No clients assigned to you yet."
-                        : "No clients match your filters."}
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            {c.classifications === "corporate" ? (
+                              <Building2 className="h-4 w-4 text-muted-foreground" />
+                            ) : (
+                              <Users className="h-4 w-4 text-muted-foreground" />
+                            )}
+                            <div>
+                              <p className="font-medium text-sm">
+                                {displayName(c)}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {c.email}
+                              </p>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell className="capitalize text-sm">
+                          {prettyLabel(c.classifications)}
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant="outline"
+                            className={`text-[10px] ${toneFor(c.status)}`}
+                          >
+                            {prettyLabel(c.status)}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            className={`text-[10px] capitalize ${riskStyle[(c.riskLevel ?? "").toLowerCase()] ?? "bg-muted text-muted-foreground"}`}
+                          >
+                            {c.riskLevel ?? "Unrated"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant="outline"
+                            className={`text-[10px] ${toneFor(c.kycStatus)}`}
+                          >
+                            {prettyLabel(c.kycStatus)}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right text-sm text-muted-foreground">
+                          {c.country ?? "—"}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {filtered.length === 0 && (
+                      <TableRow>
+                        <TableCell
+                          colSpan={6}
+                          className="text-center text-sm text-muted-foreground py-8"
+                        >
+                          {clients.length === 0
+                            ? "No clients assigned to you yet."
+                            : "No clients match your filters."}
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="contacts" className="pt-4">
           <MyContactsPanel />
         </TabsContent>
+
+        {isApprover && (
+          <TabsContent value="vendors" className="pt-4 space-y-6">
+            <div>
+              <h3 className="text-sm font-semibold flex items-center gap-1.5 mb-2">
+                <ClipboardCheck className="h-4 w-4" /> Needs your approval
+              </h3>
+              {vendorApprovals.pending.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-4">
+                  Nothing pending right now.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {vendorApprovals.pending.map((v) => (
+                    <button
+                      key={v._id}
+                      onClick={() => setSelectedVendorId(v._id)}
+                      className="w-full flex items-center justify-between rounded-lg border border-border/60 p-3 text-left hover:border-primary/40"
+                    >
+                      <div>
+                        <p className="text-sm font-semibold">{v.legalName}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {v.category} · Requested{" "}
+                          {v.approvalRequestedAt &&
+                            new Date(
+                              v.approvalRequestedAt,
+                            ).toLocaleDateString()}
+                        </p>
+                      </div>
+                      <Badge className="bg-warning/10 text-warning">
+                        Pending
+                      </Badge>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div>
+              <h3 className="text-sm font-semibold flex items-center gap-1.5 mb-2">
+                <ShieldCheck className="h-4 w-4" /> Approved by you
+              </h3>
+              {vendorApprovals.approved.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-4">
+                  You haven't approved any vendors yet.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {vendorApprovals.approved.map((v) => (
+                    <button
+                      key={v._id}
+                      onClick={() => setSelectedVendorId(v._id)}
+                      className="w-full flex items-center justify-between rounded-lg border border-border/60 p-3 text-left hover:border-primary/40"
+                    >
+                      <div>
+                        <p className="text-sm font-semibold">{v.legalName}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {v.category} · Approved{" "}
+                          {v.approvalDecidedAt &&
+                            new Date(v.approvalDecidedAt).toLocaleDateString()}
+                        </p>
+                      </div>
+                      <Badge className="bg-success/10 text-success">
+                        Active
+                      </Badge>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </TabsContent>
+        )}
       </Tabs>
+
+      <VendorApprovalDialog
+        vendorId={selectedVendorId}
+        onClose={() => setSelectedVendorId(null)}
+      />
 
       <Sheet open={!!selected} onOpenChange={(o) => !o && setSelected(null)}>
         <SheetContent className="sm:max-w-lg overflow-y-auto">
@@ -367,5 +491,163 @@ export default function AssignedClients() {
         </SheetContent>
       </Sheet>
     </div>
+  );
+}
+
+// Real detail view for a vendor an employee is (or was) the
+// approver on — same underlying data an admin sees, scoped by the
+// backend to only what this employee is authorized to view.
+function VendorApprovalDialog({
+  vendorId,
+  onClose,
+}: {
+  vendorId: string | null;
+  onClose: () => void;
+}) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const { data: vendor } = useQuery({
+    queryKey: ["my-vendor-approval", vendorId],
+    queryFn: () => fetchMyVendorApproval(vendorId!),
+    enabled: !!vendorId,
+  });
+
+  const [decisionOpen, setDecisionOpen] = useState<
+    "approved" | "rejected" | null
+  >(null);
+  const [decisionNote, setDecisionNote] = useState("");
+
+  const decideMut = useMutation({
+    mutationFn: () =>
+      decideMyVendorApproval(vendorId!, decisionOpen!, decisionNote.trim()),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["my-vendor-approvals"] });
+      queryClient.invalidateQueries({
+        queryKey: ["my-vendor-approval", vendorId],
+      });
+      setDecisionOpen(null);
+      setDecisionNote("");
+      toast({
+        title:
+          decisionOpen === "approved" ? "Vendor approved" : "Vendor rejected",
+      });
+      onClose();
+    },
+    onError: (err: any) =>
+      toast({
+        title: "Could not record decision",
+        description: err?.response?.data?.message,
+        variant: "destructive",
+      }),
+  });
+
+  if (!vendor) return null;
+  const doneCount = vendor.ddItems.filter((d) => d.done).length;
+
+  return (
+    <>
+      <Dialog open={!!vendor} onOpenChange={(o) => !o && onClose()}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{vendor.legalName}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="rounded-lg border border-border/60 divide-y">
+              {[
+                ["Category", vendor.category],
+                ["Jurisdiction", vendor.jurisdiction],
+                ["Contact", `${vendor.contactName} (${vendor.contactEmail})`],
+                [
+                  "Annual value",
+                  `${vendor.currency} ${vendor.annualValue.toLocaleString()}`,
+                ],
+                ["Risk rating", vendor.risk],
+              ].map(([k, v]) => (
+                <div key={k} className="flex justify-between px-3 py-1.5">
+                  <span className="text-xs text-muted-foreground">{k}</span>
+                  <span className="text-xs font-medium text-right">{v}</span>
+                </div>
+              ))}
+            </div>
+
+            {vendor.justification && (
+              <div>
+                <p className="text-[11px] font-semibold uppercase text-muted-foreground">
+                  Business justification
+                </p>
+                <p className="text-sm mt-1">{vendor.justification}</p>
+              </div>
+            )}
+
+            <div>
+              <p className="text-[11px] font-semibold uppercase text-muted-foreground mb-1">
+                Due diligence — {doneCount}/{vendor.ddItems.length} complete
+              </p>
+              {vendor.ddItems.map((d) => (
+                <div key={d._id} className="flex items-center gap-2 py-1">
+                  <ShieldCheck
+                    className={`h-3.5 w-3.5 shrink-0 ${d.done ? "text-success" : "text-muted-foreground"}`}
+                  />
+                  <span className="text-xs">{d.label}</span>
+                </div>
+              ))}
+            </div>
+
+            {vendor.approvalStatus === "pending" ? (
+              <div className="flex gap-2 pt-2">
+                <Button
+                  className="flex-1"
+                  onClick={() => setDecisionOpen("approved")}
+                >
+                  Approve
+                </Button>
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => setDecisionOpen("rejected")}
+                >
+                  Reject
+                </Button>
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground pt-2">
+                {vendor.approvalStatus === "approved"
+                  ? "You've already approved this vendor."
+                  : "This vendor was rejected."}
+                {vendor.approvalDecisionNote &&
+                  ` — ${vendor.approvalDecisionNote}`}
+              </p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!decisionOpen}
+        onOpenChange={(o) => !o && setDecisionOpen(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {decisionOpen === "approved" ? "Approve vendor" : "Reject vendor"}
+            </DialogTitle>
+          </DialogHeader>
+          <Textarea
+            placeholder="Decision note (optional)…"
+            value={decisionNote}
+            onChange={(e) => setDecisionNote(e.target.value)}
+          />
+          <DialogFooter>
+            <Button
+              variant={decisionOpen === "rejected" ? "destructive" : "default"}
+              disabled={decideMut.isPending}
+              onClick={() => decideMut.mutate()}
+            >
+              Confirm {decisionOpen}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

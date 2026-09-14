@@ -300,3 +300,31 @@ export const addVendorSpend = async (
   amount: number,
 ): Promise<Vendor> =>
   unwrap(await api.post(`/crm/vendors/${vendorId}/spend`, { month, amount }));
+
+// ── Employee-side — vendors this HOD/Manager needs to approve, and
+// ones they've already approved. Never the full registry. ────────
+export interface MyVendorApprovals {
+  pending: Vendor[];
+  approved: Vendor[];
+}
+
+export const fetchMyVendorApprovals = async (): Promise<MyVendorApprovals> => {
+  const res = await api.get("/crm/my-vendor-approvals");
+  const d = unwrap(res);
+  return d && typeof d === "object" ? d : { pending: [], approved: [] };
+};
+
+export const fetchMyVendorApproval = async (id: string): Promise<Vendor> =>
+  unwrap(await api.get(`/crm/my-vendor-approvals/${id}`));
+
+export const decideMyVendorApproval = async (
+  id: string,
+  decision: "approved" | "rejected",
+  note?: string,
+): Promise<Vendor> =>
+  unwrap(
+    await api.post(`/crm/my-vendor-approvals/${id}/decide`, {
+      decision,
+      note,
+    }),
+  );

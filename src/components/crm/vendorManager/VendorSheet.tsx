@@ -527,22 +527,35 @@ export function VendorSheet({
                   <p className="text-[10px] text-primary mt-1">{n.author}</p>
                 </div>
               ))}
-              <div>
-                <p className="text-[11px] font-semibold uppercase text-muted-foreground mb-2">
-                  Activity
+              {!vendor.notes.length && (
+                <p className="text-sm text-muted-foreground text-center py-6">
+                  No notes yet.
                 </p>
-                {vendor.activity.map((a) => (
-                  <div
-                    key={a._id}
-                    className="flex gap-2 py-1.5 border-b last:border-0"
-                  >
-                    <span className="text-xs flex-1">{a.text}</span>
-                    <span className="text-[10px] text-muted-foreground">
-                      {new Date(a.at).toLocaleDateString()}
-                    </span>
-                  </div>
-                ))}
-              </div>
+              )}
+            </TabsContent>
+
+            <TabsContent value="activity" className="mt-4 space-y-1">
+              <p className="text-xs text-muted-foreground mb-2">
+                A running record of everything that's happened on this vendor —
+                status changes, evidence uploads, approvals, and contract
+                events.
+              </p>
+              {vendor.activity.map((a) => (
+                <div
+                  key={a._id}
+                  className="flex gap-2 py-1.5 border-b last:border-0"
+                >
+                  <span className="text-xs flex-1">{a.text}</span>
+                  <span className="text-[10px] text-muted-foreground">
+                    {new Date(a.at).toLocaleDateString()}
+                  </span>
+                </div>
+              ))}
+              {!vendor.activity.length && (
+                <p className="text-sm text-muted-foreground text-center py-6">
+                  No activity recorded yet.
+                </p>
+              )}
             </TabsContent>
           </Tabs>
         </SheetContent>
