@@ -12,6 +12,36 @@ export type LeadStatus = "open" | "converted" | "lost";
 export type ClientPipelineStage = "active" | "retained" | "past";
 export type ClientType = "individual" | "corporate" | "partner" | "trust";
 
+export type LeadTemperature = "hot" | "warm" | "cold";
+export type LeadQualification = "unqualified" | "mql" | "sql";
+export type LeadMeetingMode = "virtual" | "physical";
+export type LeadMeetingStatus = "scheduled" | "completed" | "cancelled";
+
+export interface LeadMeeting {
+  _id: string;
+  title: string;
+  date: string;
+  time: string;
+  mode: LeadMeetingMode;
+  location: string;
+  attendees: string;
+  agenda: string;
+  outcome: string;
+  status: LeadMeetingStatus;
+}
+
+export interface LeadDocumentEntry {
+  _id: string;
+  name: string;
+  fileUrl: string;
+  size: number;
+  mimeType: string;
+  message: string;
+  sentTo: string;
+  sentAt: string;
+  sentBy: string;
+}
+
 export interface Lead {
   _id: string;
   tenantId: string;
@@ -25,6 +55,10 @@ export interface Lead {
   stage: LeadStage;
   status: LeadStatus;
   notes: string | null;
+  temperature: LeadTemperature;
+  qualification: LeadQualification;
+  meetings: LeadMeeting[];
+  documents: LeadDocumentEntry[];
   assignedToUserId: string | null;
   reachedProspectAt: string | null;
   convertedAt: string | null;
@@ -115,6 +149,8 @@ export interface UpdateLeadPayload {
   source?: LeadSource;
   sourceNote?: string;
   notes?: string;
+  temperature?: LeadTemperature;
+  qualification?: LeadQualification;
   assignedToUserId?: string;
 }
 
@@ -167,4 +203,68 @@ export const moveClientStage = async (
   reason?: string,
 ): Promise<void> => {
   await api.patch(`/crm/clients/${pipelineId}/stage`, { stage, reason });
+};
+
+// ── Meetings — scheduling genuinely emails the lead ───────────────
+export const scheduleLeadMeeting = async (
+  leadId: string,
+  dto: {
+    title: string;
+    date: string;
+    time?: string;
+    mode?: LeadMeetingMode;
+    location?: string;
+    attendees?: string;
+    agenda?: string;
+  },
+): Promise<Lead> => {
+  const res = await api.post(`/crm/leads/${leadId}/meetings`, dto);
+  return res.data?.data ?? res.data;
+};
+
+export const completeLeadMeeting = async (
+  leadId: string,
+  meetingId: string,
+  outcome: string,
+): Promise<Lead> => {
+  const res = await api.patch(
+    `/crm/leads/${leadId}/meetings/${meetingId}/complete`,
+    { outcome },
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const cancelLeadMeeting = async (
+  leadId: string,
+  meetingId: string,
+): Promise<Lead> => {
+  const res = await api.patch(
+    `/crm/leads/${leadId}/meetings/${meetingId}/cancel`,
+  );
+  return res.data?.data ?? res.data;
+};
+
+// ── Documents — sent by real email, with a real attachment ────────
+export const fetchLeadDocuments = async (
+  leadId: string,
+): Promise<LeadDocumentEntry[]> => {
+  const res = await api.get(`/crm/leads/${leadId}/documents`);
+  const d = res.data?.data ?? res.data;
+  return Array.isArray(d) ? d : [];
+};
+
+export const sendLeadDocument = async (
+  leadId: string,
+  file: File,
+  message?: string,
+): Promise<Lead> => {
+  const formData = new FormData();
+  formData.append("file", file);
+  const params = message ? `?message=${encodeURIComponent(message)}` : "";
+  const res = await api.post(
+    `/crm/leads/${leadId}/documents${params}`,
+    formData,
+    { headers: { "Content-Type": "multipart/form-data" } },
+  );
+  return res.data?.data ?? res.data;
 };

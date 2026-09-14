@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -158,6 +159,7 @@ const COLUMNS: {
 export default function Pipeline() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   const [dragging, setDragging] = useState<{
     id: string;
@@ -756,7 +758,11 @@ export default function Pipeline() {
                             setDragging(null);
                             setDragOver(null);
                           }}
-                          onClick={() => isLead && setSelectedLead(it)}
+                          onClick={() =>
+                            isLead
+                              ? setSelectedLead(it)
+                              : navigate(`/clients/${it.clientUserId}`)
+                          }
                           className={`relative rounded-lg bg-background p-3 border border-border/50 hover:border-primary/50 cursor-grab active:cursor-grabbing transition-opacity group ${
                             dragging?.id === id ? "opacity-40" : ""
                           }`}
@@ -902,7 +908,11 @@ export default function Pipeline() {
                   ]
                     .sort((a, b) => b.projectCount - a.projectCount)
                     .map((c) => (
-                      <TableRow key={c.pipelineId}>
+                      <TableRow
+                        key={c.pipelineId}
+                        className="cursor-pointer hover:bg-muted/50"
+                        onClick={() => navigate(`/clients/${c.clientUserId}`)}
+                      >
                         <TableCell>
                           <p className="font-medium text-sm">{c.name}</p>
                           <p className="text-xs text-muted-foreground">

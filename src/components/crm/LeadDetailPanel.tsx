@@ -32,20 +32,28 @@ import {
   MessageSquarePlus,
   StickyNote,
   Pencil,
+  FileText,
+  Upload,
+  Thermometer,
+  Target,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
   updateLead,
+  moveLeadStage,
+  scheduleLeadMeeting,
+  completeLeadMeeting,
+  cancelLeadMeeting,
+  sendLeadDocument,
   type Lead,
   type LeadSource,
+  type LeadTemperature,
+  type LeadQualification,
 } from "@/lib/crm/crm-pipeline-api";
 import {
   addLeadNote,
   buildTimeline,
-  cancelMeeting,
-  completeMeeting,
   logComm,
-  scheduleMeeting,
   useLeadWorkspace,
   type CommChannel,
 } from "@/lib/crm/leadWorkspaceStore";
@@ -142,9 +150,127 @@ export function LeadDetailPanel({
       }),
   });
 
+  const advanceStageMut = useMutation({
+    mutationFn: () => moveLeadStage(lead!._id, "prospect"),
+    onSuccess: (updated) => {
+      queryClient.invalidateQueries({ queryKey: ["crm-leads"] });
+      onUpdate?.(updated);
+      toast({ title: "Moved to Prospect" });
+    },
+    onError: (err: any) =>
+      toast({
+        title: "Could not advance stage",
+        description: err?.response?.data?.message,
+        variant: "destructive",
+      }),
+  });
+
+  const fieldMut = useMutation({
+    mutationFn: (dto: {
+      temperature?: LeadTemperature;
+      qualification?: LeadQualification;
+    }) => updateLead(lead!._id, dto),
+    onSuccess: (updated) => {
+      queryClient.invalidateQueries({ queryKey: ["crm-leads"] });
+      onUpdate?.(updated);
+    },
+    onError: (err: any) =>
+      toast({
+        title: "Could not update",
+        description: err?.response?.data?.message,
+        variant: "destructive",
+      }),
+  });
+
+  const scheduleMeetingMut = useMutation({
+    mutationFn: () => scheduleLeadMeeting(lead!._id, { ...meeting }),
+    onSuccess: (updated) => {
+      queryClient.invalidateQueries({ queryKey: ["crm-leads"] });
+      onUpdate?.(updated);
+      setMeeting({
+        title: "",
+        date: "",
+        time: "",
+        mode: "virtual",
+        location: "",
+        attendees: "",
+        agenda: "",
+      });
+      toast({
+        title: "Meeting scheduled",
+        description: lead?.contactEmail
+          ? `Invite emailed to ${lead.contactEmail}.`
+          : "No contact email on file — the lead wasn't emailed.",
+      });
+    },
+    onError: (err: any) =>
+      toast({
+        title: "Could not schedule meeting",
+        description: err?.response?.data?.message,
+        variant: "destructive",
+      }),
+  });
+
+  const completeMeetingMut = useMutation({
+    mutationFn: ({
+      meetingId,
+      outcome,
+    }: {
+      meetingId: string;
+      outcome: string;
+    }) => completeLeadMeeting(lead!._id, meetingId, outcome),
+    onSuccess: (updated) => {
+      queryClient.invalidateQueries({ queryKey: ["crm-leads"] });
+      onUpdate?.(updated);
+      setOutcome("");
+      setOutcomeFor(null);
+    },
+  });
+
+  const cancelMeetingMut = useMutation({
+    mutationFn: (meetingId: string) => cancelLeadMeeting(lead!._id, meetingId),
+    onSuccess: (updated) => {
+      queryClient.invalidateQueries({ queryKey: ["crm-leads"] });
+      onUpdate?.(updated);
+    },
+  });
+
+  const [docMessage, setDocMessage] = useState("");
+  const sendDocMut = useMutation({
+    mutationFn: (file: File) =>
+      sendLeadDocument(lead!._id, file, docMessage.trim()),
+    onSuccess: (updated) => {
+      queryClient.invalidateQueries({ queryKey: ["crm-leads"] });
+      onUpdate?.(updated);
+      setDocMessage("");
+      toast({
+        title: "Document sent",
+        description: `Emailed to ${lead?.contactEmail}.`,
+      });
+    },
+    onError: (err: any) =>
+      toast({
+        title: "Could not send document",
+        description: err?.response?.data?.message,
+        variant: "destructive",
+      }),
+  });
+
   if (!lead) return null;
   const title = lead.contactName || lead.companyName || "Untitled lead";
-  const timeline = buildTimeline(ws);
+  // Comms and notes still come from the local workspace; meetings
+  // are now real, so they're merged in separately rather than
+  // through the mock's own (now-unused) meeting tracking.
+  const mockTimeline = buildTimeline(ws).filter((t) => t.kind !== "meeting");
+  const meetingTimeline = lead.meetings.map((m) => ({
+    id: m._id,
+    at: `${m.date}T${m.time || "00:00"}:00`,
+    kind: "meeting" as const,
+    text: `${m.status === "completed" ? "Completed" : m.status === "cancelled" ? "Cancelled" : "Scheduled"} meeting — ${m.title}`,
+  }));
+  const timeline = [...mockTimeline, ...meetingTimeline].sort((a, b) =>
+    a.at < b.at ? 1 : -1,
+  );
 
   return (
     <Sheet open={!!lead} onOpenChange={(o) => !o && onClose()}>
@@ -158,10 +284,11 @@ export function LeadDetailPanel({
         </SheetHeader>
 
         <Tabs defaultValue="overview" className="mt-4">
-          <TabsList className="w-full grid grid-cols-5">
+          <TabsList className="w-full grid grid-cols-6">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="comms">Comms</TabsTrigger>
             <TabsTrigger value="meetings">Meetings</TabsTrigger>
+            <TabsTrigger value="documents">Documents</TabsTrigger>
             <TabsTrigger value="notes">Notes</TabsTrigger>
             <TabsTrigger value="activity">Activity</TabsTrigger>
           </TabsList>
@@ -173,6 +300,51 @@ export function LeadDetailPanel({
                 <Pencil className="mr-1.5 h-3.5 w-3.5" /> Edit details
               </Button>
             </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="flex items-center gap-1.5 text-xs">
+                  <Thermometer className="h-3.5 w-3.5" /> Temperature
+                </Label>
+                <Select
+                  value={lead.temperature}
+                  onValueChange={(v) =>
+                    fieldMut.mutate({ temperature: v as LeadTemperature })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="hot">Hot</SelectItem>
+                    <SelectItem value="warm">Warm</SelectItem>
+                    <SelectItem value="cold">Cold</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="flex items-center gap-1.5 text-xs">
+                  <Target className="h-3.5 w-3.5" /> Qualification
+                </Label>
+                <Select
+                  value={lead.qualification}
+                  onValueChange={(v) =>
+                    fieldMut.mutate({ qualification: v as LeadQualification })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="unqualified">Unqualified</SelectItem>
+                    <SelectItem value="mql">
+                      Marketing Qualified (MQL)
+                    </SelectItem>
+                    <SelectItem value="sql">Sales Qualified (SQL)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
             <div className="rounded-lg border border-border/60 divide-y">
               {[
                 ["Organisation", lead.companyName ?? "—"],
@@ -206,9 +378,19 @@ export function LeadDetailPanel({
 
             {lead.status === "open" && (
               <div className="flex gap-2">
-                <Button className="flex-1" onClick={() => onConvert(lead)}>
-                  Convert to client
-                </Button>
+                {lead.stage === "lead" ? (
+                  <Button
+                    className="flex-1"
+                    disabled={advanceStageMut.isPending}
+                    onClick={() => advanceStageMut.mutate()}
+                  >
+                    Convert to prospect
+                  </Button>
+                ) : (
+                  <Button className="flex-1" onClick={() => onConvert(lead)}>
+                    Convert to client
+                  </Button>
+                )}
                 <Button
                   variant="outline"
                   className="flex-1"
@@ -382,32 +564,27 @@ export function LeadDetailPanel({
               />
               <Button
                 size="sm"
+                disabled={scheduleMeetingMut.isPending}
                 onClick={() => {
                   if (!meeting.title.trim() || !meeting.date) return;
-                  scheduleMeeting(lead._id, { ...meeting });
-                  setMeeting({
-                    title: "",
-                    date: "",
-                    time: "",
-                    mode: "virtual",
-                    location: "",
-                    attendees: "",
-                    agenda: "",
-                  });
+                  scheduleMeetingMut.mutate();
                 }}
               >
-                <CalendarPlus className="h-4 w-4 mr-1" /> Schedule meeting
+                <CalendarPlus className="h-4 w-4 mr-1" />
+                {scheduleMeetingMut.isPending
+                  ? "Scheduling…"
+                  : "Schedule meeting"}
               </Button>
             </div>
 
-            {ws.meetings.length === 0 && (
+            {lead.meetings.length === 0 && (
               <p className="text-sm text-muted-foreground text-center py-6">
                 No meetings scheduled yet.
               </p>
             )}
-            {ws.meetings.map((m) => (
+            {lead.meetings.map((m) => (
               <div
-                key={m.id}
+                key={m._id}
                 className="rounded-lg border border-border/60 p-3 space-y-1"
               >
                 <div className="flex items-center justify-between gap-2">
@@ -443,7 +620,7 @@ export function LeadDetailPanel({
                 )}
                 {m.status === "scheduled" && (
                   <div className="flex gap-2 pt-1">
-                    {outcomeFor === m.id ? (
+                    {outcomeFor === m._id ? (
                       <div className="flex-1 space-y-2">
                         <Textarea
                           rows={2}
@@ -453,11 +630,13 @@ export function LeadDetailPanel({
                         />
                         <Button
                           size="sm"
-                          onClick={() => {
-                            completeMeeting(lead._id, m.id, outcome.trim());
-                            setOutcome("");
-                            setOutcomeFor(null);
-                          }}
+                          disabled={completeMeetingMut.isPending}
+                          onClick={() =>
+                            completeMeetingMut.mutate({
+                              meetingId: m._id,
+                              outcome: outcome.trim(),
+                            })
+                          }
                         >
                           Save outcome
                         </Button>
@@ -467,14 +646,14 @@ export function LeadDetailPanel({
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => setOutcomeFor(m.id)}
+                          onClick={() => setOutcomeFor(m._id)}
                         >
                           Mark completed
                         </Button>
                         <Button
                           size="sm"
                           variant="ghost"
-                          onClick={() => cancelMeeting(lead._id, m.id)}
+                          onClick={() => cancelMeetingMut.mutate(m._id)}
                         >
                           Cancel
                         </Button>
@@ -482,6 +661,68 @@ export function LeadDetailPanel({
                     )}
                   </div>
                 )}
+              </div>
+            ))}
+          </TabsContent>
+
+          {/* Documents */}
+          <TabsContent value="documents" className="mt-4 space-y-3">
+            <div className="rounded-lg border border-border/60 p-3 space-y-2">
+              <p className="text-xs text-muted-foreground">
+                Send a proposal, company profile, or any other document — it's
+                emailed to the lead with the file attached.
+              </p>
+              <Textarea
+                rows={2}
+                placeholder="A short message to include (optional)…"
+                value={docMessage}
+                onChange={(e) => setDocMessage(e.target.value)}
+              />
+              <label>
+                <input
+                  type="file"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) sendDocMut.mutate(file);
+                    e.target.value = "";
+                  }}
+                />
+                <span className="inline-flex h-9 cursor-pointer items-center rounded-md border border-input px-3 text-sm font-medium hover:bg-accent">
+                  <Upload className="h-4 w-4 mr-1.5" />
+                  {sendDocMut.isPending ? "Sending…" : "Choose file & send"}
+                </span>
+              </label>
+              {!lead.contactEmail && (
+                <p className="text-xs text-destructive">
+                  This lead has no contact email on file — add one under
+                  Overview before sending a document.
+                </p>
+              )}
+            </div>
+
+            {lead.documents.length === 0 && (
+              <p className="text-sm text-muted-foreground text-center py-6">
+                No documents sent yet.
+              </p>
+            )}
+            {lead.documents.map((d) => (
+              <div
+                key={d._id}
+                className="rounded-lg border border-border/60 p-3 flex items-start gap-3"
+              >
+                <FileText className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
+                <div className="flex-1">
+                  <p className="text-sm font-semibold">{d.name}</p>
+                  {d.message && (
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {d.message}
+                    </p>
+                  )}
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    Sent to {d.sentTo} · {new Date(d.sentAt).toLocaleString()}
+                  </p>
+                </div>
               </div>
             ))}
           </TabsContent>
