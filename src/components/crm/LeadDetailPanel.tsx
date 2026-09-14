@@ -258,11 +258,18 @@ export function LeadDetailPanel({
 
   if (!lead) return null;
   const title = lead.contactName || lead.companyName || "Untitled lead";
+  // Leads created before meetings/documents/temperature/qualification
+  // existed on this schema can come back missing these keys entirely
+  // (schema defaults don't retroactively apply to already-stored
+  // documents) — always fall back to safe values rather than assume
+  // every lead has the current shape.
+  const meetings = lead.meetings ?? [];
+  const documents = lead.documents ?? [];
   // Comms and notes still come from the local workspace; meetings
   // are now real, so they're merged in separately rather than
   // through the mock's own (now-unused) meeting tracking.
   const mockTimeline = buildTimeline(ws).filter((t) => t.kind !== "meeting");
-  const meetingTimeline = lead.meetings.map((m) => ({
+  const meetingTimeline = meetings.map((m) => ({
     id: m._id,
     at: `${m.date}T${m.time || "00:00"}:00`,
     kind: "meeting" as const,
@@ -306,7 +313,7 @@ export function LeadDetailPanel({
                   <Thermometer className="h-3.5 w-3.5" /> Temperature
                 </Label>
                 <Select
-                  value={lead.temperature}
+                  value={lead.temperature ?? "warm"}
                   onValueChange={(v) =>
                     fieldMut.mutate({ temperature: v as LeadTemperature })
                   }
@@ -326,7 +333,7 @@ export function LeadDetailPanel({
                   <Target className="h-3.5 w-3.5" /> Qualification
                 </Label>
                 <Select
-                  value={lead.qualification}
+                  value={lead.qualification ?? "unqualified"}
                   onValueChange={(v) =>
                     fieldMut.mutate({ qualification: v as LeadQualification })
                   }
@@ -577,12 +584,12 @@ export function LeadDetailPanel({
               </Button>
             </div>
 
-            {lead.meetings.length === 0 && (
+            {meetings.length === 0 && (
               <p className="text-sm text-muted-foreground text-center py-6">
                 No meetings scheduled yet.
               </p>
             )}
-            {lead.meetings.map((m) => (
+            {meetings.map((m) => (
               <div
                 key={m._id}
                 className="rounded-lg border border-border/60 p-3 space-y-1"
@@ -701,12 +708,12 @@ export function LeadDetailPanel({
               )}
             </div>
 
-            {lead.documents.length === 0 && (
+            {documents.length === 0 && (
               <p className="text-sm text-muted-foreground text-center py-6">
                 No documents sent yet.
               </p>
             )}
-            {lead.documents.map((d) => (
+            {documents.map((d) => (
               <div
                 key={d._id}
                 className="rounded-lg border border-border/60 p-3 flex items-start gap-3"

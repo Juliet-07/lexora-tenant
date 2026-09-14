@@ -55,10 +55,10 @@ export interface Lead {
   stage: LeadStage;
   status: LeadStatus;
   notes: string | null;
-  temperature: LeadTemperature;
-  qualification: LeadQualification;
-  meetings: LeadMeeting[];
-  documents: LeadDocumentEntry[];
+  temperature?: LeadTemperature;
+  qualification?: LeadQualification;
+  meetings?: LeadMeeting[];
+  documents?: LeadDocumentEntry[];
   assignedToUserId: string | null;
   reachedProspectAt: string | null;
   convertedAt: string | null;
