@@ -100,8 +100,12 @@ export interface Contract {
   owner: string;
   clientId: string | null;
   // Real marker set at generation time — distinguishes a contract
-  // issued as part of KYC onboarding from an ordinary CRM contract.
-  origin?: "crm" | "kyc_onboarding";
+  // issued as part of KYC onboarding or vendor management from an
+  // ordinary CRM contract.
+  origin?: "crm" | "kyc_onboarding" | "vendor";
+  // Real link back to the vendor this contract is with — set only
+  // by the vendor-management flow.
+  vendorId?: string | null;
   mandateId: string | null;
   mandateName: string;
   rounds: NegotiationRound[];
@@ -801,6 +805,7 @@ export const generateContractFromTemplate = async (dto: {
   title: string;
   type: ContractType;
   clientId?: string;
+  vendorId?: string;
   counterparty?: string;
   counterpartyEmail?: string;
   value?: number;
@@ -811,6 +816,16 @@ export const generateContractFromTemplate = async (dto: {
   mandateName?: string;
 }): Promise<SignableContract> =>
   unwrap(await api.post("/tools/contracts/generate-from-template", dto));
+
+// A single vendor's own contracts — the real filtered list, not the
+// tenant's whole CRM contract book.
+export const fetchVendorContracts = async (
+  vendorId: string,
+): Promise<SignableContract[]> => {
+  const res = await api.get(`/tools/contracts/vendor/${vendorId}`);
+  const d = unwrap(res);
+  return Array.isArray(d) ? d : [];
+};
 
 // Sending emails a real PDF attachment of the contract-as-it-stands
 // alongside the signing link, server-side.

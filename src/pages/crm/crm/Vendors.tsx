@@ -34,7 +34,6 @@ import {
 import {
   fetchVendors,
   DD_CHECKLIST_LABELS,
-  activeContract,
   daysUntil,
   vendorSpendYtd,
   SPEND_MONTHS,
@@ -44,6 +43,7 @@ import {
   type VendorRisk,
   type VendorStatus,
 } from "@/lib/crm/vendor-api";
+import { fetchContracts, type SignableContract } from "@/lib/crm/tools-api";
 import { VendorSheet } from "@/components/crm/vendorManager/VendorSheet";
 import { AddVendorDialog } from "@/components/crm/vendorManager/AddVendorDialog";
 
@@ -65,12 +65,11 @@ export const STATUS_TONE: Record<VendorStatus, string> = {
 };
 
 export const CONTRACT_TONE: Record<string, string> = {
-  draft: "bg-muted text-muted-foreground border-border",
+  not_sent: "bg-muted text-muted-foreground border-border",
   sent: "bg-info/10 text-info border-info/20",
   signed: "bg-primary/10 text-primary border-primary/20",
-  active: "bg-success/10 text-success border-success/20",
-  expired: "bg-destructive/10 text-destructive border-destructive/20",
-  terminated: "bg-destructive/10 text-destructive border-destructive/20",
+  countersigned: "bg-success/10 text-success border-success/20",
+  declined: "bg-destructive/10 text-destructive border-destructive/20",
 };
 
 export default function Vendors() {
@@ -79,6 +78,24 @@ export default function Vendors() {
     queryKey: ["vendors"],
     queryFn: fetchVendors,
   });
+  const { data: allContracts = [] } = useQuery({
+    queryKey: ["vendorOriginContracts"],
+    queryFn: fetchContracts,
+    select: (all) => all.filter((c) => c.origin === "vendor"),
+  });
+  // The most relevant real contract for a vendor — signed/countersigned
+  // (i.e. genuinely in force) if one exists, else the most recent.
+  const activeContract = (v: Vendor): SignableContract | null => {
+    const mine = allContracts.filter((c) => c.vendorId === v._id);
+    if (!mine.length) return null;
+    return (
+      mine.find(
+        (c) =>
+          c.signatureStatus === "signed" ||
+          c.signatureStatus === "countersigned",
+      ) ?? mine[0]
+    );
+  };
 
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("all");
@@ -113,8 +130,8 @@ export default function Vendors() {
   const pendingDd = vendors.filter((v) => v.status === "Pending DD").length;
   const expiring = vendors.filter((v) => {
     const c = activeContract(v);
-    return c?.endDate
-      ? daysUntil(c.endDate) <= 90 && daysUntil(c.endDate) >= 0
+    return c?.expiresOn
+      ? daysUntil(c.expiresOn) <= 90 && daysUntil(c.expiresOn) >= 0
       : false;
   });
   const ddCoverage = Math.round(
@@ -327,8 +344,8 @@ export default function Vendors() {
                           </Badge>
                         </TableCell>
                         <TableCell className="text-xs">
-                          {c?.endDate ? (
-                            `Expires ${new Date(c.endDate).toLocaleDateString()}`
+                          {c?.expiresOn ? (
+                            `Expires ${new Date(c.expiresOn).toLocaleDateString()}`
                           ) : (
                             <span className="text-muted-foreground">
                               Not yet contracted
@@ -482,38 +499,40 @@ export default function Vendors() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {vendors.flatMap((v) =>
-                    v.contracts.map((c) => (
+                  {allContracts.map((c) => {
+                    const v = vendors.find((x) => x._id === c.vendorId);
+                    return (
                       <TableRow
                         key={c._id}
                         className="cursor-pointer"
-                        onClick={() => setSelectedId(v._id)}
+                        onClick={() => v && setSelectedId(v._id)}
                       >
                         <TableCell className="text-sm font-medium">
                           {c.title}
                         </TableCell>
-                        <TableCell className="text-xs">{v.legalName}</TableCell>
                         <TableCell className="text-xs">
-                          {c.templateName}
+                          {v?.legalName ?? "—"}
+                        </TableCell>
+                        <TableCell className="text-xs">
+                          {c.templateName || c.type}
                         </TableCell>
                         <TableCell>
                           <Badge
                             variant="outline"
-                            className={`text-xs capitalize ${CONTRACT_TONE[c.status]}`}
+                            className={`text-xs capitalize ${CONTRACT_TONE[c.signatureStatus] ?? ""}`}
                           >
-                            {c.status}
+                            {c.signatureStatus.replace("_", " ")}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-xs">
-                          {c.startDate?.slice(0, 10)} →{" "}
-                          {c.endDate?.slice(0, 10)}
+                          Expires {c.expiresOn?.slice(0, 10)}
                         </TableCell>
                         <TableCell className="text-right text-sm">
                           {money(c.value, c.currency)}
                         </TableCell>
                       </TableRow>
-                    )),
-                  )}
+                    );
+                  })}
                 </TableBody>
               </Table>
             </CardContent>
@@ -611,12 +630,12 @@ export default function Vendors() {
           {expiring
             .sort(
               (a, b) =>
-                daysUntil(activeContract(a)!.endDate!) -
-                daysUntil(activeContract(b)!.endDate!),
+                daysUntil(activeContract(a)!.expiresOn!) -
+                daysUntil(activeContract(b)!.expiresOn!),
             )
             .map((v) => {
               const c = activeContract(v)!;
-              const days = daysUntil(c.endDate!);
+              const days = daysUntil(c.expiresOn!);
               const urgent = days <= 30;
               return (
                 <Card
@@ -637,7 +656,7 @@ export default function Vendors() {
                       <p
                         className={`text-sm font-semibold ${urgent ? "text-destructive" : "text-warning"}`}
                       >
-                        {new Date(c.endDate!).toLocaleDateString()}
+                        {new Date(c.expiresOn!).toLocaleDateString()}
                       </p>
                       <p className="text-[11px] text-muted-foreground">
                         {days} days left

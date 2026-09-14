@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Dialog,
   DialogContent,
@@ -10,35 +12,30 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import { RichTextEditor } from "@/components/RichTextEditor";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { ArrowLeft, ArrowRight, FileText, Loader2 } from "lucide-react";
 import {
-  ArrowLeft,
-  ArrowRight,
-  FileText,
-  Loader2,
-  Send,
-  Save,
-} from "lucide-react";
-import {
-  MERGE_FIELDS,
-  VENDOR_CONTRACT_TEMPLATES,
-  renderTemplate,
-  saveVendorContract,
-  advanceVendorContract,
-  type Vendor,
-  type VendorContract,
-} from "@/lib/crm/vendor-api";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+  fetchAvailableTemplates,
+  generateContractFromTemplate,
+  type ContractType,
+} from "@/lib/crm/tools-api";
+import { type Vendor } from "@/lib/crm/vendor-api";
 
-type Step = "template" | "terms" | "edit" | "send";
+type Step = "template" | "terms";
 
-const STEPS: { key: Step; label: string }[] = [
-  { key: "template", label: "1. Template" },
-  { key: "terms", label: "2. Terms" },
-  { key: "edit", label: "3. Edit" },
-  { key: "send", label: "4. Send" },
+const CONTRACT_TYPES: ContractType[] = [
+  "MSA",
+  "SOW",
+  "NDA",
+  "Lease",
+  "Supplier",
 ];
 
 const plusYear = (d: string) => {
@@ -47,211 +44,144 @@ const plusYear = (d: string) => {
   return date.toISOString().slice(0, 10);
 };
 
+// Only handles picking a real, Superadmin-published template and
+// setting the commercial terms. Once generated, the real contract
+// record exists — editing the wording, sending for signature, and
+// countersigning all happen on the existing full Contract detail
+// page (/crm/contracts/:id), never duplicated here.
 export function VendorContractDialog({
   vendor,
-  contract,
   open,
   onOpenChange,
 }: {
   vendor: Vendor;
-  contract?: VendorContract | null;
   open: boolean;
   onOpenChange: (o: boolean) => void;
 }) {
   const { toast } = useToast();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const today = new Date().toISOString().slice(0, 10);
 
+  const { data: templates = [] } = useQuery({
+    queryKey: ["contract-templates-available"],
+    queryFn: () => fetchAvailableTemplates(),
+    enabled: open,
+  });
+
   const [step, setStep] = useState<Step>("template");
-  const [templateId, setTemplateId] = useState(
-    contract?.templateId ?? VENDOR_CONTRACT_TEMPLATES[0].id,
-  );
-  const [title, setTitle] = useState(contract?.title ?? "");
-  const [value, setValue] = useState(
-    String(contract?.value ?? vendor.annualValue ?? 0),
-  );
-  const [currency, setCurrency] = useState(
-    contract?.currency ?? vendor.currency,
-  );
-  const [startDate, setStartDate] = useState(
-    contract?.startDate?.slice(0, 10) ?? today,
-  );
-  const [endDate, setEndDate] = useState(
-    contract?.endDate?.slice(0, 10) ?? plusYear(today),
-  );
-  const [signerName, setSignerName] = useState(
-    contract?.signerName ?? vendor.contactName,
-  );
-  const [signerEmail, setSignerEmail] = useState(
-    contract?.signerEmail ?? vendor.contactEmail,
-  );
-  const [body, setBody] = useState(contract?.body ?? "");
-
-  const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ["vendor", vendor._id] });
-    queryClient.invalidateQueries({ queryKey: ["vendors"] });
-  };
-
-  const saveMut = useMutation({
-    mutationFn: () =>
-      saveVendorContract(vendor._id, {
-        contractId: contract?._id,
-        title: title.trim(),
-        templateId: template.id,
-        templateName: template.name,
-        body,
-        value: Number(value) || 0,
-        currency,
-        startDate,
-        endDate,
-        signerName,
-        signerEmail,
-      }),
-    onSuccess: () => {
-      invalidate();
-      toast({ title: "Draft saved", description: title });
-      onOpenChange(false);
-    },
-    onError: (err: any) =>
-      toast({
-        title: "Could not save contract",
-        description: err?.response?.data?.message,
-        variant: "destructive",
-      }),
-  });
-
-  const sendMut = useMutation({
-    mutationFn: async () => {
-      const saved = await saveVendorContract(vendor._id, {
-        contractId: contract?._id,
-        title: title.trim(),
-        templateId: template.id,
-        templateName: template.name,
-        body,
-        value: Number(value) || 0,
-        currency,
-        startDate,
-        endDate,
-        signerName,
-        signerEmail,
-      });
-      // Editing: the id is already known. Creating: the backend
-      // unshifts new contracts, so the new one is reliably at [0].
-      const targetId = contract?._id ?? saved.contracts[0]?._id;
-      if (targetId) {
-        await advanceVendorContract(
-          vendor._id,
-          targetId,
-          "sent",
-          `Sent to ${signerEmail}`,
-        );
-      }
-    },
-    onSuccess: () => {
-      invalidate();
-      toast({
-        title: "Contract sent",
-        description: `${title} sent to ${signerName} (${signerEmail}) for signature.`,
-      });
-      onOpenChange(false);
-    },
-    onError: (err: any) =>
-      toast({
-        title: "Could not send contract",
-        description: err?.response?.data?.message,
-        variant: "destructive",
-      }),
-  });
-
-  const template = useMemo(
-    () =>
-      VENDOR_CONTRACT_TEMPLATES.find((t) => t.id === templateId) ??
-      VENDOR_CONTRACT_TEMPLATES[0],
-    [templateId],
-  );
+  const [templateId, setTemplateId] = useState("");
+  const [title, setTitle] = useState("");
+  const [type, setType] = useState<ContractType>("Supplier");
+  const [value, setValue] = useState(String(vendor.annualValue ?? 0));
+  const [currency, setCurrency] = useState(vendor.currency);
+  const [endDate, setEndDate] = useState(plusYear(today));
 
   useEffect(() => {
     if (!open) return;
-    setStep(contract ? "edit" : "template");
-    if (contract) setBody(contract.body);
-  }, [open, contract]);
+    setStep("template");
+    setTemplateId("");
+    setTitle("");
+    setValue(String(vendor.annualValue ?? 0));
+    setCurrency(vendor.currency);
+    setEndDate(plusYear(today));
+  }, [open]);
 
-  const buildBody = () =>
-    renderTemplate(template.body, vendor, {
-      value: Number(value) || 0,
-      currency,
-      startDate,
-      endDate,
-    });
+  const template = templates.find((t) => t._id === templateId) ?? null;
 
-  const goEdit = () => {
+  const generateMut = useMutation({
+    mutationFn: () =>
+      generateContractFromTemplate({
+        templateId,
+        templateSource: "platform",
+        title: title.trim(),
+        type,
+        vendorId: vendor._id,
+        value: Number(value) || 0,
+        currency,
+        expiresOn: endDate,
+      }),
+    onSuccess: (created) => {
+      queryClient.invalidateQueries({
+        queryKey: ["vendorContracts", vendor._id],
+      });
+      onOpenChange(false);
+      toast({
+        title: "Contract drafted",
+        description: "Opening it now to review the wording and send it.",
+      });
+      navigate(`/crm/contracts/${created._id}`);
+    },
+    onError: (err: any) =>
+      toast({
+        title: "Could not draft contract",
+        description: err?.response?.data?.message,
+        variant: "destructive",
+      }),
+  });
+
+  const goDraft = () => {
+    if (!templateId) {
+      toast({ title: "Pick a template first", variant: "destructive" });
+      return;
+    }
     if (!title.trim()) {
       toast({ title: "Give the contract a title", variant: "destructive" });
       return;
     }
-    if (!contract) setBody(buildBody());
-    setStep("edit");
-  };
-
-  const handleSaveDraft = () => saveMut.mutate();
-
-  const handleSend = () => {
-    if (!signerEmail.trim()) {
-      toast({ title: "Add a signer email", variant: "destructive" });
+    if (!vendor.contactEmail) {
+      toast({
+        title: "This vendor has no contact email on file",
+        description:
+          "Add one on the vendor's Overview tab before drafting a contract.",
+        variant: "destructive",
+      });
       return;
     }
-    sendMut.mutate();
+    generateMut.mutate();
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[92vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>
-            {contract ? "Edit contract" : "New contract"} — {vendor.legalName}
-          </DialogTitle>
+          <DialogTitle>New contract — {vendor.legalName}</DialogTitle>
           <DialogDescription>
-            Start from a template, set the commercial terms, edit the wording,
-            then send it to the vendor for signature.
+            Start from a real template published by your Superadmin. Once
+            drafted, you'll edit the wording and send it from the full contract
+            page — it emails the vendor a PDF and a link to comment and sign.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex gap-2">
-          {STEPS.map((s) => (
-            <div
-              key={s.key}
-              className={`flex-1 rounded-md px-3 py-1.5 text-[11px] font-semibold text-center border ${
-                s.key === step
-                  ? "bg-primary/10 text-primary border-primary/30"
-                  : "text-muted-foreground border-border/60"
-              }`}
-            >
-              {s.label}
-            </div>
-          ))}
-        </div>
-
         {step === "template" && (
-          <div className="grid gap-2 sm:grid-cols-2">
-            {VENDOR_CONTRACT_TEMPLATES.map((t) => (
-              <button
-                key={t.id}
-                onClick={() => setTemplateId(t.id)}
-                className={`text-left rounded-lg border p-3 transition-colors ${
-                  templateId === t.id
-                    ? "border-primary bg-primary/5"
-                    : "border-border/60 hover:border-primary/40"
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <FileText className="h-4 w-4 text-primary" />
-                  <span className="text-sm font-semibold">{t.name}</span>
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {t.description}
-                </p>
-              </button>
-            ))}
+          <div className="space-y-2">
+            {!templates.length && (
+              <p className="py-6 text-center text-sm text-muted-foreground">
+                No published templates yet — your Superadmin needs to publish at
+                least one contract template first.
+              </p>
+            )}
+            <div className="grid gap-2 sm:grid-cols-2">
+              {templates.map((t) => (
+                <button
+                  key={t._id}
+                  onClick={() => setTemplateId(t._id)}
+                  className={`text-left rounded-lg border p-3 transition-colors ${
+                    templateId === t._id
+                      ? "border-primary bg-primary/5"
+                      : "border-border/60 hover:border-primary/40"
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <FileText className="h-4 w-4 text-primary" />
+                    <span className="text-sm font-semibold">{t.title}</span>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {t.description || t.category || "Superadmin template"}
+                  </p>
+                </button>
+              ))}
+            </div>
           </div>
         )}
 
@@ -262,8 +192,26 @@ export function VendorContractDialog({
               <Input
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder={`${template.name} — ${vendor.tradingName || vendor.legalName}`}
+                placeholder={`${template?.title ?? "Contract"} — ${vendor.tradingName || vendor.legalName}`}
               />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Contract type</Label>
+              <Select
+                value={type}
+                onValueChange={(v) => setType(v as ContractType)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {CONTRACT_TYPES.map((t) => (
+                    <SelectItem key={t} value={t}>
+                      {t}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-1.5">
               <Label>Contract value</Label>
@@ -281,141 +229,44 @@ export function VendorContractDialog({
               />
             </div>
             <div className="space-y-1.5">
-              <Label>Start date</Label>
-              <Input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>End date</Label>
+              <Label>Expiry date</Label>
               <Input
                 type="date"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
               />
             </div>
-            <div className="space-y-1.5">
-              <Label>Signer name</Label>
-              <Input
-                value={signerName}
-                onChange={(e) => setSignerName(e.target.value)}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Signer email</Label>
-              <Input
-                value={signerEmail}
-                onChange={(e) => setSignerEmail(e.target.value)}
-              />
-            </div>
-            <p className="sm:col-span-2 text-[11px] text-muted-foreground">
-              These values are merged into the template wording in the next
-              step, where you can still edit every clause.
-            </p>
-          </div>
-        )}
-
-        {step === "edit" && (
-          <div className="space-y-2">
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-[11px] text-muted-foreground mr-1">
-                Merge fields:
-              </span>
-              {MERGE_FIELDS.map((f) => (
-                <Badge key={f} variant="outline" className="text-[10px]">
-                  {f}
-                </Badge>
-              ))}
-            </div>
-            <RichTextEditor value={body} onChange={setBody} minHeight={340} />
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setBody(buildBody())}
-            >
-              Reset to template wording
-            </Button>
-          </div>
-        )}
-
-        {step === "send" && (
-          <div className="space-y-3">
-            <div className="rounded-lg border border-border/60 p-4 space-y-1 text-sm">
-              <p className="font-semibold">{title}</p>
-              <p className="text-xs text-muted-foreground">
-                {template.name} · {currency} {Number(value).toLocaleString()} ·{" "}
-                {startDate} → {endDate}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Recipient: {signerName} ({signerEmail})
+            <div className="sm:col-span-2 rounded-lg border border-border/60 bg-muted/20 p-3 text-xs">
+              <p className="font-medium">Recipient (from the vendor record)</p>
+              <p className="mt-0.5 text-muted-foreground">
+                {vendor.contactName || "No contact name on file"} —{" "}
+                {vendor.contactEmail || "no contact email on file"}
               </p>
             </div>
-            <div
-              className="rounded-lg border border-border/60 bg-muted/20 p-4 max-h-64 overflow-y-auto prose prose-sm max-w-none"
-              dangerouslySetInnerHTML={{ __html: body }}
-            />
           </div>
         )}
 
         <DialogFooter className="gap-2 sm:justify-between">
           <div>
-            {step !== "template" && (
-              <Button
-                variant="outline"
-                onClick={() =>
-                  setStep(
-                    step === "send"
-                      ? "edit"
-                      : step === "edit"
-                        ? contract
-                          ? "edit"
-                          : "terms"
-                        : "template",
-                  )
-                }
-              >
+            {step === "terms" && (
+              <Button variant="outline" onClick={() => setStep("template")}>
                 <ArrowLeft className="h-4 w-4 mr-1" /> Back
               </Button>
             )}
           </div>
-          <div className="flex gap-2">
-            {(step === "edit" || step === "send") && (
-              <Button
-                variant="outline"
-                onClick={handleSaveDraft}
-                disabled={saveMut.isPending}
-              >
-                <Save className="h-4 w-4 mr-1" /> Save draft
-              </Button>
-            )}
-            {step === "template" && (
-              <Button onClick={() => setStep("terms")}>
-                Next <ArrowRight className="h-4 w-4 ml-1" />
-              </Button>
-            )}
-            {step === "terms" && (
-              <Button onClick={goEdit}>
-                Draft contract <ArrowRight className="h-4 w-4 ml-1" />
-              </Button>
-            )}
-            {step === "edit" && (
-              <Button onClick={() => setStep("send")}>
-                Review & send <ArrowRight className="h-4 w-4 ml-1" />
-              </Button>
-            )}
-            {step === "send" && (
-              <Button onClick={handleSend} disabled={sendMut.isPending}>
-                {sendMut.isPending ? (
-                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                ) : (
-                  <Send className="h-4 w-4 mr-1" />
-                )}
-                Send to vendor
-              </Button>
-            )}
-          </div>
+          {step === "template" && (
+            <Button onClick={() => setStep("terms")} disabled={!templateId}>
+              Next <ArrowRight className="h-4 w-4 ml-1" />
+            </Button>
+          )}
+          {step === "terms" && (
+            <Button onClick={goDraft} disabled={generateMut.isPending}>
+              {generateMut.isPending && (
+                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+              )}
+              Draft contract
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

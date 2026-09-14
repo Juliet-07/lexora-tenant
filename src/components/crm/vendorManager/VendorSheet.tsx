@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Sheet,
@@ -23,19 +24,17 @@ import {
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import {
+  ExternalLink,
   FileSignature,
-  FileText,
   Paperclip,
-  Send,
   ShieldCheck,
-  Trash2,
   Upload,
   UserCheck,
   X,
@@ -47,15 +46,13 @@ import {
   removeDdEvidence,
   addVendorNote,
   setVendorStatus,
-  advanceVendorContract,
-  deleteVendorContract,
   requestVendorApproval,
   decideVendorApproval,
   vendorSpendYtd,
   SPEND_MONTHS,
-  type VendorContract,
   type VendorStatus,
 } from "@/lib/crm/vendor-api";
+import { fetchVendorContracts } from "@/lib/crm/tools-api";
 import { VendorContractDialog } from "./VendorContractDialog";
 import { RISK_TONE, STATUS_TONE, CONTRACT_TONE } from "@/pages/crm/crm/Vendors";
 
@@ -94,6 +91,7 @@ export function VendorSheet({
   onClose: () => void;
 }) {
   const { toast } = useToast();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
 
   const { data: vendor } = useQuery({
@@ -106,6 +104,11 @@ export function VendorSheet({
     queryFn: fetchEligibleApprovers,
     enabled: !!vendorId,
   });
+  const { data: contracts = [] } = useQuery({
+    queryKey: ["vendorContracts", vendorId],
+    queryFn: () => fetchVendorContracts(vendorId!),
+    enabled: !!vendorId,
+  });
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["vendor", vendorId] });
@@ -113,10 +116,8 @@ export function VendorSheet({
   };
 
   const [contractOpen, setContractOpen] = useState(false);
-  const [editing, setEditing] = useState<VendorContract | null>(null);
   const [noteTitle, setNoteTitle] = useState("");
   const [noteBody, setNoteBody] = useState("");
-  const [preview, setPreview] = useState<VendorContract | null>(null);
   const [approverPickerOpen, setApproverPickerOpen] = useState(false);
   const [pickedApprover, setPickedApprover] = useState("");
   const [decisionOpen, setDecisionOpen] = useState<
@@ -154,23 +155,6 @@ export function VendorSheet({
       setNoteTitle("");
       setNoteBody("");
     },
-  });
-  const advanceMut = useMutation({
-    mutationFn: ({
-      contractId,
-      status,
-      label,
-    }: {
-      contractId: string;
-      status: VendorContract["status"];
-      label: string;
-    }) => advanceVendorContract(vendorId!, contractId, status, label),
-    onSuccess: invalidate,
-  });
-  const deleteContractMut = useMutation({
-    mutationFn: (contractId: string) =>
-      deleteVendorContract(vendorId!, contractId),
-    onSuccess: invalidate,
   });
   const requestApprovalMut = useMutation({
     mutationFn: () => requestVendorApproval(vendorId!, pickedApprover),
@@ -216,12 +200,13 @@ export function VendorSheet({
           </SheetHeader>
 
           <Tabs defaultValue="overview" className="mt-4">
-            <TabsList className="w-full grid grid-cols-5">
+            <TabsList className="w-full grid grid-cols-6">
               <TabsTrigger value="overview">Overview</TabsTrigger>
               <TabsTrigger value="dd">Diligence</TabsTrigger>
               <TabsTrigger value="contracts">Contracts</TabsTrigger>
               <TabsTrigger value="spend">Spend</TabsTrigger>
               <TabsTrigger value="notes">Notes</TabsTrigger>
+              <TabsTrigger value="activity">Activity</TabsTrigger>
             </TabsList>
 
             <TabsContent value="overview" className="mt-4 space-y-4">
@@ -433,140 +418,41 @@ export function VendorSheet({
             </TabsContent>
 
             <TabsContent value="contracts" className="mt-4 space-y-3">
-              <Button
-                className="w-full"
-                onClick={() => {
-                  setEditing(null);
-                  setContractOpen(true);
-                }}
-              >
+              <Button className="w-full" onClick={() => setContractOpen(true)}>
                 <FileSignature className="h-4 w-4 mr-2" /> New contract from
                 template
               </Button>
-              {vendor.contracts.length === 0 && (
+              {contracts.length === 0 && (
                 <p className="text-sm text-muted-foreground text-center py-6">
                   No contracts yet. Draft one from a template above.
                 </p>
               )}
-              {vendor.contracts.map((c) => (
-                <div
+              {contracts.map((c) => (
+                <button
                   key={c._id}
-                  className="rounded-lg border border-border/60 p-3 space-y-2"
+                  onClick={() => navigate(`/crm/contracts/${c._id}`)}
+                  className="w-full rounded-lg border border-border/60 p-3 text-left hover:border-primary/40"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div>
                       <p className="text-sm font-semibold">{c.title}</p>
                       <p className="text-[11px] text-muted-foreground">
-                        {c.templateName} · {money(c.value, c.currency)} ·{" "}
-                        {c.startDate?.slice(0, 10)} → {c.endDate?.slice(0, 10)}
+                        {c.templateName || c.type} ·{" "}
+                        {c.value ? money(c.value, c.currency) : "No value set"}{" "}
+                        · Expires {c.expiresOn?.slice(0, 10)}
                       </p>
                     </div>
-                    <Badge
-                      variant="outline"
-                      className={`text-[10px] capitalize ${CONTRACT_TONE[c.status]}`}
-                    >
-                      {c.status}
-                    </Badge>
-                  </div>
-                  <p className="text-[11px] text-muted-foreground">
-                    Signer: {c.signerName} ({c.signerEmail})
-                  </p>
-                  {c.history.length > 0 && (
-                    <div className="space-y-0.5">
-                      {c.history.slice(-3).map((h, i) => (
-                        <p
-                          key={i}
-                          className="text-[10px] text-muted-foreground"
-                        >
-                          {new Date(h.at).toLocaleString()} — {h.label}
-                        </p>
-                      ))}
-                    </div>
-                  )}
-                  <div className="flex flex-wrap gap-1.5">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setPreview(c)}
-                    >
-                      <FileText className="h-3.5 w-3.5 mr-1" /> View
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        setEditing(c);
-                        setContractOpen(true);
-                      }}
-                    >
-                      Edit
-                    </Button>
-                    {c.status === "draft" && (
-                      <Button
-                        size="sm"
-                        onClick={() =>
-                          advanceMut.mutate({
-                            contractId: c._id,
-                            status: "sent",
-                            label: `Sent to ${c.signerEmail}`,
-                          })
-                        }
-                      >
-                        <Send className="h-3.5 w-3.5 mr-1" /> Send
-                      </Button>
-                    )}
-                    {c.status === "sent" && (
-                      <Button
-                        size="sm"
-                        onClick={() =>
-                          advanceMut.mutate({
-                            contractId: c._id,
-                            status: "signed",
-                            label: `Signed by ${c.signerName}`,
-                          })
-                        }
-                      >
-                        Mark signed
-                      </Button>
-                    )}
-                    {c.status === "signed" && (
-                      <Button
-                        size="sm"
-                        onClick={() =>
-                          advanceMut.mutate({
-                            contractId: c._id,
-                            status: "active",
-                            label: "Contract activated",
-                          })
-                        }
-                      >
-                        Activate
-                      </Button>
-                    )}
-                    {c.status === "active" && (
-                      <Button
-                        size="sm"
+                    <div className="flex items-center gap-1.5">
+                      <Badge
                         variant="outline"
-                        onClick={() =>
-                          advanceMut.mutate({
-                            contractId: c._id,
-                            status: "terminated",
-                            label: "Contract terminated",
-                          })
-                        }
+                        className={`text-[10px] capitalize ${CONTRACT_TONE[c.signatureStatus] ?? ""}`}
                       >
-                        Terminate
-                      </Button>
-                    )}
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => deleteContractMut.mutate(c._id)}
-                    >
-                      <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                    </Button>
+                        {c.signatureStatus.replace("_", " ")}
+                      </Badge>
+                      <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
+                    </div>
                   </div>
-                </div>
+                </button>
               ))}
             </TabsContent>
 
@@ -664,25 +550,9 @@ export function VendorSheet({
 
       <VendorContractDialog
         vendor={vendor}
-        contract={editing}
         open={contractOpen}
         onOpenChange={setContractOpen}
       />
-
-      <Dialog open={!!preview} onOpenChange={(o) => !o && setPreview(null)}>
-        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{preview?.title}</DialogTitle>
-            <DialogDescription>
-              {preview?.templateName} · {preview?.status}
-            </DialogDescription>
-          </DialogHeader>
-          <div
-            className="prose prose-sm max-w-none"
-            dangerouslySetInnerHTML={{ __html: preview?.body ?? "" }}
-          />
-        </DialogContent>
-      </Dialog>
 
       {/* ── Approver picker — real employees, HOD/Manager only ── */}
       <Dialog open={approverPickerOpen} onOpenChange={setApproverPickerOpen}>
