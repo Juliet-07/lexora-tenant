@@ -14,6 +14,7 @@ export type VendorRisk = "Low" | "Medium" | "High";
 export type VendorStatus =
   | "Pending DD"
   | "Pending approval"
+  | "Approved"
   | "Active"
   | "Suspended"
   | "Offboarded";

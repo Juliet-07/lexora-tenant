@@ -60,6 +60,7 @@ export const STATUS_TONE: Record<VendorStatus, string> = {
   Active: "bg-success/10 text-success border-success/20",
   "Pending DD": "bg-warning/10 text-warning border-warning/20",
   "Pending approval": "bg-info/10 text-info border-info/20",
+  Approved: "bg-primary/10 text-primary border-primary/20",
   Suspended: "bg-destructive/10 text-destructive border-destructive/20",
   Offboarded: "bg-muted text-muted-foreground border-border",
 };
@@ -285,6 +286,7 @@ export default function Vendors() {
                   "Active",
                   "Pending DD",
                   "Pending approval",
+                  "Approved",
                   "Suspended",
                   "Offboarded",
                 ].map((s) => (

@@ -275,43 +275,53 @@ export function VendorSheet({
                   <UserCheck className="h-3.5 w-3.5" /> Approval
                 </p>
                 {vendor.approvalStatus === "not_requested" && (
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-xs text-muted-foreground">
-                      No approval requested yet.
-                    </p>
-                    <Button
-                      size="sm"
-                      onClick={() => setApproverPickerOpen(true)}
-                    >
-                      Request approval
-                    </Button>
+                  <div className="space-y-2">
+                    {done < vendor.ddItems.length ? (
+                      <p className="text-xs text-muted-foreground">
+                        Complete due diligence ({done}/{vendor.ddItems.length}{" "}
+                        done) before requesting or giving approval.
+                      </p>
+                    ) : (
+                      <>
+                        <p className="text-xs text-muted-foreground">
+                          Due diligence is complete. Assign this to a Head of
+                          Department or Manager to decide, or approve it
+                          yourself directly.
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            size="sm"
+                            onClick={() => setApproverPickerOpen(true)}
+                          >
+                            Assign an approver
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setDecisionOpen("approved")}
+                          >
+                            Approve directly
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => setDecisionOpen("rejected")}
+                          >
+                            Reject directly
+                          </Button>
+                        </div>
+                      </>
+                    )}
                   </div>
                 )}
                 {vendor.approvalStatus === "pending" && (
-                  <div className="space-y-2">
-                    <p className="text-xs">
-                      Pending with <strong>{vendor.approverName}</strong> since{" "}
-                      {vendor.approvalRequestedAt &&
-                        new Date(
-                          vendor.approvalRequestedAt,
-                        ).toLocaleDateString()}
-                    </p>
-                    <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        onClick={() => setDecisionOpen("approved")}
-                      >
-                        Approve
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setDecisionOpen("rejected")}
-                      >
-                        Reject
-                      </Button>
-                    </div>
-                  </div>
+                  <p className="text-xs">
+                    Assigned to <strong>{vendor.approverName}</strong> since{" "}
+                    {vendor.approvalRequestedAt &&
+                      new Date(vendor.approvalRequestedAt).toLocaleDateString()}
+                    . The decision belongs to them now — you'll be emailed and
+                    notified here once they decide.
+                  </p>
                 )}
                 {vendor.approvalStatus === "approved" && (
                   <p className="text-xs">
@@ -320,6 +330,8 @@ export function VendorSheet({
                       new Date(vendor.approvalDecidedAt).toLocaleDateString()}
                     {vendor.approvalDecisionNote &&
                       ` — ${vendor.approvalDecisionNote}`}
+                    . Contracting can now begin — the vendor becomes Active once
+                    a contract is signed and countersigned.
                   </p>
                 )}
                 {vendor.approvalStatus === "rejected" && (
@@ -340,18 +352,21 @@ export function VendorSheet({
               </div>
 
               <div className="flex flex-wrap gap-2">
-                {(["Active", "Suspended", "Offboarded"] as VendorStatus[]).map(
-                  (s) => (
-                    <Button
-                      key={s}
-                      size="sm"
-                      variant={vendor.status === s ? "default" : "outline"}
-                      onClick={() => statusMut.mutate(s)}
-                    >
-                      {s}
-                    </Button>
-                  ),
-                )}
+                <p className="w-full text-[11px] text-muted-foreground">
+                  Active is set automatically once a contract is signed and
+                  countersigned — not a manual switch. These two remain manual,
+                  for when you need to pause or end the relationship.
+                </p>
+                {(["Suspended", "Offboarded"] as VendorStatus[]).map((s) => (
+                  <Button
+                    key={s}
+                    size="sm"
+                    variant={vendor.status === s ? "default" : "outline"}
+                    onClick={() => statusMut.mutate(s)}
+                  >
+                    {s}
+                  </Button>
+                ))}
               </div>
             </TabsContent>
 
@@ -418,10 +433,20 @@ export function VendorSheet({
             </TabsContent>
 
             <TabsContent value="contracts" className="mt-4 space-y-3">
-              <Button className="w-full" onClick={() => setContractOpen(true)}>
-                <FileSignature className="h-4 w-4 mr-2" /> New contract from
-                template
-              </Button>
+              {vendor.approvalStatus === "approved" ? (
+                <Button
+                  className="w-full"
+                  onClick={() => setContractOpen(true)}
+                >
+                  <FileSignature className="h-4 w-4 mr-2" /> New contract from
+                  template
+                </Button>
+              ) : (
+                <p className="rounded-lg border border-dashed border-border/60 p-3 text-xs text-muted-foreground text-center">
+                  Contracting opens up once this vendor's approval is completed
+                  — see the Overview tab.
+                </p>
+              )}
               {contracts.length === 0 && (
                 <p className="text-sm text-muted-foreground text-center py-6">
                   No contracts yet. Draft one from a template above.
