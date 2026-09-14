@@ -13,7 +13,7 @@ export type ClientPipelineStage = "active" | "retained" | "past";
 export type ClientType = "individual" | "corporate" | "partner" | "trust";
 
 export type LeadTemperature = "hot" | "warm" | "cold";
-export type LeadQualification = "unqualified" | "mql" | "sql";
+export type LeadDealValuePeriod = "year" | "month" | "one_time";
 export type LeadMeetingMode = "virtual" | "physical";
 export type LeadMeetingStatus = "scheduled" | "completed" | "cancelled";
 
@@ -42,6 +42,12 @@ export interface LeadDocumentEntry {
   sentBy: string;
 }
 
+export interface LeadActivityEntry {
+  _id: string;
+  at: string;
+  text: string;
+}
+
 export interface Lead {
   _id: string;
   tenantId: string;
@@ -56,10 +62,16 @@ export interface Lead {
   status: LeadStatus;
   notes: string | null;
   temperature?: LeadTemperature;
-  qualification?: LeadQualification;
+  qualificationScore: number | null;
+  qualificationNotes: string | null;
+  serviceInterest: string | null;
+  estimatedDealValue: number | null;
+  dealValuePeriod: LeadDealValuePeriod | null;
   meetings?: LeadMeeting[];
   documents?: LeadDocumentEntry[];
+  activity?: LeadActivityEntry[];
   assignedToUserId: string | null;
+  assignedToName: string;
   reachedProspectAt: string | null;
   convertedAt: string | null;
   lostAt: string | null;
@@ -150,8 +162,11 @@ export interface UpdateLeadPayload {
   sourceNote?: string;
   notes?: string;
   temperature?: LeadTemperature;
-  qualification?: LeadQualification;
-  assignedToUserId?: string;
+  qualificationScore?: number;
+  qualificationNotes?: string;
+  serviceInterest?: string;
+  estimatedDealValue?: number;
+  dealValuePeriod?: LeadDealValuePeriod;
 }
 
 export const updateLead = async (
@@ -159,6 +174,16 @@ export const updateLead = async (
   dto: UpdateLeadPayload,
 ): Promise<Lead> => {
   const res = await api.patch(`/crm/leads/${id}`, dto);
+  return res.data?.data ?? res.data;
+};
+
+export const assignLead = async (
+  id: string,
+  assignedToUserId: string,
+): Promise<Lead> => {
+  const res = await api.patch(`/crm/leads/${id}/assign`, {
+    assignedToUserId,
+  });
   return res.data?.data ?? res.data;
 };
 
@@ -263,6 +288,121 @@ export const sendLeadDocument = async (
   const params = message ? `?message=${encodeURIComponent(message)}` : "";
   const res = await api.post(
     `/crm/leads/${leadId}/documents${params}`,
+    formData,
+    { headers: { "Content-Type": "multipart/form-data" } },
+  );
+  return res.data?.data ?? res.data;
+};
+
+// ── Employee-side — leads assigned to me, managed through the same
+// pipeline all the way to conversion. ─────────────────────────────
+export const fetchMyLeads = async (): Promise<Lead[]> => {
+  const res = await api.get("/crm/my-leads");
+  const d = res.data?.data ?? res.data;
+  return Array.isArray(d) ? d : [];
+};
+
+export const fetchMyLead = async (id: string): Promise<Lead> => {
+  const res = await api.get(`/crm/my-leads/${id}`);
+  return res.data?.data ?? res.data;
+};
+
+export const updateMyLead = async (
+  id: string,
+  dto: UpdateLeadPayload,
+): Promise<Lead> => {
+  const res = await api.patch(`/crm/my-leads/${id}`, dto);
+  return res.data?.data ?? res.data;
+};
+
+export const moveMyLeadStage = async (
+  id: string,
+  stage: LeadStage,
+): Promise<Lead> => {
+  const res = await api.patch(`/crm/my-leads/${id}/stage`, { stage });
+  return res.data?.data ?? res.data;
+};
+
+export const markMyLeadLost = async (
+  id: string,
+  reason?: string,
+): Promise<Lead> => {
+  const res = await api.post(`/crm/my-leads/${id}/lost`, { reason });
+  return res.data?.data ?? res.data;
+};
+
+export const convertMyLead = async (
+  id: string,
+  dto: {
+    email?: string;
+    phoneNumber?: string;
+    clientType: ClientType;
+    templateId: string;
+    templateSource: "platform" | "tenant";
+    contractTitle: string;
+    contractType?: string;
+  },
+): Promise<{ lead: Lead; client: unknown; message: string }> => {
+  const res = await api.post(`/crm/my-leads/${id}/convert`, dto);
+  return res.data?.data ?? res.data;
+};
+
+export const scheduleMyLeadMeeting = async (
+  leadId: string,
+  dto: {
+    title: string;
+    date: string;
+    time?: string;
+    mode?: LeadMeetingMode;
+    location?: string;
+    attendees?: string;
+    agenda?: string;
+  },
+): Promise<Lead> => {
+  const res = await api.post(`/crm/my-leads/${leadId}/meetings`, dto);
+  return res.data?.data ?? res.data;
+};
+
+export const completeMyLeadMeeting = async (
+  leadId: string,
+  meetingId: string,
+  outcome: string,
+): Promise<Lead> => {
+  const res = await api.patch(
+    `/crm/my-leads/${leadId}/meetings/${meetingId}/complete`,
+    { outcome },
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const cancelMyLeadMeeting = async (
+  leadId: string,
+  meetingId: string,
+): Promise<Lead> => {
+  const res = await api.patch(
+    `/crm/my-leads/${leadId}/meetings/${meetingId}/cancel`,
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const fetchMyLeadDocuments = async (
+  leadId: string,
+): Promise<LeadDocumentEntry[]> => {
+  const res = await api.get(`/crm/my-leads/${leadId}/documents`);
+  const d = res.data?.data ?? res.data;
+  return Array.isArray(d) ? d : [];
+};
+
+export const sendMyLeadDocument = async (
+  leadId: string,
+  file: File,
+  message?: string,
+): Promise<Lead> => {
+  const formData = new FormData();
+  formData.append("file", file);
+  const params = message ? `?message=${encodeURIComponent(message)}` : "";
+  const res = await api.post(
+    `/crm/my-leads/${leadId}/documents${params}`,
     formData,
     { headers: { "Content-Type": "multipart/form-data" } },
   );

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import {
   Sheet,
   SheetContent,
@@ -34,13 +34,17 @@ import {
   Pencil,
   FileText,
   Upload,
-  Thermometer,
+  Flame,
+  Cloud,
+  Snowflake,
   Target,
+  UserCog,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
   updateLead,
   moveLeadStage,
+  assignLead,
   scheduleLeadMeeting,
   completeLeadMeeting,
   cancelLeadMeeting,
@@ -48,8 +52,9 @@ import {
   type Lead,
   type LeadSource,
   type LeadTemperature,
-  type LeadQualification,
+  type LeadDealValuePeriod,
 } from "@/lib/crm/crm-pipeline-api";
+import { fetchEmployees, type Employee } from "@/lib/hr/hr-api";
 import {
   addLeadNote,
   buildTimeline,
@@ -119,6 +124,11 @@ export function LeadDetailPanel({
     source: "other" as LeadSource,
     sourceNote: "",
     notes: "",
+    serviceInterest: "",
+    estimatedDealValue: "",
+    dealValuePeriod: "year" as LeadDealValuePeriod,
+    qualificationScore: "",
+    qualificationNotes: "",
   });
   const openEdit = () => {
     if (!lead) return;
@@ -131,11 +141,27 @@ export function LeadDetailPanel({
       source: lead.source,
       sourceNote: lead.sourceNote ?? "",
       notes: lead.notes ?? "",
+      serviceInterest: lead.serviceInterest ?? "",
+      estimatedDealValue:
+        lead.estimatedDealValue != null ? String(lead.estimatedDealValue) : "",
+      dealValuePeriod: lead.dealValuePeriod ?? "year",
+      qualificationScore:
+        lead.qualificationScore != null ? String(lead.qualificationScore) : "",
+      qualificationNotes: lead.qualificationNotes ?? "",
     });
     setEditOpen(true);
   };
   const updateMut = useMutation({
-    mutationFn: () => updateLead(lead!._id, editDraft),
+    mutationFn: () =>
+      updateLead(lead!._id, {
+        ...editDraft,
+        estimatedDealValue: editDraft.estimatedDealValue
+          ? Number(editDraft.estimatedDealValue)
+          : undefined,
+        qualificationScore: editDraft.qualificationScore
+          ? Number(editDraft.qualificationScore)
+          : undefined,
+      }),
     onSuccess: (updated) => {
       queryClient.invalidateQueries({ queryKey: ["crm-leads"] });
       onUpdate?.(updated);
@@ -166,10 +192,8 @@ export function LeadDetailPanel({
   });
 
   const fieldMut = useMutation({
-    mutationFn: (dto: {
-      temperature?: LeadTemperature;
-      qualification?: LeadQualification;
-    }) => updateLead(lead!._id, dto),
+    mutationFn: (dto: { temperature?: LeadTemperature }) =>
+      updateLead(lead!._id, dto),
     onSuccess: (updated) => {
       queryClient.invalidateQueries({ queryKey: ["crm-leads"] });
       onUpdate?.(updated);
@@ -177,6 +201,34 @@ export function LeadDetailPanel({
     onError: (err: any) =>
       toast({
         title: "Could not update",
+        description: err?.response?.data?.message,
+        variant: "destructive",
+      }),
+  });
+
+  const [assignOpen, setAssignOpen] = useState(false);
+  const [pickedEmployee, setPickedEmployee] = useState("");
+  const { data: employeesPage } = useQuery({
+    queryKey: ["employees-for-lead-assign"],
+    queryFn: () => fetchEmployees({ limit: 200 }),
+    enabled: assignOpen,
+  });
+  const employees: Employee[] = employeesPage?.items ?? [];
+  const assignMut = useMutation({
+    mutationFn: () => assignLead(lead!._id, pickedEmployee),
+    onSuccess: (updated) => {
+      queryClient.invalidateQueries({ queryKey: ["crm-leads"] });
+      onUpdate?.(updated);
+      setAssignOpen(false);
+      setPickedEmployee("");
+      toast({
+        title: "Lead assigned",
+        description: `${updated.assignedToName} will be emailed and notified.`,
+      });
+    },
+    onError: (err: any) =>
+      toast({
+        title: "Could not assign lead",
         description: err?.response?.data?.message,
         variant: "destructive",
       }),
@@ -307,71 +359,132 @@ export function LeadDetailPanel({
                 <Pencil className="mr-1.5 h-3.5 w-3.5" /> Edit details
               </Button>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label className="flex items-center gap-1.5 text-xs">
-                  <Thermometer className="h-3.5 w-3.5" /> Temperature
-                </Label>
-                <Select
-                  value={lead.temperature ?? "warm"}
-                  onValueChange={(v) =>
-                    fieldMut.mutate({ temperature: v as LeadTemperature })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="hot">Hot</SelectItem>
-                    <SelectItem value="warm">Warm</SelectItem>
-                    <SelectItem value="cold">Cold</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="flex items-center gap-1.5 text-xs">
-                  <Target className="h-3.5 w-3.5" /> Qualification
-                </Label>
-                <Select
-                  value={lead.qualification ?? "unqualified"}
-                  onValueChange={(v) =>
-                    fieldMut.mutate({ qualification: v as LeadQualification })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="unqualified">Unqualified</SelectItem>
-                    <SelectItem value="mql">
-                      Marketing Qualified (MQL)
-                    </SelectItem>
-                    <SelectItem value="sql">Sales Qualified (SQL)</SelectItem>
-                  </SelectContent>
-                </Select>
+
+            <div>
+              <p className="text-[11px] font-semibold uppercase text-muted-foreground mb-1.5">
+                Lead details
+              </p>
+              <div className="rounded-lg border border-border/60 divide-y">
+                {[
+                  ["Organisation", lead.companyName ?? "—"],
+                  ["Contact", lead.contactName ?? "—"],
+                  ["Email", lead.contactEmail ?? "—"],
+                  ["Phone", lead.contactPhone ?? "—"],
+                  ["Industry", lead.industry ?? "—"],
+                  ["Source", lead.source.replace("_", " ")],
+                  ["Source note", lead.sourceNote ?? "—"],
+                  ["Stage", lead.stage],
+                  ["Status", lead.status],
+                  ["Created", new Date(lead.createdAt).toLocaleDateString()],
+                ].map(([k, v]) => (
+                  <div
+                    key={k}
+                    className="flex justify-between gap-4 px-3 py-1.5"
+                  >
+                    <span className="text-xs text-muted-foreground">{k}</span>
+                    <span className="text-xs font-medium capitalize text-right">
+                      {v}
+                    </span>
+                  </div>
+                ))}
+                <div className="flex items-center justify-between gap-4 px-3 py-1.5">
+                  <span className="text-xs text-muted-foreground">
+                    Assigned RM
+                  </span>
+                  <button
+                    onClick={() => setAssignOpen(true)}
+                    className="flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                  >
+                    <UserCog className="h-3.5 w-3.5" />
+                    {lead.assignedToName || "Unassigned — click to assign"}
+                  </button>
+                </div>
               </div>
             </div>
 
-            <div className="rounded-lg border border-border/60 divide-y">
-              {[
-                ["Organisation", lead.companyName ?? "—"],
-                ["Contact", lead.contactName ?? "—"],
-                ["Email", lead.contactEmail ?? "—"],
-                ["Phone", lead.contactPhone ?? "—"],
-                ["Industry", lead.industry ?? "—"],
-                ["Source", lead.source.replace("_", " ")],
-                ["Source note", lead.sourceNote ?? "—"],
-                ["Stage", lead.stage],
-                ["Status", lead.status],
-                ["Created", new Date(lead.createdAt).toLocaleDateString()],
-              ].map(([k, v]) => (
-                <div key={k} className="flex justify-between gap-4 px-3 py-1.5">
-                  <span className="text-xs text-muted-foreground">{k}</span>
-                  <span className="text-xs font-medium capitalize text-right">
-                    {v}
+            <div>
+              <p className="text-[11px] font-semibold uppercase text-muted-foreground mb-1.5">
+                Temperature &amp; Qualification
+              </p>
+              <div className="grid grid-cols-3 gap-2">
+                {(
+                  [
+                    {
+                      value: "hot",
+                      label: "Hot",
+                      icon: Flame,
+                      tone: "text-destructive border-destructive bg-destructive/5",
+                    },
+                    {
+                      value: "warm",
+                      label: "Warm",
+                      icon: Cloud,
+                      tone: "text-muted-foreground border-border",
+                    },
+                    {
+                      value: "cold",
+                      label: "Cold",
+                      icon: Snowflake,
+                      tone: "text-info border-info/40 bg-info/5",
+                    },
+                  ] as const
+                ).map((t) => {
+                  const active = (lead.temperature ?? "warm") === t.value;
+                  return (
+                    <button
+                      key={t.value}
+                      onClick={() => fieldMut.mutate({ temperature: t.value })}
+                      className={`flex items-center justify-center gap-1.5 rounded-lg border py-2 text-sm font-medium transition-colors ${
+                        active
+                          ? t.tone
+                          : "border-border/60 text-muted-foreground hover:border-border"
+                      }`}
+                    >
+                      <t.icon className="h-4 w-4" /> {t.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="rounded-lg border border-border/60 divide-y mt-3">
+                <div className="flex justify-between gap-4 px-3 py-1.5">
+                  <span className="text-xs text-muted-foreground">
+                    Service interest
+                  </span>
+                  <span className="text-xs font-medium text-right">
+                    {lead.serviceInterest || "—"}
                   </span>
                 </div>
-              ))}
+                <div className="flex justify-between gap-4 px-3 py-1.5">
+                  <span className="text-xs text-muted-foreground">
+                    Est. deal value
+                  </span>
+                  <span className="text-xs font-medium text-right text-success">
+                    {lead.estimatedDealValue != null
+                      ? `$${lead.estimatedDealValue.toLocaleString()}${
+                          lead.dealValuePeriod === "year"
+                            ? " / year"
+                            : lead.dealValuePeriod === "month"
+                              ? " / month"
+                              : ""
+                        }`
+                      : "—"}
+                  </span>
+                </div>
+                <div className="flex items-start justify-between gap-4 px-3 py-1.5">
+                  <span className="text-xs text-muted-foreground flex items-center gap-1 shrink-0">
+                    <Target className="h-3.5 w-3.5" /> Qualification
+                  </span>
+                  <span className="text-xs font-medium text-right">
+                    {lead.qualificationScore != null
+                      ? `${lead.qualificationScore}%`
+                      : "—"}
+                    {lead.qualificationNotes
+                      ? ` — ${lead.qualificationNotes}`
+                      : ""}
+                  </span>
+                </div>
+              </div>
             </div>
 
             {lead.notes && (
@@ -915,6 +1028,85 @@ export function LeadDetailPanel({
                 }
               />
             </div>
+            <div>
+              <Label className="text-xs">Service interest</Label>
+              <Input
+                placeholder="e.g. Fund administration, Advisory"
+                value={editDraft.serviceInterest}
+                onChange={(e) =>
+                  setEditDraft({
+                    ...editDraft,
+                    serviceInterest: e.target.value,
+                  })
+                }
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs">Est. deal value ($)</Label>
+                <Input
+                  type="number"
+                  value={editDraft.estimatedDealValue}
+                  onChange={(e) =>
+                    setEditDraft({
+                      ...editDraft,
+                      estimatedDealValue: e.target.value,
+                    })
+                  }
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Per</Label>
+                <Select
+                  value={editDraft.dealValuePeriod}
+                  onValueChange={(v) =>
+                    setEditDraft({
+                      ...editDraft,
+                      dealValuePeriod: v as LeadDealValuePeriod,
+                    })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="year">Year</SelectItem>
+                    <SelectItem value="month">Month</SelectItem>
+                    <SelectItem value="one_time">One-time</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs">Qualification score (%)</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={editDraft.qualificationScore}
+                  onChange={(e) =>
+                    setEditDraft({
+                      ...editDraft,
+                      qualificationScore: e.target.value,
+                    })
+                  }
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Qualification notes</Label>
+                <Input
+                  placeholder="e.g. Budget confirmed, timeline Q4"
+                  value={editDraft.qualificationNotes}
+                  onChange={(e) =>
+                    setEditDraft({
+                      ...editDraft,
+                      qualificationNotes: e.target.value,
+                    })
+                  }
+                />
+              </div>
+            </div>
           </div>
           <DialogFooter>
             <Button
@@ -922,6 +1114,40 @@ export function LeadDetailPanel({
               onClick={() => updateMut.mutate()}
             >
               {updateMut.isPending ? "Saving…" : "Save changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={assignOpen} onOpenChange={setAssignOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Assign this lead</DialogTitle>
+          </DialogHeader>
+          <p className="text-xs text-muted-foreground">
+            The employee you pick manages this lead through the pipeline up to
+            conversion — they'll be emailed and notified here.
+          </p>
+          <Select value={pickedEmployee} onValueChange={setPickedEmployee}>
+            <SelectTrigger>
+              <SelectValue placeholder="Select an employee…" />
+            </SelectTrigger>
+            <SelectContent>
+              {employees
+                .filter((e) => e.userId)
+                .map((e) => (
+                  <SelectItem key={e._id} value={e.userId as string}>
+                    {e.firstName} {e.lastName}
+                  </SelectItem>
+                ))}
+            </SelectContent>
+          </Select>
+          <DialogFooter>
+            <Button
+              disabled={!pickedEmployee || assignMut.isPending}
+              onClick={() => assignMut.mutate()}
+            >
+              {assignMut.isPending ? "Assigning…" : "Assign"}
             </Button>
           </DialogFooter>
         </DialogContent>
