@@ -49,6 +49,12 @@ import {
   completeLeadMeeting,
   cancelLeadMeeting,
   sendLeadDocument,
+  updateMyLead,
+  moveMyLeadStage,
+  scheduleMyLeadMeeting,
+  completeMyLeadMeeting,
+  cancelMyLeadMeeting,
+  sendMyLeadDocument,
   type Lead,
   type LeadSource,
   type LeadTemperature,
@@ -85,12 +91,18 @@ export function LeadDetailPanel({
   onConvert,
   onMarkLost,
   onUpdate,
+  mode = "tenant",
 }: {
   lead: Lead | null;
   onClose: () => void;
   onConvert: (lead: Lead) => void;
   onMarkLost: (lead: Lead) => void;
   onUpdate?: (lead: Lead) => void;
+  // Employees only ever manage leads genuinely assigned to them,
+  // through the exact same UI a tenant uses — this just switches
+  // which endpoints the mutations below call. Assignment itself
+  // stays tenant-only (an employee doesn't reassign their own lead).
+  mode?: "tenant" | "employee";
 }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -152,8 +164,8 @@ export function LeadDetailPanel({
     setEditOpen(true);
   };
   const updateMut = useMutation({
-    mutationFn: () =>
-      updateLead(lead!._id, {
+    mutationFn: () => {
+      const dto = {
         ...editDraft,
         estimatedDealValue: editDraft.estimatedDealValue
           ? Number(editDraft.estimatedDealValue)
@@ -161,9 +173,14 @@ export function LeadDetailPanel({
         qualificationScore: editDraft.qualificationScore
           ? Number(editDraft.qualificationScore)
           : undefined,
-      }),
+      };
+      return mode === "employee"
+        ? updateMyLead(lead!._id, dto)
+        : updateLead(lead!._id, dto);
+    },
     onSuccess: (updated) => {
       queryClient.invalidateQueries({ queryKey: ["crm-leads"] });
+      queryClient.invalidateQueries({ queryKey: ["my-leads"] });
       onUpdate?.(updated);
       setEditOpen(false);
       toast({ title: "Lead details updated" });
@@ -177,9 +194,13 @@ export function LeadDetailPanel({
   });
 
   const advanceStageMut = useMutation({
-    mutationFn: () => moveLeadStage(lead!._id, "prospect"),
+    mutationFn: () =>
+      mode === "employee"
+        ? moveMyLeadStage(lead!._id, "prospect")
+        : moveLeadStage(lead!._id, "prospect"),
     onSuccess: (updated) => {
       queryClient.invalidateQueries({ queryKey: ["crm-leads"] });
+      queryClient.invalidateQueries({ queryKey: ["my-leads"] });
       onUpdate?.(updated);
       toast({ title: "Moved to Prospect" });
     },
@@ -193,9 +214,12 @@ export function LeadDetailPanel({
 
   const fieldMut = useMutation({
     mutationFn: (dto: { temperature?: LeadTemperature }) =>
-      updateLead(lead!._id, dto),
+      mode === "employee"
+        ? updateMyLead(lead!._id, dto)
+        : updateLead(lead!._id, dto),
     onSuccess: (updated) => {
       queryClient.invalidateQueries({ queryKey: ["crm-leads"] });
+      queryClient.invalidateQueries({ queryKey: ["my-leads"] });
       onUpdate?.(updated);
     },
     onError: (err: any) =>
@@ -211,7 +235,7 @@ export function LeadDetailPanel({
   const { data: employeesPage } = useQuery({
     queryKey: ["employees-for-lead-assign"],
     queryFn: () => fetchEmployees({ limit: 200 }),
-    enabled: assignOpen,
+    enabled: assignOpen && mode === "tenant",
   });
   const employees: Employee[] = employeesPage?.items ?? [];
   const assignMut = useMutation({
@@ -235,9 +259,13 @@ export function LeadDetailPanel({
   });
 
   const scheduleMeetingMut = useMutation({
-    mutationFn: () => scheduleLeadMeeting(lead!._id, { ...meeting }),
+    mutationFn: () =>
+      mode === "employee"
+        ? scheduleMyLeadMeeting(lead!._id, { ...meeting })
+        : scheduleLeadMeeting(lead!._id, { ...meeting }),
     onSuccess: (updated) => {
       queryClient.invalidateQueries({ queryKey: ["crm-leads"] });
+      queryClient.invalidateQueries({ queryKey: ["my-leads"] });
       onUpdate?.(updated);
       setMeeting({
         title: "",
@@ -270,9 +298,13 @@ export function LeadDetailPanel({
     }: {
       meetingId: string;
       outcome: string;
-    }) => completeLeadMeeting(lead!._id, meetingId, outcome),
+    }) =>
+      mode === "employee"
+        ? completeMyLeadMeeting(lead!._id, meetingId, outcome)
+        : completeLeadMeeting(lead!._id, meetingId, outcome),
     onSuccess: (updated) => {
       queryClient.invalidateQueries({ queryKey: ["crm-leads"] });
+      queryClient.invalidateQueries({ queryKey: ["my-leads"] });
       onUpdate?.(updated);
       setOutcome("");
       setOutcomeFor(null);
@@ -280,9 +312,13 @@ export function LeadDetailPanel({
   });
 
   const cancelMeetingMut = useMutation({
-    mutationFn: (meetingId: string) => cancelLeadMeeting(lead!._id, meetingId),
+    mutationFn: (meetingId: string) =>
+      mode === "employee"
+        ? cancelMyLeadMeeting(lead!._id, meetingId)
+        : cancelLeadMeeting(lead!._id, meetingId),
     onSuccess: (updated) => {
       queryClient.invalidateQueries({ queryKey: ["crm-leads"] });
+      queryClient.invalidateQueries({ queryKey: ["my-leads"] });
       onUpdate?.(updated);
     },
   });
@@ -290,9 +326,12 @@ export function LeadDetailPanel({
   const [docMessage, setDocMessage] = useState("");
   const sendDocMut = useMutation({
     mutationFn: (file: File) =>
-      sendLeadDocument(lead!._id, file, docMessage.trim()),
+      mode === "employee"
+        ? sendMyLeadDocument(lead!._id, file, docMessage.trim())
+        : sendLeadDocument(lead!._id, file, docMessage.trim()),
     onSuccess: (updated) => {
       queryClient.invalidateQueries({ queryKey: ["crm-leads"] });
+      queryClient.invalidateQueries({ queryKey: ["my-leads"] });
       onUpdate?.(updated);
       setDocMessage("");
       toast({
@@ -391,13 +430,19 @@ export function LeadDetailPanel({
                   <span className="text-xs text-muted-foreground">
                     Assigned RM
                   </span>
-                  <button
-                    onClick={() => setAssignOpen(true)}
-                    className="flex items-center gap-1 text-xs font-medium text-primary hover:underline"
-                  >
-                    <UserCog className="h-3.5 w-3.5" />
-                    {lead.assignedToName || "Unassigned — click to assign"}
-                  </button>
+                  {mode === "tenant" ? (
+                    <button
+                      onClick={() => setAssignOpen(true)}
+                      className="flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                    >
+                      <UserCog className="h-3.5 w-3.5" />
+                      {lead.assignedToName || "Unassigned — click to assign"}
+                    </button>
+                  ) : (
+                    <span className="text-xs font-medium">
+                      {lead.assignedToName || "—"}
+                    </span>
+                  )}
                 </div>
               </div>
             </div>

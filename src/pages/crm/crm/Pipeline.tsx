@@ -64,6 +64,7 @@ import {
   type ClientType,
 } from "@/lib/crm/crm-pipeline-api";
 import { LeadDetailPanel } from "@/components/crm/LeadDetailPanel";
+import { ConvertLeadDialog } from "@/components/crm/ConvertLeadDialog";
 
 // ─── Static config ──────────────────────────────────────────────
 
@@ -77,13 +78,6 @@ const SOURCE_OPTIONS: { value: LeadSource; label: string }[] = [
   { value: "cold_outreach", label: "Cold Outreach" },
   { value: "partner", label: "Partner" },
   { value: "other", label: "Other" },
-];
-
-const CLIENT_TYPE_OPTIONS: { value: ClientType; label: string }[] = [
-  { value: "individual", label: "Individual" },
-  { value: "corporate", label: "Corporate" },
-  { value: "partner", label: "Partner" },
-  { value: "trust", label: "Trust" },
 ];
 
 const KYC_TONE: Record<string, string> = {
@@ -267,15 +261,17 @@ export default function Pipeline() {
   const convertMutation = useMutation({
     mutationFn: ({
       id,
-      email,
-      phoneNumber,
-      clientType,
+      ...payload
     }: {
       id: string;
       email?: string;
       phoneNumber?: string;
       clientType: ClientType;
-    }) => convertLead(id, { email, phoneNumber, clientType }),
+      templateId: string;
+      templateSource: "platform" | "tenant";
+      contractTitle: string;
+      contractType?: string;
+    }) => convertLead(id, payload),
     onSuccess: (res) => {
       invalidateAll();
       setConvertTarget(null);
@@ -1010,112 +1006,7 @@ export default function Pipeline() {
   );
 }
 
-// ─── Convert dialog ─────────────────────────────────────────────
-
-function ConvertLeadDialog({
-  lead,
-  onClose,
-  onConfirm,
-  isSubmitting,
-}: {
-  lead: Lead | null;
-  onClose: () => void;
-  onConfirm: (payload: {
-    email?: string;
-    phoneNumber?: string;
-    clientType: ClientType;
-  }) => void;
-  isSubmitting: boolean;
-}) {
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
-  const [clientType, setClientType] = useState<ClientType>("individual");
-
-  useState(() => {
-    if (lead) {
-      setEmail(lead.contactEmail ?? "");
-      setPhone(lead.contactPhone ?? "");
-    }
-  });
-
-  if (!lead) return null;
-  const emailValue = email || lead.contactEmail || "";
-  const canSubmit = emailValue.trim().length > 0 && !isSubmitting;
-
-  return (
-    <Dialog open={!!lead} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>
-            Convert {lead.contactName || lead.companyName} into a client
-          </DialogTitle>
-          <DialogDescription>
-            This creates a real client account via your standard client-add flow
-            — including any client-limit and engagement-letter rules.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-3">
-          <div className="space-y-1.5">
-            <Label>Email</Label>
-            <Input
-              type="email"
-              value={email || lead.contactEmail || ""}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="jane@acme.com"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Phone (optional)</Label>
-            <Input
-              value={phone || lead.contactPhone || ""}
-              onChange={(e) => setPhone(e.target.value)}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Client type</Label>
-            <Select
-              value={clientType}
-              onValueChange={(v) => setClientType(v as ClientType)}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {CLIENT_TYPE_OPTIONS.map((c) => (
-                  <SelectItem key={c.value} value={c.value}>
-                    {c.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button
-            disabled={!canSubmit}
-            onClick={() =>
-              onConfirm({
-                email: emailValue.trim(),
-                phoneNumber:
-                  phone || lead.contactPhone || undefined || undefined,
-                clientType,
-              })
-            }
-            className="bg-gradient-to-r from-primary to-secondary"
-          >
-            {isSubmitting ? (
-              <Loader2 className="h-4 w-4 animate-spin mr-2" />
-            ) : null}
-            Convert to Client
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
+// ─── Convert dialog now lives in components/crm/ConvertLeadDialog ──
 
 // ─── Generic reason dialog (mark lost / mark churned) ──────────
 

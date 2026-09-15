@@ -68,6 +68,17 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { ClipboardCheck } from "lucide-react";
+import {
+  fetchMyLeads,
+  convertMyLead,
+  markMyLeadLost,
+  type Lead,
+} from "@/lib/crm/crm-pipeline-api";
+import { LeadDetailPanel } from "@/components/crm/LeadDetailPanel";
+import {
+  ConvertLeadDialog,
+  type ConvertLeadPayload,
+} from "@/components/crm/ConvertLeadDialog";
 
 const riskStyle: Record<string, string> = {
   low: "bg-success/10 text-success",
@@ -76,6 +87,8 @@ const riskStyle: Record<string, string> = {
 };
 
 export default function AssignedClients() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [riskFilter, setRiskFilter] = useState<string>("all");
@@ -108,6 +121,48 @@ export default function AssignedClients() {
     enabled: isApprover,
   });
   const [selectedVendorId, setSelectedVendorId] = useState<string | null>(null);
+
+  const { data: myLeads = [], isLoading: leadsLoading } = useQuery({
+    queryKey: ["my-leads"],
+    queryFn: fetchMyLeads,
+  });
+  const myOpenLeadsCount = myLeads.filter((l) => l.status === "open").length;
+  const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
+  const [convertTarget, setConvertTarget] = useState<Lead | null>(null);
+  const [lostTarget, setLostTarget] = useState<Lead | null>(null);
+  const [lostReason, setLostReason] = useState("");
+
+  const convertMut = useMutation({
+    mutationFn: (payload: ConvertLeadPayload) =>
+      convertMyLead(convertTarget!._id, payload),
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: ["my-leads"] });
+      setConvertTarget(null);
+      toast({ title: "Converted", description: res.message });
+    },
+    onError: (err: any) =>
+      toast({
+        title: "Failed to convert lead",
+        description: err?.response?.data?.message,
+        variant: "destructive",
+      }),
+  });
+
+  const markLostMut = useMutation({
+    mutationFn: () => markMyLeadLost(lostTarget!._id, lostReason.trim()),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["my-leads"] });
+      setLostTarget(null);
+      setLostReason("");
+      toast({ title: "Lead marked lost" });
+    },
+    onError: (err: any) =>
+      toast({
+        title: "Could not mark lost",
+        description: err?.response?.data?.message,
+        variant: "destructive",
+      }),
+  });
 
   const filtered = useMemo(() => {
     return clients.filter((c) => {
@@ -191,6 +246,14 @@ export default function AssignedClients() {
         <TabsList>
           <TabsTrigger value="clients">Clients</TabsTrigger>
           <TabsTrigger value="contacts">Contacts</TabsTrigger>
+          <TabsTrigger value="leads">
+            Leads
+            {myOpenLeadsCount > 0 && (
+              <span className="ml-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground">
+                {myOpenLeadsCount}
+              </span>
+            )}
+          </TabsTrigger>
           {isApprover && (
             <TabsTrigger value="vendors">
               Vendors
@@ -344,6 +407,64 @@ export default function AssignedClients() {
           <MyContactsPanel />
         </TabsContent>
 
+        <TabsContent value="leads" className="pt-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Leads assigned to me</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {leadsLoading ? (
+                <p className="text-sm text-muted-foreground py-8 text-center">
+                  Loading…
+                </p>
+              ) : myLeads.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-8 text-center">
+                  No leads assigned to you yet.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {myLeads.map((l) => (
+                    <button
+                      key={l._id}
+                      onClick={() => setSelectedLead(l)}
+                      className="w-full flex items-center justify-between rounded-lg border border-border/60 p-3 text-left hover:border-primary/40"
+                    >
+                      <div>
+                        <p className="text-sm font-semibold">
+                          {l.contactName || l.companyName || "Untitled lead"}
+                        </p>
+                        <p className="text-xs text-muted-foreground capitalize">
+                          {l.stage} · {l.companyName || "No company"}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge
+                          variant="outline"
+                          className={`text-[10px] capitalize ${
+                            l.temperature === "hot"
+                              ? "bg-destructive/10 text-destructive border-destructive/20"
+                              : l.temperature === "cold"
+                                ? "bg-info/10 text-info border-info/20"
+                                : "bg-muted text-muted-foreground border-border"
+                          }`}
+                        >
+                          {l.temperature ?? "warm"}
+                        </Badge>
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] capitalize"
+                        >
+                          {l.status}
+                        </Badge>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         {isApprover && (
           <TabsContent value="vendors" className="pt-4 space-y-6">
             <div>
@@ -421,6 +542,59 @@ export default function AssignedClients() {
         vendorId={selectedVendorId}
         onClose={() => setSelectedVendorId(null)}
       />
+
+      <LeadDetailPanel
+        lead={selectedLead}
+        mode="employee"
+        onClose={() => setSelectedLead(null)}
+        onConvert={(l) => {
+          setSelectedLead(null);
+          setConvertTarget(l);
+        }}
+        onMarkLost={(l) => {
+          setSelectedLead(null);
+          setLostTarget(l);
+        }}
+        onUpdate={(l) => setSelectedLead(l)}
+      />
+
+      <ConvertLeadDialog
+        lead={convertTarget}
+        onClose={() => setConvertTarget(null)}
+        onConfirm={(payload) => convertMut.mutate(payload)}
+        isSubmitting={convertMut.isPending}
+      />
+
+      <Dialog
+        open={!!lostTarget}
+        onOpenChange={(o) => !o && setLostTarget(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              Mark{" "}
+              {lostTarget?.contactName ||
+                lostTarget?.companyName ||
+                "this lead"}{" "}
+              as lost?
+            </DialogTitle>
+          </DialogHeader>
+          <Textarea
+            rows={3}
+            placeholder="Reason (optional)…"
+            value={lostReason}
+            onChange={(e) => setLostReason(e.target.value)}
+          />
+          <DialogFooter>
+            <Button
+              disabled={markLostMut.isPending}
+              onClick={() => markLostMut.mutate()}
+            >
+              Mark as lost
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Sheet open={!!selected} onOpenChange={(o) => !o && setSelected(null)}>
         <SheetContent className="sm:max-w-lg overflow-y-auto">

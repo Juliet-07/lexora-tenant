@@ -197,7 +197,15 @@ export const markLeadLost = async (
 
 export const convertLead = async (
   id: string,
-  dto: { email?: string; phoneNumber?: string; clientType: ClientType },
+  dto: {
+    email?: string;
+    phoneNumber?: string;
+    clientType: ClientType;
+    templateId: string;
+    templateSource: "platform" | "tenant";
+    contractTitle: string;
+    contractType?: string;
+  },
 ): Promise<{ lead: Lead; client: any; message: string }> => {
   const res = await api.post(`/crm/leads/${id}/convert`, dto);
   return res.data?.data ?? res.data;
