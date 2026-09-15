@@ -23,7 +23,6 @@ import { useToast } from "@/hooks/use-toast";
 import {
   createVendor,
   VENDOR_CATEGORIES,
-  JURISDICTIONS,
   ENGAGEMENT_TYPES,
   PAYMENT_TERMS,
   DD_CHECKLIST_LABELS,
@@ -69,6 +68,7 @@ export function AddVendorDialog({
     legalName: "",
     tradingName: "",
     category: "" as VendorCategory | "",
+    customCategory: "",
     jurisdiction: "",
     registrationNumber: "",
     taxId: "",
@@ -97,9 +97,12 @@ export function AddVendorDialog({
       createVendor({
         legalName: f.legalName.trim(),
         tradingName: f.tradingName.trim(),
-        category: f.category as VendorCategory,
+        category:
+          f.category === "Other" && f.customCategory.trim()
+            ? f.customCategory.trim()
+            : (f.category as VendorCategory),
         serviceSummary: f.serviceSummary.trim(),
-        jurisdiction: f.jurisdiction || "Other",
+        jurisdiction: f.jurisdiction.trim(),
         registrationNumber: f.registrationNumber,
         taxId: f.taxId,
         contactName: f.contactName.trim(),
@@ -138,6 +141,16 @@ export function AddVendorDialog({
       toast({
         title: "Missing details",
         description: "Legal name, category and contact email are required.",
+        variant: "destructive",
+      });
+      setStep(0);
+      return;
+    }
+    if (f.category === "Other" && !f.customCategory.trim()) {
+      toast({
+        title: "Type the vendor's category",
+        description:
+          'You picked "Other" — enter what category this vendor falls under.',
         variant: "destructive",
       });
       setStep(0);
@@ -210,22 +223,23 @@ export function AddVendorDialog({
                 </SelectContent>
               </Select>
             </Field>
+            {f.category === "Other" && (
+              <Field label="Other">
+                <Input
+                  className="mt-2"
+                  placeholder="Type the vendor's category…"
+                  value={f.customCategory}
+                  onChange={(e) => set("customCategory", e.target.value)}
+                />
+              </Field>
+            )}
+
             <Field label="Jurisdiction">
-              <Select
+              <Input
+                placeholder="e.g. Rwanda"
                 value={f.jurisdiction}
-                onValueChange={(v) => set("jurisdiction", v)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select jurisdiction…" />
-                </SelectTrigger>
-                <SelectContent>
-                  {JURISDICTIONS.map((j) => (
-                    <SelectItem key={j} value={j}>
-                      {j}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                onChange={(e) => set("jurisdiction", e.target.value)}
+              />
             </Field>
             <Field label="Registration number">
               <Input

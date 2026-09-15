@@ -2,13 +2,11 @@ import { api } from "../api";
 
 const unwrap = (res: any) => res.data?.data ?? res.data;
 
-export type VendorCategory =
-  | "Technology"
-  | "Professional services"
-  | "Financial services"
-  | "Facilities & operations"
-  | "Marketing & communications"
-  | "Other";
+// Free text — the backend accepts any string. These are just the
+// frontend's suggested quick-picks (see VENDOR_CATEGORIES below);
+// picking "Other" opens a field to type a custom category, which
+// becomes the real stored value.
+export type VendorCategory = string;
 
 export type VendorRisk = "Low" | "Medium" | "High";
 export type VendorStatus =
