@@ -133,6 +133,21 @@ export interface LitigationCombinedTotals {
   totalAgeDays: number;
 }
 
+export interface LitigationClosureDetails {
+  facts: string;
+  issues: string;
+  rules: string;
+  application: string;
+  conclusion: string;
+  clientSatisfaction: "" | "Excellent" | "Good" | "Fair" | "Poor";
+  clientSatisfactionNotes: string;
+  lessonsLearned: string;
+  precedentValue: boolean;
+  precedentNotes: string;
+  recordedBy: string;
+  recordedAt: string | null;
+}
+
 export interface LitigationCase {
   _id: string;
   ref: string;
@@ -161,6 +176,7 @@ export interface LitigationCase {
   courtDates: LitigationCourtDate[];
   disbursements: AdrDisbursement[];
   outcome: string | null;
+  closure: LitigationClosureDetails | null;
   createdAt: string;
   updatedAt: string;
   // Only present on the single-case detail fetch, not the list.
@@ -296,6 +312,43 @@ export const withdrawLitigationCase = async (
   reason?: string,
 ): Promise<LitigationCase> =>
   unwrap(await api.post(`/crm/litigation-cases/${id}/withdraw`, { reason }));
+
+export const recordLitigationClosure = async (
+  id: string,
+  dto: Partial<{
+    facts: string;
+    issues: string;
+    rules: string;
+    application: string;
+    conclusion: string;
+    clientSatisfaction: string;
+    clientSatisfactionNotes: string;
+    lessonsLearned: string;
+    precedentValue: boolean;
+    precedentNotes: string;
+  }>,
+): Promise<LitigationCase> =>
+  unwrap(await api.post(`/crm/litigation-cases/${id}/closure`, dto));
+
+export const downloadLitigationClosureReport = (
+  id: string,
+  caseRef: string,
+): void => {
+  const token = localStorage.getItem("tenantToken");
+  const base = import.meta.env.VITE_REACT_APP_BASE_URL;
+  const filename = `closure-report-${caseRef}.pdf`;
+  fetch(`${base}/crm/litigation-cases/${id}/closure/pdf`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+    .then((r) => r.blob())
+    .then((blob) => {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
+};
 
 // Triggers PDF download directly in the browser — same shared house
 // style used across CRM, KYC, and GRC reports.

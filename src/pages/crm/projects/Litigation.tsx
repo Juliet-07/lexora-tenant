@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -28,6 +29,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import {
   Plus,
@@ -45,6 +47,7 @@ import {
   Ban,
   FileText,
   Scale,
+  Download,
 } from "lucide-react";
 import { mockDeadlineRules } from "@/data/caseDetailMock";
 import {
@@ -78,6 +81,8 @@ import {
   recordLitigationOutcome,
   recordConsentJudgment,
   withdrawLitigationCase,
+  recordLitigationClosure,
+  downloadLitigationClosureReport,
   exportLitigationReportPdf,
   LITIGATION_STAGES,
   LITIGATION_STAGE_TASKS,
@@ -222,6 +227,19 @@ export default function Litigation() {
   const [consentTerms, setConsentTerms] = useState("");
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [withdrawReason, setWithdrawReason] = useState("");
+  const [closureOpen, setClosureOpen] = useState(false);
+  const [closureDraft, setClosureDraft] = useState({
+    facts: "",
+    issues: "",
+    rules: "",
+    application: "",
+    conclusion: "",
+    clientSatisfaction: "" as "" | "Excellent" | "Good" | "Fair" | "Poor",
+    clientSatisfactionNotes: "",
+    lessonsLearned: "",
+    precedentValue: false,
+    precedentNotes: "",
+  });
 
   // ── Mutations ─────────────────────────────────────────────
   const createMut = useMutation({
@@ -375,6 +393,16 @@ export default function Litigation() {
       toast({ title: "Case withdrawn" });
     },
     onError: onErr("Failed to withdraw case"),
+  });
+
+  const closureMut = useMutation({
+    mutationFn: () => recordLitigationClosure(detail!._id, closureDraft),
+    onSuccess: () => {
+      invalidate();
+      setClosureOpen(false);
+      toast({ title: "Closure details recorded" });
+    },
+    onError: onErr("Failed to record closure details"),
   });
 
   if (isLoading) {
@@ -1044,8 +1072,47 @@ export default function Litigation() {
               </button>
             </div>
             <Card>
-              <CardHeader className="pb-2">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-base">Closure report</CardTitle>
+                <div className="flex gap-2">
+                  {c.closure && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() =>
+                        downloadLitigationClosureReport(c._id, c.ref)
+                      }
+                    >
+                      <Download className="mr-1.5 h-3.5 w-3.5" /> Download PDF
+                    </Button>
+                  )}
+                  {c.status !== "Active" && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        if (c.closure) {
+                          setClosureDraft({
+                            facts: c.closure.facts,
+                            issues: c.closure.issues,
+                            rules: c.closure.rules,
+                            application: c.closure.application,
+                            conclusion: c.closure.conclusion,
+                            clientSatisfaction: c.closure.clientSatisfaction,
+                            clientSatisfactionNotes:
+                              c.closure.clientSatisfactionNotes,
+                            lessonsLearned: c.closure.lessonsLearned,
+                            precedentValue: c.closure.precedentValue,
+                            precedentNotes: c.closure.precedentNotes,
+                          });
+                        }
+                        setClosureOpen(true);
+                      }}
+                    >
+                      {c.closure ? "Edit closure details" : "Record closure"}
+                    </Button>
+                  )}
+                </div>
               </CardHeader>
               <CardContent className="space-y-2 text-sm">
                 {[
@@ -1056,8 +1123,22 @@ export default function Litigation() {
                     "Combined cost",
                     t ? money(t.combinedTotal, c.currency) : "—",
                   ],
-                  ["Costs recovered", "To be recorded on closure"],
-                  ["Precedent / KB value", "To be flagged on closure"],
+                  [
+                    "Client satisfaction",
+                    c.closure?.clientSatisfaction || "Not yet recorded",
+                  ],
+                  [
+                    "Lessons learned",
+                    c.closure?.lessonsLearned || "Not yet recorded",
+                  ],
+                  [
+                    "Precedent / KB value",
+                    c.closure
+                      ? c.closure.precedentValue
+                        ? "Yes"
+                        : "No"
+                      : "Not yet flagged",
+                  ],
                 ].map(([l, v]) => (
                   <div key={l} className="flex justify-between gap-3">
                     <span className="text-muted-foreground">{l}</span>
@@ -1542,6 +1623,165 @@ export default function Litigation() {
                 onClick={() => withdrawMut.mutate()}
               >
                 Withdraw
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={closureOpen} onOpenChange={setClosureOpen}>
+          <DialogContent className="max-h-[85vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Closure details</DialogTitle>
+              <DialogDescription>
+                Recorded in FIRAC format — Facts, Issues, Rules, Application,
+                Conclusion.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div>
+                <Label className="text-xs">Facts</Label>
+                <Textarea
+                  rows={3}
+                  placeholder="What actually happened in this case?"
+                  value={closureDraft.facts}
+                  onChange={(e) =>
+                    setClosureDraft({ ...closureDraft, facts: e.target.value })
+                  }
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Issues</Label>
+                <Textarea
+                  rows={3}
+                  placeholder="What legal or factual question(s) needed resolving?"
+                  value={closureDraft.issues}
+                  onChange={(e) =>
+                    setClosureDraft({ ...closureDraft, issues: e.target.value })
+                  }
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Rules</Label>
+                <Textarea
+                  rows={3}
+                  placeholder="What law, contract terms, or principles applied?"
+                  value={closureDraft.rules}
+                  onChange={(e) =>
+                    setClosureDraft({ ...closureDraft, rules: e.target.value })
+                  }
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Application</Label>
+                <Textarea
+                  rows={3}
+                  placeholder="How were the rules applied to these facts?"
+                  value={closureDraft.application}
+                  onChange={(e) =>
+                    setClosureDraft({
+                      ...closureDraft,
+                      application: e.target.value,
+                    })
+                  }
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Conclusion</Label>
+                <Textarea
+                  rows={3}
+                  placeholder="What was the final result?"
+                  value={closureDraft.conclusion}
+                  onChange={(e) =>
+                    setClosureDraft({
+                      ...closureDraft,
+                      conclusion: e.target.value,
+                    })
+                  }
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Client satisfaction</Label>
+                <Select
+                  value={closureDraft.clientSatisfaction || "unset"}
+                  onValueChange={(v) =>
+                    setClosureDraft({
+                      ...closureDraft,
+                      clientSatisfaction:
+                        v === "unset"
+                          ? ""
+                          : (v as typeof closureDraft.clientSatisfaction),
+                    })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="unset">Not recorded</SelectItem>
+                    <SelectItem value="Excellent">Excellent</SelectItem>
+                    <SelectItem value="Good">Good</SelectItem>
+                    <SelectItem value="Fair">Fair</SelectItem>
+                    <SelectItem value="Poor">Poor</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs">Satisfaction notes</Label>
+                <Textarea
+                  value={closureDraft.clientSatisfactionNotes}
+                  onChange={(e) =>
+                    setClosureDraft({
+                      ...closureDraft,
+                      clientSatisfactionNotes: e.target.value,
+                    })
+                  }
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Lessons learned</Label>
+                <Textarea
+                  value={closureDraft.lessonsLearned}
+                  onChange={(e) =>
+                    setClosureDraft({
+                      ...closureDraft,
+                      lessonsLearned: e.target.value,
+                    })
+                  }
+                />
+              </div>
+              <label className="flex items-center gap-2 text-sm">
+                <Checkbox
+                  checked={closureDraft.precedentValue}
+                  onCheckedChange={(v) =>
+                    setClosureDraft({
+                      ...closureDraft,
+                      precedentValue: !!v,
+                    })
+                  }
+                />
+                Flag this case as having precedent / knowledge-base value
+              </label>
+              {closureDraft.precedentValue && (
+                <div>
+                  <Label className="text-xs">Precedent notes</Label>
+                  <Textarea
+                    value={closureDraft.precedentNotes}
+                    onChange={(e) =>
+                      setClosureDraft({
+                        ...closureDraft,
+                        precedentNotes: e.target.value,
+                      })
+                    }
+                  />
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button
+                disabled={closureMut.isPending}
+                onClick={() => closureMut.mutate()}
+              >
+                {closureMut.isPending ? "Saving…" : "Save closure details"}
               </Button>
             </DialogFooter>
           </DialogContent>

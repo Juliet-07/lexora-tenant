@@ -114,6 +114,11 @@ export interface AdrSettlement {
   deedDocumentId: string | null;
 }
 export interface AdrClosureDetails {
+  facts: string;
+  issues: string;
+  rules: string;
+  application: string;
+  conclusion: string;
   clientSatisfaction: "" | "Excellent" | "Good" | "Fair" | "Poor";
   clientSatisfactionNotes: string;
   lessonsLearned: string;
@@ -294,6 +299,11 @@ export const linkAdrSettlementDeed = async (
 export const recordAdrClosure = async (
   id: string,
   dto: Partial<{
+    facts: string;
+    issues: string;
+    rules: string;
+    application: string;
+    conclusion: string;
     clientSatisfaction: string;
     clientSatisfactionNotes: string;
     lessonsLearned: string;
@@ -302,6 +312,23 @@ export const recordAdrClosure = async (
   }>,
 ): Promise<AdrCase> =>
   unwrap(await api.post(`/crm/adr-cases/${id}/closure`, dto));
+
+export const downloadAdrClosureReport = (id: string, caseRef: string): void => {
+  const token = localStorage.getItem("tenantToken");
+  const base = import.meta.env.VITE_REACT_APP_BASE_URL;
+  const filename = `closure-report-${caseRef}.pdf`;
+  fetch(`${base}/crm/adr-cases/${id}/closure/pdf`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+    .then((r) => r.blob())
+    .then((blob) => {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
+};
 
 export const recordAdrOutcome = async (
   id: string,

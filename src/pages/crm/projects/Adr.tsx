@@ -30,6 +30,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import {
   Plus,
@@ -48,6 +49,7 @@ import {
   FileWarning,
   RefreshCw,
   Ban,
+  Download,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { fetchMandates } from "@/lib/crm/mandates-api";
@@ -62,6 +64,7 @@ import {
   recordAdrSettlement,
   linkAdrSettlementDeed,
   recordAdrClosure,
+  downloadAdrClosureReport,
   fetchAdrDocuments,
   recordAdrOutcome,
   restartAdrAsType,
@@ -216,6 +219,11 @@ export default function Adr() {
   const [deedDocumentId, setDeedDocumentId] = useState("");
   const [closureOpen, setClosureOpen] = useState(false);
   const [closureDraft, setClosureDraft] = useState({
+    facts: "",
+    issues: "",
+    rules: "",
+    application: "",
+    conclusion: "",
     clientSatisfaction: "" as "" | "Excellent" | "Good" | "Fair" | "Poor",
     clientSatisfactionNotes: "",
     lessonsLearned: "",
@@ -1246,27 +1254,43 @@ export default function Adr() {
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
                   <CardTitle className="text-base">Closure report</CardTitle>
-                  {c.status !== "Active" && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        if (c.closure) {
-                          setClosureDraft({
-                            clientSatisfaction: c.closure.clientSatisfaction,
-                            clientSatisfactionNotes:
-                              c.closure.clientSatisfactionNotes,
-                            lessonsLearned: c.closure.lessonsLearned,
-                            precedentValue: c.closure.precedentValue,
-                            precedentNotes: c.closure.precedentNotes,
-                          });
-                        }
-                        setClosureOpen(true);
-                      }}
-                    >
-                      {c.closure ? "Edit closure details" : "Record closure"}
-                    </Button>
-                  )}
+                  <div className="flex gap-2">
+                    {c.closure && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => downloadAdrClosureReport(c._id, c.ref)}
+                      >
+                        <Download className="mr-1.5 h-3.5 w-3.5" /> Download PDF
+                      </Button>
+                    )}
+                    {c.status !== "Active" && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          if (c.closure) {
+                            setClosureDraft({
+                              facts: c.closure.facts,
+                              issues: c.closure.issues,
+                              rules: c.closure.rules,
+                              application: c.closure.application,
+                              conclusion: c.closure.conclusion,
+                              clientSatisfaction: c.closure.clientSatisfaction,
+                              clientSatisfactionNotes:
+                                c.closure.clientSatisfactionNotes,
+                              lessonsLearned: c.closure.lessonsLearned,
+                              precedentValue: c.closure.precedentValue,
+                              precedentNotes: c.closure.precedentNotes,
+                            });
+                          }
+                          setClosureOpen(true);
+                        }}
+                      >
+                        {c.closure ? "Edit closure details" : "Record closure"}
+                      </Button>
+                    )}
+                  </div>
                 </CardHeader>
                 <CardContent className="space-y-2 text-sm">
                   {[
@@ -1527,11 +1551,76 @@ export default function Adr() {
         </Dialog>
 
         <Dialog open={closureOpen} onOpenChange={setClosureOpen}>
-          <DialogContent>
+          <DialogContent className="max-h-[85vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Closure details</DialogTitle>
+              <DialogDescription>
+                Recorded in FIRAC format — Facts, Issues, Rules, Application,
+                Conclusion.
+              </DialogDescription>
             </DialogHeader>
             <div className="space-y-3">
+              <div>
+                <Label className="text-xs">Facts</Label>
+                <Textarea
+                  rows={3}
+                  placeholder="What actually happened in this case?"
+                  value={closureDraft.facts}
+                  onChange={(e) =>
+                    setClosureDraft({ ...closureDraft, facts: e.target.value })
+                  }
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Issues</Label>
+                <Textarea
+                  rows={3}
+                  placeholder="What legal or factual question(s) needed resolving?"
+                  value={closureDraft.issues}
+                  onChange={(e) =>
+                    setClosureDraft({ ...closureDraft, issues: e.target.value })
+                  }
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Rules</Label>
+                <Textarea
+                  rows={3}
+                  placeholder="What law, contract terms, or principles applied?"
+                  value={closureDraft.rules}
+                  onChange={(e) =>
+                    setClosureDraft({ ...closureDraft, rules: e.target.value })
+                  }
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Application</Label>
+                <Textarea
+                  rows={3}
+                  placeholder="How were the rules applied to these facts?"
+                  value={closureDraft.application}
+                  onChange={(e) =>
+                    setClosureDraft({
+                      ...closureDraft,
+                      application: e.target.value,
+                    })
+                  }
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Conclusion</Label>
+                <Textarea
+                  rows={3}
+                  placeholder="What was the final result?"
+                  value={closureDraft.conclusion}
+                  onChange={(e) =>
+                    setClosureDraft({
+                      ...closureDraft,
+                      conclusion: e.target.value,
+                    })
+                  }
+                />
+              </div>
               <div>
                 <Label className="text-xs">Client satisfaction</Label>
                 <Select
