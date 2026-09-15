@@ -21,9 +21,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Play, Square, Plus } from "lucide-react";
+import { Play, Square } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { fetchEmployees } from "@/lib/hr/hr-api";
+import { useAuth } from "@/contexts/AuthContext";
 import { fetchMandates } from "@/lib/crm/mandates-api";
 import { fetchTasks } from "@/lib/crm/tasks-api";
 import {
@@ -53,9 +53,12 @@ const fmt = (ms: number) => {
   return `${h}:${m}:${sec}`;
 };
 
+const TIMER_STORAGE_KEY = "lexora.timesheet.timer.v1";
+
 export default function TimeTracking() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { user } = useAuth();
 
   const { data: entries = [], isLoading } = useQuery({
     queryKey: ["timeEntries"],
@@ -65,25 +68,13 @@ export default function TimeTracking() {
     queryKey: ["mandates"],
     queryFn: fetchMandates,
   });
-  const { data: employeesPage } = useQuery({
-    queryKey: ["hr-employees-all"],
-    queryFn: () => fetchEmployees({ limit: 500 }),
-    retry: false,
-  });
-  const employees = employeesPage?.items ?? [];
 
-  const [openNew, setOpenNew] = useState(false);
   const [running, setRunning] = useState<{ start: number } | null>(() => {
-    const raw = localStorage.getItem("lexora.timesheet.timer.v1");
+    const raw = localStorage.getItem(TIMER_STORAGE_KEY);
     return raw ? { start: Number(raw) } : null;
   });
   const [now, setNow] = useState(Date.now());
-  // Set only when the dialog was opened by stopping the timer — the
-  // hours are computed from real elapsed time, not manually typed,
-  // so the dialog hides the hours field and shows this instead.
-  const [timerElapsedHours, setTimerElapsedHours] = useState<number | null>(
-    null,
-  );
+  const [openNew, setOpenNew] = useState(false);
   const [draft, setDraft] = useState({
     employeeUserId: "",
     member: "",
@@ -96,12 +87,6 @@ export default function TimeTracking() {
     hours: 1,
     billable: true,
   });
-
-  useEffect(() => {
-    if (!running) return;
-    const t = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, [running]);
 
   const { data: mandateTasks = [] } = useQuery({
     queryKey: ["tasks", { mandateId: draft.mandateId }],
@@ -129,7 +114,6 @@ export default function TimeTracking() {
     onSuccess: () => {
       invalidate();
       setOpenNew(false);
-      setTimerElapsedHours(null);
       toast({
         title: "Time logged",
         description: "Saved as a draft — submit it when ready for approval.",
@@ -154,30 +138,37 @@ export default function TimeTracking() {
     .reduce((s, e) => s + e.hours, 0);
   const totalHrs = entries.reduce((s, e) => s + e.hours, 0);
 
+  useEffect(() => {
+    if (!running) return;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [running]);
+
   const elapsedMs = running ? now - running.start : 0;
 
   const startTimer = () => {
     const t = Date.now();
-    localStorage.setItem("lexora.timesheet.timer.v1", String(t));
+    localStorage.setItem(TIMER_STORAGE_KEY, String(t));
     setRunning({ start: t });
     setNow(t);
     toast({ title: "Timer started" });
   };
 
+  // Stopping goes straight to logging it against the tenant's own
+  // identity — this page is the tenant's own timesheet, not a way
+  // to log time on an employee's behalf, so there's no one else to
+  // pick here.
   const stopTimer = () => {
     if (!running) return;
     const hrs = Math.max(
       0.25,
       Number(((Date.now() - running.start) / 3600000).toFixed(2)),
     );
-    localStorage.removeItem("lexora.timesheet.timer.v1");
+    localStorage.removeItem(TIMER_STORAGE_KEY);
     setRunning(null);
-    // Fresh draft — the timer deliberately doesn't ask who/what
-    // until it's stopped, so nothing carries over from a previous
-    // manual "Log time" entry.
     setDraft({
-      employeeUserId: "",
-      member: "",
+      employeeUserId: user?.id ?? "",
+      member: user ? `${user.firstName} ${user.lastName}` : "",
       mandateId: "",
       mandateName: "",
       taskId: "",
@@ -187,7 +178,6 @@ export default function TimeTracking() {
       hours: hrs,
       billable: true,
     });
-    setTimerElapsedHours(hrs);
     setOpenNew(true);
   };
 
@@ -216,14 +206,6 @@ export default function TimeTracking() {
               <Play className="mr-2 h-4 w-4" /> Start timer
             </Button>
           )}
-          <Button
-            onClick={() => {
-              setTimerElapsedHours(null);
-              setOpenNew(true);
-            }}
-          >
-            <Plus className="mr-2 h-4 w-4" /> Log time
-          </Button>
         </div>
       </div>
 
@@ -275,48 +257,12 @@ export default function TimeTracking() {
         </Tabs>
       )}
 
-      <Dialog
-        open={openNew}
-        onOpenChange={(o) => {
-          setOpenNew(o);
-          if (!o) setTimerElapsedHours(null);
-        }}
-      >
+      <Dialog open={openNew} onOpenChange={setOpenNew}>
         <DialogContent className="max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>
-              {timerElapsedHours != null
-                ? `Log ${timerElapsedHours}h to a mandate`
-                : "Log time"}
-            </DialogTitle>
+            <DialogTitle>Log {draft.hours}h to a mandate</DialogTitle>
           </DialogHeader>
           <div className="grid gap-3">
-            <div>
-              <Label>Employee</Label>
-              <Select
-                value={draft.employeeUserId}
-                onValueChange={(v) => {
-                  const e = employees.find((x: any) => x._id === v);
-                  setDraft({
-                    ...draft,
-                    employeeUserId: v,
-                    member: e ? `${e.firstName} ${e.lastName}` : "",
-                  });
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select employee..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {employees.map((e: any) => (
-                    <SelectItem key={e._id} value={e._id}>
-                      {e.firstName} {e.lastName}
-                      {e.jobTitle ? ` · ${e.jobTitle}` : ""}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
             <div>
               <Label>Mandate</Label>
               <Select
@@ -376,32 +322,13 @@ export default function TimeTracking() {
                 placeholder="What did you work on?"
               />
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label>Date</Label>
-                <Input
-                  type="date"
-                  value={draft.date}
-                  onChange={(e) => setDraft({ ...draft, date: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label>Hours</Label>
-                {timerElapsedHours != null ? (
-                  <p className="flex h-10 items-center text-sm font-medium tabular-nums">
-                    {timerElapsedHours}h (from the timer)
-                  </p>
-                ) : (
-                  <Input
-                    type="number"
-                    step="0.25"
-                    value={draft.hours}
-                    onChange={(e) =>
-                      setDraft({ ...draft, hours: Number(e.target.value) })
-                    }
-                  />
-                )}
-              </div>
+            <div>
+              <Label>Date</Label>
+              <Input
+                type="date"
+                value={draft.date}
+                onChange={(e) => setDraft({ ...draft, date: e.target.value })}
+              />
             </div>
             <label className="flex items-center justify-between rounded border p-3 text-sm">
               Billable
