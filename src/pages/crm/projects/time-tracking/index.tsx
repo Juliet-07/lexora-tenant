@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -45,6 +45,14 @@ const money = (n: number, c = "USD") =>
     maximumFractionDigits: 0,
   });
 
+const fmt = (ms: number) => {
+  const s = Math.floor(ms / 1000);
+  const h = String(Math.floor(s / 3600)).padStart(2, "0");
+  const m = String(Math.floor((s % 3600) / 60)).padStart(2, "0");
+  const sec = String(s % 60).padStart(2, "0");
+  return `${h}:${m}:${sec}`;
+};
+
 export default function TimeTracking() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -65,7 +73,17 @@ export default function TimeTracking() {
   const employees = employeesPage?.items ?? [];
 
   const [openNew, setOpenNew] = useState(false);
-  const [running, setRunning] = useState<{ start: number } | null>(null);
+  const [running, setRunning] = useState<{ start: number } | null>(() => {
+    const raw = localStorage.getItem("lexora.timesheet.timer.v1");
+    return raw ? { start: Number(raw) } : null;
+  });
+  const [now, setNow] = useState(Date.now());
+  // Set only when the dialog was opened by stopping the timer — the
+  // hours are computed from real elapsed time, not manually typed,
+  // so the dialog hides the hours field and shows this instead.
+  const [timerElapsedHours, setTimerElapsedHours] = useState<number | null>(
+    null,
+  );
   const [draft, setDraft] = useState({
     employeeUserId: "",
     member: "",
@@ -78,6 +96,12 @@ export default function TimeTracking() {
     hours: 1,
     billable: true,
   });
+
+  useEffect(() => {
+    if (!running) return;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [running]);
 
   const { data: mandateTasks = [] } = useQuery({
     queryKey: ["tasks", { mandateId: draft.mandateId }],
@@ -105,6 +129,7 @@ export default function TimeTracking() {
     onSuccess: () => {
       invalidate();
       setOpenNew(false);
+      setTimerElapsedHours(null);
       toast({
         title: "Time logged",
         description: "Saved as a draft — submit it when ready for approval.",
@@ -129,17 +154,41 @@ export default function TimeTracking() {
     .reduce((s, e) => s + e.hours, 0);
   const totalHrs = entries.reduce((s, e) => s + e.hours, 0);
 
+  const elapsedMs = running ? now - running.start : 0;
+
+  const startTimer = () => {
+    const t = Date.now();
+    localStorage.setItem("lexora.timesheet.timer.v1", String(t));
+    setRunning({ start: t });
+    setNow(t);
+    toast({ title: "Timer started" });
+  };
+
   const stopTimer = () => {
-    if (!running || !draft.employeeUserId || !draft.mandateId) {
-      toast({
-        title: "Pick an employee and mandate first",
-        variant: "destructive",
-      });
-      return;
-    }
-    const hrs = Math.max(0.25, (Date.now() - running.start) / 3600000);
-    createMut.mutate(Number(hrs.toFixed(2)));
+    if (!running) return;
+    const hrs = Math.max(
+      0.25,
+      Number(((Date.now() - running.start) / 3600000).toFixed(2)),
+    );
+    localStorage.removeItem("lexora.timesheet.timer.v1");
     setRunning(null);
+    // Fresh draft — the timer deliberately doesn't ask who/what
+    // until it's stopped, so nothing carries over from a previous
+    // manual "Log time" entry.
+    setDraft({
+      employeeUserId: "",
+      member: "",
+      mandateId: "",
+      mandateName: "",
+      taskId: "",
+      taskTitle: "",
+      narrative: "",
+      date: new Date().toISOString().slice(0, 10),
+      hours: hrs,
+      billable: true,
+    });
+    setTimerElapsedHours(hrs);
+    setOpenNew(true);
   };
 
   return (
@@ -153,29 +202,26 @@ export default function TimeTracking() {
         </div>
         <div className="flex gap-2">
           {running ? (
-            <Button variant="destructive" onClick={stopTimer}>
-              <Square className="mr-2 h-4 w-4" /> Stop timer
-            </Button>
+            <div className="flex items-center gap-2 rounded-md border bg-card px-3 py-2">
+              <span className="flex items-center gap-2 pl-1 font-mono text-sm tabular-nums">
+                <span className="h-2 w-2 animate-pulse rounded-full bg-destructive" />
+                {fmt(elapsedMs)}
+              </span>
+              <Button size="sm" variant="destructive" onClick={stopTimer}>
+                <Square className="mr-1.5 h-3.5 w-3.5" /> Stop timer
+              </Button>
+            </div>
           ) : (
-            <Button
-              variant="outline"
-              onClick={() => {
-                if (!draft.employeeUserId || !draft.mandateId) {
-                  setOpenNew(true);
-                  toast({
-                    title:
-                      "Pick an employee and mandate first, then start the timer from here.",
-                  });
-                  return;
-                }
-                setRunning({ start: Date.now() });
-                toast({ title: "Timer started" });
-              }}
-            >
+            <Button variant="outline" onClick={startTimer}>
               <Play className="mr-2 h-4 w-4" /> Start timer
             </Button>
           )}
-          <Button onClick={() => setOpenNew(true)}>
+          <Button
+            onClick={() => {
+              setTimerElapsedHours(null);
+              setOpenNew(true);
+            }}
+          >
             <Plus className="mr-2 h-4 w-4" /> Log time
           </Button>
         </div>
@@ -229,10 +275,20 @@ export default function TimeTracking() {
         </Tabs>
       )}
 
-      <Dialog open={openNew} onOpenChange={setOpenNew}>
+      <Dialog
+        open={openNew}
+        onOpenChange={(o) => {
+          setOpenNew(o);
+          if (!o) setTimerElapsedHours(null);
+        }}
+      >
         <DialogContent className="max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Log time</DialogTitle>
+            <DialogTitle>
+              {timerElapsedHours != null
+                ? `Log ${timerElapsedHours}h to a mandate`
+                : "Log time"}
+            </DialogTitle>
           </DialogHeader>
           <div className="grid gap-3">
             <div>
@@ -331,14 +387,20 @@ export default function TimeTracking() {
               </div>
               <div>
                 <Label>Hours</Label>
-                <Input
-                  type="number"
-                  step="0.25"
-                  value={draft.hours}
-                  onChange={(e) =>
-                    setDraft({ ...draft, hours: Number(e.target.value) })
-                  }
-                />
+                {timerElapsedHours != null ? (
+                  <p className="flex h-10 items-center text-sm font-medium tabular-nums">
+                    {timerElapsedHours}h (from the timer)
+                  </p>
+                ) : (
+                  <Input
+                    type="number"
+                    step="0.25"
+                    value={draft.hours}
+                    onChange={(e) =>
+                      setDraft({ ...draft, hours: Number(e.target.value) })
+                    }
+                  />
+                )}
               </div>
             </div>
             <label className="flex items-center justify-between rounded border p-3 text-sm">
