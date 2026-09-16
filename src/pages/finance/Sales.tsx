@@ -203,9 +203,12 @@ export default function Sales() {
   const [quoteDraft, setQuoteDraft] = useState({
     clientId: "",
     clientName: "",
+    clientEmail: "",
     mandateId: "",
     title: "",
+    description: "",
     amount: 0,
+    vatPercent: 0,
     currency: "USD",
     expires: "",
     kind: "Quote" as QuoteKind,
@@ -360,9 +363,12 @@ export default function Sales() {
       createQuote({
         clientUserId: quoteIsProspect ? undefined : quoteDraft.clientId,
         clientName: quoteDraft.clientName,
+        clientEmail: quoteDraft.clientEmail || undefined,
         mandateId: quoteDraft.mandateId || undefined,
         title: quoteDraft.title,
+        description: quoteDraft.description || undefined,
         amount: Number(quoteDraft.amount),
+        vatPercent: Number(quoteDraft.vatPercent) || undefined,
         currency: quoteDraft.currency,
         expires: quoteDraft.expires,
         kind: quoteDraft.kind,
@@ -371,6 +377,19 @@ export default function Sales() {
       queryClient.invalidateQueries({ queryKey: ["quotes"] });
       setNewQuoteOpen(false);
       setQuoteIsProspect(false);
+      setQuoteDraft({
+        clientId: "",
+        clientName: "",
+        clientEmail: "",
+        mandateId: "",
+        title: "",
+        description: "",
+        amount: 0,
+        vatPercent: 0,
+        currency: "USD",
+        expires: "",
+        kind: "Quote",
+      });
       toast({ title: `${quoteDraft.kind} created` });
     },
     onError: onErr("Failed to create"),
@@ -1349,6 +1368,7 @@ export default function Sales() {
                     ...d,
                     clientId: "",
                     clientName: "",
+                    clientEmail: "",
                   }));
                 }}
               >
@@ -1366,15 +1386,34 @@ export default function Sales() {
               </button>
             </div>
             {quoteIsProspect ? (
-              <div>
-                <Label>Name</Label>
-                <Input
-                  value={quoteDraft.clientName}
-                  onChange={(e) =>
-                    setQuoteDraft({ ...quoteDraft, clientName: e.target.value })
-                  }
-                  placeholder="Prospect or company name"
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label>Name</Label>
+                  <Input
+                    value={quoteDraft.clientName}
+                    onChange={(e) =>
+                      setQuoteDraft({
+                        ...quoteDraft,
+                        clientName: e.target.value,
+                      })
+                    }
+                    placeholder="Prospect or company name"
+                  />
+                </div>
+                <div>
+                  <Label>Email *</Label>
+                  <Input
+                    type="email"
+                    value={quoteDraft.clientEmail}
+                    onChange={(e) =>
+                      setQuoteDraft({
+                        ...quoteDraft,
+                        clientEmail: e.target.value,
+                      })
+                    }
+                    placeholder="Where to send this"
+                  />
+                </div>
               </div>
             ) : (
               <div>
@@ -1431,7 +1470,18 @@ export default function Sales() {
                 }
               />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>Description</Label>
+              <Textarea
+                rows={3}
+                placeholder="Break down what's included, for the client to read"
+                value={quoteDraft.description}
+                onChange={(e) =>
+                  setQuoteDraft({ ...quoteDraft, description: e.target.value })
+                }
+              />
+            </div>
+            <div className="grid grid-cols-3 gap-3">
               <div>
                 <Label>Amount</Label>
                 <Input
@@ -1441,6 +1491,21 @@ export default function Sales() {
                     setQuoteDraft({
                       ...quoteDraft,
                       amount: Number(e.target.value),
+                    })
+                  }
+                />
+              </div>
+              <div>
+                <Label>VAT %</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={quoteDraft.vatPercent}
+                  onChange={(e) =>
+                    setQuoteDraft({
+                      ...quoteDraft,
+                      vatPercent: Number(e.target.value),
                     })
                   }
                 />
@@ -1463,6 +1528,17 @@ export default function Sales() {
                 </Select>
               </div>
             </div>
+            <div className="flex justify-between rounded-md border bg-muted/30 px-3 py-2 text-sm">
+              <span className="text-muted-foreground">
+                Total package ({quoteDraft.currency})
+              </span>
+              <span className="font-semibold">
+                {(
+                  Number(quoteDraft.amount || 0) *
+                  (1 + Number(quoteDraft.vatPercent || 0) / 100)
+                ).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+              </span>
+            </div>
             <div>
               <Label>Expires</Label>
               <Input
@@ -1478,7 +1554,7 @@ export default function Sales() {
             <Button
               disabled={
                 (quoteIsProspect
-                  ? !quoteDraft.clientName
+                  ? !quoteDraft.clientName || !quoteDraft.clientEmail
                   : !quoteDraft.clientId) ||
                 !quoteDraft.title ||
                 createQuoteMut.isPending

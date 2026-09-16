@@ -413,9 +413,12 @@ export const fetchQuotes = async (): Promise<Quote[]> => {
 export const createQuote = async (dto: {
   clientUserId?: string;
   clientName: string;
+  clientEmail?: string;
   mandateId?: string;
   title: string;
+  description?: string;
   amount: number;
+  vatPercent?: number;
   currency?: string;
   expires: string;
   kind: QuoteKind;
