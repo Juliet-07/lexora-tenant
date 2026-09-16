@@ -90,6 +90,20 @@ const GL_SOURCES: GlSource[] = [
   "Fund",
 ];
 
+// Same list used in Payroll and the tenant profile's currency picker.
+const LEDGER_DISPLAY_CURRENCIES = [
+  "USD",
+  "RWF",
+  "EUR",
+  "GBP",
+  "NGN",
+  "KES",
+  "ZAR",
+  "GHS",
+  "INR",
+  "JPY",
+];
+
 export default function Accounting() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -287,12 +301,14 @@ export default function Accounting() {
   // ── General ledger ─────────────────────────────────────────
   const [glSource, setGlSource] = useState<GlSource | "All">("All");
   const [glSearch, setGlSearch] = useState("");
+  const [glDisplayCurrency, setGlDisplayCurrency] = useState<string>("");
   const { data: glEntries = [] } = useQuery({
-    queryKey: ["generalLedger", glSource, glSearch],
+    queryKey: ["generalLedger", glSource, glSearch, glDisplayCurrency],
     queryFn: () =>
       fetchGeneralLedger({
         source: glSource === "All" ? undefined : glSource,
         search: glSearch || undefined,
+        displayCurrency: glDisplayCurrency || undefined,
       }),
   });
 
@@ -625,6 +641,26 @@ export default function Accounting() {
               value={glSearch}
               onChange={(e) => setGlSearch(e.target.value)}
             />
+            <Select
+              value={glDisplayCurrency || "base"}
+              onValueChange={(v) => setGlDisplayCurrency(v === "base" ? "" : v)}
+            >
+              <SelectTrigger className="w-40">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="base">
+                  {glEntries[0]?.baseCurrency
+                    ? `Base (${glEntries[0].baseCurrency})`
+                    : "Base currency"}
+                </SelectItem>
+                {LEDGER_DISPLAY_CURRENCIES.map((c) => (
+                  <SelectItem key={c} value={c}>
+                    {c}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <Button
               size="sm"
               variant="outline"

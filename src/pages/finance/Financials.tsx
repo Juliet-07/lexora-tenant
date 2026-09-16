@@ -1,12 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import {
-  ArrowUpRight,
-  TrendingUp,
-  TrendingDown,
-  Info,
-  Clock,
-} from "lucide-react";
+import { ArrowUpRight, TrendingUp, TrendingDown, Info } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -276,7 +270,6 @@ export default function Financials() {
           <TabsTrigger value="serviceline">Service line P&amp;L</TabsTrigger>
           <TabsTrigger value="clientprofit">Client profitability</TabsTrigger>
           <TabsTrigger value="kpis">KPI dashboard</TabsTrigger>
-          <TabsTrigger value="budget">Budget vs actual</TabsTrigger>
           <TabsTrigger value="writeoffs">Write-offs</TabsTrigger>
           <TabsTrigger value="linked">Linked reports</TabsTrigger>
         </TabsList>
@@ -621,32 +614,6 @@ export default function Financials() {
               </p>
             </>
           )}
-        </TabsContent>
-
-        {/* Budget vs actual — real placeholder, not fake data */}
-        <TabsContent value="budget" className="mt-4">
-          <Card>
-            <CardContent className="p-8 text-center space-y-3">
-              <Clock className="mx-auto h-8 w-8 text-muted-foreground" />
-              <p className="font-medium">Budget vs actual isn't set up yet</p>
-              <p className="mx-auto max-w-md text-sm text-muted-foreground">
-                There's no budget captured anywhere in the system yet, so this
-                tab has nothing real to show — showing sample numbers here would
-                look like a working feature when it isn't.
-              </p>
-              <div className="mx-auto max-w-md rounded-lg border bg-muted/30 p-4 text-left text-xs text-muted-foreground">
-                <p className="font-medium text-foreground">
-                  Waiting on a product decision:
-                </p>
-                <p className="mt-1">
-                  Should budgets be set per account per month, or as a simpler
-                  lump revenue/expense figure per month? And should each new
-                  period start from the prior period's numbers, or be entered
-                  fresh?
-                </p>
-              </div>
-            </CardContent>
-          </Card>
         </TabsContent>
 
         {/* Write-offs */}

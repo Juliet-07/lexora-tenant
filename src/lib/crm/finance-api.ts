@@ -1159,12 +1159,19 @@ export interface GlEntry {
   credit: number;
   sourceId: string | null;
   balance: number;
+  originalCurrency?: string;
+  originalDebit?: number;
+  originalCredit?: number;
+  fxRateToBase?: number;
+  displayCurrency?: string;
+  baseCurrency?: string;
 }
 export const fetchGeneralLedger = async (filters?: {
   source?: GlSource;
   from?: string;
   to?: string;
   search?: string;
+  displayCurrency?: string;
 }): Promise<GlEntry[]> => {
   const res = await api.get("/finance/general-ledger", { params: filters });
   const d = unwrap(res);

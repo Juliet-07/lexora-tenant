@@ -8,6 +8,13 @@ import {
   CardDescription,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -22,6 +29,20 @@ import { useToast } from "@/hooks/use-toast";
 // TYPES
 // ─────────────────────────────────────────────────────────────
 
+// Same list as Payroll's currency picker, for consistency.
+const CURRENCIES = [
+  "RWF",
+  "USD",
+  "EUR",
+  "GBP",
+  "NGN",
+  "KES",
+  "ZAR",
+  "GHS",
+  "INR",
+  "JPY",
+];
+
 interface TenantProfile {
   _id?: string;
   firstName?: string;
@@ -35,6 +56,7 @@ interface TenantProfile {
     registrationNumber?: string;
     taxId?: string;
     website?: string;
+    baseCurrency?: string;
     address?: {
       street?: string;
       city?: string;
@@ -64,6 +86,7 @@ type ProfileForm = {
   registrationNumber: string;
   taxId: string;
   website: string;
+  baseCurrency: string;
   street: string;
   city: string;
   state: string;
@@ -87,6 +110,7 @@ const EMPTY_FORM: ProfileForm = {
   registrationNumber: "",
   taxId: "",
   website: "",
+  baseCurrency: "USD",
   street: "",
   city: "",
   state: "",
@@ -115,6 +139,7 @@ function toForm(p: TenantProfile | null | undefined): ProfileForm {
     registrationNumber: tp.registrationNumber ?? "",
     taxId: tp.taxId ?? "",
     website: tp.website ?? "",
+    baseCurrency: tp.baseCurrency ?? "USD",
     street: addr.street ?? "",
     city: addr.city ?? "",
     state: addr.state ?? "",
@@ -130,29 +155,26 @@ function toForm(p: TenantProfile | null | undefined): ProfileForm {
 
 function fromForm(f: ProfileForm) {
   return {
-    firstName: f.firstName,
-    lastName: f.lastName,
     phone: f.phone,
-    tenantProfile: {
-      businessName: f.businessName,
-      industry: f.industry,
-      registrationNumber: f.registrationNumber,
-      taxId: f.taxId,
-      website: f.website,
-      address: {
-        street: f.street,
-        city: f.city,
-        state: f.state,
-        country: f.country,
-        postalCode: f.postalCode,
-      },
-      contactPerson: {
-        firstName: f.contactFirstName,
-        lastName: f.contactLastName,
-        email: f.contactEmail,
-        phone: f.contactPhone,
-        position: f.contactPosition,
-      },
+    businessName: f.businessName,
+    industry: f.industry,
+    registrationNumber: f.registrationNumber,
+    taxId: f.taxId,
+    website: f.website,
+    baseCurrency: f.baseCurrency,
+    address: {
+      street: f.street,
+      city: f.city,
+      state: f.state,
+      country: f.country,
+      postalCode: f.postalCode,
+    },
+    contactPerson: {
+      firstName: f.contactFirstName,
+      lastName: f.contactLastName,
+      email: f.contactEmail,
+      phone: f.contactPhone,
+      position: f.contactPosition,
     },
   };
 }
@@ -345,6 +367,31 @@ export default function ProfileTab() {
               value={form.taxId}
               onChange={(v) => set("taxId", v)}
             />
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">
+                Reporting currency
+              </Label>
+              <Select
+                value={form.baseCurrency}
+                onValueChange={(v) => set("baseCurrency", v)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {CURRENCIES.map((c) => (
+                    <SelectItem key={c} value={c}>
+                      {c}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Every financial record, report, and balance is kept and shown in
+                this currency — amounts entered in another currency are
+                converted using the rate on the day.
+              </p>
+            </div>
             <Field
               label="Website"
               value={form.website}
