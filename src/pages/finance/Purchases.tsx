@@ -50,6 +50,7 @@ import { fetchMandates } from "@/lib/crm/mandates-api";
 import { fetchEmployees, fetchAllPayrollRuns } from "@/lib/hr/hr-api";
 import {
   fetchVendors,
+  fetchPurchasesOverview,
   fetchPurchaseOrders,
   createPurchaseOrder,
   issuePurchaseOrder,
@@ -176,10 +177,10 @@ export default function Purchases() {
   });
   const employees = employeesPage?.items ?? [];
 
-  const payable = vendors.reduce((s, v) => s + v.outstanding, 0);
-  const claimsAwaiting = claims
-    .filter((c) => c.status !== "Paid")
-    .reduce((s, c) => s + c.amount, 0);
+  const { data: overview } = useQuery({
+    queryKey: ["purchasesOverview"],
+    queryFn: fetchPurchasesOverview,
+  });
   const nextPayroll = payrollRuns[0];
 
   const onErr = (title: string) => (err: any) =>
@@ -436,8 +437,14 @@ export default function Purchases() {
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {[
-          { label: "Total payables", value: money(payable) },
-          { label: "Claims awaiting payment", value: money(claimsAwaiting) },
+          {
+            label: "Total payables",
+            value: money(overview?.totalPayables ?? 0, overview?.currency),
+          },
+          {
+            label: "Claims awaiting payment",
+            value: money(overview?.claimsAwaiting ?? 0, overview?.currency),
+          },
           {
             label: "Next payroll (net)",
             value: nextPayroll

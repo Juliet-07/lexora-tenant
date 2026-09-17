@@ -772,7 +772,19 @@ export default function Sales() {
                           {q.kind}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-sm">{q.clientName}</TableCell>
+                      <TableCell className="text-sm">
+                        <div className="flex items-center gap-1.5">
+                          {q.clientName}
+                          {!q.clientUserId && (
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] bg-muted text-muted-foreground"
+                            >
+                              Prospect
+                            </Badge>
+                          )}
+                        </div>
+                      </TableCell>
                       <TableCell className="text-sm">{q.title}</TableCell>
                       <TableCell className="text-sm font-semibold">
                         {money(q.amount, q.currency)}
@@ -804,21 +816,25 @@ export default function Sales() {
                             Send
                           </Button>
                         )}
-                        {!q.mandateId && !q.convertedInvoiceId && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              setLinkMandateTarget(q);
-                              setLinkMandateId("");
-                            }}
-                          >
-                            <Link2 className="mr-1.5 h-3.5 w-3.5" /> Add mandate
-                          </Button>
-                        )}
+                        {!q.mandateId &&
+                          !q.convertedInvoiceId &&
+                          q.clientUserId && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setLinkMandateTarget(q);
+                                setLinkMandateId("");
+                              }}
+                            >
+                              <Link2 className="mr-1.5 h-3.5 w-3.5" /> Add
+                              mandate
+                            </Button>
+                          )}
                         {!q.convertedInvoiceId &&
                           q.status !== "Declined" &&
-                          q.status !== "Expired" && (
+                          q.status !== "Expired" &&
+                          q.clientUserId && (
                             <Button
                               size="sm"
                               variant="outline"

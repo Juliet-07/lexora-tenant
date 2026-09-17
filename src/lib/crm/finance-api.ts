@@ -559,6 +559,14 @@ export const fetchVendors = async (): Promise<Vendor[]> => {
   return Array.isArray(d) ? d : [];
 };
 
+export interface PurchasesOverview {
+  currency: string;
+  totalPayables: number;
+  claimsAwaiting: number;
+}
+export const fetchPurchasesOverview = async (): Promise<PurchasesOverview> =>
+  unwrap(await api.get("/finance/purchases-overview"));
+
 // ── Purchases: purchase orders ────────────────────────────────
 
 export type PoStatus = "Draft" | "Issued" | "Fulfilled" | "Cancelled";
@@ -795,6 +803,7 @@ export interface BankTransaction {
   date: string;
   description: string;
   amount: number;
+  currency: string;
   status: TxStatus;
   linkType: TxLinkType | null;
   linkId: string | null;
@@ -1038,9 +1047,13 @@ export const resyncEbm = async (invoiceId: string): Promise<any> =>
 // ── Accounting: overview ─────────────────────────────────────
 
 export interface AccountingOverview {
+  currency: string;
   salesRevenueYtd: number;
   outstandingReceivables: number;
   purchasesExpensesYtd: number;
+  trustBalance: number;
+  fundCommitted: number;
+  cashBalance: number;
 }
 export const fetchAccountingOverview = async (): Promise<AccountingOverview> =>
   unwrap(await api.get("/finance/accounting-overview"));

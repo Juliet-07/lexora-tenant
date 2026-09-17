@@ -177,9 +177,6 @@ export default function Accounting() {
   });
 
   // ── Overview figures ───────────────────────────────────────
-  const cashBalance = bankAccounts
-    .filter((a) => a.type === "Office")
-    .reduce((s, a) => s + a.balance, 0);
   const assetsNbv = assets.reduce((s, a) => s + a.nbv, 0);
   const unpostedJournalsCount = journals.filter(
     (j) => j.status === "Unposted",
