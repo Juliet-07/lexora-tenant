@@ -558,15 +558,6 @@ export const fetchVendors = async (): Promise<Vendor[]> => {
   const d = unwrap(res);
   return Array.isArray(d) ? d : [];
 };
-export const createVendor = async (dto: {
-  name: string;
-  tin?: string;
-  category?: string;
-  terms?: string;
-  currency?: string;
-  email?: string;
-  wht?: boolean;
-}): Promise<Vendor> => unwrap(await api.post("/finance/vendors", dto));
 
 // ── Purchases: purchase orders ────────────────────────────────
 

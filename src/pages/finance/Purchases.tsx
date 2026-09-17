@@ -50,7 +50,6 @@ import { fetchMandates } from "@/lib/crm/mandates-api";
 import { fetchEmployees, fetchAllPayrollRuns } from "@/lib/hr/hr-api";
 import {
   fetchVendors,
-  createVendor,
   fetchPurchaseOrders,
   createPurchaseOrder,
   issuePurchaseOrder,
@@ -189,36 +188,6 @@ export default function Purchases() {
       description: err?.response?.data?.message,
       variant: "destructive",
     });
-
-  // ── Vendors ────────────────────────────────────────────────
-  const [newVendorOpen, setNewVendorOpen] = useState(false);
-  const [vendorDraft, setVendorDraft] = useState({
-    name: "",
-    tin: "",
-    category: "",
-    terms: "Net 30",
-    currency: "USD",
-    email: "",
-    wht: false,
-  });
-  const createVendorMut = useMutation({
-    mutationFn: () => createVendor(vendorDraft),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["vendors"] });
-      setNewVendorOpen(false);
-      setVendorDraft({
-        name: "",
-        tin: "",
-        category: "",
-        terms: "Net 30",
-        currency: "USD",
-        email: "",
-        wht: false,
-      });
-      toast({ title: "Vendor added" });
-    },
-    onError: onErr("Failed to add vendor"),
-  });
 
   // ── Purchase orders ────────────────────────────────────────
   const [newPoOpen, setNewPoOpen] = useState(false);
@@ -930,15 +899,6 @@ export default function Purchases() {
 
         {/* Aged payables & vendors */}
         <TabsContent value="payables" className="space-y-4 mt-4">
-          <div className="flex justify-end">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setNewVendorOpen(true)}
-            >
-              <Plus className="mr-2 h-4 w-4" /> Add vendor
-            </Button>
-          </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             {["Current", "31–60", "61–90", "90+"].map((band) => (
               <Card key={band}>
@@ -998,7 +958,8 @@ export default function Purchases() {
                         colSpan={8}
                         className="py-8 text-center text-sm text-muted-foreground"
                       >
-                        No vendors yet.
+                        No vendors yet — add one under CRM's vendor management
+                        to see it here.
                       </TableCell>
                     </TableRow>
                   )}
@@ -1017,105 +978,6 @@ export default function Purchases() {
       </Tabs>
 
       {/* New vendor */}
-      <Dialog open={newVendorOpen} onOpenChange={setNewVendorOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Add vendor</DialogTitle>
-          </DialogHeader>
-          <div className="grid gap-3">
-            <div>
-              <Label>Name</Label>
-              <Input
-                value={vendorDraft.name}
-                onChange={(e) =>
-                  setVendorDraft({ ...vendorDraft, name: e.target.value })
-                }
-              />
-            </div>
-            <div>
-              <Label>Email</Label>
-              <Input
-                type="email"
-                value={vendorDraft.email}
-                onChange={(e) =>
-                  setVendorDraft({ ...vendorDraft, email: e.target.value })
-                }
-                placeholder="For sending issued purchase orders"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label>TIN</Label>
-                <Input
-                  value={vendorDraft.tin}
-                  onChange={(e) =>
-                    setVendorDraft({ ...vendorDraft, tin: e.target.value })
-                  }
-                />
-              </div>
-              <div>
-                <Label>Category</Label>
-                <Input
-                  value={vendorDraft.category}
-                  onChange={(e) =>
-                    setVendorDraft({ ...vendorDraft, category: e.target.value })
-                  }
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label>Terms</Label>
-                <Input
-                  value={vendorDraft.terms}
-                  onChange={(e) =>
-                    setVendorDraft({ ...vendorDraft, terms: e.target.value })
-                  }
-                />
-              </div>
-              <div>
-                <Label>Currency</Label>
-                <Select
-                  value={vendorDraft.currency}
-                  onValueChange={(v) =>
-                    setVendorDraft({ ...vendorDraft, currency: v })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {["USD", "EUR", "RWF", "GBP"].map((c) => (
-                      <SelectItem key={c} value={c}>
-                        {c}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={vendorDraft.wht}
-                onChange={(e) =>
-                  setVendorDraft({ ...vendorDraft, wht: e.target.checked })
-                }
-              />
-              Non-resident — subject to WHT
-            </label>
-          </div>
-          <DialogFooter>
-            <Button
-              disabled={!vendorDraft.name || createVendorMut.isPending}
-              onClick={() => createVendorMut.mutate()}
-            >
-              Add vendor
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       {/* New PO */}
       <Dialog open={newPoOpen} onOpenChange={setNewPoOpen}>
         <DialogContent className="max-h-[85vh] overflow-y-auto">
