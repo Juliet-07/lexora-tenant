@@ -183,6 +183,7 @@ export default function Banking() {
   const [matchTarget, setMatchTarget] = useState<string | null>(null);
   const [matchType, setMatchType] = useState<TxLinkType>("Invoice");
   const [matchId, setMatchId] = useState("");
+  const [matchNote, setMatchNote] = useState("");
 
   const invalidateTx = () => {
     queryClient.invalidateQueries({ queryKey: ["bankTransactions"] });
@@ -205,6 +206,14 @@ export default function Banking() {
   });
   const matchMut = useMutation({
     mutationFn: () => {
+      if (matchType === "Manual") {
+        return matchBankTransaction(
+          matchTarget!,
+          matchType,
+          undefined,
+          matchNote,
+        );
+      }
       const label =
         matchType === "Invoice"
           ? (invoices.find((i) => i._id === matchId)?.ref ?? matchId)
@@ -215,6 +224,7 @@ export default function Banking() {
       invalidateTx();
       setMatchTarget(null);
       setMatchId("");
+      setMatchNote("");
       toast({ title: "Matched" });
     },
     onError: onErr("Failed to match"),
@@ -909,6 +919,7 @@ export default function Banking() {
                 onValueChange={(v) => {
                   setMatchType(v as TxLinkType);
                   setMatchId("");
+                  setMatchNote("");
                 }}
               >
                 <SelectTrigger>
@@ -952,14 +963,17 @@ export default function Banking() {
             {matchType === "Manual" && (
               <Input
                 placeholder="Note"
-                value={matchId}
-                onChange={(e) => setMatchId(e.target.value)}
+                value={matchNote}
+                onChange={(e) => setMatchNote(e.target.value)}
               />
             )}
           </div>
           <DialogFooter>
             <Button
-              disabled={!matchId || matchMut.isPending}
+              disabled={
+                (matchType === "Manual" ? !matchNote : !matchId) ||
+                matchMut.isPending
+              }
               onClick={() => matchMut.mutate()}
             >
               Match

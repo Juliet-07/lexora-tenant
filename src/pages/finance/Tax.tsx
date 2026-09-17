@@ -300,7 +300,9 @@ export default function Tax() {
                       <p className="text-sm text-muted-foreground">
                         {l as string}
                       </p>
-                      <p className="text-xl font-bold">{money(v as number)}</p>
+                      <p className="text-xl font-bold">
+                        {money(v as number, vat.currency)}
+                      </p>
                     </CardContent>
                   </Card>
                 ))}
@@ -438,7 +440,7 @@ export default function Tax() {
                   >
                     <span className="text-muted-foreground">{l as string}</span>
                     <span className="font-medium">
-                      {money(v as number | null)}
+                      {money(v as number | null, cit.currency)}
                     </span>
                   </div>
                 ))}

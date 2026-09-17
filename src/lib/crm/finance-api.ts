@@ -820,7 +820,7 @@ export const createBankTransaction = async (dto: {
 export const matchBankTransaction = async (
   id: string,
   linkType: TxLinkType,
-  linkId: string,
+  linkId: string | undefined,
   linkLabel: string,
 ): Promise<BankTransaction> =>
   unwrap(
@@ -965,6 +965,7 @@ export interface VatLine {
 }
 export interface VatReturn {
   period: string;
+  currency: string;
   outputVat: number;
   inputVat: number;
   netPayable: number;
@@ -989,6 +990,7 @@ export const fetchPayrollTax = async (): Promise<PayrollTaxLine[]> => {
 };
 
 export interface CitProvision {
+  currency: string;
   revenue: number;
   expenses: number;
   profitBeforeTax: number;
