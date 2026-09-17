@@ -395,30 +395,54 @@ export default function Accounting() {
         {[
           {
             label: "Sales",
-            value: overview ? money(overview.salesRevenueYtd) : "—",
+            value: overview
+              ? money(overview.salesRevenueYtd, overview.currency)
+              : "—",
             hint: "Revenue posted YTD",
             color: "text-success",
           },
           {
             label: "Billing",
-            value: overview ? money(overview.outstandingReceivables) : "—",
+            value: overview
+              ? money(overview.outstandingReceivables, overview.currency)
+              : "—",
             hint: "Outstanding receivables",
           },
           {
             label: "Purchases",
-            value: overview ? money(overview.purchasesExpensesYtd) : "—",
+            value: overview
+              ? money(overview.purchasesExpensesYtd, overview.currency)
+              : "—",
             hint: "Expenses posted YTD",
             color: "text-destructive",
           },
-          { label: "Banking", value: money(cashBalance), hint: "Cash balance" },
+          {
+            label: "Banking",
+            value: overview
+              ? money(overview.cashBalance, overview.currency)
+              : "—",
+            hint: "Cash balance",
+          },
           {
             label: "Tax",
-            value: cit ? money(cit.citAtRate) : "—",
+            value: cit ? money(cit.citAtRate, cit.currency) : "—",
             hint: "CIT provision",
             color: "text-warning",
           },
-          { label: "Trust", value: "—", hint: "Not yet available" },
-          { label: "Fund", value: "—", hint: "Not yet available" },
+          {
+            label: "Trust",
+            value: overview
+              ? money(overview.trustBalance, overview.currency)
+              : "—",
+            hint: "Client trust balance",
+          },
+          {
+            label: "Fund",
+            value: overview
+              ? money(overview.fundCommitted, overview.currency)
+              : "—",
+            hint: "Committed capital",
+          },
           { label: "Assets", value: money(assetsNbv), hint: "Net book value" },
         ].map((c) => (
           <Card key={c.label}>

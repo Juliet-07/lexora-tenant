@@ -407,7 +407,7 @@ export default function Banking() {
                       <TableCell
                         className={`text-sm font-semibold ${t.amount < 0 ? "text-destructive" : "text-success"}`}
                       >
-                        {money(t.amount)}
+                        {money(t.amount, t.currency)}
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">
                         {t.suggestedAccount || "—"}
