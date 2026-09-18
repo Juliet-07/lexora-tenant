@@ -2650,3 +2650,89 @@ export const fetchFeeExpenseDisclosure = async (
       `/finance/funds/${fundId}/lp-reporting/commitments/${commitmentId}/fee-expense-disclosure/${period}`,
     ),
   );
+
+// ── Management reporting ──────────────────────────────────────
+
+export type ReportPeriodType = "Month" | "Quarter" | "Year";
+
+export interface ManagementReport {
+  periodType: ReportPeriodType;
+  periodKey: string;
+  periodLabel: string;
+  currency: string;
+  revenue: number;
+  expenses: number;
+  netIncome: number;
+  outstandingReceivables: number;
+  outstandingPayables: number;
+  cashPosition: number;
+  invoiceCount: number;
+  billCount: number;
+  executiveSummary: string;
+}
+
+export const fetchManagementReport = async (
+  periodType: ReportPeriodType,
+  periodKey: string,
+  displayCurrency?: string,
+): Promise<ManagementReport> =>
+  unwrap(
+    await api.get(`/finance/management-reports/${periodType}/${periodKey}`, {
+      params: displayCurrency ? { displayCurrency } : undefined,
+    }),
+  );
+
+export const saveExecutiveSummary = async (
+  periodType: ReportPeriodType,
+  periodKey: string,
+  executiveSummary: string,
+): Promise<void> => {
+  await api.post(
+    `/finance/management-reports/${periodType}/${periodKey}/executive-summary`,
+    { executiveSummary },
+  );
+};
+
+export const emailManagementReport = async (
+  periodType: ReportPeriodType,
+  periodKey: string,
+  dto: {
+    recipientName: string;
+    recipientEmail: string;
+    subject: string;
+    displayCurrency?: string;
+  },
+): Promise<{ sent: boolean; to: string }> =>
+  unwrap(
+    await api.post(
+      `/finance/management-reports/${periodType}/${periodKey}/email`,
+      dto,
+    ),
+  );
+
+// Triggers PDF download directly in the browser — same shared
+// fetch+attach pattern used for other real PDF exports.
+export const downloadManagementReportPdf = (
+  periodType: ReportPeriodType,
+  periodKey: string,
+  displayCurrency?: string,
+): void => {
+  const token = localStorage.getItem("tenantToken");
+  const base = import.meta.env.VITE_REACT_APP_BASE_URL;
+  const filename = `management-report-${periodKey}.pdf`;
+  const qs = displayCurrency
+    ? `?displayCurrency=${encodeURIComponent(displayCurrency)}`
+    : "";
+  fetch(
+    `${base}/finance/management-reports/${periodType}/${periodKey}/pdf${qs}`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  )
+    .then((r) => r.blob())
+    .then((blob) => {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
+};
