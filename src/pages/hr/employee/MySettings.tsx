@@ -1,21 +1,32 @@
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { useMutation } from "@tanstack/react-query";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { User as UserIcon, Lock, Bell, Upload } from "lucide-react";
+import { User as UserIcon, Lock, Bell, Upload, Loader2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { api } from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
 
 export default function MySettings() {
   const [params, setParams] = useSearchParams();
   const tab = params.get("tab") ?? "profile";
-  const valid = useMemo(() => new Set(["profile", "password", "notifications"]), []);
+  const valid = useMemo(
+    () => new Set(["profile", "password", "notifications"]),
+    [],
+  );
   const active = valid.has(tab) ? tab : "profile";
   const setTab = (v: string) => {
     const next = new URLSearchParams(params);
@@ -25,7 +36,7 @@ export default function MySettings() {
 
   const { user } = useAuth();
   const [fullName, setFullName] = useState(
-    [user?.firstName, user?.lastName].filter(Boolean).join(" ")
+    [user?.firstName, user?.lastName].filter(Boolean).join(" "),
   );
   const [email, setEmail] = useState(user?.email ?? "");
   const [phone, setPhone] = useState("");
@@ -47,14 +58,57 @@ export default function MySettings() {
     .join("")
     .toUpperCase();
 
-  const saveProfile = () => toast({ title: "Profile updated", description: "Your details have been saved." });
+  const saveProfile = () =>
+    toast({
+      title: "Profile updated",
+      description: "Your details have been saved.",
+    });
+
+  // Real API integration — same /auth/change-password endpoint the
+  // tenant-side Security settings page uses. It's authenticated off
+  // the caller's own JWT (no user-type restriction), so it works
+  // exactly the same way for an employee as it does for the owner.
+  const changePasswordMut = useMutation({
+    mutationFn: async (payload: {
+      currentPassword: string;
+      newPassword: string;
+      confirmPassword: string;
+    }) => {
+      const res = await api.patch("/auth/change-password", payload);
+      return res.data;
+    },
+    onSuccess: () => {
+      setCurrent("");
+      setNext1("");
+      setConfirm("");
+      toast({
+        title: "Password changed",
+        description: "Use your new password on next sign-in.",
+      });
+    },
+    onError: (err: any) =>
+      toast({
+        title: "Could not change password",
+        description: err?.response?.data?.message ?? "Please try again.",
+        variant: "destructive",
+      }),
+  });
+
   const changePwd = () => {
-    if (!current || !next1 || next1 !== confirm) {
-      toast({ title: "Check your inputs", description: "Passwords must match.", variant: "destructive" });
+    if (!current || next1.length < 8 || next1 !== confirm) {
+      toast({
+        title: "Check your inputs",
+        description:
+          "New password needs at least 8 characters and must match the confirmation.",
+        variant: "destructive",
+      });
       return;
     }
-    setCurrent(""); setNext1(""); setConfirm("");
-    toast({ title: "Password changed", description: "Use your new password on next sign-in." });
+    changePasswordMut.mutate({
+      currentPassword: current,
+      newPassword: next1,
+      confirmPassword: confirm,
+    });
   };
   const saveNotif = () => toast({ title: "Preferences saved" });
 
@@ -62,46 +116,74 @@ export default function MySettings() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Settings</h1>
-        <p className="text-sm text-muted-foreground">Manage your profile, password and notifications.</p>
+        <p className="text-sm text-muted-foreground">
+          Manage your profile, password and notifications.
+        </p>
       </div>
 
       <Tabs value={active} onValueChange={setTab} className="space-y-6">
         <TabsList>
-          <TabsTrigger value="profile"><UserIcon className="h-4 w-4 mr-2" /> Profile</TabsTrigger>
-          <TabsTrigger value="password"><Lock className="h-4 w-4 mr-2" /> Password</TabsTrigger>
-          <TabsTrigger value="notifications"><Bell className="h-4 w-4 mr-2" /> Notifications</TabsTrigger>
+          <TabsTrigger value="profile">
+            <UserIcon className="h-4 w-4 mr-2" /> Profile
+          </TabsTrigger>
+          <TabsTrigger value="password">
+            <Lock className="h-4 w-4 mr-2" /> Password
+          </TabsTrigger>
+          <TabsTrigger value="notifications">
+            <Bell className="h-4 w-4 mr-2" /> Notifications
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="profile">
           <Card>
             <CardHeader>
               <CardTitle>Profile</CardTitle>
-              <CardDescription>Update your personal information.</CardDescription>
+              <CardDescription>
+                Update your personal information.
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="flex items-center gap-4">
                 <Avatar className="h-16 w-16">
-                  <AvatarFallback className="text-lg">{initials}</AvatarFallback>
+                  <AvatarFallback className="text-lg">
+                    {initials}
+                  </AvatarFallback>
                 </Avatar>
-                <Button variant="outline" size="sm"><Upload className="h-4 w-4 mr-2" /> Upload photo</Button>
+                <Button variant="outline" size="sm">
+                  <Upload className="h-4 w-4 mr-2" /> Upload photo
+                </Button>
               </div>
               <Separator />
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label>Full name</Label>
-                  <Input value={fullName} onChange={(e) => setFullName(e.target.value)} />
+                  <Input
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label>Email</Label>
-                  <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+                  <Input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label>Phone</Label>
-                  <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+234..." />
+                  <Input
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="+234..."
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label>Job title</Label>
-                  <Input value={title} onChange={(e) => setTitle(e.target.value)} />
+                  <Input
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                  />
                 </div>
               </div>
               <div className="flex justify-end">
@@ -115,23 +197,49 @@ export default function MySettings() {
           <Card>
             <CardHeader>
               <CardTitle>Change password</CardTitle>
-              <CardDescription>Use at least 8 characters with a mix of letters and numbers.</CardDescription>
+              <CardDescription>
+                Use at least 8 characters with a mix of letters and numbers.
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4 max-w-md">
               <div className="space-y-2">
                 <Label>Current password</Label>
-                <Input type="password" value={current} onChange={(e) => setCurrent(e.target.value)} />
+                <Input
+                  type="password"
+                  value={current}
+                  onChange={(e) => setCurrent(e.target.value)}
+                />
               </div>
               <div className="space-y-2">
                 <Label>New password</Label>
-                <Input type="password" value={next1} onChange={(e) => setNext1(e.target.value)} />
+                <Input
+                  type="password"
+                  value={next1}
+                  onChange={(e) => setNext1(e.target.value)}
+                />
               </div>
               <div className="space-y-2">
                 <Label>Confirm new password</Label>
-                <Input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+                <Input
+                  type="password"
+                  value={confirm}
+                  onChange={(e) => setConfirm(e.target.value)}
+                />
               </div>
               <div className="flex justify-end">
-                <Button onClick={changePwd}>Update password</Button>
+                <Button
+                  onClick={changePwd}
+                  disabled={changePasswordMut.isPending}
+                >
+                  {changePasswordMut.isPending ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />{" "}
+                      Updating...
+                    </>
+                  ) : (
+                    "Update password"
+                  )}
+                </Button>
               </div>
             </CardContent>
           </Card>
@@ -141,16 +249,41 @@ export default function MySettings() {
           <Card>
             <CardHeader>
               <CardTitle>Notifications</CardTitle>
-              <CardDescription>Choose how you want to be notified.</CardDescription>
+              <CardDescription>
+                Choose how you want to be notified.
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               {[
-                { label: "Email notifications", desc: "Get key updates by email", val: notifEmail, set: setNotifEmail },
-                { label: "Push notifications", desc: "In-app and browser alerts", val: notifPush, set: setNotifPush },
-                { label: "Leave updates", desc: "When your leave request status changes", val: notifLeave, set: setNotifLeave },
-                { label: "Payroll & payslip", desc: "When a new payslip is ready", val: notifPayroll, set: setNotifPayroll },
+                {
+                  label: "Email notifications",
+                  desc: "Get key updates by email",
+                  val: notifEmail,
+                  set: setNotifEmail,
+                },
+                {
+                  label: "Push notifications",
+                  desc: "In-app and browser alerts",
+                  val: notifPush,
+                  set: setNotifPush,
+                },
+                {
+                  label: "Leave updates",
+                  desc: "When your leave request status changes",
+                  val: notifLeave,
+                  set: setNotifLeave,
+                },
+                {
+                  label: "Payroll & payslip",
+                  desc: "When a new payslip is ready",
+                  val: notifPayroll,
+                  set: setNotifPayroll,
+                },
               ].map((r) => (
-                <div key={r.label} className="flex items-center justify-between rounded-lg border p-3">
+                <div
+                  key={r.label}
+                  className="flex items-center justify-between rounded-lg border p-3"
+                >
                   <div>
                     <p className="text-sm font-medium">{r.label}</p>
                     <p className="text-xs text-muted-foreground">{r.desc}</p>
