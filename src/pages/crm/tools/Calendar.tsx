@@ -52,7 +52,9 @@ const LAYERS: CalendarLayer[] = [
   "Client",
   "Compliance",
   "ADR",
+  "Litigation",
   "Contract",
+  "Finance",
 ];
 
 const layerClass: Record<CalendarLayer, string> = {
@@ -61,7 +63,9 @@ const layerClass: Record<CalendarLayer, string> = {
   Client: "bg-success/10 text-success border-success/20",
   Compliance: "bg-destructive/10 text-destructive border-destructive/20",
   ADR: "bg-warning/10 text-warning border-warning/20",
+  Litigation: "bg-warning/10 text-warning border-warning/20",
   Contract: "bg-muted text-muted-foreground border-border",
+  Finance: "bg-secondary/10 text-secondary border-secondary/20",
 };
 
 const pad = (n: number) => String(n).padStart(2, "0");

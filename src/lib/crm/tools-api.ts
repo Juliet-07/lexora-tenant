@@ -579,7 +579,9 @@ export type CalendarLayer =
   | "Client"
   | "Compliance"
   | "ADR"
-  | "Contract";
+  | "Litigation"
+  | "Contract"
+  | "Finance";
 export type RecurrenceRule = "None" | "Daily" | "Weekly" | "Monthly";
 export type VirtualProvider = "Teams" | "Zoom" | "Google Meet";
 
