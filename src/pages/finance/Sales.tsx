@@ -38,6 +38,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
+import { FINANCE_CURRENCIES } from "@/hooks/use-finance-currency";
 import {
   Clock,
   FileText,
@@ -1497,7 +1498,7 @@ export default function Sales() {
                 }
               />
             </div>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label>Amount</Label>
                 <Input
@@ -1511,6 +1512,28 @@ export default function Sales() {
                   }
                 />
               </div>
+              <div>
+                <Label>Currency</Label>
+                <Select
+                  value={quoteDraft.currency}
+                  onValueChange={(v) =>
+                    setQuoteDraft({ ...quoteDraft, currency: v })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {FINANCE_CURRENCIES.map((c) => (
+                      <SelectItem key={c} value={c}>
+                        {c}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label>VAT %</Label>
                 <Input

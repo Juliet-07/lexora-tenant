@@ -21,9 +21,8 @@ import {
 } from "@/components/ui/dialog";
 import { Play, Square, Timer, AlertCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/contexts/AuthContext";
 import { fetchMandates } from "@/lib/crm/mandates-api";
-import { createTimeEntry, logMyTime } from "@/lib/crm/time-tracking-api";
+import { logMyTime } from "@/lib/crm/time-tracking-api";
 
 const STORAGE_KEY = "lexora.crm.floating-timer.v1";
 // Tracks when the user last confirmed they're genuinely still
@@ -52,7 +51,6 @@ const fmtCountdown = (ms: number) => {
 export function FloatingTimer() {
   const { pathname } = useLocation();
   const { toast } = useToast();
-  const { user, isAdmin } = useAuth();
   const queryClient = useQueryClient();
 
   const [startedAt, setStartedAt] = useState<number | null>(() => {
@@ -157,28 +155,22 @@ export function FloatingTimer() {
   const save = async () => {
     if (!form.mandateId) return;
     setSaving(true);
-    const mandate = mandates.find((m: any) => m._id === form.mandateId);
     try {
-      if (isAdmin) {
-        await createTimeEntry({
-          memberUserId: user?.id ?? "",
-          member: user ? `${user.firstName} ${user.lastName}` : "",
-          mandateId: form.mandateId,
-          mandateName: mandate?.name ?? "",
-          narrative: form.narrative,
-          date: new Date().toISOString().slice(0, 10),
-          hours,
-          billable: form.billable,
-        });
-      } else {
-        await logMyTime({
-          mandateId: form.mandateId,
-          narrative: form.narrative,
-          date: new Date().toISOString().slice(0, 10),
-          hours,
-          billable: form.billable,
-        });
-      }
+      // Always the self-service endpoint, even for a tenant owner in
+      // Admin view — it resolves the caller's own real Employee record
+      // server-side, which is the same identity a rate card is keyed
+      // against. Posting straight to the generic time-entries endpoint
+      // with the raw account id (as this used to do here) produced
+      // entries that could never be matched to a rate card or valued,
+      // and that later failed approval with "no rate card on file"
+      // even when one genuinely existed for that person.
+      await logMyTime({
+        mandateId: form.mandateId,
+        narrative: form.narrative,
+        date: new Date().toISOString().slice(0, 10),
+        hours,
+        billable: form.billable,
+      });
       queryClient.invalidateQueries({ queryKey: ["timeEntries"] });
       queryClient.invalidateQueries({ queryKey: ["myTimeEntries"] });
       toast({
