@@ -45,6 +45,10 @@ import {
   Paperclip,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import {
+  useFinanceCurrency,
+  FINANCE_CURRENCIES,
+} from "@/hooks/use-finance-currency";
 import { WorkflowTable } from "@/components/finance/WorkflowTable";
 import { fetchMandates } from "@/lib/crm/mandates-api";
 import { fetchEmployees, fetchAllPayrollRuns } from "@/lib/hr/hr-api";
@@ -177,9 +181,10 @@ export default function Purchases() {
   });
   const employees = employeesPage?.items ?? [];
 
+  const [financeCurrency, setFinanceCurrency] = useFinanceCurrency();
   const { data: overview } = useQuery({
-    queryKey: ["purchasesOverview"],
-    queryFn: fetchPurchasesOverview,
+    queryKey: ["purchasesOverview", financeCurrency],
+    queryFn: () => fetchPurchasesOverview(financeCurrency || undefined),
   });
   const nextPayroll = payrollRuns[0];
 
@@ -427,12 +432,34 @@ export default function Purchases() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Purchases</h1>
-        <p className="text-sm text-muted-foreground">
-          Vendor bills, purchase orders, expense claims, payroll payments and
-          payables
-        </p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold">Purchases</h1>
+          <p className="text-sm text-muted-foreground">
+            Vendor bills, purchase orders, expense claims, payroll payments and
+            payables
+          </p>
+        </div>
+        <Select
+          value={financeCurrency || "base"}
+          onValueChange={(v) => setFinanceCurrency(v === "base" ? "" : v)}
+        >
+          <SelectTrigger className="w-40">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="base">
+              {overview?.currency
+                ? `Base (${overview.currency})`
+                : "Base currency"}
+            </SelectItem>
+            {FINANCE_CURRENCIES.map((c) => (
+              <SelectItem key={c} value={c}>
+                {c}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

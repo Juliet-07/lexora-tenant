@@ -564,8 +564,14 @@ export interface PurchasesOverview {
   totalPayables: number;
   claimsAwaiting: number;
 }
-export const fetchPurchasesOverview = async (): Promise<PurchasesOverview> =>
-  unwrap(await api.get("/finance/purchases-overview"));
+export const fetchPurchasesOverview = async (
+  displayCurrency?: string,
+): Promise<PurchasesOverview> =>
+  unwrap(
+    await api.get("/finance/purchases-overview", {
+      params: displayCurrency ? { displayCurrency } : undefined,
+    }),
+  );
 
 // ── Purchases: purchase orders ────────────────────────────────
 
@@ -980,9 +986,17 @@ export interface VatReturn {
   netPayable: number;
   lines: VatLine[];
 }
-export const fetchVatReturn = async (period?: string): Promise<VatReturn> =>
+export const fetchVatReturn = async (
+  period?: string,
+  displayCurrency?: string,
+): Promise<VatReturn> =>
   unwrap(
-    await api.get("/finance/vat", { params: period ? { period } : undefined }),
+    await api.get("/finance/vat", {
+      params: {
+        ...(period ? { period } : {}),
+        ...(displayCurrency ? { displayCurrency } : {}),
+      },
+    }),
   );
 
 export interface PayrollTaxLine {
@@ -1007,8 +1021,14 @@ export interface CitProvision {
   citAtRate: number;
   note: string;
 }
-export const fetchCitProvision = async (): Promise<CitProvision> =>
-  unwrap(await api.get("/finance/cit"));
+export const fetchCitProvision = async (
+  displayCurrency?: string,
+): Promise<CitProvision> =>
+  unwrap(
+    await api.get("/finance/cit", {
+      params: displayCurrency ? { displayCurrency } : undefined,
+    }),
+  );
 
 export type WhtDirection = "Vendor payment" | "Client receipt";
 export interface WhtCertificate {
@@ -1055,8 +1075,14 @@ export interface AccountingOverview {
   fundCommitted: number;
   cashBalance: number;
 }
-export const fetchAccountingOverview = async (): Promise<AccountingOverview> =>
-  unwrap(await api.get("/finance/accounting-overview"));
+export const fetchAccountingOverview = async (
+  displayCurrency?: string,
+): Promise<AccountingOverview> =>
+  unwrap(
+    await api.get("/finance/accounting-overview", {
+      params: displayCurrency ? { displayCurrency } : undefined,
+    }),
+  );
 
 // ── Accounting: chart of accounts ────────────────────────────
 

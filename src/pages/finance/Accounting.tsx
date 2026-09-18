@@ -32,6 +32,10 @@ import {
 import { Plus, Download, CheckCircle2, Lock, Sparkles } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
+  useFinanceCurrency,
+  FINANCE_CURRENCIES,
+} from "@/hooks/use-finance-currency";
+import {
   fetchAccountingOverview,
   fetchLedgerAccounts,
   createLedgerAccount,
@@ -90,20 +94,6 @@ const GL_SOURCES: GlSource[] = [
   "Fund",
 ];
 
-// Same list used in Payroll and the tenant profile's currency picker.
-const LEDGER_DISPLAY_CURRENCIES = [
-  "USD",
-  "RWF",
-  "EUR",
-  "GBP",
-  "NGN",
-  "KES",
-  "ZAR",
-  "GHS",
-  "INR",
-  "JPY",
-];
-
 export default function Accounting() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -114,9 +104,11 @@ export default function Accounting() {
       variant: "destructive",
     });
 
+  const [financeCurrency, setFinanceCurrency] = useFinanceCurrency();
+
   const { data: overview } = useQuery({
-    queryKey: ["accountingOverview"],
-    queryFn: fetchAccountingOverview,
+    queryKey: ["accountingOverview", financeCurrency],
+    queryFn: () => fetchAccountingOverview(financeCurrency || undefined),
   });
   const { data: accounts = [] } = useQuery({
     queryKey: ["ledgerAccounts"],
@@ -131,8 +123,8 @@ export default function Accounting() {
     queryFn: fetchBankAccounts,
   });
   const { data: cit } = useQuery({
-    queryKey: ["citProvision"],
-    queryFn: fetchCitProvision,
+    queryKey: ["citProvision", financeCurrency],
+    queryFn: () => fetchCitProvision(financeCurrency || undefined),
   });
   const { data: assets = [] } = useQuery({
     queryKey: ["assets"],
@@ -298,14 +290,13 @@ export default function Accounting() {
   // ── General ledger ─────────────────────────────────────────
   const [glSource, setGlSource] = useState<GlSource | "All">("All");
   const [glSearch, setGlSearch] = useState("");
-  const [glDisplayCurrency, setGlDisplayCurrency] = useState<string>("");
   const { data: glEntries = [] } = useQuery({
-    queryKey: ["generalLedger", glSource, glSearch, glDisplayCurrency],
+    queryKey: ["generalLedger", glSource, glSearch, financeCurrency],
     queryFn: () =>
       fetchGeneralLedger({
         source: glSource === "All" ? undefined : glSource,
         search: glSearch || undefined,
-        displayCurrency: glDisplayCurrency || undefined,
+        displayCurrency: financeCurrency || undefined,
       }),
   });
 
@@ -373,6 +364,26 @@ export default function Accounting() {
           </p>
         </div>
         <div className="flex gap-2">
+          <Select
+            value={financeCurrency || "base"}
+            onValueChange={(v) => setFinanceCurrency(v === "base" ? "" : v)}
+          >
+            <SelectTrigger className="w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="base">
+                {overview?.currency
+                  ? `Base (${overview.currency})`
+                  : "Base currency"}
+              </SelectItem>
+              {FINANCE_CURRENCIES.map((c) => (
+                <SelectItem key={c} value={c}>
+                  {c}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Button
             size="sm"
             variant="outline"
@@ -662,26 +673,6 @@ export default function Accounting() {
               value={glSearch}
               onChange={(e) => setGlSearch(e.target.value)}
             />
-            <Select
-              value={glDisplayCurrency || "base"}
-              onValueChange={(v) => setGlDisplayCurrency(v === "base" ? "" : v)}
-            >
-              <SelectTrigger className="w-40">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="base">
-                  {glEntries[0]?.baseCurrency
-                    ? `Base (${glEntries[0].baseCurrency})`
-                    : "Base currency"}
-                </SelectItem>
-                {LEDGER_DISPLAY_CURRENCIES.map((c) => (
-                  <SelectItem key={c} value={c}>
-                    {c}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
             <Button
               size="sm"
               variant="outline"

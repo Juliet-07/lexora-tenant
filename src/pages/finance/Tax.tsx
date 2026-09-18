@@ -30,6 +30,10 @@ import {
 } from "@/components/ui/dialog";
 import { Plus, RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import {
+  useFinanceCurrency,
+  FINANCE_CURRENCIES,
+} from "@/hooks/use-finance-currency";
 import { WorkflowTable } from "@/components/finance/WorkflowTable";
 import {
   fetchTaxObligations,
@@ -123,17 +127,18 @@ export default function Tax() {
     queryKey: ["taxObligations"],
     queryFn: fetchTaxObligations,
   });
+  const [financeCurrency, setFinanceCurrency] = useFinanceCurrency();
   const { data: vat } = useQuery({
-    queryKey: ["vatReturn"],
-    queryFn: () => fetchVatReturn(),
+    queryKey: ["vatReturn", financeCurrency],
+    queryFn: () => fetchVatReturn(undefined, financeCurrency || undefined),
   });
   const { data: payrollTax = [] } = useQuery({
     queryKey: ["payrollTax"],
     queryFn: fetchPayrollTax,
   });
   const { data: cit } = useQuery({
-    queryKey: ["citProvision"],
-    queryFn: fetchCitProvision,
+    queryKey: ["citProvision", financeCurrency],
+    queryFn: () => fetchCitProvision(financeCurrency || undefined),
   });
   const { data: whtRegister = [] } = useQuery({
     queryKey: ["whtRegister"],
@@ -195,11 +200,32 @@ export default function Tax() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Tax</h1>
-        <p className="text-sm text-muted-foreground">
-          RRA and RSSB obligations: VAT, PAYE, RSSB, CIT, WHT and EBM compliance
-        </p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold">Tax</h1>
+          <p className="text-sm text-muted-foreground">
+            RRA and RSSB obligations: VAT, PAYE, RSSB, CIT, WHT and EBM
+            compliance
+          </p>
+        </div>
+        <Select
+          value={financeCurrency || "base"}
+          onValueChange={(v) => setFinanceCurrency(v === "base" ? "" : v)}
+        >
+          <SelectTrigger className="w-40">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="base">
+              {vat?.currency ? `Base (${vat.currency})` : "Base currency"}
+            </SelectItem>
+            {FINANCE_CURRENCIES.map((c) => (
+              <SelectItem key={c} value={c}>
+                {c}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       <Tabs defaultValue="calendar">
