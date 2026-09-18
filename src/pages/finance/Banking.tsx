@@ -49,7 +49,7 @@ import {
   type TxLinkType,
 } from "@/lib/crm/finance-api";
 import { fetchInvoices } from "@/lib/crm/finance-api";
-import { fetchBills } from "@/lib/crm/finance-api";
+import { fetchBills, fetchBillById } from "@/lib/crm/finance-api";
 
 const money = (n: number, c = "USD") =>
   n.toLocaleString(undefined, {
@@ -181,6 +181,12 @@ export default function Banking() {
     amount: 0,
   });
   const [matchTarget, setMatchTarget] = useState<string | null>(null);
+  const [matchedBillId, setMatchedBillId] = useState<string | null>(null);
+  const { data: matchedBill, isLoading: matchedBillLoading } = useQuery({
+    queryKey: ["matchedBill", matchedBillId],
+    queryFn: () => fetchBillById(matchedBillId!),
+    enabled: !!matchedBillId,
+  });
   const [matchType, setMatchType] = useState<TxLinkType>("Invoice");
   const [matchId, setMatchId] = useState("");
   const [matchNote, setMatchNote] = useState("");
@@ -413,7 +419,16 @@ export default function Banking() {
                         {t.suggestedAccount || "—"}
                       </TableCell>
                       <TableCell className="text-sm">
-                        {t.linkLabel || "—"}
+                        {t.linkType === "Bill" && t.linkId ? (
+                          <button
+                            className="text-primary hover:underline"
+                            onClick={() => setMatchedBillId(t.linkId)}
+                          >
+                            {t.linkLabel || "—"}
+                          </button>
+                        ) : (
+                          t.linkLabel || "—"
+                        )}
                       </TableCell>
                       <TableCell>
                         <Badge
@@ -1129,6 +1144,43 @@ export default function Banking() {
               Record transfer
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Matched bill popup */}
+      <Dialog
+        open={!!matchedBillId}
+        onOpenChange={(o) => !o && setMatchedBillId(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Matched bill</DialogTitle>
+          </DialogHeader>
+          {matchedBillLoading && (
+            <p className="text-sm text-muted-foreground py-6 text-center">
+              Loading…
+            </p>
+          )}
+          {matchedBill && (
+            <div className="rounded-lg border divide-y">
+              {[
+                ["Reference", matchedBill.ref],
+                ["Vendor", matchedBill.vendorName],
+                ["Description", matchedBill.description],
+                ["Amount", money(matchedBill.amount, matchedBill.currency)],
+                ["Status", matchedBill.status],
+                ["Due", new Date(matchedBill.dueOn).toLocaleDateString()],
+              ].map(([label, value]) => (
+                <div
+                  key={label}
+                  className="flex justify-between gap-4 px-3 py-2 text-sm"
+                >
+                  <span className="text-muted-foreground">{label}</span>
+                  <span className="font-medium">{value || "—"}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

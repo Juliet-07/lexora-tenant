@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -67,7 +68,6 @@ import {
   approveBill,
   rejectBill,
   scheduleBillPayment,
-  markBillPaid,
   fetchExpenseClaims,
   createExpenseClaim,
   approveExpenseClaim,
@@ -146,6 +146,8 @@ const badge = (s: string) => {
 export default function Purchases() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const [markPaidPrompt, setMarkPaidPrompt] = useState<Bill | null>(null);
 
   const { data: vendors = [] } = useQuery({
     queryKey: ["vendors"],
@@ -342,11 +344,6 @@ export default function Purchases() {
         description: `A reminder is now on the calendar for ${b.ref}.`,
       });
     },
-    onError: onErr("Failed"),
-  });
-  const markBillPaidMut = useMutation({
-    mutationFn: (id: string) => markBillPaid(id),
-    onSuccess: invalidateBills,
     onError: onErr("Failed"),
   });
 
@@ -592,7 +589,7 @@ export default function Purchases() {
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => markBillPaidMut.mutate(b._id)}
+                            onClick={() => setMarkPaidPrompt(b)}
                           >
                             Mark paid
                           </Button>
@@ -1386,6 +1383,33 @@ export default function Purchases() {
               onClick={() => scheduleBillMut.mutate()}
             >
               {scheduleBillMut.isPending ? "Scheduling…" : "Schedule payment"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Mark paid → Banking redirect */}
+      <Dialog
+        open={!!markPaidPrompt}
+        onOpenChange={(o) => !o && setMarkPaidPrompt(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Record this payment in Banking</DialogTitle>
+            <DialogDescription>
+              To keep the bank feed and the ledger in sync, a bill is marked
+              paid by matching it to the real bank transaction that paid it —
+              not by flipping its status directly. Go to Banking and match{" "}
+              {markPaidPrompt?.ref} ({markPaidPrompt?.vendorName}) to the
+              transaction that covers it.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setMarkPaidPrompt(null)}>
+              Cancel
+            </Button>
+            <Button onClick={() => navigate("/finance/banking")}>
+              Go to Banking
             </Button>
           </DialogFooter>
         </DialogContent>

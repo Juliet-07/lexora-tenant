@@ -678,6 +678,8 @@ export const fetchBills = async (): Promise<Bill[]> => {
   const d = unwrap(res);
   return Array.isArray(d) ? d : [];
 };
+export const fetchBillById = async (id: string): Promise<Bill> =>
+  unwrap(await api.get(`/finance/bills/${id}`));
 export const createBill = async (dto: {
   vendorId?: string;
   vendorName?: string;

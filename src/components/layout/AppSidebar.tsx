@@ -305,18 +305,6 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
   finance: [
     { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
     {
-      title: "Financials",
-      url: "/finance/financials",
-      icon: BarChart3,
-      adminOnly: true,
-    },
-    {
-      title: "Management Reporting",
-      url: "/finance/reporting",
-      icon: FileBarChart,
-      adminOnly: true,
-    },
-    {
       title: "Sales & Billing",
       icon: TrendingUp,
       adminOnly: true,
@@ -342,11 +330,15 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
     },
     {
       title: "Accounting",
-      icon: Cog,
+      icon: BarChart3,
       adminOnly: true,
       children: [
         { title: "Accounting", url: "/finance/accounting" },
         { title: "Asset Register", url: "/finance/assets" },
+        {
+          title: "Financials",
+          url: "/finance/financials",
+        },
       ],
     },
     {
@@ -357,6 +349,12 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
         { title: "Trust Accounting", url: "/finance/trust" },
         { title: "Fund Accounting", url: "/finance/funds" },
       ],
+    },
+    {
+      title: "Management Reporting",
+      url: "/finance/reporting",
+      icon: FileBarChart,
+      adminOnly: true,
     },
   ],
 
