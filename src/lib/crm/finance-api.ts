@@ -670,6 +670,8 @@ export interface Bill {
   recurring: boolean;
   approvedBy: string | null;
   paidAt: string | null;
+  scheduledPaymentDate: string | null;
+  scheduledPaymentTime: string;
 }
 export const fetchBills = async (): Promise<Bill[]> => {
   const res = await api.get("/finance/bills");
@@ -694,8 +696,14 @@ export const approveBill = async (
   unwrap(await api.post(`/finance/bills/${id}/approve`, { approvedBy }));
 export const rejectBill = async (id: string): Promise<Bill> =>
   unwrap(await api.post(`/finance/bills/${id}/reject`));
-export const scheduleBillPayment = async (id: string): Promise<Bill> =>
-  unwrap(await api.post(`/finance/bills/${id}/schedule-payment`));
+export const scheduleBillPayment = async (
+  id: string,
+  date: string,
+  time?: string,
+): Promise<Bill> =>
+  unwrap(
+    await api.post(`/finance/bills/${id}/schedule-payment`, { date, time }),
+  );
 export const markBillPaid = async (id: string): Promise<Bill> =>
   unwrap(await api.post(`/finance/bills/${id}/mark-paid`));
 

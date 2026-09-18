@@ -34,6 +34,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import {
   Plus,
@@ -325,13 +326,20 @@ export default function Purchases() {
     onSuccess: invalidateBills,
     onError: onErr("Failed"),
   });
+  const [scheduleTarget, setScheduleTarget] = useState<Bill | null>(null);
+  const [scheduleDate, setScheduleDate] = useState("");
+  const [scheduleTime, setScheduleTime] = useState("09:00");
   const scheduleBillMut = useMutation({
-    mutationFn: (id: string) => scheduleBillPayment(id),
+    mutationFn: () =>
+      scheduleBillPayment(scheduleTarget!._id, scheduleDate, scheduleTime),
     onSuccess: (b) => {
       invalidateBills();
+      setScheduleTarget(null);
+      setScheduleDate("");
+      setScheduleTime("09:00");
       toast({
         title: "Payment scheduled",
-        description: `${b.ref} added to the next bank file.`,
+        description: `A reminder is now on the calendar for ${b.ref}.`,
       });
     },
     onError: onErr("Failed"),
@@ -570,8 +578,12 @@ export default function Purchases() {
                           <Button
                             size="sm"
                             variant="outline"
-                            disabled={scheduleBillMut.isPending}
-                            onClick={() => scheduleBillMut.mutate(b._id)}
+                            onClick={() => {
+                              setScheduleTarget(b);
+                              setScheduleDate(
+                                new Date(b.dueOn).toISOString().slice(0, 10),
+                              );
+                            }}
                           >
                             Schedule payment
                           </Button>
@@ -1330,6 +1342,54 @@ export default function Purchases() {
           )}
         </SheetContent>
       </Sheet>
+
+      {/* Schedule payment */}
+      <Dialog
+        open={!!scheduleTarget}
+        onOpenChange={(o) => !o && setScheduleTarget(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              Schedule payment for {scheduleTarget?.ref}
+            </DialogTitle>
+            <DialogDescription>
+              {scheduleTarget?.vendorName} —{" "}
+              {scheduleTarget
+                ? money(scheduleTarget.amount, scheduleTarget.currency)
+                : ""}
+              . This puts a reminder on the calendar and starts real email and
+              portal reminders as the date approaches.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>Date</Label>
+              <Input
+                type="date"
+                value={scheduleDate}
+                onChange={(e) => setScheduleDate(e.target.value)}
+              />
+            </div>
+            <div>
+              <Label>Time</Label>
+              <Input
+                type="time"
+                value={scheduleTime}
+                onChange={(e) => setScheduleTime(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              disabled={!scheduleDate || scheduleBillMut.isPending}
+              onClick={() => scheduleBillMut.mutate()}
+            >
+              {scheduleBillMut.isPending ? "Scheduling…" : "Schedule payment"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* New bill */}
       <Dialog open={newBillOpen} onOpenChange={setNewBillOpen}>
