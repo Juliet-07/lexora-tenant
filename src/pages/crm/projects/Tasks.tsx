@@ -100,15 +100,42 @@ export default function Tasks() {
   });
 
   const draftMandate = mandates.find((m) => m._id === draft.mandateId);
-  // Always offer real employees to assign to — a mandate having no
-  // formal team shouldn't block picking a real person, same lesson
-  // as the mandate-visibility fix.
   const { data: employeesPage } = useQuery({
     queryKey: ["hr-employees-all"],
     queryFn: () => fetchEmployees({ limit: 500 }),
     retry: false,
   });
-  const eligibleAssignees = employeesPage?.items ?? [];
+  const allEmployees = employeesPage?.items ?? [];
+
+  // A task can only go to someone genuinely available for this
+  // mandate's work: the team formally assigned to it, plus the
+  // tenant owner (who can pick up anything regardless of team). If
+  // the mandate has no team assigned yet, fall back to every
+  // employee rather than leaving the picker empty — that gap shouldn't
+  // block assigning a real person.
+  const assigneesForTeam = (teamId: string | null | undefined) => {
+    if (!teamId) return allEmployees;
+    return allEmployees.filter((e) => {
+      if (e.hierarchyRole === "owner") return true;
+      const eTeamId =
+        typeof e.teamId === "string" ? e.teamId : (e.teamId as any)?._id;
+      return eTeamId === teamId;
+    });
+  };
+
+  const eligibleAssignees = useMemo(
+    () => assigneesForTeam(draftMandate?.teamId ?? null),
+    [allEmployees, draftMandate],
+  );
+
+  // Same team-scoping for reassigning an existing task from the
+  // detail panel — scoped to whichever mandate that task is on, not
+  // the New Task dialog's mandate.
+  const selectedMandate = mandates.find((m) => m._id === selected?.mandateId);
+  const reassignAssignees = useMemo(
+    () => assigneesForTeam(selectedMandate?.teamId ?? null),
+    [allEmployees, selectedMandate],
+  );
 
   const assigneeOptions = useMemo(
     () => Array.from(new Set(list.map((t) => t.assignee))).sort(),
@@ -687,7 +714,7 @@ export default function Tasks() {
                     <Select
                       value={selected.assigneeUserId ?? ""}
                       onValueChange={(v) => {
-                        const e = eligibleAssignees.find((x) => x._id === v);
+                        const e = reassignAssignees.find((x) => x._id === v);
                         if (!e) return;
                         reassignMut.mutate({
                           id: selected._id,
@@ -702,7 +729,7 @@ export default function Tasks() {
                         />
                       </SelectTrigger>
                       <SelectContent>
-                        {eligibleAssignees.map((e) => (
+                        {reassignAssignees.map((e) => (
                           <SelectItem key={e._id} value={e._id}>
                             {e.firstName} {e.lastName}
                             {e.jobTitle ? ` · ${e.jobTitle}` : ""}
