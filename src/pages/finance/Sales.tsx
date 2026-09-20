@@ -1110,48 +1110,133 @@ export default function Sales() {
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Payment plans</CardTitle>
+              <p className="text-xs text-muted-foreground">
+                Every plan agreed with a client, what it replaced, and where
+                each instalment currently stands.
+              </p>
             </CardHeader>
-            <CardContent className="space-y-3">
+            <CardContent className="space-y-4">
               {paymentPlans.map((p) => {
-                const stillDraft = p.instalments.every(
-                  (inst) => inst.invoice?.stage === "Draft",
+                const stages = p.instalments.map(
+                  (inst) => inst.invoice?.stage ?? "Draft",
                 );
+                const allDraft = stages.every((s) => s === "Draft");
+                const allPaid = stages.every((s) => s === "Paid");
+                const anyOverdue = stages.includes("Overdue");
+                const planStatus = allPaid
+                  ? "Completed"
+                  : anyOverdue
+                    ? "Overdue"
+                    : allDraft
+                      ? "Awaiting approval"
+                      : "Active";
+                const planStatusBadge = allPaid
+                  ? "bg-success/10 text-success"
+                  : anyOverdue
+                    ? "bg-destructive/10 text-destructive"
+                    : allDraft
+                      ? "bg-muted text-muted-foreground"
+                      : "bg-warning/10 text-warning";
+                const totalValue = p.instalments.reduce(
+                  (s, i) => s + i.amount,
+                  0,
+                );
+                const paidCount = stages.filter((s) => s === "Paid").length;
+                const nextDue = p.instalments
+                  .filter((inst) => inst.invoice?.stage !== "Paid")
+                  .sort(
+                    (a, b) =>
+                      new Date(a.due).getTime() - new Date(b.due).getTime(),
+                  )[0];
+
                 return (
-                  <div key={p._id} className="rounded-lg border p-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-sm font-medium">
-                        {p.clientName} · was {p.invoiceRef}
-                      </p>
-                      {stillDraft && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-6 px-2 text-[10px] shrink-0"
-                          disabled={approvePlanMut.isPending}
-                          onClick={() => approvePlanMut.mutate(p._id)}
-                        >
-                          Approve plan
-                        </Button>
-                      )}
-                    </div>
-                    <div className="mt-2 space-y-1">
-                      {p.instalments.map((inst) => (
-                        <div
-                          key={inst._id}
-                          className="flex items-center justify-between text-xs gap-2"
-                        >
-                          <span className="text-muted-foreground">
-                            {inst.due?.slice(0, 10)}
-                            {inst.invoice ? ` · ${inst.invoice.ref}` : ""}
-                          </span>
-                          <span>{money(inst.amount)}</span>
-                          <Badge
-                            className={`text-[10px] ${badge(inst.invoice?.stage ?? "Draft")}`}
+                  <div key={p._id} className="rounded-lg border p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold">{p.clientName}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Replaced {p.invoiceRef} · agreed{" "}
+                          {p.createdAt?.slice(0, 10)} · {p.instalments.length}{" "}
+                          instalment{p.instalments.length === 1 ? "" : "s"} ·{" "}
+                          {money(totalValue)} total
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {paidCount} of {p.instalments.length} paid
+                          {nextDue
+                            ? ` · next due ${nextDue.due?.slice(0, 10)} (${money(nextDue.amount)})`
+                            : ""}
+                        </p>
+                      </div>
+                      <div className="flex flex-col items-end gap-2 shrink-0">
+                        <Badge className={`text-[10px] ${planStatusBadge}`}>
+                          {planStatus}
+                        </Badge>
+                        {allDraft && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-6 px-2 text-[10px]"
+                            disabled={approvePlanMut.isPending}
+                            onClick={() => approvePlanMut.mutate(p._id)}
                           >
-                            {inst.invoice?.stage ?? "Draft"}
-                          </Badge>
-                        </div>
-                      ))}
+                            Approve plan
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                    <div className="mt-3 overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="h-7 text-[11px]">#</TableHead>
+                            <TableHead className="h-7 text-[11px]">
+                              Due
+                            </TableHead>
+                            <TableHead className="h-7 text-[11px]">
+                              Invoice
+                            </TableHead>
+                            <TableHead className="h-7 text-[11px]">
+                              Amount
+                            </TableHead>
+                            <TableHead className="h-7 text-[11px]">
+                              Status
+                            </TableHead>
+                            <TableHead className="h-7 text-[11px]">
+                              Paid
+                            </TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {p.instalments.map((inst, idx) => (
+                            <TableRow key={inst._id}>
+                              <TableCell className="py-1.5 text-xs">
+                                {idx + 1}
+                              </TableCell>
+                              <TableCell className="py-1.5 text-xs">
+                                {inst.due?.slice(0, 10)}
+                              </TableCell>
+                              <TableCell className="py-1.5 text-xs">
+                                {inst.invoice?.ref ?? "—"}
+                              </TableCell>
+                              <TableCell className="py-1.5 text-xs">
+                                {money(inst.amount)}
+                              </TableCell>
+                              <TableCell className="py-1.5">
+                                <Badge
+                                  className={`text-[10px] ${badge(inst.invoice?.stage ?? "Draft")}`}
+                                >
+                                  {inst.invoice?.stage ?? "Draft"}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="py-1.5 text-xs">
+                                {inst.invoice
+                                  ? money(inst.invoice.paidAmount)
+                                  : "—"}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
                     </div>
                   </div>
                 );

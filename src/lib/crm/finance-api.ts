@@ -544,6 +544,7 @@ export interface PaymentPlan {
   invoiceRef: string;
   clientName: string;
   instalments: Instalment[];
+  createdAt: string;
 }
 export const fetchPaymentPlans = async (): Promise<PaymentPlan[]> => {
   const res = await api.get("/finance/payment-plans");
