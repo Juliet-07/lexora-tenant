@@ -80,7 +80,7 @@ import {
   generateRecurringNow,
   fetchPaymentPlans,
   createPaymentPlan,
-  markInstalmentPaid,
+  approvePaymentPlan,
   type WipEntry,
   type Invoice,
   type Quote,
@@ -468,34 +468,34 @@ export default function Sales() {
         invoiceId: planInvoiceId!,
         instalments: planInstalments,
       }),
-    onSuccess: () => {
+    onSuccess: (plan) => {
       queryClient.invalidateQueries({ queryKey: ["paymentPlans"] });
       invalidateInvoices();
       setPlanInvoiceId(null);
       toast({
         title: "Payment plan agreed",
-        description: "Dunning paused while the client stays compliant.",
+        description: `${plan.invoiceRef} cancelled and replaced with ${plan.instalments.length} instalment invoice(s) — approve them below to enable auto-send.`,
       });
     },
     onError: onErr("Failed to create plan"),
   });
-  const payInstalmentMut = useMutation({
-    mutationFn: ({
-      planId,
-      instalmentId,
-    }: {
-      planId: string;
-      instalmentId: string;
-    }) => markInstalmentPaid(planId, instalmentId),
+  const approvePlanMut = useMutation({
+    mutationFn: (planId: string) => approvePaymentPlan(planId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["paymentPlans"] });
       invalidateInvoices();
+      toast({
+        title: "Plan approved",
+        description:
+          "Each instalment will be sent to the client automatically on its due date.",
+      });
     },
+    onError: onErr("Failed to approve plan"),
   });
 
   const bands = ["0–30", "31–60", "61–90", "90+"];
   const outstandingInvoices = invoices.filter(
-    (i) => !["Paid", "Draft", "Written Off"].includes(i.stage),
+    (i) => !["Paid", "Draft", "Written Off", "Cancelled"].includes(i.stage),
   );
   const dunningGroups = [
     { stage: "Current", note: "No action needed" },
@@ -1106,6 +1106,64 @@ export default function Sales() {
               </Table>
             </CardContent>
           </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Payment plans</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {paymentPlans.map((p) => {
+                const stillDraft = p.instalments.every(
+                  (inst) => inst.invoice?.stage === "Draft",
+                );
+                return (
+                  <div key={p._id} className="rounded-lg border p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-sm font-medium">
+                        {p.clientName} · was {p.invoiceRef}
+                      </p>
+                      {stillDraft && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-6 px-2 text-[10px] shrink-0"
+                          disabled={approvePlanMut.isPending}
+                          onClick={() => approvePlanMut.mutate(p._id)}
+                        >
+                          Approve plan
+                        </Button>
+                      )}
+                    </div>
+                    <div className="mt-2 space-y-1">
+                      {p.instalments.map((inst) => (
+                        <div
+                          key={inst._id}
+                          className="flex items-center justify-between text-xs gap-2"
+                        >
+                          <span className="text-muted-foreground">
+                            {inst.due?.slice(0, 10)}
+                            {inst.invoice ? ` · ${inst.invoice.ref}` : ""}
+                          </span>
+                          <span>{money(inst.amount)}</span>
+                          <Badge
+                            className={`text-[10px] ${badge(inst.invoice?.stage ?? "Draft")}`}
+                          >
+                            {inst.invoice?.stage ?? "Draft"}
+                          </Badge>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+              {!paymentPlans.length && (
+                <p className="text-sm text-muted-foreground">
+                  No payment plans yet. Open a receivable above and choose
+                  "Offer payment plan" to create one.
+                </p>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
 
         {/* Dunning */}
@@ -1156,61 +1214,7 @@ export default function Sales() {
             })}
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Payment plans</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {paymentPlans.map((p) => (
-                  <div key={p._id} className="rounded-lg border p-3">
-                    <p className="text-sm font-medium">
-                      {p.clientName} · {p.invoiceRef}
-                    </p>
-                    <div className="mt-2 space-y-1">
-                      {p.instalments.map((inst) => (
-                        <div
-                          key={inst._id}
-                          className="flex items-center justify-between text-xs"
-                        >
-                          <span className="text-muted-foreground">
-                            {inst.due?.slice(0, 10)}
-                          </span>
-                          <span>{money(inst.amount)}</span>
-                          <div className="flex items-center gap-1">
-                            <Badge
-                              className={`text-[10px] ${badge(inst.status)}`}
-                            >
-                              {inst.status}
-                            </Badge>
-                            {inst.status === "Scheduled" && (
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="h-5 px-1 text-[10px]"
-                                onClick={() =>
-                                  payInstalmentMut.mutate({
-                                    planId: p._id,
-                                    instalmentId: inst._id,
-                                  })
-                                }
-                              >
-                                Mark paid
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-                {!paymentPlans.length && (
-                  <p className="text-sm text-muted-foreground">
-                    No payment plans yet.
-                  </p>
-                )}
-              </CardContent>
-            </Card>
+          <div className="grid grid-cols-1 gap-4">
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">
@@ -1878,6 +1882,17 @@ export default function Sales() {
           <DialogHeader>
             <DialogTitle>Agree a payment plan</DialogTitle>
           </DialogHeader>
+          {selectedReceivable && (
+            <p className="text-xs text-muted-foreground -mt-2">
+              This cancels {selectedReceivable.ref} (
+              {money(
+                selectedReceivable.payable - selectedReceivable.paidAmount,
+                selectedReceivable.currency,
+              )}{" "}
+              outstanding) and replaces it with one Draft invoice per instalment
+              below.
+            </p>
+          )}
           <div className="space-y-2">
             {planInstalments.map((inst, i) => (
               <div key={i} className="grid grid-cols-2 gap-2">
@@ -1916,9 +1931,43 @@ export default function Sales() {
               Add instalment
             </Button>
           </div>
+          {(() => {
+            const outstanding = selectedReceivable
+              ? selectedReceivable.payable - selectedReceivable.paidAmount
+              : 0;
+            const planTotal = planInstalments.reduce(
+              (s, i) => s + (Number(i.amount) || 0),
+              0,
+            );
+            const matches = Math.abs(planTotal - outstanding) < 0.01;
+            return (
+              <p
+                className={`text-xs ${matches ? "text-muted-foreground" : "text-destructive"}`}
+              >
+                Instalments total {money(planTotal)}
+                {selectedReceivable
+                  ? ` of ${money(outstanding, selectedReceivable.currency)} outstanding`
+                  : ""}
+                {!matches && " — must match exactly before saving."}
+              </p>
+            );
+          })()}
           <DialogFooter>
             <Button
-              disabled={createPlanMut.isPending}
+              disabled={
+                createPlanMut.isPending ||
+                !planInstalments.length ||
+                planInstalments.some((i) => !i.due || !i.amount) ||
+                (!!selectedReceivable &&
+                  Math.abs(
+                    planInstalments.reduce(
+                      (s, i) => s + (Number(i.amount) || 0),
+                      0,
+                    ) -
+                      (selectedReceivable.payable -
+                        selectedReceivable.paidAmount),
+                  ) >= 0.01)
+              }
               onClick={() => createPlanMut.mutate()}
             >
               Save plan
