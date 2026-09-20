@@ -248,7 +248,7 @@ export default function Sales() {
   const totals = useMemo(() => {
     const unbilled = wipList.reduce((s, w) => s + wipValue(w), 0);
     const outstanding = invoices.filter(
-      (i) => !["Paid", "Draft", "Written Off"].includes(i.stage),
+      (i) => !["Paid", "Draft", "Written Off", "Cancelled"].includes(i.stage),
     );
     const ar = outstanding.reduce((s, i) => s + (i.payable - i.paidAmount), 0);
     const overdue = outstanding

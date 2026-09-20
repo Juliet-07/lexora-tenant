@@ -74,7 +74,7 @@ export default function CrmOverview() {
   const active = mandates.filter((m) => m.stage !== "Close");
   const wip = mandates.reduce((s, m) => s + m.wip, 0);
   const outstandingInvoices = invoices.filter(
-    (i) => !["Paid", "Draft", "Written Off"].includes(i.stage),
+    (i) => !["Paid", "Draft", "Written Off", "Cancelled"].includes(i.stage),
   );
   const outstanding = outstandingInvoices.reduce(
     (s, i) => s + (i.payable - i.paidAmount),

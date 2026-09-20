@@ -154,13 +154,15 @@ export default function Invoicing() {
 
   const totalWip = wipList.reduce((s, w) => s + wipValue(w), 0);
   const receivables = list
-    .filter((i) => !["Paid", "Draft", "Written Off"].includes(i.stage))
+    .filter(
+      (i) => !["Paid", "Draft", "Written Off", "Cancelled"].includes(i.stage),
+    )
     .reduce((s, i) => s + (i.payable - i.paidAmount), 0);
   const collected = list.reduce((s, i) => s + i.paidAmount, 0);
   const overdueTotal = list
     .filter(
       (i) =>
-        !["Paid", "Draft", "Written Off"].includes(i.stage) &&
+        !["Paid", "Draft", "Written Off", "Cancelled"].includes(i.stage) &&
         daysOverdue(i.dueOn) > 0,
     )
     .reduce((s, i) => s + (i.payable - i.paidAmount), 0);
@@ -799,7 +801,7 @@ export default function Invoicing() {
                       </Button>
                     </div>
                   )}
-                  {!["Draft", "Written Off", "Paid"].includes(
+                  {!["Draft", "Written Off", "Paid", "Cancelled"].includes(
                     selected.stage,
                   ) && (
                     <Button
@@ -816,7 +818,8 @@ export default function Invoicing() {
                     </Button>
                   )}
                   {selected.stage !== "Written Off" &&
-                    selected.stage !== "Paid" && (
+                    selected.stage !== "Paid" &&
+                    selected.stage !== "Cancelled" && (
                       <Button
                         size="sm"
                         variant="outline"

@@ -492,7 +492,7 @@ export default function Reports() {
 
     // ── 6. Invoicing & receivables ageing ──────────────────
     const outstanding = invoices.filter(
-      (i) => !["Paid", "Written Off"].includes(i.stage),
+      (i) => !["Paid", "Written Off", "Cancelled"].includes(i.stage),
     );
     entries.push({
       domain: "Receivables",
@@ -763,7 +763,9 @@ export default function Reports() {
       l: "Outstanding receivables",
       v: money(
         invoices
-          .filter((i) => !["Paid", "Written Off"].includes(i.stage))
+          .filter(
+            (i) => !["Paid", "Written Off", "Cancelled"].includes(i.stage),
+          )
           .reduce((s, i) => s + (i.payable - i.paidAmount), 0),
       ),
       icon: Receipt,
