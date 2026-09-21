@@ -81,6 +81,25 @@ const STEPS = [
   "Dunning",
 ];
 
+// This tenant genuinely bills in more than one currency, so a blind
+// sum across invoices/WIP entries would silently add incompatible
+// currencies together and mislabel the result. Groups by each row's
+// own currency and renders one money() amount per currency present,
+// joined — a single-currency set (the common case) reads exactly
+// like a plain total.
+function sumByCurrencyLabel<T extends { currency?: string }>(
+  rows: T[],
+  valueOf: (row: T) => number,
+): string {
+  if (!rows.length) return money(0);
+  const byCurrency = new Map<string, number>();
+  rows.forEach((r) => {
+    const c = r.currency || "USD";
+    byCurrency.set(c, (byCurrency.get(c) ?? 0) + valueOf(r));
+  });
+  return [...byCurrency.entries()].map(([c, amt]) => money(amt, c)).join(" + ");
+}
+
 const stageClass: Record<InvoiceStage, string> = {
   Draft: "bg-muted text-muted-foreground",
   "In Review": "bg-primary/10 text-primary",
@@ -153,20 +172,22 @@ export default function Invoicing() {
       variant: "destructive",
     });
 
-  const totalWip = wipList.reduce((s, w) => s + wipValue(w), 0);
-  const receivables = list
-    .filter(
+  const totalWip = sumByCurrencyLabel(wipList, wipValue);
+  const receivables = sumByCurrencyLabel(
+    list.filter(
       (i) => !["Paid", "Draft", "Written Off", "Cancelled"].includes(i.stage),
-    )
-    .reduce((s, i) => s + (i.payable - i.paidAmount), 0);
-  const collected = list.reduce((s, i) => s + i.paidAmount, 0);
-  const overdueTotal = list
-    .filter(
+    ),
+    (i) => i.payable - i.paidAmount,
+  );
+  const collected = sumByCurrencyLabel(list, (i) => i.paidAmount);
+  const overdueTotal = sumByCurrencyLabel(
+    list.filter(
       (i) =>
         !["Paid", "Draft", "Written Off", "Cancelled"].includes(i.stage) &&
         daysOverdue(i.dueOn) > 0,
-    )
-    .reduce((s, i) => s + (i.payable - i.paidAmount), 0);
+    ),
+    (i) => i.payable - i.paidAmount,
+  );
 
   const createMut = useMutation({
     mutationFn: () => {
@@ -323,10 +344,10 @@ export default function Invoicing() {
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {[
-          { l: "Unbilled WIP", v: money(totalWip) },
-          { l: "Outstanding receivables", v: money(receivables) },
-          { l: "Collected (total)", v: money(collected) },
-          { l: "Overdue", v: money(overdueTotal) },
+          { l: "Unbilled WIP", v: totalWip },
+          { l: "Outstanding receivables", v: receivables },
+          { l: "Collected (total)", v: collected },
+          { l: "Overdue", v: overdueTotal },
         ].map((k) => (
           <Card key={k.l}>
             <CardContent className="p-4">

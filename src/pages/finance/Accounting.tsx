@@ -65,7 +65,6 @@ const money = (n: number, c = "USD") =>
   n.toLocaleString(undefined, {
     style: "currency",
     currency: c,
-    maximumFractionDigits: 0,
   });
 
 const currentPeriod = () => new Date().toISOString().slice(0, 7);
@@ -429,7 +428,7 @@ export default function Accounting() {
             value: overview
               ? money(overview.cashBalance, overview.currency)
               : "—",
-            hint: "Cash balance",
+            hint: "Book balance (operating accounts, per the ledger)",
           },
           {
             label: "Tax",
@@ -1185,36 +1184,44 @@ export default function Accounting() {
                   key={i}
                   className="grid grid-cols-[1fr_1.2fr_90px_90px] gap-2"
                 >
-                  <Input
-                    placeholder="Code"
+                  <Select
                     value={l.accountCode}
-                    onChange={(e) => {
-                      const acc = accounts.find(
-                        (a) => a.code === e.target.value,
-                      );
+                    onValueChange={(v) => {
+                      const acc = accounts.find((a) => a.code === v);
                       setJournalLines((p) =>
                         p.map((x, j) =>
                           j === i
                             ? {
                                 ...x,
-                                accountCode: e.target.value,
-                                accountName: acc?.name ?? x.accountName,
+                                accountCode: v,
+                                accountName: acc?.name ?? "",
                               }
                             : x,
                         ),
                       );
                     }}
-                  />
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select code..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {accounts.map((a) => (
+                        <SelectItem key={a._id} value={a.code}>
+                          {a.code} — {a.name}
+                        </SelectItem>
+                      ))}
+                      {!accounts.length && (
+                        <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                          No accounts yet — seed the chart of accounts first.
+                        </div>
+                      )}
+                    </SelectContent>
+                  </Select>
                   <Input
-                    placeholder="Account name"
+                    placeholder="Account name — set by the code above"
                     value={l.accountName}
-                    onChange={(e) =>
-                      setJournalLines((p) =>
-                        p.map((x, j) =>
-                          j === i ? { ...x, accountName: e.target.value } : x,
-                        ),
-                      )
-                    }
+                    disabled
+                    readOnly
                   />
                   <Input
                     type="number"
