@@ -39,7 +39,6 @@ const money = (n: number, c = "USD") =>
   n.toLocaleString(undefined, {
     style: "currency",
     currency: c,
-    maximumFractionDigits: 0,
   });
 
 const now = new Date();

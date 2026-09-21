@@ -1262,6 +1262,27 @@ export const fetchGeneralLedger = async (filters?: {
   return Array.isArray(d) ? d : [];
 };
 
+// Powers the GL ref drill-through popup — resolves a GL entry to
+// whatever real invoice/bill/transaction/journal it was posted from.
+export interface GlSourceDetail {
+  found: boolean;
+  reason?: string;
+  type?: string;
+  id?: string;
+  ref?: string;
+  party?: string;
+  amount?: number | null;
+  currency?: string;
+  status?: string;
+  date?: string;
+}
+export const fetchGlEntrySource = async (
+  glEntryId: string,
+): Promise<GlSourceDetail> => {
+  const res = await api.get(`/finance/general-ledger/${glEntryId}/source`);
+  return unwrap(res);
+};
+
 const csvEscape = (val: string | number) => {
   const s = String(val ?? "");
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
@@ -2707,8 +2728,6 @@ export interface ManagementReport {
   outstandingReceivables: number;
   outstandingPayables: number;
   cashPosition: number;
-  invoiceCount: number;
-  billCount: number;
   executiveSummary: string;
 }
 

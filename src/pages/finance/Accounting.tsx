@@ -55,10 +55,12 @@ import {
   fetchBankAccounts,
   fetchCitProvision,
   fetchAssets,
+  fetchGlEntrySource,
   type AccountType,
   type JournalType,
   type JournalLine,
   type GlSource,
+  type GlSourceDetail,
 } from "@/lib/crm/finance-api";
 
 const money = (n: number, c = "USD") =>
@@ -337,6 +339,16 @@ export default function Accounting() {
   });
   const [overrideOpen, setOverrideOpen] = useState(false);
   const [overrideReason, setOverrideReason] = useState("");
+
+  // GL ref drill-through — clicking a ref popups the real invoice,
+  // bill, transaction or journal that entry was posted from.
+  const [sourceDetailId, setSourceDetailId] = useState<string | null>(null);
+  const { data: sourceDetail, isFetching: sourceDetailLoading } =
+    useQuery<GlSourceDetail>({
+      queryKey: ["glEntrySource", sourceDetailId],
+      queryFn: () => fetchGlEntrySource(sourceDetailId as string),
+      enabled: !!sourceDetailId,
+    });
   const overrideMut = useMutation({
     mutationFn: () => overridePeriodLock(period, "You", overrideReason),
     onSuccess: () => {
@@ -703,8 +715,15 @@ export default function Accounting() {
                       <TableCell className="text-sm">
                         {e.date?.slice(0, 10)}
                       </TableCell>
-                      <TableCell className="text-sm text-primary">
-                        {e.ref}
+                      <TableCell className="text-sm">
+                        <button
+                          type="button"
+                          className="text-primary underline-offset-2 hover:underline disabled:no-underline disabled:cursor-default disabled:text-muted-foreground"
+                          disabled={!e.sourceId}
+                          onClick={() => setSourceDetailId(e._id)}
+                        >
+                          {e.ref}
+                        </button>
                       </TableCell>
                       <TableCell className="text-sm">{e.description}</TableCell>
                       <TableCell className="text-sm">
@@ -1336,6 +1355,71 @@ export default function Accounting() {
               onClick={() => overrideMut.mutate()}
             >
               Log override
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* GL ref drill-through */}
+      <Dialog
+        open={!!sourceDetailId}
+        onOpenChange={(open) => !open && setSourceDetailId(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Source document</DialogTitle>
+          </DialogHeader>
+          {sourceDetailLoading && (
+            <p className="text-sm text-muted-foreground">Loading…</p>
+          )}
+          {!sourceDetailLoading && sourceDetail && !sourceDetail.found && (
+            <p className="text-sm text-muted-foreground">
+              {sourceDetail.reason || "This entry has no linked record."}
+            </p>
+          )}
+          {!sourceDetailLoading && sourceDetail?.found && (
+            <div className="space-y-3 text-sm">
+              <div className="flex items-center justify-between">
+                <Badge variant="outline">{sourceDetail.type}</Badge>
+                {sourceDetail.status && (
+                  <Badge className="text-[10px]">{sourceDetail.status}</Badge>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-y-2">
+                <span className="text-muted-foreground">Reference</span>
+                <span className="text-right font-medium">
+                  {sourceDetail.ref}
+                </span>
+                {sourceDetail.party && (
+                  <>
+                    <span className="text-muted-foreground">Party</span>
+                    <span className="text-right font-medium">
+                      {sourceDetail.party}
+                    </span>
+                  </>
+                )}
+                {sourceDetail.amount != null && (
+                  <>
+                    <span className="text-muted-foreground">Amount</span>
+                    <span className="text-right font-medium">
+                      {money(sourceDetail.amount, sourceDetail.currency)}
+                    </span>
+                  </>
+                )}
+                {sourceDetail.date && (
+                  <>
+                    <span className="text-muted-foreground">Date</span>
+                    <span className="text-right font-medium">
+                      {new Date(sourceDetail.date).toLocaleDateString()}
+                    </span>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSourceDetailId(null)}>
+              Close
             </Button>
           </DialogFooter>
         </DialogContent>

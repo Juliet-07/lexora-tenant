@@ -1,6 +1,12 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowUpRight, TrendingUp, TrendingDown, Info } from "lucide-react";
+import {
+  ArrowUpRight,
+  TrendingUp,
+  TrendingDown,
+  Info,
+  Download,
+} from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -16,6 +22,17 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+  Cell,
+} from "recharts";
+import {
   fetchProfitAndLoss,
   fetchBalanceSheet,
   fetchCashFlow,
@@ -26,11 +43,57 @@ import {
   type WriteOffStage,
 } from "@/lib/crm/finance-api";
 
+// ── CSV export — each tab downloads only its own rows, not the
+// whole page. Client-side, so it always matches exactly what's on
+// screen for the current filters. ──────────────────────────────
+const csvCell = (v: unknown) => {
+  const s = v === null || v === undefined ? "" : String(v);
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+};
+const downloadCsv = (
+  filename: string,
+  headers: string[],
+  rows: (string | number)[][],
+) => {
+  const csv = [headers, ...rows]
+    .map((r) => r.map(csvCell).join(","))
+    .join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+};
+
+const DownloadButton = ({
+  onClick,
+  disabled,
+}: {
+  onClick: () => void;
+  disabled?: boolean;
+}) => (
+  <Button size="sm" variant="outline" onClick={onClick} disabled={disabled}>
+    <Download className="mr-2 h-4 w-4" /> Download this tab
+  </Button>
+);
+
+const CHART_COLORS = [
+  "#4B0082",
+  "#10b981",
+  "#f59e0b",
+  "#3b82f6",
+  "#c62828",
+  "#8b5cf6",
+];
+
 const money = (n: number, c = "USD") =>
   n.toLocaleString(undefined, {
     style: "currency",
     currency: c,
-    maximumFractionDigits: 0,
   });
 const pct = (n: number) => `${(n * 100).toFixed(1)}%`;
 
@@ -276,7 +339,36 @@ export default function Financials() {
 
         {/* P&L */}
         <TabsContent value="pl" className="mt-4 space-y-3">
-          <PeriodPicker />
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <PeriodPicker />
+            <DownloadButton
+              disabled={!pl}
+              onClick={() =>
+                pl &&
+                downloadCsv(
+                  `pl_${pl.from}_${pl.to}.csv`,
+                  ["Type", "Code", "Name", "Amount"],
+                  [
+                    ...pl.revenueRows.map((r) => [
+                      "Revenue",
+                      r.code,
+                      r.name,
+                      r.amount,
+                    ]),
+                    ...pl.expenseRows.map((r) => [
+                      "Expense",
+                      r.code,
+                      r.name,
+                      r.amount,
+                    ]),
+                    ["Total", "", "Total revenue", pl.totalRevenue],
+                    ["Total", "", "Total expenses", pl.totalExpenses],
+                    ["Total", "", "Profit before tax", pl.profitBeforeTax],
+                  ],
+                )
+              }
+            />
+          </div>
           {pl && (
             <Card>
               <CardHeader>
@@ -285,6 +377,35 @@ export default function Financials() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart
+                    data={[
+                      { name: "Revenue", value: pl.totalRevenue },
+                      { name: "Expenses", value: pl.totalExpenses },
+                      { name: "Profit before tax", value: pl.profitBeforeTax },
+                    ]}
+                  >
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      className="opacity-30"
+                    />
+                    <XAxis dataKey="name" fontSize={12} />
+                    <YAxis fontSize={12} />
+                    <Tooltip formatter={(v: number) => money(v)} />
+                    <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                      {[
+                        pl.totalRevenue,
+                        pl.totalExpenses,
+                        pl.profitBeforeTax,
+                      ].map((v, i) => (
+                        <Cell
+                          key={i}
+                          fill={v < 0 ? "#c62828" : CHART_COLORS[i]}
+                        />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
                 <div>
                   <p className="mb-1 text-xs font-medium text-muted-foreground">
                     REVENUE
@@ -373,12 +494,47 @@ export default function Financials() {
 
         {/* Balance sheet */}
         <TabsContent value="bs" className="mt-4 space-y-3">
-          <Input
-            type="date"
-            value={asOf}
-            onChange={(e) => setAsOf(e.target.value)}
-            className="w-40"
-          />
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <Input
+              type="date"
+              value={asOf}
+              onChange={(e) => setAsOf(e.target.value)}
+              className="w-40"
+            />
+            <DownloadButton
+              disabled={!bs}
+              onClick={() =>
+                bs &&
+                downloadCsv(
+                  `balance_sheet_${asOf}.csv`,
+                  ["Section", "Code", "Name", "Amount"],
+                  [
+                    ...bs.assets.map((r) => [
+                      "Assets",
+                      r.code,
+                      r.name,
+                      r.amount,
+                    ]),
+                    ...bs.liabilities.map((r) => [
+                      "Liabilities",
+                      r.code,
+                      r.name,
+                      r.amount,
+                    ]),
+                    ...bs.equity.map((r) => [
+                      "Equity",
+                      r.code,
+                      r.name,
+                      r.amount,
+                    ]),
+                    ["Total", "", "Total assets", bs.totalAssets],
+                    ["Total", "", "Total liabilities", bs.totalLiabilities],
+                    ["Total", "", "Total equity", bs.totalEquity],
+                  ],
+                )
+              }
+            />
+          </div>
           {bs && (
             <>
               <div
@@ -388,6 +544,27 @@ export default function Financials() {
                   ? `Balanced. Assets (${money(bs.totalAssets)}) equal Liabilities + Equity (${money(bs.totalLiabilities + bs.totalEquity)}).`
                   : `Not balanced — Assets ${money(bs.totalAssets)} vs Liabilities + Equity ${money(bs.totalLiabilities + bs.totalEquity)}.`}
               </div>
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart
+                  data={[
+                    { name: "Assets", value: bs.totalAssets },
+                    { name: "Liabilities", value: bs.totalLiabilities },
+                    { name: "Equity", value: bs.totalEquity },
+                  ]}
+                >
+                  <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+                  <XAxis dataKey="name" fontSize={12} />
+                  <YAxis fontSize={12} />
+                  <Tooltip formatter={(v: number) => money(v)} />
+                  <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                    {[bs.totalAssets, bs.totalLiabilities, bs.totalEquity].map(
+                      (v, i) => (
+                        <Cell key={i} fill={CHART_COLORS[i]} />
+                      ),
+                    )}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                 {[
                   ["Assets", bs.assets, bs.totalAssets],
@@ -433,7 +610,23 @@ export default function Financials() {
 
         {/* Cash flow */}
         <TabsContent value="cf" className="mt-4 space-y-3">
-          <PeriodPicker />
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <PeriodPicker />
+            <DownloadButton
+              disabled={!cf}
+              onClick={() =>
+                cf &&
+                downloadCsv(
+                  `cash_flow_${cf.from}_${cf.to}.csv`,
+                  ["Source", "Net movement"],
+                  [
+                    ...cf.lines.map((l) => [l.source, l.netMovement]),
+                    ["Net movement in cash", cf.netMovement],
+                  ],
+                )
+              }
+            />
+          </div>
           {cf && (
             <Card>
               <CardHeader>
@@ -442,6 +635,32 @@ export default function Financials() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
+                {cf.lines.length > 0 && (
+                  <ResponsiveContainer width="100%" height={220}>
+                    <BarChart
+                      data={cf.lines.map((l) => ({
+                        name: l.source,
+                        value: l.netMovement,
+                      }))}
+                    >
+                      <CartesianGrid
+                        strokeDasharray="3 3"
+                        className="opacity-30"
+                      />
+                      <XAxis dataKey="name" fontSize={12} />
+                      <YAxis fontSize={12} />
+                      <Tooltip formatter={(v: number) => money(v)} />
+                      <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                        {cf.lines.map((l, i) => (
+                          <Cell
+                            key={i}
+                            fill={l.netMovement < 0 ? "#c62828" : "#1a7f37"}
+                          />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
                 {cf.lines.map((l) => (
                   <div
                     key={l.source}
@@ -482,7 +701,32 @@ export default function Financials() {
 
         {/* Service line P&L */}
         <TabsContent value="serviceline" className="mt-4 space-y-3">
-          <PeriodPicker />
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <PeriodPicker />
+            <DownloadButton
+              disabled={!serviceLine?.rows.length}
+              onClick={() =>
+                serviceLine &&
+                downloadCsv(
+                  `service_line_pl_${from}_${to}.csv`,
+                  [
+                    "Service line",
+                    "Revenue",
+                    "Direct expenses",
+                    "Contribution",
+                    "Margin",
+                  ],
+                  serviceLine.rows.map((r) => [
+                    r.serviceLine,
+                    r.revenue,
+                    r.directExpenses,
+                    r.contribution,
+                    r.contributionMargin,
+                  ]),
+                )
+              }
+            />
+          </div>
           <Card>
             <CardHeader>
               <CardTitle className="text-base">
@@ -492,6 +736,36 @@ export default function Financials() {
             <CardContent>
               {serviceLine && (
                 <>
+                  {serviceLine.rows.length > 0 && (
+                    <ResponsiveContainer width="100%" height={240}>
+                      <BarChart
+                        data={serviceLine.rows.map((r) => ({
+                          name: r.serviceLine,
+                          value: r.contribution,
+                        }))}
+                      >
+                        <CartesianGrid
+                          strokeDasharray="3 3"
+                          className="opacity-30"
+                        />
+                        <XAxis dataKey="name" fontSize={12} />
+                        <YAxis fontSize={12} />
+                        <Tooltip formatter={(v: number) => money(v)} />
+                        <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                          {serviceLine.rows.map((r, i) => (
+                            <Cell
+                              key={i}
+                              fill={
+                                r.contribution < 0
+                                  ? "#c62828"
+                                  : CHART_COLORS[i % CHART_COLORS.length]
+                              }
+                            />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  )}
                   <ContributionTable
                     rows={serviceLine.rows}
                     labelKey="serviceLine"
@@ -509,7 +783,32 @@ export default function Financials() {
 
         {/* Client profitability */}
         <TabsContent value="clientprofit" className="mt-4 space-y-3">
-          <PeriodPicker />
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <PeriodPicker />
+            <DownloadButton
+              disabled={!clientProfitability?.rows.length}
+              onClick={() =>
+                clientProfitability &&
+                downloadCsv(
+                  `client_profitability_${from}_${to}.csv`,
+                  [
+                    "Client",
+                    "Revenue",
+                    "Direct expenses",
+                    "Contribution",
+                    "Margin",
+                  ],
+                  clientProfitability.rows.map((r) => [
+                    r.clientName,
+                    r.revenue,
+                    r.directExpenses,
+                    r.contribution,
+                    r.contributionMargin,
+                  ]),
+                )
+              }
+            />
+          </div>
           <Card>
             <CardHeader>
               <CardTitle className="text-base">
@@ -519,6 +818,45 @@ export default function Financials() {
             <CardContent>
               {clientProfitability && (
                 <>
+                  {clientProfitability.rows.length > 0 && (
+                    <ResponsiveContainer width="100%" height={240}>
+                      <BarChart
+                        data={clientProfitability.rows
+                          .slice(0, 12)
+                          .map((r) => ({
+                            name: r.clientName,
+                            value: r.contribution,
+                          }))}
+                      >
+                        <CartesianGrid
+                          strokeDasharray="3 3"
+                          className="opacity-30"
+                        />
+                        <XAxis
+                          dataKey="name"
+                          fontSize={11}
+                          interval={0}
+                          angle={-20}
+                          textAnchor="end"
+                          height={60}
+                        />
+                        <YAxis fontSize={12} />
+                        <Tooltip formatter={(v: number) => money(v)} />
+                        <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                          {clientProfitability.rows.slice(0, 12).map((r, i) => (
+                            <Cell
+                              key={i}
+                              fill={
+                                r.contribution < 0
+                                  ? "#c62828"
+                                  : CHART_COLORS[i % CHART_COLORS.length]
+                              }
+                            />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  )}
                   <ContributionTable
                     rows={clientProfitability.rows}
                     labelKey="clientName"
@@ -536,9 +874,58 @@ export default function Financials() {
 
         {/* KPI dashboard */}
         <TabsContent value="kpis" className="mt-4 space-y-3">
-          <PeriodPicker />
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <PeriodPicker />
+            <DownloadButton
+              disabled={!kpis}
+              onClick={() =>
+                kpis &&
+                downloadCsv(
+                  `kpi_dashboard_${kpis.from}_${kpis.to}.csv`,
+                  ["KPI", "Value"],
+                  [
+                    ["Gross margin", pct(kpis.grossMargin)],
+                    ["Net margin", pct(kpis.netMargin)],
+                    ["Revenue per employee", kpis.revenuePerEmployee],
+                    ["Active employees", kpis.activeEmployees],
+                    ["Lockup days", kpis.lockupDays],
+                    ["WIP days", kpis.wipDays],
+                    ["AR days", kpis.arDays],
+                    ["Realization rate", pct(kpis.realizationRate)],
+                    ["Collection rate", pct(kpis.collectionRate)],
+                  ],
+                )
+              }
+            />
+          </div>
           {kpis && (
             <>
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart
+                  data={[
+                    { name: "Gross margin", value: kpis.grossMargin * 100 },
+                    { name: "Net margin", value: kpis.netMargin * 100 },
+                    {
+                      name: "Realization rate",
+                      value: kpis.realizationRate * 100,
+                    },
+                    {
+                      name: "Collection rate",
+                      value: kpis.collectionRate * 100,
+                    },
+                  ]}
+                >
+                  <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+                  <XAxis dataKey="name" fontSize={12} />
+                  <YAxis fontSize={12} unit="%" />
+                  <Tooltip formatter={(v: number) => `${v.toFixed(1)}%`} />
+                  <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                    {CHART_COLORS.slice(0, 4).map((c, i) => (
+                      <Cell key={i} fill={c} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 <KpiCard
                   label="Gross margin"
@@ -646,6 +1033,38 @@ export default function Financials() {
                     {money(writeOffTotal)}
                   </span>
                 </span>
+                <DownloadButton
+                  disabled={!writeOffs.length}
+                  onClick={() =>
+                    downloadCsv(
+                      `write_offs_${woStage === "All" ? "all" : woStage.replace(/\s+/g, "_")}.csv`,
+                      [
+                        "Ref",
+                        "Stage",
+                        "Reference",
+                        "Client",
+                        "Mandate",
+                        "Amount",
+                        "Reason",
+                        "Approved by",
+                        "Date",
+                        "Status",
+                      ],
+                      writeOffs.map((w) => [
+                        w.ref,
+                        w.stage,
+                        w.reference,
+                        w.clientName,
+                        w.mandateName,
+                        w.amount,
+                        w.reason,
+                        w.approvedBy,
+                        w.createdAt?.slice(0, 10) ?? "",
+                        w.status,
+                      ]),
+                    )
+                  }
+                />
               </div>
               <div className="overflow-x-auto">
                 <Table>

@@ -118,7 +118,6 @@ const money = (n: number, c = "USD") =>
   (n ?? 0).toLocaleString(undefined, {
     style: "currency",
     currency: c,
-    maximumFractionDigits: 0,
   });
 const pct = (n: number) => `${((n ?? 0) * 1).toFixed(1)}%`;
 const today = () => new Date().toISOString().slice(0, 10);

@@ -46,7 +46,6 @@ const money = (n: number, c = "USD") =>
   n.toLocaleString(undefined, {
     style: "currency",
     currency: c,
-    maximumFractionDigits: 0,
   });
 
 const currentPeriod = () => new Date().toISOString().slice(0, 7);
