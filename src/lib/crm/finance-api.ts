@@ -410,6 +410,7 @@ export interface Quote {
   clientName: string;
   mandateId: string | null;
   title: string;
+  termsAndConditions: string;
   amount: number;
   currency: string;
   issued: string;
@@ -430,6 +431,7 @@ export const createQuote = async (dto: {
   mandateId?: string;
   title: string;
   description?: string;
+  termsAndConditions?: string;
   amount: number;
   vatPercent?: number;
   currency?: string;
@@ -989,6 +991,7 @@ export type TaxObligationType =
   | "WHT remittance"
   | "CIT provisional";
 export type TaxObligationStatus = "Draft" | "Filed";
+export type TaxRecurringFrequency = "Monthly" | "Quarterly" | "Annually";
 export interface TaxObligation {
   _id: string;
   type: TaxObligationType;
@@ -997,6 +1000,9 @@ export interface TaxObligation {
   amount: number;
   status: TaxObligationStatus;
   filedAt: string | null;
+  recurring?: boolean;
+  frequency?: TaxRecurringFrequency | null;
+  nextDueOn?: string | null;
 }
 export const fetchTaxObligations = async (): Promise<TaxObligation[]> => {
   const res = await api.get("/finance/tax-obligations");
@@ -1008,6 +1014,8 @@ export const createTaxObligation = async (dto: {
   period: string;
   dueOn: string;
   amount: number;
+  recurring?: boolean;
+  frequency?: TaxRecurringFrequency;
 }): Promise<TaxObligation> =>
   unwrap(await api.post("/finance/tax-obligations", dto));
 export const fileTaxObligation = async (id: string): Promise<TaxObligation> =>

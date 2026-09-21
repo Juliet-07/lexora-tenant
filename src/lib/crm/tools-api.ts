@@ -582,7 +582,13 @@ export type CalendarLayer =
   | "Litigation"
   | "Contract"
   | "Finance";
-export type RecurrenceRule = "None" | "Daily" | "Weekly" | "Monthly";
+export type RecurrenceRule =
+  | "None"
+  | "Daily"
+  | "Weekly"
+  | "Monthly"
+  | "Quarterly"
+  | "Annually";
 export type VirtualProvider = "Teams" | "Zoom" | "Google Meet";
 
 export interface CalendarEventItem {

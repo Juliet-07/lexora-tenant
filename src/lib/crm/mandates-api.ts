@@ -38,11 +38,11 @@ export const MANDATE_STAGE_META: Record<
 > = {
   Create: {
     owner: "Partner",
-    trigger: "Mandate created, template applied, conflict check queued.",
+    trigger: "Mandate created — conflict check queued for partner review.",
   },
   Setup: {
     owner: "Manager",
-    trigger: "Conflict check cleared — engagement letter and team setup.",
+    trigger: "Conflict check cleared — team and delivery setup.",
   },
   Deliver: {
     owner: "Team",
@@ -72,13 +72,22 @@ export const money = (n: number, c = "USD") =>
   n.toLocaleString(undefined, {
     style: "currency",
     currency: c,
-    maximumFractionDigits: 0,
   });
 
 export interface ClosureChecklistItem {
   _id: string;
   label: string;
   done: boolean;
+}
+
+export interface ConflictHit {
+  _id: string;
+  matchedAgainst: string;
+  source: "client" | "mandate";
+  matchedName: string;
+  clientUserId?: string;
+  mandateId?: string;
+  mandateRef?: string;
 }
 
 export type MilestoneStatus = "pending" | "in_progress" | "completed";
@@ -114,6 +123,8 @@ export interface Mandate {
   feeStructure: FeeStructure;
   progress: number;
   conflictCheck: ConflictCheckStatus;
+  parties: string[];
+  conflictHits: ConflictHit[];
   currency: string;
   closureChecklist: ClosureChecklistItem[];
   milestones: Milestone[];
@@ -134,8 +145,7 @@ export interface CreateMandatePayload {
   budget: number;
   feeStructure: FeeStructure;
   currency?: string;
-  templateName?: string;
-  templateTaskCount?: number;
+  parties?: string[];
 }
 
 export interface UpdateMandatePayload {
@@ -151,6 +161,7 @@ export interface UpdateMandatePayload {
   billed?: number;
   feeStructure?: FeeStructure;
   progress?: number;
+  parties?: string[];
 }
 
 const unwrap = (res: any) => res.data?.data ?? res.data;
@@ -185,6 +196,13 @@ export const advanceMandateStage = async (
 
 export const clearConflictCheck = async (id: string): Promise<Mandate> => {
   const res = await api.post(`/crm/mandates/${id}/clear-conflict-check`);
+  return unwrap(res);
+};
+
+// Real automated search against existing clients and other mandates —
+// re-runnable on demand, e.g. after editing parties.
+export const rerunConflictCheck = async (id: string): Promise<Mandate> => {
+  const res = await api.post(`/crm/mandates/${id}/rerun-conflict-check`);
   return unwrap(res);
 };
 

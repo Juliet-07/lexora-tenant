@@ -46,7 +46,9 @@ import {
   fetchEbmStatus,
   resyncEbm,
   type TaxObligationType,
+  type TaxRecurringFrequency,
 } from "@/lib/crm/finance-api";
+import { Checkbox } from "@/components/ui/checkbox";
 
 // Tolerant of null/undefined/NaN — a single missing field on one
 // record (an older payroll run without totalEmployerContributions,
@@ -57,7 +59,6 @@ const money = (n: number | null | undefined, c = "RWF") => {
   return safe.toLocaleString(undefined, {
     style: "currency",
     currency: c,
-    maximumFractionDigits: 0,
   });
 };
 
@@ -74,6 +75,12 @@ const OBLIGATION_TYPES: TaxObligationType[] = [
   "RSSB contributions",
   "WHT remittance",
   "CIT provisional",
+];
+
+const RECURRING_FREQUENCIES: TaxRecurringFrequency[] = [
+  "Monthly",
+  "Quarterly",
+  "Annually",
 ];
 
 const taxWorkflow = [
@@ -162,9 +169,21 @@ export default function Tax() {
     period: "",
     dueOn: "",
     amount: 0,
+    recurring: false,
+    frequency: "Monthly" as TaxRecurringFrequency,
   });
   const createObligationMut = useMutation({
-    mutationFn: () => createTaxObligation(obligationDraft),
+    mutationFn: () =>
+      createTaxObligation({
+        type: obligationDraft.type,
+        period: obligationDraft.period,
+        dueOn: obligationDraft.dueOn,
+        amount: obligationDraft.amount,
+        recurring: obligationDraft.recurring,
+        ...(obligationDraft.recurring
+          ? { frequency: obligationDraft.frequency }
+          : {}),
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["taxObligations"] });
       setNewObligationOpen(false);
@@ -173,6 +192,8 @@ export default function Tax() {
         period: "",
         dueOn: "",
         amount: 0,
+        recurring: false,
+        frequency: "Monthly",
       });
       toast({ title: "Added to tax calendar" });
     },
@@ -677,6 +698,50 @@ export default function Tax() {
                 />
               </div>
             </div>
+            <div className="flex items-center gap-2 pt-1">
+              <Checkbox
+                id="obligation-recurring"
+                checked={obligationDraft.recurring}
+                onCheckedChange={(v) =>
+                  setObligationDraft({
+                    ...obligationDraft,
+                    recurring: v === true,
+                  })
+                }
+              />
+              <Label htmlFor="obligation-recurring" className="cursor-pointer">
+                Recurring — add to calendar and remind me automatically
+              </Label>
+            </div>
+            {obligationDraft.recurring && (
+              <div>
+                <Label>Frequency</Label>
+                <Select
+                  value={obligationDraft.frequency}
+                  onValueChange={(v) =>
+                    setObligationDraft({
+                      ...obligationDraft,
+                      frequency: v as TaxRecurringFrequency,
+                    })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {RECURRING_FREQUENCIES.map((f) => (
+                      <SelectItem key={f} value={f}>
+                        {f}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  A new obligation is created and a reminder (email and portal)
+                  is sent ahead of each due date, on this cadence.
+                </p>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button

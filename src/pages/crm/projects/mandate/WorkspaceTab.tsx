@@ -3,22 +3,37 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from "@/components/ui/select";
 import { ShieldCheck, MessageSquare, StickyNote } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
-  advanceMandateStage, clearConflictCheck, updateMandate,
-  fetchMessages, fetchNotes,
-  MANDATE_STAGE_META, type Mandate, type Rag,
+  advanceMandateStage,
+  clearConflictCheck,
+  rerunConflictCheck,
+  updateMandate,
+  fetchMessages,
+  fetchNotes,
+  MANDATE_STAGE_META,
+  type Mandate,
+  type Rag,
 } from "@/lib/crm/mandates-api";
 
 export function WorkspaceTab({ mandate }: { mandate: Mandate }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: ["mandates"] });
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: ["mandates"] });
   const onErr = (title: string) => (err: any) =>
-    toast({ title, description: err?.response?.data?.message, variant: "destructive" });
+    toast({
+      title,
+      description: err?.response?.data?.message,
+      variant: "destructive",
+    });
 
   const advanceMut = useMutation({
     mutationFn: () => advanceMandateStage(mandate._id),
@@ -31,7 +46,25 @@ export function WorkspaceTab({ mandate }: { mandate: Mandate }) {
 
   const clearConflictMut = useMutation({
     mutationFn: () => clearConflictCheck(mandate._id),
-    onSuccess: () => { invalidate(); toast({ title: "Conflict check cleared" }); },
+    onSuccess: () => {
+      invalidate();
+      toast({ title: "Conflict check cleared" });
+    },
+    onError: onErr("Couldn't clear conflict check"),
+  });
+
+  const rerunConflictMut = useMutation({
+    mutationFn: () => rerunConflictCheck(mandate._id),
+    onSuccess: (m) => {
+      invalidate();
+      toast({
+        title: "Conflict search re-run",
+        description: m.conflictHits.length
+          ? `${m.conflictHits.length} possible match${m.conflictHits.length === 1 ? "" : "es"} found.`
+          : "No matches found.",
+      });
+    },
+    onError: onErr("Couldn't re-run conflict check"),
   });
 
   const ragMut = useMutation({
@@ -44,24 +77,53 @@ export function WorkspaceTab({ mandate }: { mandate: Mandate }) {
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-sm">
-            Current stage — {mandate.stage} (owner: {MANDATE_STAGE_META[mandate.stage].owner})
+            Current stage — {mandate.stage} (owner:{" "}
+            {MANDATE_STAGE_META[mandate.stage].owner})
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          <p className="text-sm text-muted-foreground">{MANDATE_STAGE_META[mandate.stage].trigger}</p>
+          <p className="text-sm text-muted-foreground">
+            {MANDATE_STAGE_META[mandate.stage].trigger}
+          </p>
           <div className="flex flex-wrap gap-2">
-            <Button size="sm" disabled={advanceMut.isPending || mandate.stage === "Close"} onClick={() => advanceMut.mutate()}>
+            <Button
+              size="sm"
+              disabled={advanceMut.isPending || mandate.stage === "Close"}
+              onClick={() => advanceMut.mutate()}
+            >
               Advance stage
             </Button>
             {mandate.conflictCheck !== "Cleared" && (
-              <Button size="sm" variant="outline" disabled={clearConflictMut.isPending} onClick={() => clearConflictMut.mutate()}>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={clearConflictMut.isPending}
+                onClick={() => clearConflictMut.mutate()}
+              >
                 <ShieldCheck className="mr-2 h-4 w-4" /> Clear conflict check
               </Button>
             )}
-            <Select value={mandate.rag} onValueChange={(v) => ragMut.mutate(v as Rag)}>
-              <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={rerunConflictMut.isPending}
+              onClick={() => rerunConflictMut.mutate()}
+            >
+              Re-run conflict search
+            </Button>
+            <Select
+              value={mandate.rag}
+              onValueChange={(v) => ragMut.mutate(v as Rag)}
+            >
+              <SelectTrigger className="w-36">
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
-                {(["Green", "Amber", "Red"] as Rag[]).map((r) => <SelectItem key={r} value={r}>RAG: {r}</SelectItem>)}
+                {(["Green", "Amber", "Red"] as Rag[]).map((r) => (
+                  <SelectItem key={r} value={r}>
+                    RAG: {r}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -72,10 +134,18 @@ export function WorkspaceTab({ mandate }: { mandate: Mandate }) {
         <Card>
           <CardContent className="space-y-1 p-4 text-sm">
             <p className="text-xs text-muted-foreground">Team</p>
-            {mandate.teamName && <p className="text-xs text-muted-foreground">Team: {mandate.teamName}</p>}
+            {mandate.teamName && (
+              <p className="text-xs text-muted-foreground">
+                Team: {mandate.teamName}
+              </p>
+            )}
             {mandate.manager && <p>{mandate.manager} (manager)</p>}
-            {mandate.team.map((t) => <p key={t}>{t}</p>)}
-            {!mandate.team.length && !mandate.manager && <p className="text-muted-foreground">No team assigned yet</p>}
+            {mandate.team.map((t) => (
+              <p key={t}>{t}</p>
+            ))}
+            {!mandate.team.length && !mandate.manager && !mandate.teamName && (
+              <p className="text-muted-foreground">No team assigned yet</p>
+            )}
           </CardContent>
         </Card>
         <Card>
@@ -83,10 +153,38 @@ export function WorkspaceTab({ mandate }: { mandate: Mandate }) {
             <p className="text-xs text-muted-foreground">Dates</p>
             <p>Start: {mandate.startDate?.slice(0, 10)}</p>
             <p>Target: {mandate.targetDate?.slice(0, 10)}</p>
-            <p>Conflict check: <Badge variant="outline">{mandate.conflictCheck}</Badge></p>
+            <p>
+              Conflict check:{" "}
+              <Badge variant="outline">{mandate.conflictCheck}</Badge>
+            </p>
           </CardContent>
         </Card>
       </div>
+
+      {mandate.conflictHits.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">
+              Conflict search results ({mandate.conflictHits.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {mandate.conflictHits.map((h) => (
+              <div key={h._id} className="rounded border p-2 text-sm">
+                <p>
+                  <span className="font-medium">{h.matchedAgainst}</span> on
+                  this mandate matches{" "}
+                  <span className="font-medium">{h.matchedName}</span>
+                  {h.source === "mandate" && h.mandateRef
+                    ? ` on ${h.mandateRef}`
+                    : " — an existing client"}
+                  .
+                </p>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
       <ActivityLog mandateId={mandate._id} />
     </div>
@@ -97,32 +195,51 @@ export function WorkspaceTab({ mandate }: { mandate: Mandate }) {
 // genuinely real data rather than the unrelated global mock feed the
 // original prototype showed here.
 function ActivityLog({ mandateId }: { mandateId: string }) {
-  const { data: messages = [] } = useQuery({ queryKey: ["mandateMessages", mandateId], queryFn: () => fetchMessages(mandateId) });
-  const { data: notes = [] } = useQuery({ queryKey: ["mandateNotes", mandateId], queryFn: () => fetchNotes(mandateId) });
+  const { data: messages = [] } = useQuery({
+    queryKey: ["mandateMessages", mandateId],
+    queryFn: () => fetchMessages(mandateId),
+  });
+  const { data: notes = [] } = useQuery({
+    queryKey: ["mandateNotes", mandateId],
+    queryFn: () => fetchNotes(mandateId),
+  });
 
   const entries = [
     ...messages.map((m) => ({
       at: m.createdAt,
       icon: MessageSquare,
-      text: m.direction === "tenant" ? `${m.author} messaged the client` : `${m.author} sent a message`,
+      text:
+        m.direction === "tenant"
+          ? `${m.author} messaged the client`
+          : `${m.author} sent a message`,
     })),
-    ...notes.map((n) => ({ at: n.createdAt, icon: StickyNote, text: `${n.author} added a note` })),
+    ...notes.map((n) => ({
+      at: n.createdAt,
+      icon: StickyNote,
+      text: `${n.author} added a note`,
+    })),
   ]
     .sort((a, b) => b.at.localeCompare(a.at))
     .slice(0, 5);
 
   return (
     <Card>
-      <CardHeader className="pb-2"><CardTitle className="text-sm">Activity log</CardTitle></CardHeader>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm">Activity log</CardTitle>
+      </CardHeader>
       <CardContent className="space-y-2">
         {entries.map((e, i) => (
           <div key={i} className="flex items-center gap-2 text-sm">
             <e.icon className="h-3.5 w-3.5 text-muted-foreground" />
             <span>{e.text}</span>
-            <span className="text-xs text-muted-foreground">· {new Date(e.at).toLocaleString()}</span>
+            <span className="text-xs text-muted-foreground">
+              · {new Date(e.at).toLocaleString()}
+            </span>
           </div>
         ))}
-        {!entries.length && <p className="text-sm text-muted-foreground">No activity yet.</p>}
+        {!entries.length && (
+          <p className="text-sm text-muted-foreground">No activity yet.</p>
+        )}
       </CardContent>
     </Card>
   );

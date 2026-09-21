@@ -709,7 +709,14 @@ export default function CalendarPage() {
                   </SelectTrigger>
                   <SelectContent>
                     {(
-                      ["None", "Daily", "Weekly", "Monthly"] as RecurrenceRule[]
+                      [
+                        "None",
+                        "Daily",
+                        "Weekly",
+                        "Monthly",
+                        "Quarterly",
+                        "Annually",
+                      ] as RecurrenceRule[]
                     ).map((r) => (
                       <SelectItem key={r} value={r}>
                         {r}

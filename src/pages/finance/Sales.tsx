@@ -66,7 +66,6 @@ import {
   ageBucket,
   daysOverdue,
   addDunningEvent,
-  setDunningPaused,
   fetchQuotes,
   createQuote,
   setQuoteStatus,
@@ -129,6 +128,21 @@ const salesWorkflow = [
     trigger: "Past due date",
   },
 ];
+
+// Rate cards are multi-currency, so a blind sum across WIP entries
+// would silently add incompatible currencies together. This groups
+// by each entry's own currency and renders one money() amount per
+// currency present, joined — a single-currency selection (the
+// common case) reads exactly like a plain total.
+const wipTotalLabel = (entries: WipEntry[]) => {
+  if (!entries.length) return money(0);
+  const byCurrency = new Map<string, number>();
+  entries.forEach((w) => {
+    const c = w.currency || "USD";
+    byCurrency.set(c, (byCurrency.get(c) ?? 0) + wipValue(w));
+  });
+  return [...byCurrency.entries()].map(([c, amt]) => money(amt, c)).join(" + ");
+};
 
 const badge = (s: string) => {
   if (
@@ -208,6 +222,7 @@ export default function Sales() {
     mandateId: "",
     title: "",
     description: "",
+    termsAndConditions: "",
     amount: 0,
     vatPercent: 0,
     currency: "USD",
@@ -311,15 +326,25 @@ export default function Sales() {
 
   const selectedEntries = wipList.filter((w) => selectedIds.includes(w._id));
   const selectedMandateId = selectedEntries[0]?.mandateId;
-  const canGenerate =
-    selectedEntries.length > 0 &&
-    selectedEntries.every((e) => e.mandateId === selectedMandateId);
+  const selectedCurrency = selectedEntries[0]?.currency;
+  const sameMandate = selectedEntries.every(
+    (e) => e.mandateId === selectedMandateId,
+  );
+  // Rate cards are multi-currency, so entries selected together can
+  // legitimately carry different currencies — but one invoice is
+  // still one currency (matching Invoice.currency elsewhere), so a
+  // mixed-currency selection can't be generated as a single invoice.
+  const sameCurrency = selectedEntries.every(
+    (e) => (e.currency || "USD") === (selectedCurrency || "USD"),
+  );
+  const canGenerate = selectedEntries.length > 0 && sameMandate && sameCurrency;
 
   const generateInvoiceMut = useMutation({
     mutationFn: () =>
       createInvoiceFromWip({
         mandateId: selectedMandateId!,
         timeEntryIds: selectedIds,
+        currency: selectedCurrency,
         dueOn: genDueOn,
         vatRate: genVat,
         whtRate: genWht,
@@ -353,12 +378,6 @@ export default function Sales() {
     },
     onError: onErr("Failed to log action"),
   });
-  const pauseMut = useMutation({
-    mutationFn: ({ id, paused }: { id: string; paused: boolean }) =>
-      setDunningPaused(id, paused),
-    onSuccess: invalidateInvoices,
-  });
-
   const createQuoteMut = useMutation({
     mutationFn: () =>
       createQuote({
@@ -368,6 +387,7 @@ export default function Sales() {
         mandateId: quoteDraft.mandateId || undefined,
         title: quoteDraft.title,
         description: quoteDraft.description || undefined,
+        termsAndConditions: quoteDraft.termsAndConditions || undefined,
         amount: Number(quoteDraft.amount),
         vatPercent: Number(quoteDraft.vatPercent) || undefined,
         currency: quoteDraft.currency,
@@ -385,6 +405,7 @@ export default function Sales() {
         mandateId: "",
         title: "",
         description: "",
+        termsAndConditions: "",
         amount: 0,
         vatPercent: 0,
         currency: "USD",
@@ -545,7 +566,7 @@ export default function Sales() {
 
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
         {[
-          { label: "Unbilled WIP", value: money(totals.unbilled), icon: Clock },
+          { label: "Unbilled WIP", value: wipTotalLabel(wipList), icon: Clock },
           {
             label: "Total receivables",
             value: money(totals.ar),
@@ -596,9 +617,7 @@ export default function Sales() {
                 <Card key={b}>
                   <CardContent className="p-4">
                     <p className="text-xs text-muted-foreground">{b} days</p>
-                    <p className="text-lg font-bold">
-                      {money(items.reduce((s, w) => s + wipValue(w), 0))}
-                    </p>
+                    <p className="text-lg font-bold">{wipTotalLabel(items)}</p>
                     <p className="text-xs text-muted-foreground">
                       {items.length} entries
                     </p>
@@ -611,8 +630,7 @@ export default function Sales() {
           {selectedIds.length > 0 && (
             <div className="flex items-center gap-2 rounded border bg-muted/40 p-2 text-sm">
               <span className="text-muted-foreground">
-                {selectedIds.length} selected —{" "}
-                {money(selectedEntries.reduce((s, e) => s + wipValue(e), 0))}
+                {selectedIds.length} selected — {wipTotalLabel(selectedEntries)}
               </span>
               <Button
                 size="sm"
@@ -623,7 +641,9 @@ export default function Sales() {
               </Button>
               {!canGenerate && (
                 <span className="text-xs text-destructive">
-                  Select entries from one mandate only
+                  {!sameMandate
+                    ? "Select entries from one mandate only"
+                    : "Select entries in one currency only"}
                 </span>
               )}
             </div>
@@ -1415,10 +1435,7 @@ export default function Sales() {
             </DialogTitle>
           </DialogHeader>
           <div className="grid gap-3">
-            <p className="text-sm">
-              Total:{" "}
-              {money(selectedEntries.reduce((s, e) => s + wipValue(e), 0))}
-            </p>
+            <p className="text-sm">Total: {wipTotalLabel(selectedEntries)}</p>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label>VAT %</Label>
@@ -1584,6 +1601,20 @@ export default function Sales() {
                 value={quoteDraft.description}
                 onChange={(e) =>
                   setQuoteDraft({ ...quoteDraft, description: e.target.value })
+                }
+              />
+            </div>
+            <div>
+              <Label>Terms &amp; conditions</Label>
+              <Textarea
+                rows={3}
+                placeholder="Payment terms, validity conditions, etc. — printed on the quote/proforma PDF"
+                value={quoteDraft.termsAndConditions}
+                onChange={(e) =>
+                  setQuoteDraft({
+                    ...quoteDraft,
+                    termsAndConditions: e.target.value,
+                  })
                 }
               />
             </div>
@@ -1906,12 +1937,7 @@ export default function Sales() {
                   </div>
                 )}
                 <div className="grid grid-cols-2 gap-2">
-                  {[
-                    "Log call",
-                    "Resend reminder",
-                    "Escalate to partner",
-                    "Mark as disputed",
-                  ].map((a) => (
+                  {["Mark as disputed"].map((a) => (
                     <Button
                       key={a}
                       size="sm"
@@ -1927,20 +1953,6 @@ export default function Sales() {
                       {a}
                     </Button>
                   ))}
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() =>
-                      pauseMut.mutate({
-                        id: selectedReceivable._id,
-                        paused: !selectedReceivable.dunningPaused,
-                      })
-                    }
-                  >
-                    {selectedReceivable.dunningPaused
-                      ? "Resume dunning"
-                      : "Pause dunning"}
-                  </Button>
                   <Button
                     size="sm"
                     variant="outline"

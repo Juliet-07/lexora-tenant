@@ -90,6 +90,7 @@ const stageClass: Record<InvoiceStage, string> = {
   Paid: "bg-success/10 text-success",
   Overdue: "bg-destructive/10 text-destructive",
   "Written Off": "bg-muted text-muted-foreground",
+  Cancelled: "bg-muted text-muted-foreground",
 };
 
 export default function Invoicing() {

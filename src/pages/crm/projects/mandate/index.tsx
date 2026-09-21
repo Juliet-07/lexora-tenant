@@ -48,7 +48,6 @@ import {
   type Mandate,
   type FeeStructure,
 } from "@/lib/crm/mandates-api";
-import { mandateTemplates } from "@/data/crmPmMockData";
 
 import { WorkspaceTab } from "./WorkspaceTab";
 import { TasksTab } from "./TasksTab";
@@ -103,13 +102,13 @@ export default function Mandates() {
     clientId: "",
     clientName: "",
     type: "Audit" as Mandate["type"],
-    template: mandateTemplates[0].id,
     teamId: "",
     teamName: "",
     budget: 0,
     currency: "USD",
     feeStructure: "Fixed fee" as FeeStructure,
     targetDate: "",
+    partiesText: "",
   });
 
   const invalidate = () =>
@@ -134,9 +133,8 @@ export default function Mandates() {
   );
 
   const createMut = useMutation({
-    mutationFn: () => {
-      const tpl = mandateTemplates.find((t) => t.id === draft.template);
-      return createMandate({
+    mutationFn: () =>
+      createMandate({
         name: draft.name,
         clientUserId: draft.clientId,
         clientName: draft.clientName,
@@ -147,17 +145,20 @@ export default function Mandates() {
         currency: draft.currency,
         feeStructure: draft.feeStructure,
         targetDate: draft.targetDate || "2026-12-31",
-        templateName: tpl?.name,
-        templateTaskCount: tpl?.tasks,
-      });
-    },
+        parties: draft.partiesText
+          .split(",")
+          .map((p) => p.trim())
+          .filter(Boolean),
+      }),
     onSuccess: (m) => {
       invalidate();
       setOpenNew(false);
-      const tpl = mandateTemplates.find((t) => t.id === draft.template);
       toast({
         title: "Mandate created",
-        description: `${m.ref} · ${tpl?.name} template applied (${tpl?.tasks} tasks, ${tpl?.phases} phases). Conflict check queued.`,
+        description:
+          m.conflictHits.length > 0
+            ? `${m.ref} · conflict search found ${m.conflictHits.length} possible match${m.conflictHits.length === 1 ? "" : "es"} — review before clearing.`
+            : `${m.ref} · conflict search found no matches, cleared automatically.`,
       });
     },
     onError: onErr("Failed to create mandate"),
@@ -327,52 +328,32 @@ export default function Mandates() {
                 placeholder="Select client..."
               />
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label>Type</Label>
-                <Select
-                  value={draft.type}
-                  onValueChange={(v) =>
-                    setDraft({ ...draft, type: v as Mandate["type"] })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {[
-                      "Audit",
-                      "Advisory",
-                      "Transaction",
-                      "Compliance",
-                      "Onboarding",
-                      "Litigation",
-                    ].map((t) => (
-                      <SelectItem key={t} value={t}>
-                        {t}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Template</Label>
-                <Select
-                  value={draft.template}
-                  onValueChange={(v) => setDraft({ ...draft, template: v })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {mandateTemplates.map((t) => (
-                      <SelectItem key={t.id} value={t.id}>
-                        {t.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+            <div>
+              <Label>Type</Label>
+              <Select
+                value={draft.type}
+                onValueChange={(v) =>
+                  setDraft({ ...draft, type: v as Mandate["type"] })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {[
+                    "Audit",
+                    "Advisory",
+                    "Transaction",
+                    "Compliance",
+                    "Onboarding",
+                    "Litigation",
+                  ].map((t) => (
+                    <SelectItem key={t} value={t}>
+                      {t}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -476,9 +457,24 @@ export default function Mandates() {
                 />
               </div>
             </div>
+            <div>
+              <Label>Other parties (optional)</Label>
+              <Input
+                placeholder="Counterparties or related entities, comma-separated"
+                value={draft.partiesText}
+                onChange={(e) =>
+                  setDraft({ ...draft, partiesText: e.target.value })
+                }
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                Used by the conflict check to search your existing clients and
+                mandates for related names.
+              </p>
+            </div>
             <p className="rounded bg-muted p-2 text-xs text-muted-foreground">
-              On create: template applied, conflict check run, team notified and
-              client informed via the portal.
+              On create: an automated conflict search runs against your existing
+              clients and mandates — cleared automatically if nothing matches,
+              otherwise left pending for a partner to review.
             </p>
           </div>
           <DialogFooter>

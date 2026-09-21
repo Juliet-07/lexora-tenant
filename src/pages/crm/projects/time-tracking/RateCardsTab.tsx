@@ -228,7 +228,7 @@ export function RateCardsTab() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {["USD", "EUR", "GBP", "NGN", "ZAR"].map((c) => (
+                    {["USD", "RWF", "EUR", "GBP", "NGN", "ZAR"].map((c) => (
                       <SelectItem key={c} value={c}>
                         {c}
                       </SelectItem>
