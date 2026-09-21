@@ -288,16 +288,22 @@ export default function Purchases() {
     currency: "USD",
     recurring: false,
   });
+  // The vendor receipt/invoice — image or PDF — is a required part
+  // of capturing a bill, not an optional afterthought.
+  const [billReceiptFile, setBillReceiptFile] = useState<File | null>(null);
   const invalidateBills = () =>
     queryClient.invalidateQueries({ queryKey: ["bills"] });
   const createBillMut = useMutation({
     mutationFn: () =>
-      createBill({
-        ...billDraft,
-        vendorId: billIsVendorless ? undefined : billDraft.vendorId,
-        vendorName: billIsVendorless ? billDraft.vendorName : undefined,
-        poId: billDraft.poId || undefined,
-      }),
+      createBill(
+        {
+          ...billDraft,
+          vendorId: billIsVendorless ? undefined : billDraft.vendorId,
+          vendorName: billIsVendorless ? billDraft.vendorName : undefined,
+          poId: billDraft.poId || undefined,
+        },
+        billReceiptFile!,
+      ),
     onSuccess: () => {
       invalidateBills();
       setNewBillOpen(false);
@@ -313,6 +319,7 @@ export default function Purchases() {
         currency: "USD",
         recurring: false,
       });
+      setBillReceiptFile(null);
       toast({ title: "Bill captured" });
     },
     onError: onErr("Failed to capture bill"),
@@ -528,7 +535,20 @@ export default function Purchases() {
                   {bills.map((b) => (
                     <TableRow key={b._id}>
                       <TableCell className="font-medium text-sm">
-                        {b.ref}
+                        <div className="flex items-center gap-1.5">
+                          {b.ref}
+                          {b.receiptUrl && (
+                            <a
+                              href={b.receiptUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              title={b.receiptFileName || "Receipt"}
+                              className="text-muted-foreground hover:text-primary"
+                            >
+                              <Paperclip className="h-3.5 w-3.5" />
+                            </a>
+                          )}
+                        </div>
                         {b.recurring && (
                           <Badge variant="outline" className="ml-2 text-[10px]">
                             Recurring
@@ -1572,6 +1592,20 @@ export default function Purchases() {
               />
               Recurring bill
             </label>
+            <div>
+              <Label>Vendor receipt / invoice (image or PDF)</Label>
+              <Input
+                type="file"
+                accept="application/pdf,image/jpeg,image/jpg,image/png,image/heic,image/webp"
+                onChange={(e) =>
+                  setBillReceiptFile(e.target.files?.[0] ?? null)
+                }
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                Required — a bill can't be captured without the real document
+                behind it.
+              </p>
+            </div>
           </div>
           <DialogFooter>
             <Button
@@ -1581,6 +1615,7 @@ export default function Purchases() {
                   : !billDraft.vendorId) ||
                 !billDraft.description ||
                 !billDraft.dueOn ||
+                !billReceiptFile ||
                 createBillMut.isPending
               }
               onClick={() => createBillMut.mutate()}

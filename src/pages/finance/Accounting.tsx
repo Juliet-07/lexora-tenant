@@ -29,7 +29,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Plus, Download, CheckCircle2, Lock, Sparkles } from "lucide-react";
+import {
+  Plus,
+  Download,
+  CheckCircle2,
+  Lock,
+  Sparkles,
+  MinusCircle,
+  RotateCcw,
+} from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
   useFinanceCurrency,
@@ -49,6 +57,8 @@ import {
   fetchTrialBalance,
   fetchPeriodClose,
   completePeriodStep,
+  markStepNotApplicable,
+  resetPeriodStep,
   lockPeriod,
   overridePeriodLock,
   PERIOD_CLOSE_STEP_LABELS,
@@ -337,6 +347,27 @@ export default function Accounting() {
     },
     onError: onErr("Cannot lock period"),
   });
+  // A step that genuinely doesn't apply to this tenant (e.g. no
+  // Trust account) — satisfies the lock gate without a real
+  // completion, with a reason kept for the audit trail.
+  const [naTarget, setNaTarget] = useState<string | null>(null);
+  const [naReason, setNaReason] = useState("");
+  const markNaMut = useMutation({
+    mutationFn: () => markStepNotApplicable(period, naTarget!, naReason, "You"),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["periodClose", period] });
+      setNaTarget(null);
+      setNaReason("");
+      toast({ title: "Step marked not applicable" });
+    },
+    onError: onErr("Failed to mark step N/A"),
+  });
+  const resetStepMut = useMutation({
+    mutationFn: (key: string) => resetPeriodStep(period, key),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ["periodClose", period] }),
+    onError: onErr("Failed to reset step"),
+  });
   const [overrideOpen, setOverrideOpen] = useState(false);
   const [overrideReason, setOverrideReason] = useState("");
 
@@ -360,7 +391,8 @@ export default function Accounting() {
     onError: onErr("Failed to log override"),
   });
   const completedSteps =
-    periodClose?.steps.filter((s) => s.completedBy).length ?? 0;
+    periodClose?.steps.filter((s) => s.completedBy || s.notApplicable).length ??
+    0;
   const totalSteps = periodClose?.steps.length ?? 10;
   const progressPct = Math.round((completedSteps / totalSteps) * 100);
 
@@ -1001,14 +1033,16 @@ export default function Accounting() {
                 {periodClose.steps.map((s, i) => (
                   <div
                     key={s.key}
-                    className={`flex items-center justify-between rounded-lg border p-3 ${s.completedBy ? "bg-success/5 border-success/30" : ""}`}
+                    className={`flex items-center justify-between rounded-lg border p-3 ${s.completedBy ? "bg-success/5 border-success/30" : s.notApplicable ? "bg-muted/40 border-muted" : ""}`}
                   >
                     <div className="flex items-center gap-3">
                       <span
-                        className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium ${s.completedBy ? "bg-success text-white" : "bg-muted text-muted-foreground"}`}
+                        className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium ${s.completedBy ? "bg-success text-white" : s.notApplicable ? "bg-muted-foreground text-white" : "bg-muted text-muted-foreground"}`}
                       >
                         {s.completedBy ? (
                           <CheckCircle2 className="h-4 w-4" />
+                        ) : s.notApplicable ? (
+                          <MinusCircle className="h-4 w-4" />
                         ) : (
                           i + 1
                         )}
@@ -1023,27 +1057,65 @@ export default function Accounting() {
                             {new Date(s.completedAt!).toLocaleString()}
                           </p>
                         )}
+                        {s.notApplicable && (
+                          <p className="text-xs text-muted-foreground">
+                            Not applicable — {s.notApplicableReason}
+                            {s.notApplicableBy
+                              ? ` (by ${s.notApplicableBy})`
+                              : ""}
+                          </p>
+                        )}
                       </div>
                     </div>
-                    {!s.completedBy && s.key !== "lock" && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={completeStepMut.isPending}
-                        onClick={() => completeStepMut.mutate(s.key)}
-                      >
-                        Mark complete
-                      </Button>
-                    )}
-                    {s.key === "lock" && !periodClose.locked && (
-                      <Button
-                        size="sm"
-                        disabled={lockMut.isPending}
-                        onClick={() => lockMut.mutate()}
-                      >
-                        <Lock className="mr-2 h-3.5 w-3.5" /> Lock period
-                      </Button>
-                    )}
+                    <div className="flex items-center gap-2">
+                      {!s.completedBy &&
+                        !s.notApplicable &&
+                        s.key !== "lock" && (
+                          <>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={completeStepMut.isPending}
+                              onClick={() => completeStepMut.mutate(s.key)}
+                            >
+                              Mark complete
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              disabled={markNaMut.isPending}
+                              onClick={() => {
+                                setNaTarget(s.key);
+                                setNaReason("");
+                              }}
+                            >
+                              <MinusCircle className="mr-2 h-3.5 w-3.5" /> Not
+                              applicable
+                            </Button>
+                          </>
+                        )}
+                      {(s.completedBy || s.notApplicable) &&
+                        s.key !== "lock" &&
+                        !periodClose.locked && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            disabled={resetStepMut.isPending}
+                            onClick={() => resetStepMut.mutate(s.key)}
+                          >
+                            <RotateCcw className="mr-2 h-3.5 w-3.5" /> Reset
+                          </Button>
+                        )}
+                      {s.key === "lock" && !periodClose.locked && (
+                        <Button
+                          size="sm"
+                          disabled={lockMut.isPending}
+                          onClick={() => lockMut.mutate()}
+                        >
+                          <Lock className="mr-2 h-3.5 w-3.5" /> Lock period
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 ))}
                 {periodClose.locked && (
@@ -1420,6 +1492,44 @@ export default function Accounting() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setSourceDetailId(null)}>
               Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Mark a close step not applicable — e.g. trust reconciliation
+          for a tenant with no Trust account. Satisfies the lock gate
+          without a real completion; the reason is the audit trail. */}
+      <Dialog
+        open={!!naTarget}
+        onOpenChange={(open) => !open && setNaTarget(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Mark step not applicable</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-3">
+            <div>
+              <Label>Step</Label>
+              <p className="text-sm text-muted-foreground">
+                {naTarget && PERIOD_CLOSE_STEP_LABELS[naTarget]}
+              </p>
+            </div>
+            <div>
+              <Label>Reason</Label>
+              <Input
+                value={naReason}
+                onChange={(e) => setNaReason(e.target.value)}
+                placeholder="e.g. No Trust account for this tenant"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              disabled={!naReason.trim() || markNaMut.isPending}
+              onClick={() => markNaMut.mutate()}
+            >
+              Mark not applicable
             </Button>
           </DialogFooter>
         </DialogContent>

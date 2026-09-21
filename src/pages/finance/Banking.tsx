@@ -28,7 +28,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Landmark, Plus, ArrowRightLeft } from "lucide-react";
+import { Landmark, Plus, ArrowRightLeft, Pencil } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { WorkflowTable } from "@/components/finance/WorkflowTable";
 import {
@@ -39,6 +39,8 @@ import {
   matchBankTransaction,
   fetchBankRules,
   createBankRule,
+  updateBankRule,
+  fetchLedgerAccounts,
   fetchTransfers,
   createTransfer,
   fetchReconciliation,
@@ -47,6 +49,7 @@ import {
   fetchCashForecast,
   type BankAccountType,
   type TxLinkType,
+  type BankRule,
 } from "@/lib/crm/finance-api";
 import { fetchInvoices } from "@/lib/crm/finance-api";
 import { fetchBills, fetchBillById } from "@/lib/crm/finance-api";
@@ -118,6 +121,10 @@ export default function Banking() {
   const { data: rules = [] } = useQuery({
     queryKey: ["bankRules"],
     queryFn: fetchBankRules,
+  });
+  const { data: ledgerAccounts = [] } = useQuery({
+    queryKey: ["ledgerAccounts"],
+    queryFn: fetchLedgerAccounts,
   });
   const { data: transfers = [] } = useQuery({
     queryKey: ["transfers"],
@@ -251,6 +258,27 @@ export default function Banking() {
       toast({ title: "Rule created" });
     },
     onError: onErr("Failed to create rule"),
+  });
+
+  // A rule is editable after it's created — description and/or the
+  // ledger account it posts to.
+  const [editRuleTarget, setEditRuleTarget] = useState<BankRule | null>(null);
+  const [editRuleDraft, setEditRuleDraft] = useState({
+    matchText: "",
+    account: "",
+  });
+  const updateRuleMut = useMutation({
+    mutationFn: () =>
+      updateBankRule(editRuleTarget!._id, {
+        matchText: editRuleDraft.matchText,
+        account: editRuleDraft.account,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["bankRules"] });
+      setEditRuleTarget(null);
+      toast({ title: "Rule updated" });
+    },
+    onError: onErr("Failed to update rule"),
   });
 
   // ── Transfers ──────────────────────────────────────────────
@@ -596,6 +624,7 @@ export default function Banking() {
                     <TableHead>Match text</TableHead>
                     <TableHead>Posts to</TableHead>
                     <TableHead>Auto</TableHead>
+                    <TableHead className="text-right">Action</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -608,12 +637,27 @@ export default function Banking() {
                       <TableCell className="text-sm">
                         {r.auto ? "Yes" : "No"}
                       </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => {
+                            setEditRuleTarget(r);
+                            setEditRuleDraft({
+                              matchText: r.matchText,
+                              account: r.account,
+                            });
+                          }}
+                        >
+                          <Pencil className="mr-2 h-3.5 w-3.5" /> Edit
+                        </Button>
+                      </TableCell>
                     </TableRow>
                   ))}
                   {!rules.length && (
                     <TableRow>
                       <TableCell
-                        colSpan={3}
+                        colSpan={4}
                         className="py-8 text-center text-sm text-muted-foreground"
                       >
                         No rules yet.
@@ -1015,13 +1059,23 @@ export default function Banking() {
             </div>
             <div>
               <Label>Posts to ledger account</Label>
-              <Input
+              <Select
                 value={ruleDraft.account}
-                onChange={(e) =>
-                  setRuleDraft({ ...ruleDraft, account: e.target.value })
+                onValueChange={(v) =>
+                  setRuleDraft({ ...ruleDraft, account: v })
                 }
-                placeholder="e.g. 6100 · Rent"
-              />
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a ledger account" />
+                </SelectTrigger>
+                <SelectContent>
+                  {ledgerAccounts.map((a) => (
+                    <SelectItem key={a._id} value={`${a.code} · ${a.name}`}>
+                      {a.code} · {a.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
           <DialogFooter>
@@ -1034,6 +1088,65 @@ export default function Banking() {
               onClick={() => createRuleMut.mutate()}
             >
               Create rule
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit bank rule — description and/or ledger account can both
+          change after creation. */}
+      <Dialog
+        open={!!editRuleTarget}
+        onOpenChange={(open) => !open && setEditRuleTarget(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit bank rule</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-3">
+            <div>
+              <Label>Description contains</Label>
+              <Input
+                value={editRuleDraft.matchText}
+                onChange={(e) =>
+                  setEditRuleDraft({
+                    ...editRuleDraft,
+                    matchText: e.target.value,
+                  })
+                }
+              />
+            </div>
+            <div>
+              <Label>Posts to ledger account</Label>
+              <Select
+                value={editRuleDraft.account}
+                onValueChange={(v) =>
+                  setEditRuleDraft({ ...editRuleDraft, account: v })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a ledger account" />
+                </SelectTrigger>
+                <SelectContent>
+                  {ledgerAccounts.map((a) => (
+                    <SelectItem key={a._id} value={`${a.code} · ${a.name}`}>
+                      {a.code} · {a.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              disabled={
+                !editRuleDraft.matchText ||
+                !editRuleDraft.account ||
+                updateRuleMut.isPending
+              }
+              onClick={() => updateRuleMut.mutate()}
+            >
+              Save changes
             </Button>
           </DialogFooter>
         </DialogContent>

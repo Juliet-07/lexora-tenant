@@ -705,6 +705,8 @@ export interface Bill {
   paidAt: string | null;
   scheduledPaymentDate: string | null;
   scheduledPaymentTime: string;
+  receiptUrl: string | null;
+  receiptFileName: string | null;
 }
 export const fetchBills = async (): Promise<Bill[]> => {
   const res = await api.get("/finance/bills");
@@ -713,17 +715,46 @@ export const fetchBills = async (): Promise<Bill[]> => {
 };
 export const fetchBillById = async (id: string): Promise<Bill> =>
   unwrap(await api.get(`/finance/bills/${id}`));
-export const createBill = async (dto: {
-  vendorId?: string;
-  vendorName?: string;
-  poId?: string;
-  description: string;
-  category?: string;
-  dueOn: string;
-  amount: number;
-  currency?: string;
-  recurring?: boolean;
-}): Promise<Bill> => unwrap(await api.post("/finance/bills", dto));
+// The vendor receipt/invoice (image or PDF) is required to capture
+// a bill — sent as part of the same multipart request as the rest
+// of the fields, not a separate after-the-fact step.
+export const createBill = async (
+  dto: {
+    vendorId?: string;
+    vendorName?: string;
+    poId?: string;
+    description: string;
+    category?: string;
+    dueOn: string;
+    amount: number;
+    currency?: string;
+    recurring?: boolean;
+  },
+  receiptFile: File,
+): Promise<Bill> => {
+  const form = new FormData();
+  Object.entries(dto).forEach(([k, v]) => {
+    if (v !== undefined && v !== null) form.append(k, String(v));
+  });
+  form.append("file", receiptFile);
+  return unwrap(
+    await api.post("/finance/bills", form, {
+      headers: { "Content-Type": "multipart/form-data" },
+    }),
+  );
+};
+export const attachBillReceipt = async (
+  id: string,
+  file: File,
+): Promise<Bill> => {
+  const form = new FormData();
+  form.append("file", file);
+  return unwrap(
+    await api.post(`/finance/bills/${id}/receipt`, form, {
+      headers: { "Content-Type": "multipart/form-data" },
+    }),
+  );
+};
 export const approveBill = async (
   id: string,
   approvedBy: string,
@@ -905,6 +936,11 @@ export const createBankRule = async (dto: {
   account: string;
   auto?: boolean;
 }): Promise<BankRule> => unwrap(await api.post("/finance/bank-rules", dto));
+export const updateBankRule = async (
+  id: string,
+  dto: { matchText?: string; account?: string; auto?: boolean },
+): Promise<BankRule> =>
+  unwrap(await api.patch(`/finance/bank-rules/${id}`, dto));
 
 export interface Transfer {
   _id: string;
@@ -1375,6 +1411,9 @@ export interface PeriodCloseStep {
   key: string;
   completedBy: string | null;
   completedAt: string | null;
+  notApplicable?: boolean;
+  notApplicableReason?: string | null;
+  notApplicableBy?: string | null;
 }
 export interface AccountingPeriod {
   _id: string;
@@ -1411,6 +1450,28 @@ export const completePeriodStep = async (
       completedBy,
     }),
   );
+// A step that will genuinely never apply to this tenant (e.g. no
+// Trust account) — satisfies the lock gate the same as completing
+// it, with the reason kept for the audit trail.
+export const markStepNotApplicable = async (
+  period: string,
+  key: string,
+  reason: string,
+  by: string,
+): Promise<AccountingPeriod> =>
+  unwrap(
+    await api.post(
+      `/finance/period-close/${period}/steps/${key}/not-applicable`,
+      { reason, by },
+    ),
+  );
+// Undo a mistaken complete/N/A — back to pending. Only while the
+// period is still unlocked.
+export const resetPeriodStep = async (
+  period: string,
+  key: string,
+): Promise<AccountingPeriod> =>
+  unwrap(await api.post(`/finance/period-close/${period}/steps/${key}/reset`));
 export const lockPeriod = async (
   period: string,
   lockedBy: string,
