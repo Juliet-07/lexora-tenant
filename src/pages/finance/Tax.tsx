@@ -28,7 +28,20 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Plus, RefreshCw } from "lucide-react";
+import {
+  Plus,
+  RefreshCw,
+  MoreHorizontal,
+  Pencil,
+  Download,
+  Paperclip,
+} from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import {
   useFinanceCurrency,
@@ -45,6 +58,8 @@ import {
   fetchWhtRegister,
   fetchEbmStatus,
   resyncEbm,
+  updateEbmReceipt,
+  type EbmDocument,
   type TaxObligationType,
   type TaxRecurringFrequency,
 } from "@/lib/crm/finance-api";
@@ -217,6 +232,25 @@ export default function Tax() {
       toast({ title: "Re-synced to EBM" });
     },
     onError: onErr("Failed to re-sync"),
+  });
+
+  // Update receipt — the real number off the physical EBM
+  // device/slip, no longer auto-generated, with an optional photo
+  // or scan of the receipt as evidence.
+  const [receiptTarget, setReceiptTarget] = useState<EbmDocument | null>(null);
+  const [receiptNumberDraft, setReceiptNumberDraft] = useState("");
+  const [receiptFile, setReceiptFile] = useState<File | null>(null);
+  const updateReceiptMut = useMutation({
+    mutationFn: () =>
+      updateEbmReceipt(receiptTarget!._id, receiptNumberDraft, receiptFile),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["ebmStatus"] });
+      setReceiptTarget(null);
+      setReceiptNumberDraft("");
+      setReceiptFile(null);
+      toast({ title: "Receipt recorded" });
+    },
+    onError: onErr("Failed to update receipt"),
   });
 
   return (
@@ -560,8 +594,48 @@ export default function Tax() {
         {/* EBM */}
         <TabsContent value="ebm" className="mt-4">
           <Card>
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between gap-3">
               <CardTitle className="text-base">EBM reconciliation</CardTitle>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={!ebm.length}
+                onClick={() => {
+                  const headers = [
+                    "Document",
+                    "Receipt number",
+                    "Classification",
+                    "Status",
+                  ];
+                  const rows = ebm.map((e) => [
+                    e.document,
+                    e.receipt,
+                    e.classification,
+                    e.status,
+                  ]);
+                  const csv = [headers, ...rows]
+                    .map((r) =>
+                      r
+                        .map((v) => {
+                          const s = String(v ?? "");
+                          return /[",\n]/.test(s)
+                            ? `"${s.replace(/"/g, '""')}"`
+                            : s;
+                        })
+                        .join(","),
+                    )
+                    .join("\n");
+                  const blob = new Blob([csv], { type: "text/csv" });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = `ebm-reconciliation-${new Date().toISOString().slice(0, 10)}.csv`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                }}
+              >
+                <Download className="mr-2 h-3.5 w-3.5" /> Download report
+              </Button>
             </CardHeader>
             <CardContent className="p-4 pt-0">
               <Table>
@@ -580,7 +654,22 @@ export default function Tax() {
                       <TableCell className="text-sm font-medium">
                         {e.document}
                       </TableCell>
-                      <TableCell className="text-sm">{e.receipt}</TableCell>
+                      <TableCell className="text-sm">
+                        <div className="flex items-center gap-1.5">
+                          {e.receipt}
+                          {e.receiptFileUrl && (
+                            <a
+                              href={e.receiptFileUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              title={e.receiptFileName || "Receipt file"}
+                              className="text-muted-foreground hover:text-primary"
+                            >
+                              <Paperclip className="h-3.5 w-3.5" />
+                            </a>
+                          )}
+                        </div>
+                      </TableCell>
                       <TableCell className="text-sm">
                         {e.classification}
                       </TableCell>
@@ -590,16 +679,33 @@ export default function Tax() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">
-                        {e.status !== "Synced" && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            disabled={resyncMut.isPending}
-                            onClick={() => resyncMut.mutate(e._id)}
-                          >
-                            <RefreshCw className="mr-2 h-3.5 w-3.5" /> Re-sync
-                          </Button>
-                        )}
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button size="icon" variant="ghost">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              disabled={resyncMut.isPending}
+                              onClick={() => resyncMut.mutate(e._id)}
+                            >
+                              <RefreshCw className="mr-2 h-3.5 w-3.5" /> Re-sync
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => {
+                                setReceiptTarget(e);
+                                setReceiptNumberDraft(
+                                  e.receipt === "—" ? "" : e.receipt,
+                                );
+                                setReceiptFile(null);
+                              }}
+                            >
+                              <Pencil className="mr-2 h-3.5 w-3.5" /> Update
+                              receipt number
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -753,6 +859,60 @@ export default function Tax() {
               onClick={() => createObligationMut.mutate()}
             >
               Add
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Update EBM receipt — the real number off the physical
+          device/slip, never auto-generated, with an optional photo
+          or scan of the receipt as evidence. */}
+      <Dialog
+        open={!!receiptTarget}
+        onOpenChange={(open) => !open && setReceiptTarget(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Update receipt number</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-3">
+            <div>
+              <Label>Document</Label>
+              <p className="text-sm text-muted-foreground">
+                {receiptTarget?.document}
+              </p>
+            </div>
+            <div>
+              <Label>Receipt number</Label>
+              <Input
+                value={receiptNumberDraft}
+                onChange={(e) => setReceiptNumberDraft(e.target.value)}
+                placeholder="As printed on the EBM receipt"
+              />
+            </div>
+            <div>
+              <Label>Attach receipt (image or PDF)</Label>
+              <Input
+                type="file"
+                accept="application/pdf,image/jpeg,image/png,image/webp"
+                onChange={(e) => setReceiptFile(e.target.files?.[0] ?? null)}
+              />
+              {receiptTarget?.receiptFileUrl && !receiptFile && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  A receipt file is already attached — choose a new one to
+                  replace it.
+                </p>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              disabled={
+                !receiptNumberDraft.trim() || updateReceiptMut.isPending
+              }
+              onClick={() => updateReceiptMut.mutate()}
+            >
+              Save receipt
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -1104,6 +1104,8 @@ export interface EbmDocument {
   receipt: string;
   classification: string;
   status: "Synced" | "Pending" | "Error";
+  receiptFileUrl?: string | null;
+  receiptFileName?: string | null;
 }
 export const fetchEbmStatus = async (): Promise<EbmDocument[]> => {
   const res = await api.get("/finance/ebm");
@@ -1112,6 +1114,23 @@ export const fetchEbmStatus = async (): Promise<EbmDocument[]> => {
 };
 export const resyncEbm = async (invoiceId: string): Promise<any> =>
   unwrap(await api.post(`/finance/ebm/${invoiceId}/resync`));
+// The real receipt number, typed in off the actual EBM device/slip —
+// never auto-generated — optionally with a photo or scan of it as
+// evidence.
+export const updateEbmReceipt = async (
+  invoiceId: string,
+  receiptNumber: string,
+  file?: File | null,
+): Promise<EbmDocument> => {
+  const form = new FormData();
+  form.append("receiptNumber", receiptNumber);
+  if (file) form.append("file", file);
+  return unwrap(
+    await api.post(`/finance/ebm/${invoiceId}/receipt`, form, {
+      headers: { "Content-Type": "multipart/form-data" },
+    }),
+  );
+};
 
 // ── Accounting: overview ─────────────────────────────────────
 
