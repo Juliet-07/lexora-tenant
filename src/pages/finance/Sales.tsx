@@ -1476,7 +1476,7 @@ export default function Sales() {
 
       {/* New quote */}
       <Dialog open={newQuoteOpen} onOpenChange={setNewQuoteOpen}>
-        <DialogContent>
+        <DialogContent className="max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>New quote / proforma</DialogTitle>
           </DialogHeader>

@@ -364,16 +364,22 @@ export default function Purchases() {
     currency: "USD",
     rechargeable: false,
   });
+  // Optional — proof of the claim can be attached right away, or added
+  // later via the row's "Attach receipt" action.
+  const [claimReceiptFile, setClaimReceiptFile] = useState<File | null>(null);
   const invalidateClaims = () =>
     queryClient.invalidateQueries({ queryKey: ["expenseClaims"] });
   const createClaimMut = useMutation({
     mutationFn: () => {
       const m = mandates.find((x) => x._id === claimDraft.mandateId);
-      return createExpenseClaim({
-        ...claimDraft,
-        mandateId: claimDraft.mandateId || undefined,
-        mandateName: m?.name,
-      });
+      return createExpenseClaim(
+        {
+          ...claimDraft,
+          mandateId: claimDraft.mandateId || undefined,
+          mandateName: m?.name,
+        },
+        claimReceiptFile,
+      );
     },
     onSuccess: () => {
       invalidateClaims();
@@ -387,6 +393,7 @@ export default function Purchases() {
         currency: "USD",
         rechargeable: false,
       });
+      setClaimReceiptFile(null);
       toast({ title: "Claim recorded" });
     },
     onError: onErr("Failed to record claim"),
@@ -1736,6 +1743,20 @@ export default function Purchases() {
               />
               Rechargeable to mandate — flows to WIP once approved
             </label>
+            <div>
+              <Label>Proof of claim (receipt image or PDF)</Label>
+              <Input
+                type="file"
+                accept="application/pdf,image/jpeg,image/jpg,image/png,image/heic,image/webp"
+                onChange={(e) =>
+                  setClaimReceiptFile(e.target.files?.[0] ?? null)
+                }
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                Optional here — it can also be attached later from the claims
+                table.
+              </p>
+            </div>
           </div>
           <DialogFooter>
             <Button

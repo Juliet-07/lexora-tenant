@@ -29,12 +29,24 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Plus,
   RefreshCw,
   MoreHorizontal,
   Pencil,
   Download,
   Paperclip,
+  Trash2,
+  Loader2,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -59,6 +71,7 @@ import {
   fetchEbmStatus,
   resyncEbm,
   updateEbmReceipt,
+  deleteEbmReceipt,
   type EbmDocument,
   type TaxObligationType,
   type TaxRecurringFrequency,
@@ -251,6 +264,21 @@ export default function Tax() {
       toast({ title: "Receipt recorded" });
     },
     onError: onErr("Failed to update receipt"),
+  });
+
+  // Delete a manually-recorded receipt — there's no standalone EBM
+  // record to delete (rows are derived live off the invoice), so this
+  // clears the receipt number/file and reverts the document back to
+  // Pending.
+  const [deleteTarget, setDeleteTarget] = useState<EbmDocument | null>(null);
+  const deleteReceiptMut = useMutation({
+    mutationFn: () => deleteEbmReceipt(deleteTarget!._id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["ebmStatus"] });
+      setDeleteTarget(null);
+      toast({ title: "Receipt deleted" });
+    },
+    onError: onErr("Failed to delete receipt"),
   });
 
   return (
@@ -704,6 +732,14 @@ export default function Tax() {
                               <Pencil className="mr-2 h-3.5 w-3.5" /> Update
                               receipt number
                             </DropdownMenuItem>
+                            <DropdownMenuItem
+                              disabled={e.receipt === "—" && !e.receiptFileUrl}
+                              className="text-destructive focus:text-destructive"
+                              onClick={() => setDeleteTarget(e)}
+                            >
+                              <Trash2 className="mr-2 h-3.5 w-3.5" /> Delete
+                              receipt
+                            </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>
@@ -917,6 +953,42 @@ export default function Tax() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete EBM receipt confirm — clears the recorded receipt
+          number/file and reverts the document back to Pending. There's
+          no standalone EBM record: this never touches the invoice
+          itself. */}
+      <AlertDialog
+        open={!!deleteTarget}
+        onOpenChange={(v) => !v && setDeleteTarget(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Delete receipt for "{deleteTarget?.document}"?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This clears the recorded receipt number and attached file, and
+              reverts this document back to Pending. It does not delete the
+              underlying invoice.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive hover:bg-destructive/90"
+              disabled={deleteReceiptMut.isPending}
+              onClick={() => deleteReceiptMut.mutate()}
+            >
+              {deleteReceiptMut.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                "Delete"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

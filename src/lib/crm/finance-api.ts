@@ -798,17 +798,35 @@ export const fetchExpenseClaims = async (): Promise<ExpenseClaim[]> => {
   const d = unwrap(res);
   return Array.isArray(d) ? d : [];
 };
-export const createExpenseClaim = async (dto: {
-  employeeUserId: string;
-  employee: string;
-  description: string;
-  mandateId?: string;
-  mandateName?: string;
-  amount: number;
-  currency?: string;
-  rechargeable?: boolean;
-}): Promise<ExpenseClaim> =>
-  unwrap(await api.post("/finance/expense-claims", dto));
+export const createExpenseClaim = async (
+  dto: {
+    employeeUserId: string;
+    employee: string;
+    description: string;
+    mandateId?: string;
+    mandateName?: string;
+    amount: number;
+    currency?: string;
+    rechargeable?: boolean;
+  },
+  receiptFile?: File | null,
+): Promise<ExpenseClaim> => {
+  // Proof of claim is optional at recording time — attach it now if
+  // given, or the tenant can add it later via attachExpenseReceipt.
+  if (!receiptFile) {
+    return unwrap(await api.post("/finance/expense-claims", dto));
+  }
+  const form = new FormData();
+  Object.entries(dto).forEach(([k, v]) => {
+    if (v !== undefined && v !== null) form.append(k, String(v));
+  });
+  form.append("file", receiptFile);
+  return unwrap(
+    await api.post("/finance/expense-claims", form, {
+      headers: { "Content-Type": "multipart/form-data" },
+    }),
+  );
+};
 export const attachExpenseReceipt = async (
   id: string,
   file: File,
@@ -1167,6 +1185,13 @@ export const updateEbmReceipt = async (
     }),
   );
 };
+// EBM rows are derived live off invoices — there's no standalone
+// record to delete. This clears the manually-recorded receipt
+// number/file and reverts the document back to Pending.
+export const deleteEbmReceipt = async (
+  invoiceId: string,
+): Promise<EbmDocument> =>
+  unwrap(await api.delete(`/finance/ebm/${invoiceId}/receipt`));
 
 // ── Accounting: overview ─────────────────────────────────────
 
