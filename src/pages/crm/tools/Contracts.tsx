@@ -269,6 +269,7 @@ export default function Contracts() {
     counterpartyEmail: "",
     value: "",
     currency: "USD",
+    scopeOfWork: "",
     expiresOn: "",
   };
   const [generateDraft, setGenerateDraft] = useState(emptyGenerateDraft);
@@ -286,6 +287,7 @@ export default function Contracts() {
         type: generateDraft.type,
         value: generateDraft.value ? Number(generateDraft.value) : undefined,
         currency: generateDraft.currency,
+        scopeOfWork: generateDraft.scopeOfWork.trim() || undefined,
         expiresOn: generateDraft.expiresOn,
         ...(generateDraft.partyMode === "client"
           ? {
@@ -1210,6 +1212,23 @@ export default function Contracts() {
                   }
                 />
               </div>
+            </div>
+            <div>
+              <Label>Scope of work (optional)</Label>
+              <Textarea
+                value={generateDraft.scopeOfWork}
+                onChange={(e) =>
+                  setGenerateDraft({
+                    ...generateDraft,
+                    scopeOfWork: e.target.value,
+                  })
+                }
+                placeholder="What's covered — deliverables, services, or work this contract is for"
+                rows={3}
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                Merged into the document wherever the template references it.
+              </p>
             </div>
           </div>
           <DialogFooter>

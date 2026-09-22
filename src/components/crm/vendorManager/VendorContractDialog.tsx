@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -76,6 +77,7 @@ export function VendorContractDialog({
   const [value, setValue] = useState(String(vendor.annualValue ?? 0));
   const [currency, setCurrency] = useState(vendor.currency);
   const [endDate, setEndDate] = useState(plusYear(today));
+  const [scopeOfWork, setScopeOfWork] = useState("");
 
   useEffect(() => {
     if (!open) return;
@@ -85,6 +87,7 @@ export function VendorContractDialog({
     setValue(String(vendor.annualValue ?? 0));
     setCurrency(vendor.currency);
     setEndDate(plusYear(today));
+    setScopeOfWork("");
   }, [open]);
 
   const template = templates.find((t) => t._id === templateId) ?? null;
@@ -99,6 +102,7 @@ export function VendorContractDialog({
         vendorId: vendor._id,
         value: Number(value) || 0,
         currency,
+        scopeOfWork: scopeOfWork.trim() || undefined,
         expiresOn: endDate,
       }),
     onSuccess: (created) => {
@@ -235,6 +239,18 @@ export function VendorContractDialog({
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
               />
+            </div>
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label>Scope of work (optional)</Label>
+              <Textarea
+                value={scopeOfWork}
+                onChange={(e) => setScopeOfWork(e.target.value)}
+                placeholder="What's covered — deliverables, services, or work this contract is for"
+                rows={3}
+              />
+              <p className="text-xs text-muted-foreground">
+                Merged into the document wherever the template references it.
+              </p>
             </div>
             <div className="sm:col-span-2 rounded-lg border border-border/60 bg-muted/20 p-3 text-xs">
               <p className="font-medium">Recipient (from the vendor record)</p>

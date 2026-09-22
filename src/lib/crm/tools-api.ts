@@ -818,6 +818,9 @@ export const generateContractFromTemplate = async (dto: {
   counterpartyEmail?: string;
   value?: number;
   currency?: string;
+  // Free-text scope of work / deliverables — merged into the drafted
+  // document as {{scopeOfWork}} when the template references it.
+  scopeOfWork?: string;
   expiresOn: string;
   autoRenew?: boolean;
   mandateId?: string;
