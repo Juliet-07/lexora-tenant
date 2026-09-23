@@ -270,6 +270,14 @@ export default function Contracts() {
     value: "",
     currency: "USD",
     scopeOfWork: "",
+    tenantCompanyJurisdiction: "",
+    clientJurisdiction: "",
+    leadProfessionalName: "",
+    leadProfessionalTitle: "",
+    clientRepresentativeName: "",
+    clientRepresentativeTitle: "",
+    commencementDate: "",
+    engagementDuration: "",
     expiresOn: "",
   };
   const [generateDraft, setGenerateDraft] = useState(emptyGenerateDraft);
@@ -288,6 +296,21 @@ export default function Contracts() {
         value: generateDraft.value ? Number(generateDraft.value) : undefined,
         currency: generateDraft.currency,
         scopeOfWork: generateDraft.scopeOfWork.trim() || undefined,
+        tenantCompanyJurisdiction:
+          generateDraft.tenantCompanyJurisdiction.trim() || undefined,
+        clientJurisdiction:
+          generateDraft.clientJurisdiction.trim() || undefined,
+        leadProfessionalName:
+          generateDraft.leadProfessionalName.trim() || undefined,
+        leadProfessionalTitle:
+          generateDraft.leadProfessionalTitle.trim() || undefined,
+        clientRepresentativeName:
+          generateDraft.clientRepresentativeName.trim() || undefined,
+        clientRepresentativeTitle:
+          generateDraft.clientRepresentativeTitle.trim() || undefined,
+        commencementDate: generateDraft.commencementDate || undefined,
+        engagementDuration:
+          generateDraft.engagementDuration.trim() || undefined,
         expiresOn: generateDraft.expiresOn,
         ...(generateDraft.partyMode === "client"
           ? {
@@ -1223,12 +1246,122 @@ export default function Contracts() {
                     scopeOfWork: e.target.value,
                   })
                 }
-                placeholder="What's covered — deliverables, services, or work this contract is for"
+                placeholder={
+                  "One item per line, e.g.\nIncorporation and registration\nOngoing compliance advisory\nAnnual filings"
+                }
                 rows={3}
               />
               <p className="mt-1 text-xs text-muted-foreground">
-                Merged into the document wherever the template references it.
+                One line per item — each becomes its own numbered point wherever
+                the template references it.
               </p>
+            </div>
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-muted-foreground">
+                Additional details (optional — only used if this template
+                references them)
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label>Your jurisdiction</Label>
+                  <Input
+                    value={generateDraft.tenantCompanyJurisdiction}
+                    onChange={(e) =>
+                      setGenerateDraft({
+                        ...generateDraft,
+                        tenantCompanyJurisdiction: e.target.value,
+                      })
+                    }
+                    placeholder="e.g. the Republic of Rwanda"
+                  />
+                </div>
+                <div>
+                  <Label>Client's jurisdiction</Label>
+                  <Input
+                    value={generateDraft.clientJurisdiction}
+                    onChange={(e) =>
+                      setGenerateDraft({
+                        ...generateDraft,
+                        clientJurisdiction: e.target.value,
+                      })
+                    }
+                  />
+                </div>
+                <div>
+                  <Label>Lead professional — name</Label>
+                  <Input
+                    value={generateDraft.leadProfessionalName}
+                    onChange={(e) =>
+                      setGenerateDraft({
+                        ...generateDraft,
+                        leadProfessionalName: e.target.value,
+                      })
+                    }
+                  />
+                </div>
+                <div>
+                  <Label>Lead professional — title</Label>
+                  <Input
+                    value={generateDraft.leadProfessionalTitle}
+                    onChange={(e) =>
+                      setGenerateDraft({
+                        ...generateDraft,
+                        leadProfessionalTitle: e.target.value,
+                      })
+                    }
+                  />
+                </div>
+                <div>
+                  <Label>Client representative — name</Label>
+                  <Input
+                    value={generateDraft.clientRepresentativeName}
+                    onChange={(e) =>
+                      setGenerateDraft({
+                        ...generateDraft,
+                        clientRepresentativeName: e.target.value,
+                      })
+                    }
+                  />
+                </div>
+                <div>
+                  <Label>Client representative — title</Label>
+                  <Input
+                    value={generateDraft.clientRepresentativeTitle}
+                    onChange={(e) =>
+                      setGenerateDraft({
+                        ...generateDraft,
+                        clientRepresentativeTitle: e.target.value,
+                      })
+                    }
+                  />
+                </div>
+                <div>
+                  <Label>Commencement date</Label>
+                  <Input
+                    type="date"
+                    value={generateDraft.commencementDate}
+                    onChange={(e) =>
+                      setGenerateDraft({
+                        ...generateDraft,
+                        commencementDate: e.target.value,
+                      })
+                    }
+                  />
+                </div>
+                <div>
+                  <Label>Engagement duration</Label>
+                  <Input
+                    value={generateDraft.engagementDuration}
+                    onChange={(e) =>
+                      setGenerateDraft({
+                        ...generateDraft,
+                        engagementDuration: e.target.value,
+                      })
+                    }
+                    placeholder="e.g. 12 months"
+                  />
+                </div>
+              </div>
             </div>
           </div>
           <DialogFooter>

@@ -78,6 +78,20 @@ export function VendorContractDialog({
   const [currency, setCurrency] = useState(vendor.currency);
   const [endDate, setEndDate] = useState(plusYear(today));
   const [scopeOfWork, setScopeOfWork] = useState("");
+  // Engagement-letter fields — optional, only relevant to templates
+  // that reference the matching {{token}}. Grouped separately from
+  // the commercial terms above since most vendor templates won't
+  // need them.
+  const [tenantCompanyJurisdiction, setTenantCompanyJurisdiction] =
+    useState("");
+  const [clientJurisdiction, setClientJurisdiction] = useState("");
+  const [leadProfessionalName, setLeadProfessionalName] = useState("");
+  const [leadProfessionalTitle, setLeadProfessionalTitle] = useState("");
+  const [clientRepresentativeName, setClientRepresentativeName] = useState("");
+  const [clientRepresentativeTitle, setClientRepresentativeTitle] =
+    useState("");
+  const [commencementDate, setCommencementDate] = useState("");
+  const [engagementDuration, setEngagementDuration] = useState("");
 
   useEffect(() => {
     if (!open) return;
@@ -88,6 +102,14 @@ export function VendorContractDialog({
     setCurrency(vendor.currency);
     setEndDate(plusYear(today));
     setScopeOfWork("");
+    setTenantCompanyJurisdiction("");
+    setClientJurisdiction("");
+    setLeadProfessionalName("");
+    setLeadProfessionalTitle("");
+    setClientRepresentativeName("");
+    setClientRepresentativeTitle("");
+    setCommencementDate("");
+    setEngagementDuration("");
   }, [open]);
 
   const template = templates.find((t) => t._id === templateId) ?? null;
@@ -103,6 +125,16 @@ export function VendorContractDialog({
         value: Number(value) || 0,
         currency,
         scopeOfWork: scopeOfWork.trim() || undefined,
+        tenantCompanyJurisdiction:
+          tenantCompanyJurisdiction.trim() || undefined,
+        clientJurisdiction: clientJurisdiction.trim() || undefined,
+        leadProfessionalName: leadProfessionalName.trim() || undefined,
+        leadProfessionalTitle: leadProfessionalTitle.trim() || undefined,
+        clientRepresentativeName: clientRepresentativeName.trim() || undefined,
+        clientRepresentativeTitle:
+          clientRepresentativeTitle.trim() || undefined,
+        commencementDate: commencementDate || undefined,
+        engagementDuration: engagementDuration.trim() || undefined,
         expiresOn: endDate,
       }),
     onSuccess: (created) => {
@@ -245,12 +277,88 @@ export function VendorContractDialog({
               <Textarea
                 value={scopeOfWork}
                 onChange={(e) => setScopeOfWork(e.target.value)}
-                placeholder="What's covered — deliverables, services, or work this contract is for"
+                placeholder={
+                  "One item per line, e.g.\nCompany secretarial filings\nQuarterly compliance review\nAnnual returns preparation"
+                }
                 rows={3}
               />
               <p className="text-xs text-muted-foreground">
-                Merged into the document wherever the template references it.
+                One line per item — each becomes its own numbered point wherever
+                the template references it.
               </p>
+            </div>
+            <div className="sm:col-span-2 space-y-2">
+              <p className="text-xs font-medium text-muted-foreground">
+                Additional details (optional — only used if this template
+                references them)
+              </p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label>Your jurisdiction</Label>
+                  <Input
+                    value={tenantCompanyJurisdiction}
+                    onChange={(e) =>
+                      setTenantCompanyJurisdiction(e.target.value)
+                    }
+                    placeholder="e.g. the Republic of Rwanda"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Vendor's jurisdiction</Label>
+                  <Input
+                    value={clientJurisdiction}
+                    onChange={(e) => setClientJurisdiction(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Lead professional — name</Label>
+                  <Input
+                    value={leadProfessionalName}
+                    onChange={(e) => setLeadProfessionalName(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Lead professional — title</Label>
+                  <Input
+                    value={leadProfessionalTitle}
+                    onChange={(e) => setLeadProfessionalTitle(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Vendor representative — name</Label>
+                  <Input
+                    value={clientRepresentativeName}
+                    onChange={(e) =>
+                      setClientRepresentativeName(e.target.value)
+                    }
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Vendor representative — title</Label>
+                  <Input
+                    value={clientRepresentativeTitle}
+                    onChange={(e) =>
+                      setClientRepresentativeTitle(e.target.value)
+                    }
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Commencement date</Label>
+                  <Input
+                    type="date"
+                    value={commencementDate}
+                    onChange={(e) => setCommencementDate(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Engagement duration</Label>
+                  <Input
+                    value={engagementDuration}
+                    onChange={(e) => setEngagementDuration(e.target.value)}
+                    placeholder="e.g. 12 months"
+                  />
+                </div>
+              </div>
             </div>
             <div className="sm:col-span-2 rounded-lg border border-border/60 bg-muted/20 p-3 text-xs">
               <p className="font-medium">Recipient (from the vendor record)</p>

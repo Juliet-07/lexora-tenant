@@ -818,9 +818,20 @@ export const generateContractFromTemplate = async (dto: {
   counterpartyEmail?: string;
   value?: number;
   currency?: string;
-  // Free-text scope of work / deliverables — merged into the drafted
-  // document as {{scopeOfWork}} when the template references it.
+  // Free-text scope of work / deliverables, one item per line —
+  // merged into the drafted document as {{scopeOfWork}} (a real
+  // numbered list) when the template references it.
   scopeOfWork?: string;
+  // Engagement-letter fields — all optional, merged in only when the
+  // chosen template actually references the matching {{token}}.
+  tenantCompanyJurisdiction?: string;
+  clientJurisdiction?: string;
+  leadProfessionalName?: string;
+  leadProfessionalTitle?: string;
+  clientRepresentativeName?: string;
+  clientRepresentativeTitle?: string;
+  commencementDate?: string;
+  engagementDuration?: string;
   expiresOn: string;
   autoRenew?: boolean;
   mandateId?: string;
