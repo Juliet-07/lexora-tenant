@@ -73,6 +73,8 @@ const createClientWithContract = async (payload: {
   templateSource: "platform" | "tenant";
   contractTitle: string;
   contractType?: string;
+  value?: number;
+  currency?: string;
   // Everything captured on the "Select Contract" step, merged into
   // the drafted document the same way every other generate-from-
   // template flow works — see ContractDetailsForm below.
@@ -268,6 +270,13 @@ export default function AddClientWizard({
   } | null>(null);
   const [selectedTemplate, setSelectedTemplate] =
     useState<AvailableTemplate | null>(null);
+  // Core contract terms — same tier as title/type, not one of the
+  // optional merge-only fields in ContractDetailsForm below. Without
+  // these the wizard had no way to set a real contract value at all:
+  // every onboarding contract came out with value 0 and currency
+  // silently defaulted to USD on the backend.
+  const [contractValue, setContractValue] = useState("");
+  const [contractCurrency, setContractCurrency] = useState("USD");
   const [contractDetails, setContractDetails] =
     useState<ContractDetails>(emptyContractDetails);
   const [contract, setContract] = useState<SignableContract | null>(null);
@@ -283,6 +292,8 @@ export default function AddClientWizard({
     });
     setCreatedClient(null);
     setSelectedTemplate(null);
+    setContractValue("");
+    setContractCurrency("USD");
     setContractDetails(emptyContractDetails);
     setContract(null);
   };
@@ -335,6 +346,8 @@ export default function AddClientWizard({
         templateSource: "platform",
         contractTitle: `${selectedTemplate.title} — ${form.fullName}`,
         contractType: selectedTemplate.type ?? "MSA",
+        value: contractValue.trim() ? Number(contractValue) : undefined,
+        currency: contractCurrency.trim() || undefined,
         scopeOfWork: contractDetails.scopeOfWork.trim() || undefined,
         tenantCompanyJurisdiction:
           contractDetails.tenantCompanyJurisdiction.trim() || undefined,
@@ -591,6 +604,28 @@ export default function AddClientWizard({
                       </button>
                     );
                   })}
+                </div>
+              )}
+              {selectedTemplate && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Contract value</Label>
+                    <Input
+                      type="number"
+                      className="h-8 text-sm"
+                      value={contractValue}
+                      onChange={(e) => setContractValue(e.target.value)}
+                      placeholder="0"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Currency</Label>
+                    <Input
+                      className="h-8 text-sm"
+                      value={contractCurrency}
+                      onChange={(e) => setContractCurrency(e.target.value)}
+                    />
+                  </div>
                 </div>
               )}
               {selectedTemplate && (
