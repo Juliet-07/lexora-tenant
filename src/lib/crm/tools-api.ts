@@ -873,6 +873,15 @@ export const editContractBody = async (
 ): Promise<SignableContract> =>
   unwrap(await api.patch(`/tools/contracts/${id}/body`, dto));
 
+// Re-applies merge-field substitution using the contract's own saved
+// details — fixes a contract whose rendered body still shows a
+// literal {{token}} for a field that didn't exist yet when it was
+// generated, without recreating the contract from scratch.
+export const resyncContractMergeFields = async (
+  id: string,
+): Promise<SignableContract & { unresolvedMergeFields?: string[] }> =>
+  unwrap(await api.post(`/tools/contracts/${id}/resync-merge-fields`, {}));
+
 export const countersignContract = async (
   id: string,
   dto: {

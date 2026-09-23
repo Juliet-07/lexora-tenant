@@ -1010,7 +1010,7 @@ export default function Contracts() {
 
       {/* Generate from template */}
       <Dialog open={openGenerateDialog} onOpenChange={setOpenGenerateDialog}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Generate contract from template</DialogTitle>
           </DialogHeader>

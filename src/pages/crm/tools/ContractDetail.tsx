@@ -44,6 +44,7 @@ import {
   Pencil,
   PenTool,
   Plus,
+  RefreshCw,
   Send,
   ShieldCheck,
   Users,
@@ -66,6 +67,7 @@ import {
   setObligationDone,
   sendContractForSignature,
   editContractBody,
+  resyncContractMergeFields,
   countersignContract,
   sendSignedContractCopy,
   downloadContractPdf,
@@ -221,6 +223,28 @@ export default function ContractDetail() {
       ok("Draft saved")();
     },
     onError: onErr("Could not save draft"),
+  });
+  // Fixes a contract that still shows a literal {{token}} for a field
+  // added after it was generated — re-runs substitution against the
+  // contract's own already-saved details instead of asking the
+  // tenant to recreate it from scratch.
+  const resyncMut = useMutation({
+    mutationFn: () => resyncContractMergeFields(id),
+    onSuccess: (updated) => {
+      invalidate();
+      const remaining = updated.unresolvedMergeFields ?? [];
+      toast({
+        title: remaining.length
+          ? `Resynced — ${remaining.length} field${
+              remaining.length === 1 ? "" : "s"
+            } still blank`
+          : "Merge fields resynced",
+        description: remaining.length
+          ? `Still showing as {{...}} in the document because they haven't been filled in yet: ${remaining.join(", ")}`
+          : "Any newer field this contract's template uses has been filled in from its saved details.",
+      });
+    },
+    onError: onErr("Could not resync merge fields"),
   });
   const countersignMut = useMutation({
     mutationFn: () => countersignContract(id, { signerName }),
@@ -456,6 +480,14 @@ export default function ContractDetail() {
   const canEditBody =
     contract.signatureStatus === "not_sent" ||
     contract.signatureStatus === "sent";
+  // Surfaces the "Resync merge fields" action only when it could
+  // actually do something — a plain scan for any leftover {{token}}
+  // in the rendered body, which is exactly what renderContractBody
+  // leaves behind on the backend for a field it doesn't have a value
+  // for (see resyncContractMergeFields's doc comment).
+  const hasUnresolvedMergeFields = /\{\{\w+\}\}/.test(
+    contract.renderedBody ?? "",
+  );
   // Real version history, derived from the template used at
   // generation and each real amendment since — no separate
   // versioning backend needed, this is just the amendment log read
@@ -888,6 +920,17 @@ export default function ContractDetail() {
               <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 pb-3">
                 <SectionTitle icon={FileText}>Document</SectionTitle>
                 <div className="flex items-center gap-2">
+                  {canEditBody && !editing && hasUnresolvedMergeFields && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={resyncMut.isPending}
+                      onClick={() => resyncMut.mutate()}
+                      title="This document still shows a raw {{field}} placeholder — fill it in from this contract's own saved details"
+                    >
+                      <RefreshCw className="mr-2 h-4 w-4" /> Resync merge fields
+                    </Button>
+                  )}
                   {canEditBody ? (
                     editing ? (
                       <>
