@@ -162,6 +162,7 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
         { title: "Certifications", url: "/grc/compliance/certifications" },
         { title: "Policies", url: "/grc/compliance/policies" },
         { title: "Audit Management", url: "/grc/compliance/audits" },
+        { title: "Incidents & Breaches", url: "/grc/compliance/incidents" },
         {
           title: "Regulatory Change",
           url: "/grc/compliance/regulatory-change",
