@@ -86,6 +86,7 @@ import {
   encodeMinutesToken,
   useMinutesReviews,
 } from "@/lib/grcGovernanceLocal";
+import { MeetingWorkspace } from "@/components/grc/meetings/MeetingWorkspace";
 
 const demoMeeting = (id: string, title: string, type: any, daysOff: number, status: any, agenda: string[]): Meeting => ({
   _id: id, title, type, date: new Date(Date.now() + daysOff * 864e5).toISOString(), mode: "Physical",
