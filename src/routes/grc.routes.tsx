@@ -11,6 +11,7 @@ import GrcHeatmap from "@/pages/grc/risk/Heatmap";
 import GrcEmergingRisks from "@/pages/grc/risk/EmergingRisks";
 import GrcPolicies from "@/pages/grc/compliance/Policies";
 import GrcAudits from "@/pages/grc/compliance/Audits";
+import IncidentsBreaches from "@/pages/grc/compliance/IncidentsBreaches";
 import GrcVendors from "@/pages/grc/risk/Vendors";
 import GrcBcp from "@/pages/grc/risk/Bcp";
 import GrcMeetings from "@/pages/grc/governance/Meetings";
@@ -236,6 +237,11 @@ export const grcRoutes = ({ isAdmin, accessibleModules }: RouteContext) => {
         key="grc-compliance-policies"
         path="/grc/compliance/policies"
         element={layout(<GrcPolicies />)}
+      />,
+      <Route
+        key="grc-compliance-incidents"
+        path="/grc/compliance/incidents"
+        element={layout(<IncidentsBreaches />)}
       />,
       <Route
         key="grc-compliance-audits"
