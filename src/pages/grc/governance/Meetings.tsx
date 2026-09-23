@@ -86,17 +86,61 @@ import {
   encodeMinutesToken,
   useMinutesReviews,
 } from "@/lib/grcGovernanceLocal";
+import { MeetingWorkspace } from "@/components/grc/meetings/MeetingWorkspace";
+
+const demoMeeting = (id: string, title: string, type: any, daysOff: number, status: any, agenda: string[]): Meeting => ({
+  _id: id, title, type, date: new Date(Date.now() + daysOff * 864e5).toISOString(), mode: "Physical",
+  venue: "Boardroom 1", meetingLink: null, platform: null, location: "Lexora Kigali, Boardroom 1 / Zoom hybrid",
+  chair: "Upendo Mbeki", committeeId: null, notes: "", status,
+  attendees: [
+    { name: "Upendo Mbeki", email: "u.mbeki@lexora.rw", role: "Chair" },
+    { name: "Naledi Mokoena", email: "n.mokoena@lexora.rw", role: "Director" },
+    { name: "James Karenzi", email: "j.karenzi@lexora.rw", role: "Director" },
+    { name: "Eric Nsabimana", email: "e.nsabimana@lexora.rw", role: "Director" },
+    { name: "Grace Kamau", email: "g.kamau@lexora.rw", role: "Director" },
+    { name: "Mkhululi Ndlovu", email: "m.ndlovu@lexora.rw", role: "Director" },
+  ] as any,
+  agenda: agenda.map((t) => ({ title: t, minutes: 20 })) as any,
+  boardPack: [{ name: "Meeting notice & agenda", uploadedAt: new Date().toISOString() }] as any,
+  sentAt: status !== "Draft" ? new Date(Date.now() + (daysOff - 19) * 864e5).toISOString() : null,
+  minutes: null, minutesSentAt: null, postponementReason: null, postponedAt: null,
+  attendanceAllPresent: status === "Held" ? true : null, attendancePresentIndices: [], attendanceRecordedAt: status === "Held" ? new Date().toISOString() : null,
+  acknowledgments: [], ackTokens: [], minutesPdfUrl: null, minutesReviews: [],
+});
+
+const DEMO_MEETINGS: Meeting[] = [
+  demoMeeting("demo_q3", "Q3 Board meeting", "Board", 9, "Sent", ["Opening, quorum, and adoption of agenda", "Confirmation of previous minutes & matters arising", "CEO quarterly update & Q3 financial review", "Audit Committee report — interim results", "Approval of Q3 interim dividend declaration", "Anti-Bribery & Corruption Policy — ratification", "Any other business & close"]),
+  demoMeeting("demo_audit", "Audit Committee meeting", "Committee", 17, "Draft", ["Opening", "Interim results review", "External audit plan"]),
+  demoMeeting("demo_nom", "Nomination Committee — succession planning", "Committee", 22, "Draft", ["Director term expiry planning"]),
+  demoMeeting("demo_q2", "Q2 Board meeting", "Board", -90, "Held", ["Opening, quorum, and adoption of agenda", "CEO update", "Approval of Delegation of Authority update"]),
+];
+
+const DEMO_ACTIONS = [
+  { action: "Circulate revised CoI Policy to Board", source: "Q2 Board, 10 Jun", owner: "Rudo Sibanda", due: "21 Aug (overdue)", status: "Overdue" },
+  { action: "Obtain Nsabimana signature on RES-2026-020", source: "Board, 15 Jul", owner: "Rudo Sibanda", due: "30 Jul (overdue)", status: "Overdue" },
+  { action: "Prepare succession briefing pack for Nomination", source: "Q2 Board, 10 Jun", owner: "Rudo Sibanda", due: "10 Sep 2026", status: "In progress" },
+  { action: "Update internal controls matrix post-audit", source: "Audit Comm., 18 Jun", owner: "James Karenzi", due: "30 Sep 2026", status: "In progress" },
+  { action: "Present ESG reporting framework options", source: "Q2 Board, 10 Jun", owner: "Grace Kamau", due: "2 Sep 2026", status: "Not started" },
+];
 
 export default function GrcMeetings() {
   const [newOpen, setNewOpen] = useState(false);
   const [selected, setSelected] = useState<Meeting | null>(null);
+  const [workspace, setWorkspace] = useState<Meeting | null>(null);
+  const [filter, setFilter] = useState<"upcoming" | "past" | "all">("upcoming");
 
-  const { data: meetings = [], isLoading } = useQuery({
+  const { data: apiMeetings = [], isLoading } = useQuery({
     queryKey: ["grc-meetings"],
     queryFn: fetchMeetings,
+    retry: 1,
   });
+  const isDemo = apiMeetings.length === 0;
+  const meetings = isDemo ? DEMO_MEETINGS : apiMeetings;
   const selectedLive = selected
     ? (meetings.find((m) => m._id === selected._id) ?? selected)
+    : null;
+  const workspaceLive = workspace
+    ? (meetings.find((m) => m._id === workspace._id) ?? workspace)
     : null;
 
   if (isLoading) {
@@ -108,64 +152,125 @@ export default function GrcMeetings() {
     );
   }
 
+  if (workspaceLive) {
+    const demo = workspaceLive._id.startsWith("demo_");
+    return (
+      <>
+        <MeetingWorkspace
+          meeting={workspaceLive}
+          isDemo={demo}
+          onBack={() => setWorkspace(null)}
+          onManage={demo ? undefined : () => setSelected(workspaceLive)}
+        />
+        <MeetingSheet meeting={selectedLive} onClose={() => setSelected(null)} />
+      </>
+    );
+  }
+
+  const now = Date.now();
+  const upcoming = meetings.filter((m) => new Date(m.date).getTime() >= now).sort((a, b) => +new Date(a.date) - +new Date(b.date));
+  const past = meetings.filter((m) => new Date(m.date).getTime() < now).sort((a, b) => +new Date(b.date) - +new Date(a.date));
+  const list = filter === "upcoming" ? upcoming : filter === "past" ? past : [...upcoming, ...past];
+  const minutesOutstanding = past.filter((m) => !m.minutesSentAt).length;
+  const packsPending = upcoming.filter((m) => m.status === "Draft").length;
+  const attRate = (() => {
+    const rec = past.filter((m) => m.attendanceRecordedAt);
+    if (!rec.length) return isDemo ? 92 : null;
+    const pct = rec.map((m) => (m.attendanceAllPresent ? 100 : (m.attendancePresentIndices.length / Math.max(1, m.attendees.length)) * 100));
+    return Math.round(pct.reduce((a, b) => a + b, 0) / pct.length);
+  })();
+
+  const kpis = [
+    { label: "Meetings YTD", value: meetings.length, sub: `${past.length} held, ${upcoming.length} upcoming` },
+    { label: "Avg attendance", value: attRate === null ? "—" : `${attRate}%`, sub: "Recorded meetings" },
+    { label: "Minutes outstanding", value: minutesOutstanding, sub: "Past meetings" },
+    { label: "Action items open", value: DEMO_ACTIONS.length, sub: `${DEMO_ACTIONS.filter((a) => a.status === "Overdue").length} overdue` },
+    { label: "Board packs pending", value: packsPending, sub: "Upcoming meetings" },
+  ];
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-start flex-wrap gap-2">
         <div>
           <h1 className="text-2xl font-bold">Meetings</h1>
-          <p className="text-sm text-muted-foreground">
-            Create board & committee meetings, assemble the board pack, and
-            dispatch invites.
+          <p className="text-sm text-muted-foreground max-w-3xl">
+            Board and committee meetings — full Company Secretary workflow from scheduling through minutes approval, with board pack assembly, checklist, and post-meeting actions.
           </p>
         </div>
         <Button onClick={() => setNewOpen(true)}>
           <Plus className="h-4 w-4 mr-1" />
-          New meeting
+          Schedule meeting
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {meetings.map((m) => (
-          <Card
-            key={m._id}
-            className="cursor-pointer hover:shadow-md transition"
-            onClick={() => setSelected(m)}
-          >
-            <CardContent className="p-4 space-y-2">
-              <div className="flex justify-between items-start">
-                <div>
-                  <div className="font-semibold">{m.title}</div>
-                  <div className="text-xs text-muted-foreground flex items-center gap-1">
-                    <CalendarClock className="h-3 w-3" />
-                    {new Date(m.date).toLocaleString()}
-                  </div>
-                </div>
-                <Badge variant="outline">{m.status}</Badge>
-              </div>
-              <div className="text-xs text-muted-foreground">{m.location}</div>
-              <div className="flex gap-2 text-xs flex-wrap">
-                <Badge variant="secondary">{m.type}</Badge>
-                <Badge variant="outline">
-                  <Users2 className="h-3 w-3 mr-1" />
-                  {m.attendees.length}
-                </Badge>
-                <Badge variant="outline">
-                  <Paperclip className="h-3 w-3 mr-1" />
-                  {m.boardPack.length}
-                </Badge>
-              </div>
-            </CardContent>
-          </Card>
+      {isDemo && (
+        <div className="text-xs rounded-md border bg-muted/40 px-3 py-2 text-muted-foreground">
+          Showing sample meetings. Schedule your first meeting to replace them.
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        {kpis.map((k) => (
+          <Card key={k.label}><CardContent className="p-4">
+            <div className="text-xs text-muted-foreground">{k.label}</div>
+            <div className="text-2xl font-bold mt-1">{k.value}</div>
+            <div className="text-[11px] text-muted-foreground">{k.sub}</div>
+          </CardContent></Card>
         ))}
-        {meetings.length === 0 && (
-          <div className="text-sm text-muted-foreground col-span-full text-center py-12">
-            No meetings yet.
-          </div>
-        )}
       </div>
 
+      <div className="flex gap-1 border-b">
+        {([["upcoming", `Upcoming (${upcoming.length})`], ["past", `Past (${past.length})`], ["all", "All meetings"]] as const).map(([k, l]) => (
+          <button key={k} onClick={() => setFilter(k)} className={`px-3 py-2 text-sm border-b-2 -mb-px ${filter === k ? "border-primary text-primary font-medium" : "border-transparent text-muted-foreground"}`}>{l}</button>
+        ))}
+      </div>
+
+      <div className="space-y-2">
+        {list.map((m) => {
+          const d = new Date(m.date);
+          const isPast = d.getTime() < now;
+          const label = isPast ? (m.minutesSentAt ? "Complete" : "Minutes outstanding") : m.status === "Draft" ? "Agenda draft" : m.status === "Postponed" ? "Postponed" : "Preparing";
+          return (
+            <Card key={m._id} className="cursor-pointer hover:shadow-md transition" onClick={() => setWorkspace(m)}>
+              <CardContent className="p-4 flex items-center gap-4">
+                <div className="w-14 text-center rounded-lg bg-primary/10 py-1.5 shrink-0">
+                  <div className="text-xl font-bold text-primary leading-none">{d.getDate()}</div>
+                  <div className="text-[10px] font-semibold text-primary">{d.toLocaleString("en", { month: "short" }).toUpperCase()}</div>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold">{m.title}</div>
+                  <div className="text-xs text-muted-foreground flex flex-wrap gap-x-3">
+                    <span>{m.type}</span>
+                    <span>{m.agenda.length} agenda items</span>
+                    <span className="flex items-center gap-1"><Users2 className="h-3 w-3" />{m.attendees.length}</span>
+                    <span className="flex items-center gap-1"><Paperclip className="h-3 w-3" />{m.boardPack.length} docs</span>
+                    <span>{m.location}</span>
+                  </div>
+                </div>
+                <Badge variant={label === "Complete" ? "default" : label === "Minutes outstanding" ? "destructive" : "secondary"}>{label}</Badge>
+              </CardContent>
+            </Card>
+          );
+        })}
+        {list.length === 0 && <div className="text-sm text-muted-foreground text-center py-12">No meetings here.</div>}
+      </div>
+
+      <Card>
+        <CardContent className="p-4">
+          <div className="font-semibold mb-3 flex items-center gap-2"><ClipboardCheck className="h-4 w-4" />Open action items across all meetings</div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead><tr className="text-left text-xs text-muted-foreground border-b"><th className="py-2">Action</th><th>Meeting source</th><th>Owner</th><th>Due</th><th>Status</th></tr></thead>
+              <tbody>{DEMO_ACTIONS.map((a) => (
+                <tr key={a.action} className="border-b last:border-0"><td className="py-2 font-medium">{a.action}</td><td>{a.source}</td><td>{a.owner}</td><td>{a.due}</td>
+                  <td><Badge variant={a.status === "Overdue" ? "destructive" : a.status === "In progress" ? "secondary" : "outline"}>{a.status}</Badge></td></tr>
+              ))}</tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
       <NewMeetingDialog open={newOpen} onOpenChange={setNewOpen} />
-      <MeetingSheet meeting={selectedLive} onClose={() => setSelected(null)} />
     </div>
   );
 }

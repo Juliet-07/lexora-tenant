@@ -199,6 +199,7 @@ export const createContract = async (dto: {
   autoRenew?: boolean;
   mandateId?: string;
   mandateName?: string;
+  tenantRegisteredAddress?: string;
   content?: string;
 }): Promise<SignableContract> =>
   unwrap(await api.post("/tools/contracts", dto));
@@ -836,6 +837,9 @@ export const generateContractFromTemplate = async (dto: {
   autoRenew?: boolean;
   mandateId?: string;
   mandateName?: string;
+  tenantRegisteredAddress?: string;
+  clientRegisteredAddress?: string;
+  serviceCategory?: string;
 }): Promise<SignableContract> =>
   unwrap(await api.post("/tools/contracts/generate-from-template", dto));
 
