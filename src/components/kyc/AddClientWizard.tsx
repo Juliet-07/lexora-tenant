@@ -9,6 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -72,10 +73,179 @@ const createClientWithContract = async (payload: {
   templateSource: "platform" | "tenant";
   contractTitle: string;
   contractType?: string;
+  // Everything captured on the "Select Contract" step, merged into
+  // the drafted document the same way every other generate-from-
+  // template flow works — see ContractDetailsForm below.
+  scopeOfWork?: string;
+  tenantCompanyJurisdiction?: string;
+  clientJurisdiction?: string;
+  leadProfessionalName?: string;
+  leadProfessionalTitle?: string;
+  clientRepresentativeName?: string;
+  clientRepresentativeTitle?: string;
+  commencementDate?: string;
+  engagementDuration?: string;
+  tenantRegisteredAddress?: string;
+  clientRegisteredAddress?: string;
+  serviceCategory?: string;
 }): Promise<CreateClientWithContractResponse> => {
   const res = await api.post("/tenant/create-client", payload);
   return res.data;
 };
+
+// Blank draft for every optional contract-merge field the wizard can
+// collect up front — kept as one object so it's easy to reset and to
+// spread into the create-client payload trimmed-or-omitted.
+const emptyContractDetails = {
+  scopeOfWork: "",
+  tenantCompanyJurisdiction: "",
+  clientJurisdiction: "",
+  leadProfessionalName: "",
+  leadProfessionalTitle: "",
+  clientRepresentativeName: "",
+  clientRepresentativeTitle: "",
+  commencementDate: "",
+  engagementDuration: "",
+  tenantRegisteredAddress: "",
+  clientRegisteredAddress: "",
+  serviceCategory: "",
+};
+type ContractDetails = typeof emptyContractDetails;
+
+// Renders once a template is picked — the essence of it being that
+// the tenant has as little as possible left to hand-edit once the
+// contract is drafted. Every field is optional: a template that
+// doesn't reference a given token is unaffected either way.
+function ContractDetailsForm({
+  details,
+  onChange,
+}: {
+  details: ContractDetails;
+  onChange: (next: ContractDetails) => void;
+}) {
+  const set = (k: keyof ContractDetails) => (v: string) =>
+    onChange({ ...details, [k]: v });
+  return (
+    <div className="space-y-3 rounded-lg border p-3">
+      <p className="text-xs font-medium text-muted-foreground">
+        Additional details for the contract (optional — only used if this
+        template references them). Filling these in now means little to nothing
+        left to edit once the contract is drafted.
+      </p>
+      <div className="space-y-1.5">
+        <Label className="text-xs">Scope of work</Label>
+        <Textarea
+          value={details.scopeOfWork}
+          onChange={(e) => set("scopeOfWork")(e.target.value)}
+          placeholder={
+            "One item per line, e.g.\nIncorporation and registration\nOngoing compliance advisory"
+          }
+          rows={3}
+          className="text-sm"
+        />
+        <p className="text-[11px] text-muted-foreground">
+          One line per item — each becomes its own numbered point in the
+          document.
+        </p>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1.5">
+          <Label className="text-xs">Your registered address</Label>
+          <Input
+            className="h-8 text-sm"
+            value={details.tenantRegisteredAddress}
+            onChange={(e) => set("tenantRegisteredAddress")(e.target.value)}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs">Client's registered address</Label>
+          <Input
+            className="h-8 text-sm"
+            value={details.clientRegisteredAddress}
+            onChange={(e) => set("clientRegisteredAddress")(e.target.value)}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs">Your jurisdiction</Label>
+          <Input
+            className="h-8 text-sm"
+            value={details.tenantCompanyJurisdiction}
+            onChange={(e) => set("tenantCompanyJurisdiction")(e.target.value)}
+            placeholder="e.g. the Republic of Rwanda"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs">Client's jurisdiction</Label>
+          <Input
+            className="h-8 text-sm"
+            value={details.clientJurisdiction}
+            onChange={(e) => set("clientJurisdiction")(e.target.value)}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs">Service category</Label>
+          <Input
+            className="h-8 text-sm"
+            value={details.serviceCategory}
+            onChange={(e) => set("serviceCategory")(e.target.value)}
+            placeholder="e.g. company secretarial"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs">Engagement duration</Label>
+          <Input
+            className="h-8 text-sm"
+            value={details.engagementDuration}
+            onChange={(e) => set("engagementDuration")(e.target.value)}
+            placeholder="e.g. 12 months"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs">Commencement date</Label>
+          <Input
+            type="date"
+            className="h-8 text-sm"
+            value={details.commencementDate}
+            onChange={(e) => set("commencementDate")(e.target.value)}
+          />
+        </div>
+        <div />
+        <div className="space-y-1.5">
+          <Label className="text-xs">Lead professional — name</Label>
+          <Input
+            className="h-8 text-sm"
+            value={details.leadProfessionalName}
+            onChange={(e) => set("leadProfessionalName")(e.target.value)}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs">Lead professional — title</Label>
+          <Input
+            className="h-8 text-sm"
+            value={details.leadProfessionalTitle}
+            onChange={(e) => set("leadProfessionalTitle")(e.target.value)}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs">Client representative — name</Label>
+          <Input
+            className="h-8 text-sm"
+            value={details.clientRepresentativeName}
+            onChange={(e) => set("clientRepresentativeName")(e.target.value)}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs">Client representative — title</Label>
+          <Input
+            className="h-8 text-sm"
+            value={details.clientRepresentativeTitle}
+            onChange={(e) => set("clientRepresentativeTitle")(e.target.value)}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function AddClientWizard({
   open,
@@ -98,6 +268,8 @@ export default function AddClientWizard({
   } | null>(null);
   const [selectedTemplate, setSelectedTemplate] =
     useState<AvailableTemplate | null>(null);
+  const [contractDetails, setContractDetails] =
+    useState<ContractDetails>(emptyContractDetails);
   const [contract, setContract] = useState<SignableContract | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
 
@@ -111,6 +283,7 @@ export default function AddClientWizard({
     });
     setCreatedClient(null);
     setSelectedTemplate(null);
+    setContractDetails(emptyContractDetails);
     setContract(null);
   };
 
@@ -162,6 +335,27 @@ export default function AddClientWizard({
         templateSource: "platform",
         contractTitle: `${selectedTemplate.title} — ${form.fullName}`,
         contractType: selectedTemplate.type ?? "MSA",
+        scopeOfWork: contractDetails.scopeOfWork.trim() || undefined,
+        tenantCompanyJurisdiction:
+          contractDetails.tenantCompanyJurisdiction.trim() || undefined,
+        clientJurisdiction:
+          contractDetails.clientJurisdiction.trim() || undefined,
+        leadProfessionalName:
+          contractDetails.leadProfessionalName.trim() || undefined,
+        leadProfessionalTitle:
+          contractDetails.leadProfessionalTitle.trim() || undefined,
+        clientRepresentativeName:
+          contractDetails.clientRepresentativeName.trim() || undefined,
+        clientRepresentativeTitle:
+          contractDetails.clientRepresentativeTitle.trim() || undefined,
+        commencementDate: contractDetails.commencementDate || undefined,
+        engagementDuration:
+          contractDetails.engagementDuration.trim() || undefined,
+        tenantRegisteredAddress:
+          contractDetails.tenantRegisteredAddress.trim() || undefined,
+        clientRegisteredAddress:
+          contractDetails.clientRegisteredAddress.trim() || undefined,
+        serviceCategory: contractDetails.serviceCategory.trim() || undefined,
       });
     },
     onSuccess: (data) => {
@@ -398,6 +592,12 @@ export default function AddClientWizard({
                     );
                   })}
                 </div>
+              )}
+              {selectedTemplate && (
+                <ContractDetailsForm
+                  details={contractDetails}
+                  onChange={setContractDetails}
+                />
               )}
               <div className="flex justify-between pt-2">
                 <Button variant="outline" onClick={() => setStep(1)}>

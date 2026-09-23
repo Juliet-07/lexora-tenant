@@ -92,6 +92,9 @@ export function VendorContractDialog({
     useState("");
   const [commencementDate, setCommencementDate] = useState("");
   const [engagementDuration, setEngagementDuration] = useState("");
+  const [tenantRegisteredAddress, setTenantRegisteredAddress] = useState("");
+  const [clientRegisteredAddress, setClientRegisteredAddress] = useState("");
+  const [serviceCategory, setServiceCategory] = useState("");
 
   useEffect(() => {
     if (!open) return;
@@ -110,6 +113,9 @@ export function VendorContractDialog({
     setClientRepresentativeTitle("");
     setCommencementDate("");
     setEngagementDuration("");
+    setTenantRegisteredAddress("");
+    setClientRegisteredAddress("");
+    setServiceCategory("");
   }, [open]);
 
   const template = templates.find((t) => t._id === templateId) ?? null;
@@ -135,6 +141,9 @@ export function VendorContractDialog({
           clientRepresentativeTitle.trim() || undefined,
         commencementDate: commencementDate || undefined,
         engagementDuration: engagementDuration.trim() || undefined,
+        tenantRegisteredAddress: tenantRegisteredAddress.trim() || undefined,
+        clientRegisteredAddress: clientRegisteredAddress.trim() || undefined,
+        serviceCategory: serviceCategory.trim() || undefined,
         expiresOn: endDate,
       }),
     onSuccess: (created) => {
@@ -179,11 +188,11 @@ export function VendorContractDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>New contract — {vendor.legalName}</DialogTitle>
           <DialogDescription>
-            Start from a real template published by your Superadmin. Once
+            Start from a real template published by Lexora. Once
             drafted, you'll edit the wording and send it from the full contract
             page — it emails the vendor a PDF and a link to comment and sign.
           </DialogDescription>
@@ -294,6 +303,20 @@ export function VendorContractDialog({
               </p>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
+                  <Label>Your registered address</Label>
+                  <Input
+                    value={tenantRegisteredAddress}
+                    onChange={(e) => setTenantRegisteredAddress(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Vendor's registered address</Label>
+                  <Input
+                    value={clientRegisteredAddress}
+                    onChange={(e) => setClientRegisteredAddress(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
                   <Label>Your jurisdiction</Label>
                   <Input
                     value={tenantCompanyJurisdiction}
@@ -308,6 +331,14 @@ export function VendorContractDialog({
                   <Input
                     value={clientJurisdiction}
                     onChange={(e) => setClientJurisdiction(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Service category</Label>
+                  <Input
+                    value={serviceCategory}
+                    onChange={(e) => setServiceCategory(e.target.value)}
+                    placeholder="e.g. company secretarial"
                   />
                 </div>
                 <div className="space-y-1.5">

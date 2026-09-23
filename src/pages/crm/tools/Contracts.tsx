@@ -278,6 +278,9 @@ export default function Contracts() {
     clientRepresentativeTitle: "",
     commencementDate: "",
     engagementDuration: "",
+    tenantRegisteredAddress: "",
+    clientRegisteredAddress: "",
+    serviceCategory: "",
     expiresOn: "",
   };
   const [generateDraft, setGenerateDraft] = useState(emptyGenerateDraft);
@@ -311,6 +314,11 @@ export default function Contracts() {
         commencementDate: generateDraft.commencementDate || undefined,
         engagementDuration:
           generateDraft.engagementDuration.trim() || undefined,
+        tenantRegisteredAddress:
+          generateDraft.tenantRegisteredAddress.trim() || undefined,
+        clientRegisteredAddress:
+          generateDraft.clientRegisteredAddress.trim() || undefined,
+        serviceCategory: generateDraft.serviceCategory.trim() || undefined,
         expiresOn: generateDraft.expiresOn,
         ...(generateDraft.partyMode === "client"
           ? {
@@ -1263,6 +1271,30 @@ export default function Contracts() {
               </p>
               <div className="grid grid-cols-2 gap-3">
                 <div>
+                  <Label>Your registered address</Label>
+                  <Input
+                    value={generateDraft.tenantRegisteredAddress}
+                    onChange={(e) =>
+                      setGenerateDraft({
+                        ...generateDraft,
+                        tenantRegisteredAddress: e.target.value,
+                      })
+                    }
+                  />
+                </div>
+                <div>
+                  <Label>Client's registered address</Label>
+                  <Input
+                    value={generateDraft.clientRegisteredAddress}
+                    onChange={(e) =>
+                      setGenerateDraft({
+                        ...generateDraft,
+                        clientRegisteredAddress: e.target.value,
+                      })
+                    }
+                  />
+                </div>
+                <div>
                   <Label>Your jurisdiction</Label>
                   <Input
                     value={generateDraft.tenantCompanyJurisdiction}
@@ -1285,6 +1317,19 @@ export default function Contracts() {
                         clientJurisdiction: e.target.value,
                       })
                     }
+                  />
+                </div>
+                <div>
+                  <Label>Service category</Label>
+                  <Input
+                    value={generateDraft.serviceCategory}
+                    onChange={(e) =>
+                      setGenerateDraft({
+                        ...generateDraft,
+                        serviceCategory: e.target.value,
+                      })
+                    }
+                    placeholder="e.g. company secretarial"
                   />
                 </div>
                 <div>
