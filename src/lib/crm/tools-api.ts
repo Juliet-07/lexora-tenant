@@ -837,6 +837,7 @@ export const generateContractFromTemplate = async (dto: {
   autoRenew?: boolean;
   mandateId?: string;
   mandateName?: string;
+  tenantRegisteredAddress?: string;
 }): Promise<SignableContract> =>
   unwrap(await api.post("/tools/contracts/generate-from-template", dto));
 
