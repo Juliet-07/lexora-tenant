@@ -1,43 +1,59 @@
+# Policy & Procedure Management — Detailed Workflow
+
 ## Goal
 
-Mirror the "My Team → Manage 90-day plan" experience for the two missing rungs of the hierarchy so probation feels identical at every level:
+Rebuild the tenant Policy & Procedure page to match the uploaded reference while preserving the working API flows for policy upload, download, deletion, employee acknowledgement, and external acknowledgement. Everything the API does not currently store will behave as persistent demo data in the browser.
 
-- **HOD → Managers on probation** — HOD runs the 90-day plan + monthly check-ins.
-- **Tenant → HODs on probation** — Tenant runs the 90-day plan + monthly check-ins, then records the final decision.
+## What will change
 
-The engine already exists (`ProbationRunnerPanel` in `ManagerProbationSheet.tsx` supports `mode: "manager" | "tenant"` and both sets of endpoints in `hr-probation-api.ts` are already wired). The gap is UX discoverability and one wiring bug — the tenant/HOD entry points don't look and behave like the manager's `MyTeam` cards.
+### 1. Policy register and oversight
+- Add summary figures for total policies, published/draft/review counts, overdue reviews, average acknowledgement, and staff with gaps.
+- Add search and status filters for All, Published, Draft, Under review, Overdue, Superseded, and Archived.
+- Group the register into collapsible subject areas: Legal & Compliance, IT/Data/Cyber, Website & Client-facing, HR & People, Operations & Finance, and Governance.
+- Show owner, version, lifecycle status, next review date, acknowledgement rate, document, and an explicit Open action.
+- Add working “send reminders” feedback and CSV acknowledgement export.
 
-## What's actually wrong today
+### 2. New policy flow
+- Expand “Upload policy” into the reference’s structured policy setup flow.
+- Keep the real API upload fields and file submission: title, category, organisation/board type, and document.
+- Add template selection, owner, approval authority, review frequency, acknowledgement requirement, description/scope, and linked regulations as persistent demo metadata.
+- Provide the full template catalogue from the reference and prefill sensible titles/categories while still supporting a blank custom policy.
 
-1. `ManagerProbationSheet` renders `<ProbationRunnerPanel employee={employee} />` **without a `mode` prop**, even though `mode` is required. It happens to fall through as "manager" for both `MyTeam` (correct) and `MyDepartment` (HOD acting on a manager — also correct, same manager-side endpoints).
-2. The tenant side has NO "cards with a Manage 90-day plan button" surface for HODs. The functionality is buried inside `HR → Probation` (click row → open sheet → Timeline tab). The user expects the same card + button pattern `MyTeam` uses.
-3. `MyDepartment` already has the "Manage 90-day plan" button on probation managers — this rung works, we just formalise the `mode="manager"` wiring so it's explicit.
+### 3. Full policy workspace
+Opening a policy will replace the small side panel with a full workspace containing:
+- A clear header with category, lifecycle status, owner, version, review information, document download, review action, edit/save controls, and deletion.
+- **Editor:** section navigation, rich-text content editing, adding/removing sections, document properties, and saved-state feedback.
+- **Properties:** policy reference, effective date, superseded document, related policies, owner, approval authority, review frequency, linked regulations, acknowledgement audience, and re-acknowledgement rules.
+- **Acknowledgements:** completion rate, current-version staff status, real acknowledgement records merged with realistic demo assignees, reminder action, CSV export, and all-version history.
+- **Version history:** current and previous versions, authors, change summaries, approval details, version viewing/comparison, and archive export feedback.
+- **Comments:** review discussion with replies and a working add-comment flow.
 
-## Changes
+### 4. Lifecycle and review workflow
+- Support Draft → Under review → Approved/Published → Superseded/Archived states in the demo layer.
+- “Send for review” will create a review event/comment and move the policy to Under review.
+- Publishing/version updates will record a new version-history entry and reset demo acknowledgement tracking where re-acknowledgement is mandatory.
+- Review due dates and overdue indicators will update from the configured review frequency.
 
-### 1. `src/components/hr/ManagerProbationSheet.tsx`
-- Add optional `mode?: "manager" | "tenant"` (default `"manager"`) to `ManagerProbationSheet`'s props and forward it to `ProbationRunnerPanel`. Keeps existing callers working; lets the tenant surface pass `mode="tenant"`.
+### 5. Data boundaries
+- The existing API remains authoritative for uploaded policy files, policy records, deletion, and acknowledgement submissions.
+- Additional workflow data is keyed to each API policy and persisted locally so the prototype remains interactive between refreshes.
+- Employee “My Policies” and the public acknowledgement page remain connected to the existing API and are not replaced with mock-only flows.
 
-### 2. `src/pages/hr/employee/MyDepartment.tsx`
-- No behavioural change; pass `mode="manager"` explicitly to `ManagerProbationSheet` for clarity. HOD → Manager probation continues to hit the manager-side endpoints (backend authorises HOD via department scope).
+## Technical details
 
-### 3. `src/pages/hr/Probation.tsx` — add a "Heads of Department on probation" section
-At the top of the tenant Probation page, above the existing "Active probations" table, add a dedicated cards grid that mirrors `MyTeam`:
+- Add a focused policy-workflow store for metadata, sections, comments, versions, assignees, and lifecycle transitions.
+- Split the large tenant screen into focused register, setup dialog, and workspace components.
+- Reuse the existing rich-text editor and semantic design components/tokens.
+- Remove unsafe non-null assertions in any policy files touched during the rebuild.
 
-- Filter `fetchAllProbationRecords()` results for employees whose `hierarchyRole === "head_of_department"`.
-- Render each as a card (name, job title, probation end date, current stage badge) with a **"Manage 90-day plan"** button.
-- Button opens `<ManagerProbationSheet employee={...} mode="tenant" onClose={...} />` — same sheet, same runner panel, same stages (Onboarding → M1 → M2 → M3), driven by the `*AsTenant` endpoints.
-- Once Month 3 is complete, the runner panel's Final Decision card links into the existing decision flow (already in the sheet), so the tenant records confirm/extend/terminate from the same surface.
-- The existing "Active probations" table stays as a full oversight list for everyone else (regular employees + managers on probation still run by their line manager/HOD respectively).
+## Verification
 
-### 4. Verification
-- Confirm `fetchAllProbationRecords` returns `hierarchyRole` on the employee shape; if not, extend the mapping in `hr-probation-api.ts` (`ProbationListEmployee`) to include it. If the endpoint doesn't expose it, fall back to cross-referencing with `fetchEmployeesByHierarchyRole("head_of_department")` from `hr-api.ts`.
-- Run `tsgo` to make sure the new optional prop and the HOD filter compile.
-- Manually walk the three rungs in the preview:
-  - Manager → regular employee on probation (unchanged)
-  - HOD → manager on probation (button on `MyDepartment`)
-  - Tenant → HOD on probation (new cards on `HR → Probation`)
+- Run the project’s TypeScript check.
+- Test the tenant flow in the preview: filter/search, create/upload, open workspace, edit content/properties, send for review, update status, add comments, send reminders, export acknowledgement data, download the uploaded file, and delete.
+- Confirm the employee and external acknowledgement pages still load and retain their existing API behavior.
+- Check the policy register and workspace at desktop and mobile widths for overflow and readable controls.
 
 ## Out of scope
-- No backend changes — every endpoint required (`setProbationOnboardingAsTenant`, `completeProbationMonth1AsTenant`, etc.) already exists.
-- No changes to how HODs are added on the Employees page — creating a HOD with `employmentStatus === "probation"` already produces a probation record server-side, same as any employee.
+
+- No backend or endpoint changes.
+- Demo-only metadata will not sync between devices or users until matching endpoints exist.
