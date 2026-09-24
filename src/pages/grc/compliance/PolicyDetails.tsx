@@ -38,17 +38,12 @@ import {
   Plus,
   Mail,
   BarChart3,
-  Bold,
-  Italic,
-  Underline,
-  List,
-  ListOrdered,
-  Table as TableIcon,
   ShieldCheck,
   Eye,
   FileDown,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { RichTextEditor } from "@/components/RichTextEditor";
 import {
   fetchPolicy,
   updatePolicyProperties,
@@ -532,11 +527,21 @@ function escapeHtml(s: string): string {
   );
 }
 
+// jsPDF's own doc.html() plugin (tried first here previously) rendered
+// a blank page for this content — a known failure mode when the
+// source element is positioned off-screen (e.g. left:-9999px), which
+// throws off html2canvas's viewport-relative capture rect. Rendering
+// with html2canvas directly, on-screen but hidden behind everything
+// via a negative z-index at the top-left of the page, then slicing
+// the resulting canvas into page-sized chunks ourselves, is the
+// standard workaround and doesn't depend on jsPDF's own html2canvas
+// wrapper at all.
 async function exportPolicyPdf(policy: Policy): Promise<void> {
+  const WIDTH_PX = 700;
   const container = document.createElement("div");
   container.style.cssText =
-    "position:fixed;left:-9999px;top:0;width:700px;padding:32px;" +
-    "font-family:Georgia,serif;color:#1a1a1a;background:#fff;";
+    `position:absolute;left:0;top:0;width:${WIDTH_PX}px;z-index:-1000;` +
+    "padding:32px;font-family:Georgia,serif;color:#1a1a1a;background:#fff;";
   container.innerHTML = `
     <h1 style="font-size:22px;margin:0 0 6px;">${escapeHtml(policy.title)}</h1>
     <p style="font-size:11px;color:#666;margin:0 0 24px;">
@@ -553,43 +558,77 @@ async function exportPolicyPdf(policy: Policy): Promise<void> {
   document.body.appendChild(container);
 
   try {
-    const doc = new jsPDF({ unit: "pt", format: "a4" });
-    await new Promise<void>((resolve, reject) => {
-      doc.html(container, {
-        x: 40,
-        y: 40,
-        width: 515,
-        windowWidth: 700,
-        autoPaging: "text",
-        callback: () => {
-          try {
-            doc.save(`${policy.title.replace(/[^a-z0-9]+/gi, "_")}.pdf`);
-            resolve();
-          } catch (err) {
-            reject(err);
-          }
-        },
-      });
+    // Let the browser actually paint the container (fonts, layout)
+    // before capturing it.
+    await new Promise((r) =>
+      requestAnimationFrame(() => requestAnimationFrame(r)),
+    );
+
+    const html2canvas = (await import("html2canvas")).default;
+    const canvas = await html2canvas(container, {
+      scale: 2,
+      backgroundColor: "#ffffff",
+      useCORS: true,
+      windowWidth: WIDTH_PX,
     });
+
+    const pdf = new jsPDF({ unit: "pt", format: "a4" });
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const margin = 40;
+    const usableWidth = pageWidth - margin * 2;
+    const usableHeight = pageHeight - margin * 2;
+
+    // pt-per-canvas-px scale, then how many source canvas px make up
+    // one page's worth of vertical space.
+    const ptPerPx = usableWidth / canvas.width;
+    const pagePxHeight = Math.floor(usableHeight / ptPerPx);
+
+    let renderedPx = 0;
+    let firstPage = true;
+    while (renderedPx < canvas.height) {
+      const sliceHeightPx = Math.min(pagePxHeight, canvas.height - renderedPx);
+      const sliceCanvas = document.createElement("canvas");
+      sliceCanvas.width = canvas.width;
+      sliceCanvas.height = sliceHeightPx;
+      const ctx = sliceCanvas.getContext("2d")!;
+      ctx.drawImage(
+        canvas,
+        0,
+        renderedPx,
+        canvas.width,
+        sliceHeightPx,
+        0,
+        0,
+        canvas.width,
+        sliceHeightPx,
+      );
+
+      if (!firstPage) pdf.addPage();
+      pdf.addImage(
+        sliceCanvas.toDataURL("image/png"),
+        "PNG",
+        margin,
+        margin,
+        usableWidth,
+        sliceHeightPx * ptPerPx,
+      );
+
+      renderedPx += sliceHeightPx;
+      firstPage = false;
+    }
+
+    pdf.save(`${policy.title.replace(/[^a-z0-9]+/gi, "_")}.pdf`);
   } finally {
     document.body.removeChild(container);
   }
 }
 
-const TABLE_HTML =
-  '<table style="border-collapse:collapse;width:100%"><tbody>' +
-  Array.from({ length: 2 })
-    .map(
-      () =>
-        `<tr>${Array.from({ length: 2 })
-          .map(
-            () => '<td style="border:1px solid #ccc;padding:6px">&nbsp;</td>',
-          )
-          .join("")}</tr>`,
-    )
-    .join("") +
-  "</tbody></table><p></p>";
-
+// Section content editing uses the same shared RichTextEditor as the
+// rest of the app (contracts, resolutions, codes, meeting notices,
+// …) instead of a policy-only toolbar — one editor, uniform
+// formatting (font, size, paragraph/heading, alignment, tables)
+// everywhere it appears.
 function SectionEditor({
   policyId,
   section,
@@ -601,8 +640,8 @@ function SectionEditor({
   invalidate: () => void;
   onErr: (t: string) => (e: any) => void;
 }) {
-  const ref = useRef<HTMLDivElement>(null);
   const [title, setTitle] = useState(section.title);
+  const [content, setContent] = useState(section.content);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -616,50 +655,25 @@ function SectionEditor({
     onError: onErr("Failed to save section"),
   });
 
-  const saveContent = () => {
-    if (!ref.current) return;
-    saveMut.mutate({ content: ref.current.innerHTML });
-  };
-  const scheduleSave = () => {
+  const handleContentChange = (html: string) => {
+    setContent(html);
     if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(saveContent, 1500);
-  };
-
-  const exec = (cmd: string, value?: string) => {
-    ref.current?.focus();
-    document.execCommand(cmd, false, value);
-    scheduleSave();
+    saveTimer.current = setTimeout(
+      () => saveMut.mutate({ content: html }),
+      1500,
+    );
   };
 
   return (
     <Card>
-      <CardContent className="p-0">
-        <div className="flex items-center justify-between border-b px-3 py-2 gap-2 flex-wrap">
-          <div className="flex gap-1">
-            <ToolBtn onClick={() => exec("bold")}>
-              <Bold className="h-3.5 w-3.5" />
-            </ToolBtn>
-            <ToolBtn onClick={() => exec("italic")}>
-              <Italic className="h-3.5 w-3.5" />
-            </ToolBtn>
-            <ToolBtn onClick={() => exec("underline")}>
-              <Underline className="h-3.5 w-3.5" />
-            </ToolBtn>
-            <div className="w-px bg-border mx-1" />
-            <ToolBtn onClick={() => exec("formatBlock", "H1")}>H1</ToolBtn>
-            <ToolBtn onClick={() => exec("formatBlock", "H2")}>H2</ToolBtn>
-            <ToolBtn onClick={() => exec("formatBlock", "H3")}>H3</ToolBtn>
-            <div className="w-px bg-border mx-1" />
-            <ToolBtn onClick={() => exec("insertUnorderedList")}>
-              <List className="h-3.5 w-3.5" />
-            </ToolBtn>
-            <ToolBtn onClick={() => exec("insertOrderedList")}>
-              <ListOrdered className="h-3.5 w-3.5" />
-            </ToolBtn>
-            <ToolBtn onClick={() => exec("insertHTML", TABLE_HTML)}>
-              <TableIcon className="h-3.5 w-3.5" />
-            </ToolBtn>
-          </div>
+      <CardContent className="p-3 space-y-3">
+        <div className="flex items-center justify-between gap-2">
+          <Input
+            className="font-semibold text-base border-none px-0 focus-visible:ring-0"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            onBlur={() => title !== section.title && saveMut.mutate({ title })}
+          />
           <span className="text-[11px] text-muted-foreground shrink-0">
             {saveMut.isPending
               ? "Saving…"
@@ -668,44 +682,14 @@ function SectionEditor({
                 : ""}
           </span>
         </div>
-        <div className="p-3 space-y-3">
-          <Input
-            className="font-semibold text-base border-none px-0 focus-visible:ring-0"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            onBlur={() => title !== section.title && saveMut.mutate({ title })}
-          />
-          <div
-            ref={ref}
-            contentEditable
-            suppressContentEditableWarning
-            className="min-h-[300px] text-sm leading-relaxed outline-none prose prose-sm max-w-none"
-            dangerouslySetInnerHTML={{ __html: section.content }}
-            onInput={scheduleSave}
-            onBlur={saveContent}
-          />
-        </div>
+        <RichTextEditor
+          value={content}
+          onChange={handleContentChange}
+          minHeight={300}
+          placeholder="Start writing this section…"
+        />
       </CardContent>
     </Card>
-  );
-}
-
-function ToolBtn({
-  children,
-  onClick,
-}: {
-  children: React.ReactNode;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onMouseDown={(e) => e.preventDefault()}
-      onClick={onClick}
-      className="h-7 min-w-7 px-1.5 inline-flex items-center justify-center rounded border text-xs hover:bg-muted"
-    >
-      {children}
-    </button>
   );
 }
 

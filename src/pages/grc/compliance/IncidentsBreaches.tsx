@@ -6,7 +6,6 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
@@ -23,6 +22,19 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
   Table,
   TableBody,
   TableCell,
@@ -37,6 +49,9 @@ import {
   Upload,
   Download,
   Lock,
+  Check,
+  ChevronsUpDown,
+  X,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { fmtDate } from "@/lib/grc/usePersistentState";
@@ -55,6 +70,9 @@ import {
   type IncidentStatus,
   type IncidentSeverity,
 } from "@/lib/grc/compliance-api";
+import { fetchEmployees, type Employee } from "@/lib/hr/hr-api";
+import { fetchClients, type ApiClient } from "@/lib/client/clients-api";
+import { fetchPolicies } from "@/lib/grc/policy-api";
 
 const CATEGORIES = [
   "Policy breach",
@@ -69,17 +87,6 @@ const CATEGORIES = [
   "IT / cybersecurity",
   "Third-party / outsourcing",
   "Other",
-];
-const POLICIES = [
-  "AML/CFT Policy",
-  "Data Protection Policy",
-  "IT Security Policy",
-  "Client Acceptance Policy",
-  "Code of Conduct",
-  "Complaints Handling Policy",
-  "Record Retention Policy",
-  "Business Continuity Plan",
-  "Employee Handbook",
 ];
 const ROOT = [
   "Process failure",
@@ -1025,6 +1032,106 @@ function Detail({ inc, onBack }: { inc: Incident; onBack: () => void }) {
   );
 }
 
+// Searchable, checkbox-style multi-select used for "Persons involved" and
+// "Clients affected" — a Popover+Command combo (same pattern as the
+// single-select employee picker in hr/Contracts.tsx), extended to toggle
+// membership in an id array instead of replacing a single value, with
+// selections shown as removable chips.
+function MultiSelectPicker({
+  label,
+  placeholder,
+  searchPlaceholder,
+  emptyText,
+  options,
+  selected,
+  onChange,
+}: {
+  label: string;
+  placeholder: string;
+  searchPlaceholder: string;
+  emptyText: string;
+  options: { id: string; label: string; sublabel?: string }[];
+  selected: string[];
+  onChange: (ids: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const toggle = (id: string) =>
+    onChange(
+      selected.includes(id)
+        ? selected.filter((x) => x !== id)
+        : [...selected, id],
+    );
+  const selectedOptions = options.filter((o) => selected.includes(o.id));
+
+  return (
+    <div>
+      <Label>{label}</Label>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            type="button"
+            variant="outline"
+            role="combobox"
+            className="w-full justify-between font-normal"
+          >
+            <span className="truncate text-left">
+              {selectedOptions.length
+                ? `${selectedOptions.length} selected`
+                : placeholder}
+            </span>
+            <ChevronsUpDown className="h-4 w-4 opacity-50 shrink-0" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+          <Command>
+            <CommandInput placeholder={searchPlaceholder} />
+            <CommandList>
+              <CommandEmpty>{emptyText}</CommandEmpty>
+              <CommandGroup>
+                {options.map((o) => (
+                  <CommandItem
+                    key={o.id}
+                    value={o.label}
+                    onSelect={() => toggle(o.id)}
+                  >
+                    <Check
+                      className={`mr-2 h-4 w-4 ${selected.includes(o.id) ? "opacity-100" : "opacity-0"}`}
+                    />
+                    <div className="flex flex-col">
+                      <span>{o.label}</span>
+                      {o.sublabel && (
+                        <span className="text-[11px] text-muted-foreground">
+                          {o.sublabel}
+                        </span>
+                      )}
+                    </div>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
+      {selectedOptions.length > 0 && (
+        <div className="flex flex-wrap gap-1 mt-1.5">
+          {selectedOptions.map((o) => (
+            <Badge key={o.id} variant="secondary" className="gap-1 pr-1">
+              {o.label}
+              <button
+                type="button"
+                onClick={() => toggle(o.id)}
+                className="hover:text-destructive"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </Badge>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ReportDialog({
   open,
   onOpenChange,
@@ -1040,17 +1147,55 @@ function ReportDialog({
     occurred: "",
     reported: todayStr(),
     description: "",
-    persons: "",
-    clients: "",
+    personIds: [] as string[],
+    clientIds: [] as string[],
     policy: "",
     immediateActions: "",
-    anonymous: false,
     files: [] as File[],
   };
   const [f, setF] = useState(empty);
 
+  // Persons involved / clients affected / policy potentially breached are
+  // now picked from the tenant's real employee/client directory and its
+  // published policies, rather than typed as free text.
+  const { data: employeesPage } = useQuery({
+    queryKey: ["hr-employees-for-incident-picker"],
+    queryFn: () => fetchEmployees({ limit: 500 }),
+    enabled: open,
+  });
+  const employees = employeesPage?.items ?? [];
+
+  const { data: clients = [] } = useQuery({
+    queryKey: ["clients-for-incident-picker"],
+    queryFn: fetchClients,
+    enabled: open,
+  });
+
+  const { data: policies = [] } = useQuery({
+    queryKey: ["grc-policies-for-incident-picker"],
+    queryFn: fetchPolicies,
+    enabled: open,
+  });
+  const publishedPolicies = policies.filter((p) => p.status === "Published");
+
+  const employeeName = (e: Employee) => `${e.firstName} ${e.lastName}`.trim();
+  const clientName = (c: ApiClient) =>
+    c.businessName ||
+    `${c.firstName ?? ""} ${c.lastName ?? ""}`.trim() ||
+    c.email;
+
   const mutation = useMutation({
     mutationFn: async () => {
+      const persons = f.personIds
+        .map((id) => employees.find((e) => e._id === id))
+        .filter((e): e is Employee => !!e)
+        .map(employeeName)
+        .join(", ");
+      const clientsInvolved = f.clientIds
+        .map((id) => clients.find((c) => c._id === id))
+        .filter((c): c is ApiClient => !!c)
+        .map(clientName)
+        .join(", ");
       const created = await createIncident({
         title: f.title,
         category: f.category,
@@ -1058,11 +1203,10 @@ function ReportDialog({
         occurred: f.occurred || undefined,
         reported: f.reported,
         description: f.description,
-        persons: f.persons || undefined,
-        clients: f.clients || undefined,
+        persons: persons || undefined,
+        clients: clientsInvolved || undefined,
         policy: f.policy || undefined,
         immediateActions: f.immediateActions || undefined,
-        anonymous: f.anonymous,
       });
       if (f.files.length) await addIncidentFiles(created._id, f.files);
       return created;
@@ -1094,7 +1238,7 @@ function ReportDialog({
         <DialogHeader>
           <DialogTitle>Report an incident</DialogTitle>
         </DialogHeader>
-        <div className="rounded-lg border bg-muted/30 p-3 text-xs flex gap-2">
+        <div className="hidden rounded-lg border bg-muted/30 p-3 text-xs flex gap-2">
           <Lock className="h-4 w-4 shrink-0" />
           <div>
             <b>Confidential reporting.</b> Only the assigned investigator and
@@ -1184,20 +1328,31 @@ function ReportDialog({
             />
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label>Persons involved</Label>
-              <Input
-                value={f.persons}
-                onChange={(e) => setF({ ...f, persons: e.target.value })}
-              />
-            </div>
-            <div>
-              <Label>Clients affected (if any)</Label>
-              <Input
-                value={f.clients}
-                onChange={(e) => setF({ ...f, clients: e.target.value })}
-              />
-            </div>
+            <MultiSelectPicker
+              label="Persons involved"
+              placeholder="Select employees…"
+              searchPlaceholder="Search employees…"
+              emptyText="No employees found."
+              options={employees.map((e) => ({
+                id: e._id,
+                label: employeeName(e),
+                sublabel: e.jobTitle,
+              }))}
+              selected={f.personIds}
+              onChange={(ids) => setF({ ...f, personIds: ids })}
+            />
+            <MultiSelectPicker
+              label="Clients affected (if any)"
+              placeholder="Select clients…"
+              searchPlaceholder="Search clients…"
+              emptyText="No clients found."
+              options={clients.map((c) => ({
+                id: c._id,
+                label: clientName(c),
+              }))}
+              selected={f.clientIds}
+              onChange={(ids) => setF({ ...f, clientIds: ids })}
+            />
           </div>
           <div>
             <Label>Policy potentially breached</Label>
@@ -1209,13 +1364,21 @@ function ReportDialog({
                 <SelectValue placeholder="Select if applicable…" />
               </SelectTrigger>
               <SelectContent>
-                {[...POLICIES, "Other (specify in description)"].map((c) => (
-                  <SelectItem key={c} value={c}>
-                    {c}
+                {publishedPolicies.map((p) => (
+                  <SelectItem key={p._id} value={p.title}>
+                    {p.title}
                   </SelectItem>
                 ))}
+                <SelectItem value="Other (specify in description)">
+                  Other (specify in description)
+                </SelectItem>
               </SelectContent>
             </Select>
+            {publishedPolicies.length === 0 && (
+              <p className="text-[11px] text-muted-foreground mt-1">
+                No published policies yet — pick "Other" and describe it above.
+              </p>
+            )}
           </div>
           <div>
             <Label>Immediate actions taken</Label>
@@ -1238,13 +1401,6 @@ function ReportDialog({
               PDF, Word, Excel, images. Max 10 MB per file.
             </p>
           </div>
-          <label className="flex gap-2 items-center text-sm">
-            <Checkbox
-              checked={f.anonymous}
-              onCheckedChange={(v) => setF({ ...f, anonymous: !!v })}
-            />
-            I wish to report this anonymously
-          </label>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
