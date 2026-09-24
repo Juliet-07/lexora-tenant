@@ -21,6 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Table,
   TableBody,
@@ -35,13 +36,15 @@ import {
   fetchPolicies,
   fetchPolicyStats,
   fetchPolicyRosterReport,
+  fetchPolicyTemplates,
   createPolicyDoc,
-  POLICY_TEMPLATES,
+  POLICY_TYPES,
   POLICY_CATEGORIES,
   REVIEW_FREQUENCIES,
   ACK_REQUIREMENTS,
   type Policy,
   type PolicyStatus,
+  type PolicyType,
   type ReviewFrequency,
   type AckRequirement,
 } from "@/lib/grc/policy-api";
@@ -49,6 +52,7 @@ import {
 const statusTone: Record<PolicyStatus, string> = {
   Published: "text-emerald-600 border-emerald-500/30 bg-emerald-500/10",
   "Under review": "text-amber-600 border-amber-500/30 bg-amber-500/10",
+  "Pending board approval": "text-blue-600 border-blue-500/30 bg-blue-500/10",
   Draft: "text-muted-foreground",
 };
 const ackTone = (rate: number) =>
@@ -189,7 +193,7 @@ export default function GrcPolicies() {
         <div>
           <h1 className="text-2xl font-bold">Policies &amp; Procedures</h1>
           <p className="text-sm text-muted-foreground">
-            Version-controlled policy register with review cycles and staff
+            Version-controlled policy register with review cycles and
             acknowledgement tracking.
           </p>
         </div>
@@ -247,15 +251,18 @@ export default function GrcPolicies() {
         </Card>
       </div>
 
-      <div className="flex gap-2 flex-wrap items-center">
-        <Input
-          className="max-w-xs"
-          placeholder="Search policies…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
+      <div className="flex items-center justify-between px-2">
         <div className="flex gap-1">
-          {(["All", "Published", "Draft", "Overdue"] as const).map((s) => (
+          {(
+            [
+              "All",
+              "Published",
+              "Draft",
+              "Under review",
+              "Pending board approval",
+              "Overdue",
+            ] as const
+          ).map((s) => (
             <Button
               key={s}
               size="sm"
@@ -266,6 +273,12 @@ export default function GrcPolicies() {
             </Button>
           ))}
         </div>
+        <Input
+          className="max-w-xs"
+          placeholder="Search policies…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
       </div>
 
       <div className="space-y-2">
@@ -398,27 +411,12 @@ export default function GrcPolicies() {
         )}
       </div>
 
-      <div className="flex gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={remindersMut.isPending}
-          onClick={() => remindersMut.mutate()}
-        >
-          <Mail className="h-4 w-4 mr-1" />
-          {remindersMut.isPending
-            ? "Sending…"
-            : "Send reminders to outstanding"}
-        </Button>
-        <Button variant="outline" size="sm" onClick={exportReport}>
-          <BarChart3 className="h-4 w-4 mr-1" /> Export acknowledgement report
-        </Button>
-      </div>
-
       <NewPolicyDialog open={newOpen} onOpenChange={setNewOpen} />
     </div>
   );
 }
+
+const CUSTOM_TEMPLATE = "__custom__";
 
 function NewPolicyDialog({
   open,
@@ -430,19 +428,38 @@ function NewPolicyDialog({
   const nav = useNavigate();
   const queryClient = useQueryClient();
   const [f, setF] = useState({
-    template: POLICY_TEMPLATES[0],
+    templateId: CUSTOM_TEMPLATE,
     title: "",
     category: POLICY_CATEGORIES[0],
+    type: "organisation" as PolicyType,
     owner: "",
     approvalAuthority: "",
     reviewFrequency: "Annual" as ReviewFrequency,
     acknowledgementRequirement: "All staff must acknowledge" as AckRequirement,
     description: "",
     linkedRegulationsOrStandards: "",
+    boardApprovalRequired: false,
   });
 
+  // Templates are authored by Super Admin under the GRC module's
+  // Policies area — fetched fresh (not cached across categories) and
+  // filtered client-side to the category currently selected, plus a
+  // "Custom policy" option for a blank editor.
+  const { data: allTemplates = [] } = useQuery({
+    queryKey: ["policy-templates"],
+    queryFn: () => fetchPolicyTemplates(),
+    enabled: open,
+  });
+  const templatesForCategory = allTemplates.filter(
+    (t) => t.category === f.category,
+  );
+
   const mutation = useMutation({
-    mutationFn: () => createPolicyDoc(f),
+    mutationFn: () =>
+      createPolicyDoc({
+        ...f,
+        templateId: f.templateId === CUSTOM_TEMPLATE ? undefined : f.templateId,
+      }),
     onSuccess: (created) => {
       queryClient.invalidateQueries({ queryKey: ["grc-policies"] });
       queryClient.invalidateQueries({ queryKey: ["grc-policy-stats"] });
@@ -471,25 +488,58 @@ function NewPolicyDialog({
         </DialogHeader>
         <div className="space-y-3">
           <div>
-            <Label>Policy type / template</Label>
+            <Label>Category</Label>
             <Select
-              value={f.template}
-              onValueChange={(v) => setF({ ...f, template: v })}
+              value={f.category}
+              onValueChange={(v) =>
+                setF((prev) => {
+                  const stillValid = allTemplates.some(
+                    (t) => t._id === prev.templateId && t.category === v,
+                  );
+                  return {
+                    ...prev,
+                    category: v,
+                    templateId: stillValid ? prev.templateId : CUSTOM_TEMPLATE,
+                  };
+                })
+              }
             >
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {POLICY_TEMPLATES.map((t) => (
-                  <SelectItem key={t} value={t}>
-                    {t}
+                {POLICY_CATEGORIES.map((c) => (
+                  <SelectItem key={c} value={c}>
+                    {c}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label>Template</Label>
+            <Select
+              value={f.templateId}
+              onValueChange={(v) => setF({ ...f, templateId: v })}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={CUSTOM_TEMPLATE}>
+                  Custom policy (blank editor)
+                </SelectItem>
+                {templatesForCategory.map((t) => (
+                  <SelectItem key={t._id} value={t._id}>
+                    {t.title}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
             <p className="text-[11px] text-muted-foreground mt-1">
-              Select a template to start with a pre-structured document, or
-              choose "Custom policy" for a blank editor.
+              {templatesForCategory.length > 0
+                ? "Templates are published by your platform provider for this category. Pick one to start pre-structured, or leave it as a blank editor."
+                : "No published templates for this category yet — this will start as a blank editor."}
             </p>
           </div>
           <div>
@@ -502,22 +552,26 @@ function NewPolicyDialog({
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label>Category</Label>
+              <Label>Acknowledgement audience</Label>
               <Select
-                value={f.category}
-                onValueChange={(v) => setF({ ...f, category: v })}
+                value={f.type}
+                onValueChange={(v: PolicyType) => setF({ ...f, type: v })}
               >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {POLICY_CATEGORIES.map((c) => (
-                    <SelectItem key={c} value={c}>
-                      {c}
+                  {POLICY_TYPES.map((t) => (
+                    <SelectItem key={t.value} value={t.value}>
+                      {t.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              <p className="text-[11px] text-muted-foreground mt-1">
+                Organisation-wide policies are visible to employees and the
+                board; board-only policies are restricted to the board.
+              </p>
             </div>
             <div>
               <Label>Owner</Label>
@@ -526,6 +580,24 @@ function NewPolicyDialog({
                 value={f.owner}
                 onChange={(e) => setF({ ...f, owner: e.target.value })}
               />
+            </div>
+          </div>
+          <div className="flex items-start gap-2 rounded-md border p-3">
+            <Checkbox
+              checked={f.boardApprovalRequired}
+              onCheckedChange={(v) =>
+                setF({ ...f, boardApprovalRequired: Boolean(v) })
+              }
+            />
+            <div>
+              <Label className="font-normal">
+                Require board approval before publishing
+              </Label>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                When checked, approving this policy sends it to every active
+                board member for sign-off; it only publishes once all of them
+                approve.
+              </p>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">

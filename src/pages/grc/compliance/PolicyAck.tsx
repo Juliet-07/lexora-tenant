@@ -150,39 +150,76 @@ export default function PolicyAckPage() {
                   url={resolvePolicyFileUrl(snap.fileUrl)}
                   onScrolledToEnd={() => setReviewed(true)}
                 />
-              ) : (
+              ) : snap.fileUrl ? (
                 <div className="flex items-center justify-between gap-3 border rounded-md px-3 py-2">
                   <div className="flex items-center gap-2 text-sm min-w-0">
                     <FileText className="h-4 w-4 shrink-0" />
                     <span className="truncate">{snap.fileName}</span>
                   </div>
-                  {snap.fileUrl ? (
-                    <a
-                      href={resolvePolicyFileUrl(snap.fileUrl)}
-                      target="_blank"
-                      rel="noreferrer"
-                      onClick={() => setReviewed(true)}
-                    >
-                      <Button size="sm" variant="outline">
-                        <Download className="h-4 w-4 mr-1" /> Download
-                      </Button>
-                    </a>
-                  ) : (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setReviewed(true)}
-                    >
-                      Mark as reviewed
+                  <a
+                    href={resolvePolicyFileUrl(snap.fileUrl)}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={() => setReviewed(true)}
+                  >
+                    <Button size="sm" variant="outline">
+                      <Download className="h-4 w-4 mr-1" /> Download
                     </Button>
+                  </a>
+                </div>
+              ) : snap.sections?.length ? (
+                <div
+                  className="border rounded-md overflow-y-auto bg-muted/10 p-4 space-y-4"
+                  style={{ maxHeight: 420 }}
+                  onScroll={(e) => {
+                    const el = e.currentTarget;
+                    if (
+                      el.scrollTop + el.clientHeight >=
+                      el.scrollHeight - 20
+                    ) {
+                      setReviewed(true);
+                    }
+                  }}
+                >
+                  {snap.sections.map((s, i) => (
+                    <div key={i}>
+                      <h3 className="font-semibold text-sm mb-1">{s.title}</h3>
+                      <div
+                        className="prose prose-sm max-w-none text-foreground"
+                        dangerouslySetInnerHTML={{ __html: s.content || "" }}
+                      />
+                    </div>
+                  ))}
+                  {!reviewed && (
+                    <p className="text-center text-xs text-muted-foreground">
+                      Scroll to the end to continue.
+                    </p>
                   )}
                 </div>
+              ) : (
+                <div className="flex items-center justify-between gap-3 border rounded-md px-3 py-2">
+                  <div className="flex items-center gap-2 text-sm min-w-0">
+                    <FileText className="h-4 w-4 shrink-0" />
+                    <span className="truncate">
+                      {snap.fileName || "This policy has no content yet."}
+                    </span>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setReviewed(true)}
+                  >
+                    Mark as reviewed
+                  </Button>
+                </div>
               )}
-              {!reviewed && (
+              {!reviewed && !snap.sections?.length && (
                 <p className="text-xs text-muted-foreground mt-2">
                   {isPdf
                     ? "Scroll to the last page to continue."
-                    : "Download the document to continue."}
+                    : snap.fileUrl
+                      ? "Download the document to continue."
+                      : "Mark as reviewed to continue."}
                 </p>
               )}
             </div>

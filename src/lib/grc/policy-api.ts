@@ -1,7 +1,12 @@
 import { api } from "../api";
 
 export type PolicyType = "organisation" | "board";
-export type PolicyStatus = "Draft" | "Under review" | "Published";
+export type PolicyStatus =
+  | "Draft"
+  | "Under review"
+  | "Pending board approval"
+  | "Published";
+export type BoardApprovalDecision = "Pending" | "Approved" | "Rejected";
 export type ReviewFrequency =
   | "Annual"
   | "Semi-annual"
@@ -27,17 +32,9 @@ export const ACK_REQUIREMENTS: AckRequirement[] = [
   "Specific roles",
   "No acknowledgement required",
 ];
-export const POLICY_TEMPLATES = [
-  "AML/CFT Policy",
-  "Data Protection Policy",
-  "IT Security Policy",
-  "Client Acceptance Policy",
-  "Code of Conduct",
-  "Complaints Handling Policy",
-  "Record Retention Policy",
-  "Business Continuity Plan",
-  "Employee Handbook",
-  "Custom policy",
+export const POLICY_TYPES: { value: PolicyType; label: string }[] = [
+  { value: "organisation", label: "Organisation-wide (employees + board)" },
+  { value: "board", label: "Board only" },
 ];
 export const POLICY_CATEGORIES = [
   "Legal and Compliance",
@@ -96,6 +93,23 @@ export interface PolicyRosterEntry {
   status: "Acknowledged" | "Outstanding";
 }
 
+export interface BoardApprovalRow {
+  name: string;
+  email: string;
+  decision: BoardApprovalDecision;
+  notes: string;
+  decidedAt: string | null;
+  requestedAt: string;
+}
+
+export interface BoardApprovalSummary {
+  total: number;
+  approved: number;
+  rejected: number;
+  pending: number;
+  rows: BoardApprovalRow[];
+}
+
 export interface Policy {
   _id: string;
   title: string;
@@ -115,9 +129,14 @@ export interface Policy {
   relatedPolicies: string[];
   lastReviewed: string | null;
   nextReviewDue: string | null;
+  templateId: string | null;
   sections: PolicySection[];
   approvalHistory: PolicyApprovalEntry[];
   comments: PolicyComment[];
+  boardApprovalRequired: boolean;
+  tenantApprovedBy: string;
+  tenantApprovedAt: string | null;
+  tenantApprovalNotes: string;
   fileName: string;
   fileUrl: string | null;
   mimeType: string | null;
@@ -130,6 +149,21 @@ export interface Policy {
   acknowledgedCount: number;
   ackRate: number | null;
   rosterStatus: PolicyRosterEntry[];
+  boardApprovalSummary: BoardApprovalSummary | null;
+}
+
+export interface PolicyTemplateSection {
+  title: string;
+  content: string;
+}
+
+export interface PolicyTemplate {
+  _id: string;
+  title: string;
+  category: string;
+  description: string;
+  sections: PolicyTemplateSection[];
+  status: "Draft" | "Published";
 }
 
 export interface PolicyStats {
@@ -177,16 +211,28 @@ export const fetchPolicy = async (id: string): Promise<Policy> => {
   return res.data?.data ?? res.data;
 };
 
+export const fetchPolicyTemplates = async (
+  category?: string,
+): Promise<PolicyTemplate[]> => {
+  const res = await api.get("/grc/compliance/policy-templates", {
+    params: category ? { category } : undefined,
+  });
+  const d = res.data?.data ?? res.data;
+  return Array.isArray(d) ? d : [];
+};
+
 export const createPolicyDoc = async (dto: {
   title: string;
   category: string;
-  template?: string;
+  templateId?: string;
+  type?: PolicyType;
   owner?: string;
   approvalAuthority?: string;
   reviewFrequency?: ReviewFrequency;
   acknowledgementRequirement?: AckRequirement;
   description?: string;
   linkedRegulationsOrStandards?: string;
+  boardApprovalRequired?: boolean;
 }): Promise<Policy> => {
   const res = await api.post("/grc/compliance/policies", dto);
   return res.data?.data ?? res.data;
@@ -207,6 +253,8 @@ export const updatePolicyProperties = async (
     acknowledgementRequirement: AckRequirement;
     description: string;
     linkedRegulationsOrStandards: string[];
+    type: PolicyType;
+    boardApprovalRequired: boolean;
   }>,
 ): Promise<Policy> => {
   const res = await api.patch(`/grc/compliance/policies/${id}/properties`, dto);
@@ -278,6 +326,13 @@ export const sendPolicyReminders = async (
   return res.data?.data ?? res.data;
 };
 
+export const sendBoardApprovalReminders = async (
+  id: string,
+): Promise<{ remindersSent: number }> => {
+  const res = await api.post(`/grc/compliance/policies/${id}/remind-board`);
+  return res.data?.data ?? res.data;
+};
+
 export const deletePolicy = async (id: string): Promise<void> => {
   await api.delete(`/grc/compliance/policies/${id}`);
 };
@@ -315,6 +370,7 @@ export interface PolicyAckSnapshot {
   fileName: string;
   fileUrl: string | null;
   mimeType: string | null;
+  sections: PolicySection[];
   uploadedAt: string;
   prefillName: string;
   alreadyAcknowledged: boolean;
@@ -332,5 +388,41 @@ export const submitPolicyAck = async (
   dto: { name: string; signature: string },
 ): Promise<{ success: boolean }> => {
   const res = await api.post(`/grc/compliance/policies/ack/${token}`, dto);
+  return res.data?.data ?? res.data;
+};
+
+// ── Board approval (pre-publish sign-off, separate from the
+// post-publish acknowledgement above) ───────────────────────────
+
+export interface PolicyBoardApprovalSnapshot {
+  title: string;
+  category: string;
+  description: string;
+  version: string;
+  sections: PolicySection[];
+  fileName: string;
+  fileUrl: string | null;
+  mimeType: string | null;
+  prefillName: string;
+  decision: BoardApprovalDecision;
+  notes: string;
+  alreadyDecided: boolean;
+}
+
+export const fetchBoardApprovalSnapshot = async (
+  token: string,
+): Promise<PolicyBoardApprovalSnapshot> => {
+  const res = await api.get(`/grc/compliance/policies/board-approve/${token}`);
+  return res.data?.data ?? res.data;
+};
+
+export const submitBoardApprovalDecision = async (
+  token: string,
+  dto: { decision: "Approved" | "Rejected"; notes?: string },
+): Promise<{ success: boolean; outcome: string }> => {
+  const res = await api.post(
+    `/grc/compliance/policies/board-approve/${token}`,
+    dto,
+  );
   return res.data?.data ?? res.data;
 };

@@ -16,6 +16,7 @@ import SignContractPage from "@/pages/public/SigninContractPage";
 import MeetingAckPage from "@/pages/grc/governance/MeetingAck";
 import MinutesReviewPage from "@/pages/grc/governance/MinutesReview";
 import PolicyAckPage from "@/pages/grc/compliance/PolicyAck";
+import PolicyApprovalPage from "@/pages/grc/compliance/PolicyApproval";
 import DealContractReviewPage from "@/pages/grc/deals/DealContractReview";
 import DealOfferReviewPage from "@/pages/grc/deals/DealOfferReview";
 import SignToolContractPage from "@/pages/public/SignToolContractPage";
@@ -39,6 +40,7 @@ const PUBLIC_ROUTE_PATTERNS = [
   /^\/meeting-ack\/[^/]+$/,
   /^\/minutes-review\/[^/]+$/,
   /^\/policy-ack\/[^/]+$/,
+  /^\/policy-approval\/[^/]+$/,
   /^\/deal-review\/contract\/[^/]+$/,
   /^\/deal-review\/offer\/[^/]+$/,
   /^\/forgot-password$/,
@@ -65,6 +67,10 @@ export function AppRoutes() {
         <Route path="/meeting-ack/:token" element={<MeetingAckPage />} />
         <Route path="/minutes-review/:token" element={<MinutesReviewPage />} />
         <Route path="/policy-ack/:token" element={<PolicyAckPage />} />
+        <Route
+          path="/policy-approval/:token"
+          element={<PolicyApprovalPage />}
+        />
         <Route
           path="/deal-review/contract/:token"
           element={<DealContractReviewPage />}

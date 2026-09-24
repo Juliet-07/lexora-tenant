@@ -31,6 +31,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   ArrowLeft,
   Plus,
@@ -43,6 +44,7 @@ import {
   List,
   ListOrdered,
   Table as TableIcon,
+  ShieldCheck,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import {
@@ -54,9 +56,12 @@ import {
   publishPolicy,
   addPolicyComment,
   sendPolicyReminders,
+  sendBoardApprovalReminders,
   REVIEW_FREQUENCIES,
   ACK_REQUIREMENTS,
+  POLICY_TYPES,
   type Policy,
+  type PolicyType,
   type ReviewFrequency,
   type AckRequirement,
 } from "@/lib/grc/policy-api";
@@ -64,6 +69,7 @@ import {
 const statusTone: Record<string, string> = {
   Published: "text-emerald-600 border-emerald-500/30 bg-emerald-500/10",
   "Under review": "text-amber-600 border-amber-500/30 bg-amber-500/10",
+  "Pending board approval": "text-blue-600 border-blue-500/30 bg-blue-500/10",
   Draft: "text-muted-foreground",
 };
 
@@ -105,6 +111,15 @@ export default function PolicyDetail() {
     onSuccess: (r) =>
       toast({
         title: "Reminders sent",
+        description: `${r.remindersSent} reminder(s) sent.`,
+      }),
+    onError: onErr("Failed to send reminders"),
+  });
+  const remindBoardMut = useMutation({
+    mutationFn: () => sendBoardApprovalReminders(id!),
+    onSuccess: (r) =>
+      toast({
+        title: "Board reminded",
         description: `${r.remindersSent} reminder(s) sent.`,
       }),
     onError: onErr("Failed to send reminders"),
@@ -158,6 +173,16 @@ export default function PolicyDetail() {
               <Mail className="h-4 w-4 mr-1" /> Send reminders to outstanding
             </Button>
           )}
+          {policy.status === "Pending board approval" && (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={remindBoardMut.isPending}
+              onClick={() => remindBoardMut.mutate()}
+            >
+              <Mail className="h-4 w-4 mr-1" /> Remind board
+            </Button>
+          )}
         </div>
       </div>
 
@@ -165,6 +190,9 @@ export default function PolicyDetail() {
         <div>
           <div className="flex gap-2 mb-1">
             <Badge variant="secondary">{policy.category}</Badge>
+            <Badge variant="outline">
+              {policy.type === "board" ? "Board only" : "Organisation-wide"}
+            </Badge>
             <Badge variant="outline" className={statusTone[policy.status]}>
               {policy.status}
             </Badge>
@@ -191,13 +219,23 @@ export default function PolicyDetail() {
             >
               Send for review
             </Button>
+          ) : policy.status === "Pending board approval" ? (
+            <Button size="sm" disabled>
+              Awaiting board approval
+            </Button>
           ) : (
             <Button size="sm" onClick={() => setPublishOpen(true)}>
-              Publish
+              {policy.boardApprovalRequired
+                ? "Approve & send to board"
+                : "Publish"}
             </Button>
           )}
         </div>
       </div>
+
+      {policy.boardApprovalRequired && policy.boardApprovalSummary && (
+        <BoardApprovalCard policy={policy} />
+      )}
 
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList>
@@ -233,9 +271,72 @@ export default function PolicyDetail() {
         open={publishOpen}
         onOpenChange={setPublishOpen}
         policyId={policy._id}
+        boardApprovalRequired={policy.boardApprovalRequired}
         onDone={invalidate}
       />
     </div>
+  );
+}
+
+// ── Board approval card ──────────────────────────────────────
+
+function BoardApprovalCard({ policy }: { policy: Policy }) {
+  const summary = policy.boardApprovalSummary;
+  if (!summary) return null;
+  return (
+    <Card className="border-blue-500/30">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm flex items-center gap-2">
+          <ShieldCheck className="h-4 w-4 text-blue-600" /> Board approval —{" "}
+          {summary.approved} of {summary.total} approved
+          {summary.rejected > 0 && (
+            <Badge
+              variant="outline"
+              className="text-rose-600 border-rose-500/30 bg-rose-500/10"
+            >
+              {summary.rejected} declined
+            </Badge>
+          )}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-0">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Board member</TableHead>
+              <TableHead>Decision</TableHead>
+              <TableHead>Notes</TableHead>
+              <TableHead>Decided</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {summary.rows.map((r) => (
+              <TableRow key={r.email}>
+                <TableCell className="font-medium">{r.name}</TableCell>
+                <TableCell>
+                  <Badge
+                    variant="outline"
+                    className={
+                      r.decision === "Approved"
+                        ? "text-emerald-600 border-emerald-500/30 bg-emerald-500/10"
+                        : r.decision === "Rejected"
+                          ? "text-rose-600 border-rose-500/30 bg-rose-500/10"
+                          : "text-muted-foreground"
+                    }
+                  >
+                    {r.decision}
+                  </Badge>
+                </TableCell>
+                <TableCell className="text-xs">{r.notes || "—"}</TableCell>
+                <TableCell className="text-xs">
+                  {r.decidedAt ? r.decidedAt.slice(0, 10) : "—"}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -583,6 +684,35 @@ function PropertiesSidebar({
               ))}
             </SelectContent>
           </Select>
+        </div>
+        <div>
+          <Label className="text-xs">Acknowledgement audience</Label>
+          <Select
+            value={policy.type}
+            onValueChange={(v: PolicyType) => saveMut.mutate({ type: v })}
+          >
+            <SelectTrigger className="h-8">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {POLICY_TYPES.map((t) => (
+                <SelectItem key={t.value} value={t.value}>
+                  {t.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex items-start gap-2 pt-1">
+          <Checkbox
+            checked={policy.boardApprovalRequired}
+            onCheckedChange={(v) =>
+              saveMut.mutate({ boardApprovalRequired: Boolean(v) })
+            }
+          />
+          <Label className="text-xs font-normal leading-snug">
+            Require board approval before publishing
+          </Label>
         </div>
       </CardContent>
     </Card>
@@ -1053,11 +1183,13 @@ function PublishDialog({
   open,
   onOpenChange,
   policyId,
+  boardApprovalRequired,
   onDone,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   policyId: string;
+  boardApprovalRequired: boolean;
   onDone: () => void;
 }) {
   const [notes, setNotes] = useState("");
@@ -1067,7 +1199,11 @@ function PublishDialog({
       onDone();
       setNotes("");
       onOpenChange(false);
-      toast({ title: "Policy published" });
+      toast({
+        title: boardApprovalRequired
+          ? "Sent to the board for approval"
+          : "Policy published",
+      });
     },
     onError: (err: any) =>
       toast({
@@ -1081,12 +1217,15 @@ function PublishDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Publish policy</DialogTitle>
+          <DialogTitle>
+            {boardApprovalRequired ? "Approve policy" : "Publish policy"}
+          </DialogTitle>
         </DialogHeader>
         <div className="space-y-3">
           <p className="text-sm text-muted-foreground">
-            This bumps the version, records you as the approver, and (if
-            configured) requires staff to re-acknowledge.
+            {boardApprovalRequired
+              ? "This records your approval and emails every active board member a link to review and approve. The policy publishes automatically once all of them approve."
+              : "This bumps the version, records you as the approver, and (if configured) requires staff to re-acknowledge."}
           </p>
           <div>
             <Label className="text-xs">Approval notes (optional)</Label>
@@ -1106,7 +1245,11 @@ function PublishDialog({
             disabled={mutation.isPending}
             onClick={() => mutation.mutate()}
           >
-            {mutation.isPending ? "Publishing…" : "Publish"}
+            {mutation.isPending
+              ? "Submitting…"
+              : boardApprovalRequired
+                ? "Approve & send to board"
+                : "Publish"}
           </Button>
         </DialogFooter>
       </DialogContent>
