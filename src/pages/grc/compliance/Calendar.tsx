@@ -86,14 +86,14 @@ export default function ComplianceCalendar() {
       }),
     );
     filings
-      .filter((f) => f.stage === "Receipt confirmed")
+      .filter((f) => f.stage === "Completed")
       .forEach((f) =>
         out.push({
           id: f._id,
           date: f.dueDate.slice(0, 10),
-          title: `${f.periodLabel} filing submitted`,
+          title: `${f.periodLabel} filing completed`,
           kind: "Obligation",
-          detail: f.receiptRef ?? "",
+          detail: f.completedBy ?? "",
           done: true,
         }),
       );

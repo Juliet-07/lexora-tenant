@@ -36,6 +36,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Plus,
   Upload,
@@ -54,17 +55,19 @@ import {
   setFilingStage,
   addFilingEvidence,
   certifyFiling,
-  confirmFilingReceipt,
+  completeFiling,
   resolveComplianceFileUrl,
   REGULATORS,
   FREQUENCIES,
   FILING_STAGES,
+  EVIDENCE_CATEGORIES,
   daysUntil,
   todayStr,
   type ComplianceObligation,
   type Filing,
   type Regulator,
   type Frequency,
+  type EvidenceCategory,
 } from "@/lib/grc/compliance-api";
 
 const statusTone: Record<string, string> = {
@@ -441,7 +444,7 @@ function FilingTracker({
               <TableHead>Progress</TableHead>
               <TableHead>Evidence</TableHead>
               <TableHead>Certification</TableHead>
-              <TableHead>Receipt</TableHead>
+              <TableHead>Completed</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -451,8 +454,7 @@ function FilingTracker({
                 (FILING_STAGES.indexOf(f.stage) / (FILING_STAGES.length - 1)) *
                 100;
               const late =
-                f.dueDate.slice(0, 10) < todayStr() &&
-                f.stage !== "Receipt confirmed";
+                f.dueDate.slice(0, 10) < todayStr() && f.stage !== "Completed";
               return (
                 <TableRow
                   key={f._id}
@@ -483,7 +485,9 @@ function FilingTracker({
                       : "—"}
                   </TableCell>
                   <TableCell className="text-xs">
-                    {f.receiptRef ?? "—"}
+                    {f.completedBy
+                      ? `${f.completedBy} · ${new Date(f.completedAt!).toLocaleDateString()}`
+                      : "—"}
                   </TableCell>
                 </TableRow>
               );
@@ -698,14 +702,14 @@ function ObligationSheet({
     });
 
   const [evFiles, setEvFiles] = useState<File[]>([]);
-  const [signer, setSigner] = useState("");
-  const [receipt, setReceipt] = useState("");
+  const [evCategory, setEvCategory] = useState<EvidenceCategory>("Document");
+  const [confirmTick, setConfirmTick] = useState(false);
 
   const obligationFilings = filings
     .filter((f) => f.obligationId === obligation._id)
     .sort((a, b) => b.dueDate.localeCompare(a.dueDate));
   const open =
-    obligationFilings.find((f) => f.stage !== "Receipt confirmed") ??
+    obligationFilings.find((f) => f.stage !== "Completed") ??
     obligationFilings[0];
 
   const stageMut = useMutation({
@@ -715,7 +719,7 @@ function ObligationSheet({
     onError: onErr("Failed to update stage"),
   });
   const evidenceMut = useMutation({
-    mutationFn: () => addFilingEvidence(open!._id, evFiles),
+    mutationFn: () => addFilingEvidence(open!._id, evFiles, evCategory),
     onSuccess: () => {
       invalidate();
       setEvFiles([]);
@@ -723,7 +727,7 @@ function ObligationSheet({
     onError: onErr("Failed to upload evidence"),
   });
   const certifyMut = useMutation({
-    mutationFn: () => certifyFiling(open!._id, signer),
+    mutationFn: () => certifyFiling(open!._id),
     onSuccess: () => {
       invalidate();
       toast({
@@ -733,35 +737,18 @@ function ObligationSheet({
     },
     onError: onErr("Failed to certify"),
   });
-  const receiptMut = useMutation({
-    mutationFn: () => confirmFilingReceipt(open!._id, receipt),
+  const completeMut = useMutation({
+    mutationFn: () => completeFiling(open!._id),
     onSuccess: (data) => {
       invalidate();
-      setReceipt("");
+      setConfirmTick(false);
       toast({
         title: "Filing closed",
         description: `Next cycle scheduled for ${data.obligation.nextDueDate.slice(0, 10)}.`,
       });
     },
-    onError: onErr("Failed to confirm receipt"),
+    onError: onErr("Failed to complete filing"),
   });
-
-  const certify = () => {
-    if (!signer)
-      return toast({
-        title: "Certifier name required",
-        variant: "destructive",
-      });
-    certifyMut.mutate();
-  };
-  const confirmReceiptClick = () => {
-    if (!receipt)
-      return toast({
-        title: "Receipt reference required",
-        variant: "destructive",
-      });
-    receiptMut.mutate();
-  };
 
   const st = obligation.computedStatus;
 
@@ -825,21 +812,26 @@ function ObligationSheet({
                 {open.evidence.map((e, i) => (
                   <div
                     key={i}
-                    className="text-xs flex justify-between border rounded px-2 py-1"
+                    className="text-xs flex justify-between items-center gap-2 border rounded px-2 py-1"
                   >
-                    {e.fileUrl ? (
-                      <a
-                        href={resolveComplianceFileUrl(e.fileUrl)}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-primary hover:underline"
-                      >
-                        {e.name}
-                      </a>
-                    ) : (
-                      <span>{e.name}</span>
-                    )}
-                    <span className="text-muted-foreground">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Badge variant="outline" className="text-[10px] shrink-0">
+                        {e.category}
+                      </Badge>
+                      {e.fileUrl ? (
+                        <a
+                          href={resolveComplianceFileUrl(e.fileUrl)}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-primary hover:underline truncate"
+                        >
+                          {e.name}
+                        </a>
+                      ) : (
+                        <span className="truncate">{e.name}</span>
+                      )}
+                    </div>
+                    <span className="text-muted-foreground shrink-0">
                       {e.uploadedBy} ·{" "}
                       {new Date(e.uploadedAt).toLocaleDateString()}
                     </span>
@@ -856,8 +848,24 @@ function ObligationSheet({
                   Click "Mark in preparation" below before attaching evidence.
                 </p>
               ) : open.stage === "In preparation" ? (
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap">
+                  <Select
+                    value={evCategory}
+                    onValueChange={(v) => setEvCategory(v as EvidenceCategory)}
+                  >
+                    <SelectTrigger className="w-40">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {EVIDENCE_CATEGORIES.map((c) => (
+                        <SelectItem key={c} value={c}>
+                          {c}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <Input
+                    className="flex-1 min-w-[160px]"
                     type="file"
                     multiple
                     onChange={(e) =>
@@ -905,77 +913,119 @@ function ObligationSheet({
                 <div className="text-sm font-medium">
                   Management certification
                 </div>
-                <div className="flex gap-2">
-                  <Input
-                    value={signer}
-                    onChange={(e) => setSigner(e.target.value)}
-                    placeholder={obligation.certifier || "Certifier name"}
-                  />
-                  <Button
-                    size="sm"
-                    disabled={certifyMut.isPending}
-                    onClick={certify}
-                  >
-                    Certify
-                  </Button>
-                </div>
-                {open.certifiedBy && (
+                {open.certifiedBy ? (
                   <div className="text-xs text-muted-foreground">
                     Certified by {open.certifiedBy} on{" "}
                     {new Date(open.certifiedAt!).toLocaleString()}
                   </div>
+                ) : (
+                  <Button
+                    size="sm"
+                    disabled={certifyMut.isPending}
+                    onClick={() => certifyMut.mutate()}
+                  >
+                    {certifyMut.isPending
+                      ? "Certifying…"
+                      : "Certify as logged-in user"}
+                  </Button>
                 )}
               </div>
 
               <div className="border-t pt-3 space-y-2">
-                <div className="text-sm font-medium">
-                  Submission &amp; regulator receipt
-                </div>
-                <div className="flex gap-2">
-                  <Input
-                    value={receipt}
-                    onChange={(e) => setReceipt(e.target.value)}
-                    placeholder="Regulator receipt reference"
+                <div className="text-sm font-medium">Mark filing complete</div>
+                <label className="flex gap-2 items-start text-xs">
+                  <Checkbox
+                    checked={confirmTick}
+                    onCheckedChange={(v) => setConfirmTick(!!v)}
+                    disabled={open.evidence.length === 0 || !open.certifiedBy}
                   />
-                  <Button
-                    size="sm"
-                    disabled={
-                      receiptMut.isPending ||
-                      open.evidence.length === 0 ||
-                      !open.certifiedBy
-                    }
-                    onClick={confirmReceiptClick}
-                  >
-                    Confirm receipt
-                  </Button>
-                  {(open.evidence.length === 0 || !open.certifiedBy) && (
-                    <p className="text-[11px] text-muted-foreground mt-1">
-                      {open.evidence.length === 0 && "Evidence required. "}
-                      {!open.certifiedBy && "Certification required."}
-                    </p>
-                  )}
-                </div>
+                  <span>
+                    I confirm this period's filing is complete and ready to
+                    close — the next cycle will be scheduled automatically.
+                  </span>
+                </label>
+                <Button
+                  size="sm"
+                  disabled={
+                    !confirmTick ||
+                    completeMut.isPending ||
+                    open.evidence.length === 0 ||
+                    !open.certifiedBy
+                  }
+                  onClick={() => completeMut.mutate()}
+                >
+                  {completeMut.isPending ? "Closing…" : "Mark filing complete"}
+                </Button>
+                {(open.evidence.length === 0 || !open.certifiedBy) && (
+                  <p className="text-[11px] text-muted-foreground">
+                    {open.evidence.length === 0 && "Evidence required. "}
+                    {!open.certifiedBy && "Certification required."}
+                  </p>
+                )}
               </div>
             </div>
           )}
 
           <div className="border-t pt-3">
             <div className="font-medium text-sm mb-2">Filing history</div>
-            <div className="space-y-1">
+            <div className="space-y-2">
               {obligationFilings.map((f) => (
                 <div
                   key={f._id}
-                  className="text-xs flex justify-between border rounded px-2 py-1.5"
+                  className="text-xs border rounded px-2 py-1.5 space-y-1.5"
                 >
-                  <span>
-                    {f.periodLabel} · due {f.dueDate.slice(0, 10)}
-                  </span>
-                  <span className="text-muted-foreground">
-                    {f.stage}
-                    {f.receiptRef ? ` · ${f.receiptRef}` : ""}
-                  </span>
+                  <div className="flex justify-between">
+                    <span className="font-medium">
+                      {f.periodLabel} · due {f.dueDate.slice(0, 10)}
+                    </span>
+                    <span className="text-muted-foreground">
+                      {f.stage}
+                      {f.completedBy
+                        ? ` · completed by ${f.completedBy} on ${new Date(f.completedAt!).toLocaleDateString()}`
+                        : ""}
+                    </span>
+                  </div>
+                  {f.evidence.length > 0 && (
+                    <div className="space-y-1 pl-2">
+                      {f.evidence.map((e, i) => (
+                        <div
+                          key={i}
+                          className="flex justify-between items-center gap-2"
+                        >
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] shrink-0"
+                            >
+                              {e.category}
+                            </Badge>
+                            {e.fileUrl ? (
+                              <a
+                                href={resolveComplianceFileUrl(e.fileUrl)}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-primary hover:underline truncate"
+                              >
+                                {e.name}
+                              </a>
+                            ) : (
+                              <span className="truncate">{e.name}</span>
+                            )}
+                          </div>
+                          <span className="text-muted-foreground shrink-0">
+                            {e.uploadedBy}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               ))}
+              {obligationFilings.length === 0 && (
+                <div className="text-xs text-muted-foreground">
+                  No filing history yet.
+                </div>
+              )}
             </div>
           </div>
         </div>

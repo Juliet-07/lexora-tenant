@@ -239,8 +239,8 @@ export interface Filing {
   dueDate: string;
   stage: string;
   certifiedBy: string | null;
-  submittedAt: string | null;
-  receiptRef: string | null;
+  completedBy: string | null;
+  completedAt: string | null;
 }
 export interface Certification {
   _id: string;

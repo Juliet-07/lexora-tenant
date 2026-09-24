@@ -26,8 +26,18 @@ export type FilingStage =
   | "In preparation"
   | "Evidence collected"
   | "Certified"
-  | "Submitted"
-  | "Receipt confirmed";
+  | "Completed";
+export type EvidenceCategory =
+  | "Document"
+  | "Declaration"
+  | "Proof of payment"
+  | "Other";
+export const EVIDENCE_CATEGORIES: EvidenceCategory[] = [
+  "Document",
+  "Declaration",
+  "Proof of payment",
+  "Other",
+];
 
 export const REGULATORS: Regulator[] = [
   "BNR",
@@ -52,8 +62,7 @@ export const FILING_STAGES: FilingStage[] = [
   "In preparation",
   "Evidence collected",
   "Certified",
-  "Submitted",
-  "Receipt confirmed",
+  "Completed",
 ];
 
 export const daysUntil = (dateStr: string): number => {
@@ -72,6 +81,7 @@ export const resolveComplianceFileUrl = (url: string): string => {
 
 export interface FilingEvidence {
   name: string;
+  category: EvidenceCategory;
   fileUrl: string | null;
   mimeType: string | null;
   size: number;
@@ -88,8 +98,8 @@ export interface Filing {
   evidence: FilingEvidence[];
   certifiedBy: string | null;
   certifiedAt: string | null;
-  submittedAt: string | null;
-  receiptRef: string | null;
+  completedBy: string | null;
+  completedAt: string | null;
 }
 
 export interface ComplianceObligation {
@@ -281,9 +291,11 @@ export const setFilingStage = async (
 export const addFilingEvidence = async (
   id: string,
   files: File[],
+  category?: EvidenceCategory,
 ): Promise<Filing> => {
   const form = new FormData();
   files.forEach((f) => form.append("files", f));
+  if (category) form.append("category", category);
   const res = await api.post(
     `/grc/compliance/obligations/filings/${id}/evidence`,
     form,
@@ -291,24 +303,22 @@ export const addFilingEvidence = async (
   return res.data?.data ?? res.data;
 };
 
-export const certifyFiling = async (
-  id: string,
-  certifiedBy: string,
-): Promise<Filing> => {
+// certifiedBy is resolved server-side from the logged-in user.
+export const certifyFiling = async (id: string): Promise<Filing> => {
   const res = await api.patch(
     `/grc/compliance/obligations/filings/${id}/certify`,
-    { certifiedBy },
   );
   return res.data?.data ?? res.data;
 };
 
-export const confirmFilingReceipt = async (
+// The tick-box that closes the current filing period (requires
+// evidence + certification) and schedules the next one.
+// completedBy is resolved server-side from the logged-in user.
+export const completeFiling = async (
   id: string,
-  receiptRef: string,
 ): Promise<{ filing: Filing; obligation: ComplianceObligation }> => {
   const res = await api.patch(
-    `/grc/compliance/obligations/filings/${id}/confirm-receipt`,
-    { receiptRef },
+    `/grc/compliance/obligations/filings/${id}/complete`,
   );
   return res.data?.data ?? res.data;
 };
@@ -502,5 +512,176 @@ export const updateLoopAction = async (
     `/grc/compliance/regulatory-changes/${id}/loop/${field}`,
     dto,
   );
+  return res.data?.data ?? res.data;
+};
+
+export type IncidentStatus = "Open" | "Investigating" | "Closed";
+export type IncidentSeverity = "Critical" | "High" | "Medium" | "Low";
+export type IncidentActionStatus = "Pending" | "In progress" | "Done";
+
+export interface IncidentImpact {
+  financial: string;
+  regulatory: string;
+  client: string;
+  reputational: string;
+}
+export interface IncidentFinding {
+  ref: string;
+  finding: string;
+  severity: IncidentSeverity;
+  action: string;
+}
+export interface IncidentAction {
+  action: string;
+  owner: string;
+  due: string | null;
+  status: IncidentActionStatus;
+}
+export interface IncidentFile {
+  name: string;
+  fileUrl: string;
+  type: string;
+  by: string;
+  date: string;
+  size: string;
+}
+export interface IncidentLink {
+  type: string;
+  label: string;
+}
+export interface IncidentLesson {
+  title: string;
+  category: string;
+  detail: string;
+  by: string;
+  date: string;
+}
+export interface IncidentTimelineEntry {
+  at: string;
+  event: string;
+  detail?: string;
+}
+
+export interface Incident {
+  _id: string;
+  ref: string;
+  title: string;
+  category: string;
+  severity: IncidentSeverity;
+  status: IncidentStatus;
+  occurred: string | null;
+  reported: string;
+  reportedBy: string;
+  anonymous: boolean;
+  assignedTo: string;
+  escalatedTo: string;
+  regulatoryReport: string;
+  linkedAudit: string;
+  description: string;
+  investigationNotes: string;
+  persons: string;
+  clients: string;
+  policies: string[];
+  immediateActions: string;
+  impact: IncidentImpact;
+  rootCauses: string[];
+  rootNarrative: string;
+  findings: IncidentFinding[];
+  actions: IncidentAction[];
+  files: IncidentFile[];
+  links: IncidentLink[];
+  lessons: IncidentLesson[];
+  timeline: IncidentTimelineEntry[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const fetchIncidents = async (): Promise<Incident[]> => {
+  const res = await api.get("/grc/compliance/incidents");
+  const d = res.data?.data ?? res.data;
+  return Array.isArray(d) ? d : [];
+};
+
+export const createIncident = async (dto: {
+  title: string;
+  category: string;
+  severity: IncidentSeverity;
+  occurred?: string;
+  reported: string;
+  description: string;
+  persons?: string;
+  clients?: string;
+  policy?: string;
+  immediateActions?: string;
+  anonymous?: boolean;
+}): Promise<Incident> => {
+  const res = await api.post("/grc/compliance/incidents", dto);
+  return res.data?.data ?? res.data;
+};
+
+export const updateIncidentFields = async (
+  id: string,
+  dto: Partial<{
+    category: string;
+    severity: IncidentSeverity;
+    assignedTo: string;
+    escalatedTo: string;
+    regulatoryReport: string;
+    investigationNotes: string;
+    status: IncidentStatus;
+    impact: Partial<IncidentImpact>;
+    rootCauses: string[];
+    rootNarrative: string;
+    timelineEvent: string;
+    timelineDetail: string;
+  }>,
+): Promise<Incident> => {
+  const res = await api.patch(`/grc/compliance/incidents/${id}`, dto);
+  return res.data?.data ?? res.data;
+};
+
+export const addIncidentFinding = async (
+  id: string,
+  dto: { finding: string; severity: IncidentSeverity; action?: string },
+): Promise<Incident> => {
+  const res = await api.post(`/grc/compliance/incidents/${id}/findings`, dto);
+  return res.data?.data ?? res.data;
+};
+
+export const addIncidentAction = async (
+  id: string,
+  dto: { action: string; owner?: string; due?: string },
+): Promise<Incident> => {
+  const res = await api.post(`/grc/compliance/incidents/${id}/actions`, dto);
+  return res.data?.data ?? res.data;
+};
+
+export const updateIncidentActionStatus = async (
+  id: string,
+  index: number,
+  status: IncidentActionStatus,
+): Promise<Incident> => {
+  const res = await api.patch(
+    `/grc/compliance/incidents/${id}/actions/${index}`,
+    { status },
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const addIncidentLesson = async (
+  id: string,
+  dto: { title: string; category?: string; detail?: string },
+): Promise<Incident> => {
+  const res = await api.post(`/grc/compliance/incidents/${id}/lessons`, dto);
+  return res.data?.data ?? res.data;
+};
+
+export const addIncidentFiles = async (
+  id: string,
+  files: File[],
+): Promise<Incident> => {
+  const form = new FormData();
+  files.forEach((f) => form.append("files", f));
+  const res = await api.post(`/grc/compliance/incidents/${id}/files`, form);
   return res.data?.data ?? res.data;
 };

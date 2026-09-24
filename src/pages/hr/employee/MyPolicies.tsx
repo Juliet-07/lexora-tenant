@@ -14,7 +14,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { FileText, Download, CheckCircle2, ShieldCheck } from "lucide-react";
+import {
+  FileText,
+  Download,
+  CheckCircle2,
+  ShieldCheck,
+  BookOpen,
+} from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -32,13 +38,17 @@ export default function MyPolicies() {
     queryFn: fetchPolicies,
   });
   const policies = useMemo(
-    () => all.filter((p) => p.type === "organisation"),
+    () =>
+      all.filter((p) => p.type === "organisation" && p.status === "Published"),
     [all],
   );
   const [active, setActive] = useState<Policy | null>(null);
+  const [reading, setReading] = useState<Policy | null>(null);
 
   const isAcked = (p: Policy) =>
-    p.acknowledgments.some((a) => a.email.toLowerCase() === email);
+    p.acknowledgments.some(
+      (a) => a.email.toLowerCase() === email && a.version === p.version,
+    );
   const pending = policies.filter((p) => !isAcked(p));
   const done = policies.filter(isAcked);
 
@@ -79,18 +89,21 @@ export default function MyPolicies() {
             list={pending}
             emptyText="Nothing pending — you're all caught up."
             onAck={setActive}
+            onRead={setReading}
           />
         </TabsContent>
         <TabsContent value="done" className="mt-4">
           <PolicyGrid
             list={done}
             emptyText="No acknowledged policies yet."
+            onRead={setReading}
             acked
           />
         </TabsContent>
       </Tabs>
 
       <AckDialog policy={active} onClose={() => setActive(null)} />
+      <ReadPolicyDialog policy={reading} onClose={() => setReading(null)} />
     </div>
   );
 }
@@ -115,11 +128,13 @@ function PolicyGrid({
   list,
   emptyText,
   onAck,
+  onRead,
   acked,
 }: {
   list: Policy[];
   emptyText: string;
   onAck?: (p: Policy) => void;
+  onRead?: (p: Policy) => void;
   acked?: boolean;
 }) {
   if (list.length === 0)
@@ -149,16 +164,27 @@ function PolicyGrid({
           <CardContent className="space-y-3">
             <div className="flex flex-wrap gap-2 text-xs">
               {p.category && <Badge variant="outline">{p.category}</Badge>}
+              <Badge variant="outline">Version {p.version}</Badge>
               <span className="text-muted-foreground">
                 Published {new Date(p.createdAt).toLocaleDateString()}
               </span>
             </div>
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <FileText className="h-4 w-4 shrink-0" />
-              <span className="truncate">{p.fileName}</span>
-            </div>
+            {p.fileUrl ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <FileText className="h-4 w-4 shrink-0" />
+                <span className="truncate">{p.fileName}</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <BookOpen className="h-4 w-4 shrink-0" />
+                <span className="truncate">
+                  {p.sections?.length ?? 0} section
+                  {p.sections?.length === 1 ? "" : "s"}
+                </span>
+              </div>
+            )}
             <div className="flex gap-2">
-              {p.fileUrl && (
+              {p.fileUrl ? (
                 <a
                   href={resolvePolicyFileUrl(p.fileUrl)}
                   target="_blank"
@@ -168,6 +194,12 @@ function PolicyGrid({
                     <Download className="h-4 w-4 mr-1" /> Download
                   </Button>
                 </a>
+              ) : (
+                onRead && (
+                  <Button variant="outline" size="sm" onClick={() => onRead(p)}>
+                    <BookOpen className="h-4 w-4 mr-1" /> Read policy
+                  </Button>
+                )
               )}
               {onAck && (
                 <Button size="sm" onClick={() => onAck(p)}>
@@ -252,6 +284,54 @@ function AckDialog({
             {mutation.isPending ? "Submitting…" : "Submit acknowledgement"}
           </Button>
         </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ReadPolicyDialog({
+  policy,
+  onClose,
+}: {
+  policy: Policy | null;
+  onClose: () => void;
+}) {
+  if (!policy) return null;
+  const sections = [...(policy.sections ?? [])].sort(
+    (a, b) => a.order - b.order,
+  );
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{policy.title}</DialogTitle>
+        </DialogHeader>
+        <div className="flex flex-wrap gap-2 text-xs mb-2">
+          {policy.category && (
+            <Badge variant="outline">{policy.category}</Badge>
+          )}
+          <Badge variant="outline">Version {policy.version}</Badge>
+          {policy.owner && (
+            <span className="text-muted-foreground">Owner: {policy.owner}</span>
+          )}
+        </div>
+        {sections.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-8 text-center">
+            This policy has no content yet.
+          </p>
+        ) : (
+          <div className="space-y-6">
+            {sections.map((s) => (
+              <div key={s.id}>
+                <h3 className="font-semibold text-sm mb-2">{s.title}</h3>
+                <div
+                  className="prose prose-sm max-w-none text-foreground"
+                  dangerouslySetInnerHTML={{ __html: s.content || "" }}
+                />
+              </div>
+            ))}
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );
