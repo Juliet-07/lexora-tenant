@@ -516,8 +516,6 @@ function NewObligationDialog({
     frequency: "Annual" as Frequency,
     nextDueDate: todayStr(),
     evidenceRequirements: "",
-    owner: "",
-    certifier: "",
   });
 
   const mutation = useMutation({
@@ -643,31 +641,6 @@ function NewObligationDialog({
                 setF({ ...f, evidenceRequirements: e.target.value })
               }
             />
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <Label>Owner</Label>
-              <Input
-                value={f.owner}
-                onChange={(e) => setF({ ...f, owner: e.target.value })}
-              />
-            </div>
-            {/* <div>
-              <Label>Owner email</Label>
-              <Input
-                type="email"
-                placeholder="Optional — defaults to your login email"
-                value={f.ownerEmail}
-                onChange={(e) => setF({ ...f, ownerEmail: e.target.value })}
-              />
-            </div> */}
-            <div>
-              <Label>Certifier</Label>
-              <Input
-                value={f.certifier}
-                onChange={(e) => setF({ ...f, certifier: e.target.value })}
-              />
-            </div>
           </div>
         </div>
         <DialogFooter>

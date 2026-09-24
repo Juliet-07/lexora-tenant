@@ -16,6 +16,7 @@ import {
   daysUntil,
   todayStr,
 } from "@/lib/grc/compliance-api";
+import { fetchPolicies } from "@/lib/grc/policy-api";
 
 type Kind = "Obligation" | "Certification" | "Policy" | "Audit";
 
@@ -50,9 +51,10 @@ const KIND_STYLE: Record<Kind, { dot: string; chip: string }> = {
 const REMINDERS = [90, 60, 30, 14, 7];
 
 export default function ComplianceCalendar() {
-  // Certification/Policy/Audit sources are stubbed empty until those
-  // features get their own real backends — this only aggregates real
-  // data for what actually exists today (Obligations + Filings).
+  // Certification/Audit sources are still stubbed empty until those
+  // features get their own real backends. Policy now plots real data
+  // (each policy's next review due date) alongside Obligations +
+  // Filings.
   const { data: obligations = [] } = useQuery({
     queryKey: ["compliance-obligations"],
     queryFn: fetchObligations,
@@ -60,6 +62,10 @@ export default function ComplianceCalendar() {
   const { data: filings = [] } = useQuery({
     queryKey: ["compliance-filings"],
     queryFn: fetchFilings,
+  });
+  const { data: policies = [] } = useQuery({
+    queryKey: ["grc-policies"],
+    queryFn: fetchPolicies,
   });
 
   const [cursor, setCursor] = useState(() => {
@@ -97,8 +103,20 @@ export default function ComplianceCalendar() {
           done: true,
         }),
       );
+    policies
+      .filter((p) => !!p.nextReviewDue)
+      .forEach((p) =>
+        out.push({
+          id: p._id,
+          date: p.nextReviewDue!.slice(0, 10),
+          title: `${p.title} review due`,
+          kind: "Policy",
+          detail: `${p.category} · v${p.version}`,
+          done: false,
+        }),
+      );
     return out.filter((e) => !!e.date);
-  }, [obligations, filings]);
+  }, [obligations, filings, policies]);
 
   const visible = events.filter((e) => kinds.includes(e.kind));
 

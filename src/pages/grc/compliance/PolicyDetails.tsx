@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import jsPDF from "jspdf";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,7 +37,6 @@ import {
   ArrowLeft,
   Plus,
   Mail,
-  Download,
   BarChart3,
   Bold,
   Italic,
@@ -45,6 +45,8 @@ import {
   ListOrdered,
   Table as TableIcon,
   ShieldCheck,
+  Eye,
+  FileDown,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import {
@@ -125,22 +127,6 @@ export default function PolicyDetail() {
     onError: onErr("Failed to send reminders"),
   });
 
-  const exportDocx = () => {
-    if (!policy) return;
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${policy.title}</title></head><body>
-      <h1>${policy.title}</h1>
-      <p><i>Version ${policy.version} · Owner: ${policy.owner || "—"} · Approval: ${policy.approvalAuthority || "—"}</i></p>
-      ${policy.sections.map((s) => `<h2>${s.title}</h2>${s.content || "<p></p>"}`).join("")}
-    </body></html>`;
-    const blob = new Blob(["﻿", html], { type: "application/msword" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${policy.title.replace(/[^a-z0-9]+/gi, "_")}.doc`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
   if (isLoading || !policy)
     return (
       <div className="py-24 text-center text-sm text-muted-foreground">
@@ -149,6 +135,19 @@ export default function PolicyDetail() {
     );
 
   const outstanding = policy.assignedCount - policy.acknowledgedCount;
+
+  // "Send for review" only makes sense once the policy's own review
+  // cadence (reviewFrequency → nextReviewDue, set at publish time) has
+  // actually arrived — starting a review early would reset nothing
+  // and just confuse the "next review due" date shown elsewhere.
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const nextReviewDate = policy.nextReviewDue
+    ? new Date(policy.nextReviewDue)
+    : null;
+  if (nextReviewDate) nextReviewDate.setHours(0, 0, 0, 0);
+  const reviewNotYetDue =
+    !!nextReviewDate && nextReviewDate.getTime() > today.getTime();
 
   return (
     <div className="space-y-4">
@@ -207,17 +206,21 @@ export default function PolicyDetail() {
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
-          <Button variant="outline" size="sm" onClick={exportDocx}>
-            <Download className="h-4 w-4 mr-1" /> Export .docx
-          </Button>
           {policy.status === "Published" ? (
             <Button
               variant="outline"
               size="sm"
-              disabled={reviewMut.isPending}
+              disabled={reviewMut.isPending || reviewNotYetDue}
+              title={
+                reviewNotYetDue
+                  ? `Not due for review until ${nextReviewDate!.toISOString().slice(0, 10)}`
+                  : undefined
+              }
               onClick={() => reviewMut.mutate()}
             >
-              Send for review
+              {reviewNotYetDue
+                ? `Review due ${nextReviewDate!.toISOString().slice(0, 10)}`
+                : "Send for review"}
             </Button>
           ) : policy.status === "Pending board approval" ? (
             <Button size="sm" disabled>
@@ -372,62 +375,205 @@ function EditorTab({
 
   const active = policy.sections.find((s) => s.id === activeId) ?? null;
 
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const exportPdf = async () => {
+    setExporting(true);
+    try {
+      await exportPolicyPdf(policy);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
-    <div className="grid lg:grid-cols-[200px_1fr_260px] gap-4">
-      <div>
-        <div className="text-xs font-semibold text-muted-foreground mb-2 px-1">
-          SECTIONS
-        </div>
-        <div className="space-y-0.5">
-          {policy.sections.map((s) => (
-            <button
-              key={s.id}
-              type="button"
-              onClick={() => setActiveId(s.id)}
-              className={`w-full text-left text-sm px-2 py-1.5 rounded ${
-                s.id === activeId
-                  ? "bg-primary/10 text-primary font-medium"
-                  : "hover:bg-muted"
-              }`}
-            >
-              {s.order + 1}. {s.title}
-            </button>
-          ))}
-        </div>
+    <div className="space-y-3">
+      <div className="flex justify-end gap-2">
         <Button
-          size="sm"
           variant="outline"
-          className="w-full mt-2"
-          disabled={addMut.isPending}
-          onClick={() => addMut.mutate()}
+          size="sm"
+          onClick={() => setPreviewOpen(true)}
         >
-          <Plus className="h-4 w-4 mr-1" /> Add section
+          <Eye className="h-4 w-4 mr-1" /> Preview
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={exporting}
+          onClick={exportPdf}
+        >
+          <FileDown className="h-4 w-4 mr-1" />
+          {exporting ? "Exporting…" : "Export PDF"}
         </Button>
       </div>
 
-      {active ? (
-        <SectionEditor
-          key={active.id}
-          policyId={policy._id}
-          section={active}
+      <div className="grid lg:grid-cols-[200px_1fr_260px] gap-4">
+        <div>
+          <div className="text-xs font-semibold text-muted-foreground mb-2 px-1">
+            SECTIONS
+          </div>
+          <div className="space-y-0.5">
+            {policy.sections.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => setActiveId(s.id)}
+                className={`w-full text-left text-sm px-2 py-1.5 rounded ${
+                  s.id === activeId
+                    ? "bg-primary/10 text-primary font-medium"
+                    : "hover:bg-muted"
+                }`}
+              >
+                {s.order + 1}. {s.title}
+              </button>
+            ))}
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            className="w-full mt-2"
+            disabled={addMut.isPending}
+            onClick={() => addMut.mutate()}
+          >
+            <Plus className="h-4 w-4 mr-1" /> Add section
+          </Button>
+        </div>
+
+        {active ? (
+          <SectionEditor
+            key={active.id}
+            policyId={policy._id}
+            section={active}
+            invalidate={invalidate}
+            onErr={onErr}
+          />
+        ) : (
+          <Card>
+            <CardContent className="p-10 text-center text-sm text-muted-foreground">
+              No sections yet — add one to start writing.
+            </CardContent>
+          </Card>
+        )}
+
+        <PropertiesSidebar
+          policy={policy}
           invalidate={invalidate}
           onErr={onErr}
         />
-      ) : (
-        <Card>
-          <CardContent className="p-10 text-center text-sm text-muted-foreground">
-            No sections yet — add one to start writing.
-          </CardContent>
-        </Card>
-      )}
+      </div>
 
-      <PropertiesSidebar
+      <PolicyPreviewDialog
         policy={policy}
-        invalidate={invalidate}
-        onErr={onErr}
+        open={previewOpen}
+        onOpenChange={setPreviewOpen}
       />
     </div>
   );
+}
+
+// ── Preview dialog + PDF export ──────────────────────────────
+// Both read the policy exactly as it will be seen by an approver or
+// an acknowledging staff member — the full assembled document, not
+// one section at a time like the editor's own left-hand list.
+
+function PolicyPreviewDialog({
+  policy,
+  open,
+  onOpenChange,
+}: {
+  policy: Policy;
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{policy.title}</DialogTitle>
+        </DialogHeader>
+        <div className="text-xs text-muted-foreground -mt-2 mb-2">
+          Version {policy.version} · Owner: {policy.owner || "—"} · Approval:{" "}
+          {policy.approvalAuthority || "—"}
+        </div>
+        <div className="space-y-6">
+          {policy.sections.map((s) => (
+            <div key={s.id}>
+              <h3 className="text-base font-semibold mb-2">{s.title}</h3>
+              <div
+                className="prose prose-sm max-w-none text-foreground"
+                dangerouslySetInnerHTML={{
+                  __html: s.content || "<p><em>No content yet.</em></p>",
+                }}
+              />
+            </div>
+          ))}
+          {policy.sections.length === 0 && (
+            <p className="text-sm text-muted-foreground text-center py-8">
+              No sections yet.
+            </p>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(
+    /[&<>"']/g,
+    (c) =>
+      ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;",
+      })[c] as string,
+  );
+}
+
+async function exportPolicyPdf(policy: Policy): Promise<void> {
+  const container = document.createElement("div");
+  container.style.cssText =
+    "position:fixed;left:-9999px;top:0;width:700px;padding:32px;" +
+    "font-family:Georgia,serif;color:#1a1a1a;background:#fff;";
+  container.innerHTML = `
+    <h1 style="font-size:22px;margin:0 0 6px;">${escapeHtml(policy.title)}</h1>
+    <p style="font-size:11px;color:#666;margin:0 0 24px;">
+      Version ${escapeHtml(policy.version)} · Owner: ${escapeHtml(policy.owner || "—")} · Approval authority: ${escapeHtml(policy.approvalAuthority || "—")}
+    </p>
+    ${policy.sections
+      .map(
+        (s) =>
+          `<h2 style="font-size:15px;margin:20px 0 8px;border-bottom:1px solid #ddd;padding-bottom:4px;">${escapeHtml(s.title)}</h2>
+           <div style="font-size:12px;line-height:1.65;">${s.content || "<p style='color:#999'>No content.</p>"}</div>`,
+      )
+      .join("")}
+  `;
+  document.body.appendChild(container);
+
+  try {
+    const doc = new jsPDF({ unit: "pt", format: "a4" });
+    await new Promise<void>((resolve, reject) => {
+      doc.html(container, {
+        x: 40,
+        y: 40,
+        width: 515,
+        windowWidth: 700,
+        autoPaging: "text",
+        callback: () => {
+          try {
+            doc.save(`${policy.title.replace(/[^a-z0-9]+/gi, "_")}.pdf`);
+            resolve();
+          } catch (err) {
+            reject(err);
+          }
+        },
+      });
+    });
+  } finally {
+    document.body.removeChild(container);
+  }
 }
 
 const TABLE_HTML =
