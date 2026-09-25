@@ -150,183 +150,185 @@ export default function ComplianceCalendar() {
         </p>
       </div>
 
-      <Card>
-        <CardContent className="p-4 space-y-4">
-          <div className="flex items-center justify-between flex-wrap gap-3">
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={() => setCursor(new Date(year, month - 1, 1))}
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <div className="font-semibold w-44 text-center">
-                {cursor.toLocaleDateString(undefined, {
-                  month: "long",
-                  year: "numeric",
-                })}
-              </div>
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={() => setCursor(new Date(year, month + 1, 1))}
-              >
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  const d = new Date();
-                  setCursor(new Date(d.getFullYear(), d.getMonth(), 1));
-                }}
-              >
-                <CalendarDays className="h-4 w-4 mr-1" />
-                Today
-              </Button>
-            </div>
-            <div className="flex items-center gap-3 flex-wrap">
-              {(Object.keys(KIND_STYLE) as Kind[]).map((k) => (
-                <label key={k} className="flex items-center gap-1.5 text-xs">
-                  <Checkbox
-                    checked={kinds.includes(k)}
-                    onCheckedChange={(v) =>
-                      setKinds((prev) =>
-                        v ? [...prev, k] : prev.filter((x) => x !== k),
-                      )
-                    }
-                  />
-                  <span
-                    className={`h-2 w-2 rounded-full ${KIND_STYLE[k].dot}`}
-                  />
-                  {k}
-                </label>
-              ))}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-7 gap-px bg-border rounded-lg overflow-hidden">
-            {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
-              <div
-                key={d}
-                className="bg-muted/60 text-center text-xs font-medium py-1.5"
-              >
-                {d}
-              </div>
-            ))}
-            {cells.map((d, i) => {
-              const ds = d ? dateStr(d) : "";
-              const dayEvents = d ? visible.filter((e) => e.date === ds) : [];
-              const isToday = ds === todayStr();
-              return (
-                <div
-                  key={i}
-                  className={`bg-card min-h-[92px] p-1.5 ${d ? "" : "opacity-40"}`}
+      <div className="w-full flex gap-4">
+        <Card>
+          <CardContent className="p-4 space-y-4">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => setCursor(new Date(year, month - 1, 1))}
                 >
-                  {d && (
-                    <div
-                      className={`text-xs mb-1 ${isToday ? "font-bold text-primary" : "text-muted-foreground"}`}
-                    >
-                      {d}
-                    </div>
-                  )}
-                  <div className="space-y-1">
-                    {dayEvents.slice(0, 3).map((e) => {
-                      const overdue = !e.done && e.date < todayStr();
-                      return (
-                        <div
-                          key={e.id}
-                          title={`${e.title} — ${e.detail}`}
-                          className={`text-[10px] leading-tight rounded px-1 py-0.5 border truncate ${
-                            e.done
-                              ? "bg-emerald-500/10 text-emerald-700 border-emerald-500/30 line-through"
-                              : overdue
-                                ? "bg-rose-500/10 text-rose-700 border-rose-500/30"
-                                : KIND_STYLE[e.kind].chip
-                          }`}
-                        >
-                          {e.title}
-                        </div>
-                      );
-                    })}
-                    {dayEvents.length > 3 && (
-                      <div className="text-[10px] text-muted-foreground">
-                        +{dayEvents.length - 3} more
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <div className="font-semibold w-44 text-center">
+                  {cursor.toLocaleDateString(undefined, {
+                    month: "long",
+                    year: "numeric",
+                  })}
+                </div>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => setCursor(new Date(year, month + 1, 1))}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    const d = new Date();
+                    setCursor(new Date(d.getFullYear(), d.getMonth(), 1));
+                  }}
+                >
+                  <CalendarDays className="h-4 w-4 mr-1" />
+                  Today
+                </Button>
+              </div>
+              <div className="flex items-center gap-3 flex-wrap">
+                {(Object.keys(KIND_STYLE) as Kind[]).map((k) => (
+                  <label key={k} className="flex items-center gap-1.5 text-xs">
+                    <Checkbox
+                      checked={kinds.includes(k)}
+                      onCheckedChange={(v) =>
+                        setKinds((prev) =>
+                          v ? [...prev, k] : prev.filter((x) => x !== k),
+                        )
+                      }
+                    />
+                    <span
+                      className={`h-2 w-2 rounded-full ${KIND_STYLE[k].dot}`}
+                    />
+                    {k}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-7 gap-px bg-border rounded-lg overflow-hidden">
+              {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
+                <div
+                  key={d}
+                  className="bg-muted/60 text-center text-xs font-medium py-1.5"
+                >
+                  {d}
+                </div>
+              ))}
+              {cells.map((d, i) => {
+                const ds = d ? dateStr(d) : "";
+                const dayEvents = d ? visible.filter((e) => e.date === ds) : [];
+                const isToday = ds === todayStr();
+                return (
+                  <div
+                    key={i}
+                    className={`bg-card min-h-[92px] p-1.5 ${d ? "" : "opacity-40"}`}
+                  >
+                    {d && (
+                      <div
+                        className={`text-xs mb-1 ${isToday ? "font-bold text-primary" : "text-muted-foreground"}`}
+                      >
+                        {d}
                       </div>
                     )}
+                    <div className="space-y-1">
+                      {dayEvents.slice(0, 3).map((e) => {
+                        const overdue = !e.done && e.date < todayStr();
+                        return (
+                          <div
+                            key={e.id}
+                            title={`${e.title} — ${e.detail}`}
+                            className={`text-[10px] leading-tight rounded px-1 py-0.5 border truncate ${
+                              e.done
+                                ? "bg-emerald-500/10 text-emerald-700 border-emerald-500/30 line-through"
+                                : overdue
+                                  ? "bg-rose-500/10 text-rose-700 border-rose-500/30"
+                                  : KIND_STYLE[e.kind].chip
+                            }`}
+                          >
+                            {e.title}
+                          </div>
+                        );
+                      })}
+                      {dayEvents.length > 3 && (
+                        <div className="text-[10px] text-muted-foreground">
+                          +{dayEvents.length - 3} more
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="flex flex-wrap gap-3 text-[11px] text-muted-foreground">
+              <Legend className="bg-rose-500" label="Overdue" />
+              <Legend className="bg-amber-500" label="Regulatory deadline" />
+              <Legend className="bg-sky-500" label="Policy review" />
+              <Legend className="bg-violet-500" label="Audit" />
+              <Legend
+                className="bg-emerald-500"
+                label="Completed / certification"
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-4 space-y-2">
+            <div className="font-medium text-sm flex items-center gap-2">
+              <BellRing className="h-4 w-4" />
+              Deadline alerts — 90 / 60 / 30 / 14 / 7 day reminders
+            </div>
+            {upcomingAlerts.map(({ e, d }) => {
+              const milestone = REMINDERS.filter((r) => d <= r).sort(
+                (a, b) => a - b,
+              )[0];
+              return (
+                <div
+                  key={e.kind + e.id}
+                  className="flex items-center justify-between border rounded p-2.5 text-sm"
+                >
+                  <div className="min-w-0">
+                    <div className="font-medium truncate">{e.title}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {e.kind} · {e.detail} · {e.date}
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0 pl-3">
+                    <div
+                      className={
+                        d < 0
+                          ? "text-rose-600 font-medium"
+                          : d <= 7
+                            ? "text-amber-600 font-medium"
+                            : ""
+                      }
+                    >
+                      {d < 0 ? `${Math.abs(d)}d overdue` : `${d}d left`}
+                    </div>
+                    <div className="text-[11px] text-muted-foreground">
+                      {d < 0
+                        ? "Escalated to senior management"
+                        : d <= 7
+                          ? "Escalated to manager"
+                          : milestone
+                            ? `${milestone}-day reminder sent`
+                            : "Scheduled"}
+                    </div>
                   </div>
                 </div>
               );
             })}
-          </div>
-
-          <div className="flex flex-wrap gap-3 text-[11px] text-muted-foreground">
-            <Legend className="bg-rose-500" label="Overdue" />
-            <Legend className="bg-amber-500" label="Regulatory deadline" />
-            <Legend className="bg-sky-500" label="Policy review" />
-            <Legend className="bg-violet-500" label="Audit" />
-            <Legend
-              className="bg-emerald-500"
-              label="Completed / certification"
-            />
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardContent className="p-4 space-y-2">
-          <div className="font-medium text-sm flex items-center gap-2">
-            <BellRing className="h-4 w-4" />
-            Deadline alerts — 90 / 60 / 30 / 14 / 7 day reminders
-          </div>
-          {upcomingAlerts.map(({ e, d }) => {
-            const milestone = REMINDERS.filter((r) => d <= r).sort(
-              (a, b) => a - b,
-            )[0];
-            return (
-              <div
-                key={e.kind + e.id}
-                className="flex items-center justify-between border rounded p-2.5 text-sm"
-              >
-                <div className="min-w-0">
-                  <div className="font-medium truncate">{e.title}</div>
-                  <div className="text-xs text-muted-foreground">
-                    {e.kind} · {e.detail} · {e.date}
-                  </div>
-                </div>
-                <div className="text-right shrink-0 pl-3">
-                  <div
-                    className={
-                      d < 0
-                        ? "text-rose-600 font-medium"
-                        : d <= 7
-                          ? "text-amber-600 font-medium"
-                          : ""
-                    }
-                  >
-                    {d < 0 ? `${Math.abs(d)}d overdue` : `${d}d left`}
-                  </div>
-                  <div className="text-[11px] text-muted-foreground">
-                    {d < 0
-                      ? "Escalated to senior management"
-                      : d <= 7
-                        ? "Escalated to manager"
-                        : milestone
-                          ? `${milestone}-day reminder sent`
-                          : "Scheduled"}
-                  </div>
-                </div>
+            {upcomingAlerts.length === 0 && (
+              <div className="text-sm text-muted-foreground py-4 text-center">
+                Nothing due in the next 90 days.
               </div>
-            );
-          })}
-          {upcomingAlerts.length === 0 && (
-            <div className="text-sm text-muted-foreground py-4 text-center">
-              Nothing due in the next 90 days.
-            </div>
-          )}
-        </CardContent>
-      </Card>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
       {/* <div className="text-xs text-muted-foreground flex items-center gap-2">
         <Badge variant="outline">External sync</Badge>

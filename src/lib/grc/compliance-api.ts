@@ -12,6 +12,7 @@ export type Regulator =
   | "Sector-specific";
 export type Frequency =
   | "Annual"
+  | "Semi-annual"
   | "Quarterly"
   | "Monthly"
   | "Ad hoc"
@@ -52,6 +53,7 @@ export const REGULATORS: Regulator[] = [
 ];
 export const FREQUENCIES: Frequency[] = [
   "Annual",
+  "Semi-annual",
   "Quarterly",
   "Monthly",
   "Ad hoc",
