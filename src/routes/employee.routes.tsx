@@ -12,6 +12,7 @@ import MyDisputes from "@/pages/hr/employee/MyDisputes";
 import MyLearning from "@/pages/hr/employee/MyLearning";
 import TeamDisputes from "@/pages/hr/employee/TeamDisputes";
 import MyPolicies from "@/pages/hr/employee/MyPolicies";
+import MyAuditRequests from "@/pages/hr/employee/MyAuditRequests";
 import MyServiceDesk from "@/pages/hr/employee/MyServiceDesk";
 import EmployeeOnboarding from "@/pages/EmployeeOnboarding";
 import MyCases from "@/pages/hr/employee/MyCases";
@@ -48,6 +49,11 @@ export const employeeRoutes = ({ isAdmin, hierarchyRole }: RouteContext) => {
       key="my-policies"
       path="/my/policies"
       element={layout(<MyPolicies />)}
+    />,
+    <Route
+      key="my-audit-requests"
+      path="/my/audit-requests"
+      element={layout(<MyAuditRequests />)}
     />,
     <Route
       key="my-service-desk"

@@ -69,6 +69,11 @@ export interface HrTeam {
   memberCount: number;
   isActive: boolean;
   createdAt: string;
+  /** The tenant's designated Audit team — at most one team can have
+   * this set at a time. GRC's Audit Management module auto-assigns
+   * this team (its Head of Department as lead auditor) to every
+   * Internal audit engagement. */
+  isAuditTeam?: boolean;
 }
 
 export const fetchTeams = async (): Promise<HrTeam[]> => {
@@ -88,7 +93,12 @@ export const createTeam = async (dto: {
 
 export const updateTeam = async (
   id: string,
-  dto: { name?: string; description?: string; lead?: string },
+  dto: {
+    name?: string;
+    description?: string;
+    lead?: string;
+    isAuditTeam?: boolean;
+  },
 ): Promise<HrTeam> => {
   const res = await api.patch(`/hr/teams/${id}`, dto);
   return res.data?.data ?? res.data;

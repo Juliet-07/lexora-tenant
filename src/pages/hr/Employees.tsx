@@ -272,6 +272,19 @@ export default function HREmployees() {
       toast.error(err?.response?.data?.message ?? "Failed to create team"),
   });
 
+  const updateTeamMutation = useMutation({
+    mutationFn: ({ id, dto }: { id: string; dto: { isAuditTeam?: boolean } }) =>
+      updateTeam(id, dto),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["hr-teams"] });
+      toast.success(
+        variables.dto.isAuditTeam ? "Set as the Audit team." : "Team updated.",
+      );
+    },
+    onError: (err: any) =>
+      toast.error(err?.response?.data?.message ?? "Failed to update team"),
+  });
+
   const createLocMutation = useMutation({
     mutationFn: createLocation,
     onSuccess: () => {
@@ -613,10 +626,16 @@ export default function HREmployees() {
                   <CardContent className="p-5">
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <UsersRound className="h-4 w-4 text-primary" />
                           <h3 className="font-semibold">{t.name}</h3>
                           <Badge variant="secondary">{t.memberCount}</Badge>
+                          {t.isAuditTeam && (
+                            <Badge className="bg-primary/10 text-primary border-primary/20">
+                              <ClipboardCheck className="h-3 w-3 mr-1" />
+                              Audit team
+                            </Badge>
+                          )}
                         </div>
                         {t.description && (
                           <p className="text-xs text-muted-foreground mt-1">
@@ -649,6 +668,23 @@ export default function HREmployees() {
                             No Head of Department assigned yet.
                           </p>
                         )}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-6 px-2 text-xs mt-2"
+                          disabled={updateTeamMutation.isPending}
+                          onClick={() =>
+                            updateTeamMutation.mutate({
+                              id: t._id,
+                              dto: { isAuditTeam: !t.isAuditTeam },
+                            })
+                          }
+                        >
+                          <ClipboardCheck className="h-3 w-3 mr-1" />
+                          {t.isAuditTeam
+                            ? "Unset as Audit team"
+                            : "Set as Audit team"}
+                        </Button>
                       </div>
                       <Button
                         variant="ghost"

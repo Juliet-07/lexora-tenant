@@ -171,15 +171,35 @@ export type AuditEngagementStatus =
   | "In Progress"
   | "Reporting"
   | "Closed";
-export type RequestStatus = "Requested" | "Received" | "Overdue";
+// Requested → Submitted (files uploaded) / Disputed (employee pushed
+// back) → Resolved (tenant/auditor signed off). Nothing here is a
+// stored "Overdue" state — overdue-ness is computed at display time
+// from dueDate vs. now, so it can never go stale.
+export type RequestStatus = "Requested" | "Submitted" | "Disputed" | "Resolved";
 export type FindingSeverity = "Critical" | "High" | "Medium" | "Low";
 export type FindingStatus = "Open" | "In Progress" | "Remediated" | "Closed";
 
+export interface RequestFile {
+  name: string;
+  fileUrl: string;
+  uploadedAt: string;
+  uploadedBy: string;
+}
+
 export interface AuditRequest {
+  _id: string;
   description: string;
-  assignedTo: string;
+  folder: string;
+  assignedToEmployeeId: string;
+  assignedToName: string;
   dueDate: string;
   status: RequestStatus;
+  files: RequestFile[];
+  disputeReason: string;
+  disputedAt: string | null;
+  resolutionNote: string;
+  resolvedAt: string | null;
+  resolvedBy: string;
 }
 export interface AuditFinding {
   observation: string;
@@ -203,8 +223,23 @@ export interface AuditEngagement {
   startDate: string;
   endDate: string;
   status: AuditEngagementStatus;
+  auditTeamId: string | null;
+  auditTeamName: string;
+  leadAuditorEmployeeId: string | null;
+  leadAuditorName: string;
+  externalAuditorName: string;
+  linkedRiskIds: string[];
   requests: AuditRequest[];
   findings: AuditFinding[];
+}
+
+// An employee's own view of a request they've been assigned, flattened
+// with the parent engagement's context — what GET /audits/my/requests
+// returns.
+export interface MyAuditRequest extends AuditRequest {
+  auditId: string;
+  auditName: string;
+  auditType: AuditType;
 }
 
 export type ChangeUrgency =
@@ -394,6 +429,9 @@ export const createAudit = async (dto: {
   scope?: string;
   startDate: string;
   endDate: string;
+  // External only — Internal auto-resolves the tenant's Audit team.
+  externalAuditorName?: string;
+  linkedRiskIds?: string[];
 }): Promise<AuditEngagement> => {
   const res = await api.post("/grc/compliance/audits", dto);
   return res.data?.data ?? res.data;
@@ -411,22 +449,91 @@ export const setAuditStatus = async (
 
 export const addAuditRequest = async (
   id: string,
-  dto: { description: string; assignedTo?: string; dueDate: string },
+  dto: {
+    description: string;
+    folder?: string;
+    assignedToEmployeeId: string;
+    dueDate: string;
+  },
 ): Promise<AuditEngagement> => {
   const res = await api.post(`/grc/compliance/audits/${id}/requests`, dto);
   return res.data?.data ?? res.data;
 };
 
-export const setRequestStatus = async (
-  id: string,
-  index: number,
-  status: RequestStatus,
+export const resolveAuditRequest = async (
+  auditId: string,
+  requestId: string,
+  note?: string,
 ): Promise<AuditEngagement> => {
   const res = await api.patch(
-    `/grc/compliance/audits/${id}/requests/${index}/status`,
-    { status },
+    `/grc/compliance/audits/${auditId}/requests/${requestId}/resolve`,
+    { note },
   );
   return res.data?.data ?? res.data;
+};
+
+// Triggers a browser download of every uploaded document across this
+// engagement's requests, grouped into folders inside the zip.
+export const downloadAuditRequestsZip = async (
+  auditId: string,
+  auditName: string,
+): Promise<void> => {
+  const res = await api.get(`/grc/compliance/audits/${auditId}/requests/zip`, {
+    responseType: "blob",
+  });
+  const url = window.URL.createObjectURL(new Blob([res.data]));
+  const link = document.createElement("a");
+  link.href = url;
+  link.setAttribute(
+    "download",
+    `${auditName.replace(/[^a-z0-9]+/gi, "_")}_documents.zip`,
+  );
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
+};
+
+// ── Employee-facing document-request portal ("my/*" endpoints) ──
+export const fetchMyAuditRequests = async (): Promise<MyAuditRequest[]> => {
+  const res = await api.get("/grc/compliance/audits/my/requests");
+  const d = res.data?.data ?? res.data;
+  return Array.isArray(d) ? d : [];
+};
+
+export const submitMyAuditRequestFiles = async (
+  requestId: string,
+  files: File[],
+): Promise<AuditEngagement> => {
+  const form = new FormData();
+  files.forEach((f) => form.append("files", f));
+  const res = await api.post(
+    `/grc/compliance/audits/my/requests/${requestId}/files`,
+    form,
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const disputeMyAuditRequest = async (
+  requestId: string,
+  reason: string,
+): Promise<AuditEngagement> => {
+  const res = await api.post(
+    `/grc/compliance/audits/my/requests/${requestId}/dispute`,
+    { reason },
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const resolveAuditFileUrl = (relativeUrl: string): string => {
+  if (!relativeUrl) return relativeUrl;
+  if (relativeUrl.startsWith("http")) return relativeUrl;
+  const base = import.meta.env.VITE_REACT_APP_BASE_URL ?? "";
+  try {
+    return `${new URL(base).origin}${relativeUrl}`;
+  } catch {
+    return `${base}${relativeUrl}`;
+  }
 };
 
 export const addFinding = async (

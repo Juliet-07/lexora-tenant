@@ -41,6 +41,7 @@ import {
   Leaf,
   FileBarChart,
   Bell,
+  FileSearch,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
@@ -474,6 +475,7 @@ export function AppSidebar() {
     { title: "Service Desk", url: "/my/service-desk", icon: LifeBuoy },
     { title: "Learning", url: "/my/learning", icon: GraduationCap },
     { title: "Policies", url: "/my/policies", icon: ShieldCheck },
+    { title: "Audit Requests", url: "/my/audit-requests", icon: FileSearch },
     { title: "Disputes", url: "/my/disputes", icon: ShieldAlert },
     {
       title: "Team Disputes",
