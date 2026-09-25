@@ -174,6 +174,7 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
       icon: Landmark,
       adminOnly: true,
       children: [
+        { title: "Organisation Structure", url: "/grc/governance/structure" },
         { title: "Board Management", url: "/grc/governance/board" },
         { title: "Committees", url: "/grc/governance/committees" },
         { title: "Meetings", url: "/grc/governance/meetings" },
