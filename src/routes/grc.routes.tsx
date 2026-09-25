@@ -136,6 +136,11 @@ export const grcRoutes = ({ isAdmin, accessibleModules }: RouteContext) => {
       // Governance
 
       <Route
+        key="grc-gov-structure"
+        path="/grc/governance/structure"
+        element={layout(<GrcOrgStructure />)}
+      />,
+      <Route
         key="grc-gov-meetings"
         path="/grc/governance/meetings"
         element={layout(<GrcMeetings />)}
