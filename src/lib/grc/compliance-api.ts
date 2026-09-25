@@ -186,6 +186,13 @@ export interface RequestFile {
   uploadedBy: string;
 }
 
+// A tenant-created folder for an engagement's document requests —
+// created up front, then picked (not retyped) when a request is raised.
+export interface AuditFolder {
+  _id: string;
+  name: string;
+}
+
 export interface AuditRequest {
   _id: string;
   description: string;
@@ -229,6 +236,7 @@ export interface AuditEngagement {
   leadAuditorName: string;
   externalAuditorName: string;
   linkedRiskIds: string[];
+  folders: AuditFolder[];
   requests: AuditRequest[];
   findings: AuditFinding[];
 }
@@ -447,11 +455,36 @@ export const setAuditStatus = async (
   return res.data?.data ?? res.data;
 };
 
+// Create a folder up front so it can be picked (not retyped) when a
+// document request is raised.
+export const addAuditFolder = async (
+  id: string,
+  name: string,
+): Promise<AuditEngagement> => {
+  const res = await api.post(`/grc/compliance/audits/${id}/folders`, {
+    name,
+  });
+  return res.data?.data ?? res.data;
+};
+
+// Blocked server-side once a request already references this folder.
+export const removeAuditFolder = async (
+  id: string,
+  folderId: string,
+): Promise<AuditEngagement> => {
+  const res = await api.delete(
+    `/grc/compliance/audits/${id}/folders/${folderId}`,
+  );
+  return res.data?.data ?? res.data;
+};
+
 export const addAuditRequest = async (
   id: string,
   dto: {
     description: string;
-    folder?: string;
+    // Must name one of the engagement's existing folders — create it
+    // first with addAuditFolder if it doesn't exist yet.
+    folder: string;
     assignedToEmployeeId: string;
     dueDate: string;
   },

@@ -43,6 +43,7 @@ import {
   Loader2,
   Paperclip,
   FolderOpen,
+  X,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { usePersistentState, fmtDate } from "@/lib/grc/usePersistentState";
@@ -50,12 +51,15 @@ import {
   fetchAudits,
   createAudit,
   setAuditStatus,
+  addAuditFolder,
+  removeAuditFolder,
   addAuditRequest,
   resolveAuditRequest,
   downloadAuditRequestsZip,
   addFinding,
   updateFinding,
   type AuditEngagement,
+  type AuditFolder,
   type AuditType,
   type FindingSeverity,
   type FindingStatus,
@@ -833,18 +837,22 @@ function EngagementDetail({
                 <CardTitle className="text-base">Document requests</CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
+                <FolderManager e={e} mutate={mutate} />
                 <RequestTable e={e} mutate={mutate} />
                 <RequestAdder
                   req={req}
                   setReq={setReq}
+                  folders={e.folders}
                   onAdd={() => {
                     if (
                       !req.description ||
+                      !req.folder ||
                       !req.dueDate ||
                       !req.assignedToEmployeeId
                     )
                       return toast({
-                        title: "Item, assignee and due date are required",
+                        title:
+                          "Item, folder, assignee and due date are required",
                         variant: "destructive",
                       });
                     mutate(
@@ -1864,6 +1872,73 @@ function ObjectiveAdder({ onAdd }: { onAdd: (o: string) => void }) {
   );
 }
 
+// Folders are created here, up front, by the tenant — then picked
+// (not retyped) on each request below. Removal is blocked server-side
+// once a request already references the folder, so a failed remove
+// just surfaces as the usual "Action failed" toast from mutate.
+function FolderManager({ e, mutate }: { e: AuditEngagement; mutate: Mutate }) {
+  const [v, setV] = useState("");
+  // Engagements created before folders existed on the schema may come
+  // back with no `folders` field at all (older cached responses, or
+  // any endpoint that doesn't normalize it) — never assume the array.
+  const folders = e.folders ?? [];
+  return (
+    <div className="space-y-2 pb-2 border-b">
+      <div className="text-xs font-semibold text-muted-foreground">Folders</div>
+      <div className="flex flex-wrap gap-1.5">
+        {folders.map((f) => (
+          <Badge key={f._id} variant="secondary" className="gap-1 pr-1">
+            {f.name}
+            <button
+              type="button"
+              className="ml-0.5 rounded-full hover:bg-muted-foreground/20"
+              onClick={() =>
+                mutate(
+                  () => removeAuditFolder(e._id, f._id),
+                  (en) => ({
+                    ...en,
+                    folders: en.folders.filter((x) => x._id !== f._id),
+                  }),
+                )
+              }
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </Badge>
+        ))}
+        {!folders.length && (
+          <span className="text-xs text-muted-foreground">
+            No folders yet — add one to start requesting documents.
+          </span>
+        )}
+      </div>
+      <div className="flex gap-2">
+        <Input
+          className="h-8"
+          placeholder="New folder, e.g. Financial records"
+          value={v}
+          onChange={(ev) => setV(ev.target.value)}
+        />
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => {
+            if (!v.trim()) return;
+            mutate(
+              () => addAuditFolder(e._id, v.trim()),
+              undefined,
+              "Folder created",
+            );
+            setV("");
+          }}
+        >
+          Add folder
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 // Requested/Submitted/Disputed are all driven by a real action taken
 // elsewhere (the request being created, the employee uploading files
 // or disputing it) — the only action available here is Resolve, once
@@ -1954,6 +2029,7 @@ function RequestAdder({
   req,
   setReq,
   onAdd,
+  folders: foldersProp,
 }: {
   req: {
     description: string;
@@ -1968,7 +2044,10 @@ function RequestAdder({
     dueDate: string;
   }) => void;
   onAdd: () => void;
+  folders: AuditFolder[] | undefined;
 }) {
+  // Same defensive fallback as FolderManager — never assume the array.
+  const folders = foldersProp ?? [];
   const { data: employeesPage } = useQuery({
     queryKey: ["hr-employees-for-audit-picker"],
     queryFn: () => fetchEmployees({ limit: 500 }),
@@ -1982,11 +2061,26 @@ function RequestAdder({
           value={req.description}
           onChange={(ev) => setReq({ ...req, description: ev.target.value })}
         />
-        <Input
-          placeholder="Folder (optional, e.g. Financial records)"
+        <Select
           value={req.folder}
-          onChange={(ev) => setReq({ ...req, folder: ev.target.value })}
-        />
+          onValueChange={(v) => setReq({ ...req, folder: v })}
+          disabled={!folders.length}
+        >
+          <SelectTrigger>
+            <SelectValue
+              placeholder={
+                folders.length ? "Select folder" : "Add a folder first"
+              }
+            />
+          </SelectTrigger>
+          <SelectContent>
+            {folders.map((f) => (
+              <SelectItem key={f._id} value={f.name}>
+                {f.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
       <div className="grid grid-cols-2 gap-2">
         <Select
