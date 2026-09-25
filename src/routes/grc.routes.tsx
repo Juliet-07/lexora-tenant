@@ -16,6 +16,7 @@ import IncidentsBreaches from "@/pages/grc/compliance/IncidentsBreaches";
 import GrcVendors from "@/pages/grc/risk/Vendors";
 import GrcBcp from "@/pages/grc/risk/Bcp";
 import GrcMeetings from "@/pages/grc/governance/Meetings";
+import GrcOrgStructure from "@/pages/grc/governance/OrgStructure";
 import GrcCommittees from "@/pages/grc/governance/Committees";
 import GrcBoardMgt from "@/pages/grc/governance/BoardMgt";
 import GrcCodes from "@/pages/grc/governance/Codes";
@@ -134,6 +135,11 @@ export const grcRoutes = ({ isAdmin, accessibleModules }: RouteContext) => {
 
       // Governance
 
+      <Route
+        key="grc-gov-structure"
+        path="/grc/governance/structure"
+        element={layout(<GrcOrgStructure />)}
+      />,
       <Route
         key="grc-gov-meetings"
         path="/grc/governance/meetings"
