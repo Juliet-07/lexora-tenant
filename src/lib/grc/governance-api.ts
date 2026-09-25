@@ -5,16 +5,127 @@ export type BoardMemberRole =
   | "Vice-Chair"
   | "Executive Director"
   | "Non-Executive Director"
-  | "Independent Director";
+  | "Independent Director"
+  | "Alternate Director"
+  | "Company Secretary (Non-voting)";
 
+export type BoardMemberLifecycleStatus = "Onboarding" | "Active" | "Offboarded";
+// Read-path derived only — never sent to the API. "Term expiring" /
+// "Term expired" overlay onto Active based on termEnds; Onboarding and
+// Offboarded pass through as-is from lifecycleStatus.
+export type BoardMemberTermStatus =
+  | "Onboarding"
+  | "Active"
+  | "Term expiring"
+  | "Term expired"
+  | "Offboarded";
+
+export type ConflictType = "Standing" | "Meeting-specific";
 export interface ConflictDisclosure {
   note: string;
   disclosedAt: string;
+  type: ConflictType;
+  resolved: boolean;
 }
 
+export type TrainingType = "Mandatory" | "Certification" | "CPD";
 export interface TrainingRecord {
   title: string;
   completedAt: string;
+  type: TrainingType;
+  provider: string;
+  hours: number;
+  expiresAt: string | null;
+}
+
+export interface ChecklistItem {
+  label: string;
+  done: boolean;
+  completedAt: string | null;
+}
+
+export type BoardDocumentCategory = "Governance Document" | "Regulatory Filing";
+export interface BoardDocument {
+  name: string;
+  category: BoardDocumentCategory;
+  fileUrl: string | null;
+  mimeType: string | null;
+  size: number;
+  uploadedAt: string;
+  uploadedBy: string;
+  signedAt: string | null;
+}
+
+export interface CommitteeMembership {
+  name: string;
+  isChair: boolean;
+}
+
+export interface Remuneration {
+  annualRetainer: number;
+  committeeChairFee: number;
+  meetingAttendanceFee: number;
+  lastReviewedAt: string | null;
+}
+
+export type SuccessionStageName =
+  | "Trigger"
+  | "NomCo review"
+  | "Evaluation"
+  | "Recommendation"
+  | "AGM approval"
+  | "Confirmed";
+export type SuccessionStageStatus = "Pending" | "In progress" | "Done";
+export interface SuccessionStage {
+  name: SuccessionStageName;
+  status: SuccessionStageStatus;
+  notes: string;
+  completedAt: string | null;
+}
+
+export interface SuccessionRiskAssessment {
+  criticality: string;
+  skillsAtRisk: string[];
+  committeeRolesAtRisk: string[];
+  regulatoryImpact: string;
+  diversityImpact: string;
+  institutionalKnowledgeRating: string;
+  internalCandidates: number;
+  externalCandidates: number;
+  timeToReplaceEstimate: string;
+  interimSuccessorId:
+    | { _id: string; name: string; role: string }
+    | string
+    | null;
+  interimNotes: string;
+}
+
+export interface SuccessionCandidate {
+  name: string;
+  source: string;
+  skillsMatch: string[];
+  bnrPreCleared: boolean;
+  availability: string;
+  assessmentStatus: string;
+}
+
+export interface SuccessionPlan {
+  reference: string;
+  triggerType: string;
+  triggeredAt: string;
+  triggeredBy: string;
+  stages: SuccessionStage[];
+  riskAssessment: SuccessionRiskAssessment;
+  candidates: SuccessionCandidate[];
+  knowledgeTransferChecklist: ChecklistItem[];
+}
+
+export interface OffboardingRecord {
+  reason: string;
+  effectiveDate: string | null;
+  notes: string;
+  checklist: ChecklistItem[];
+  initiatedAt: string;
 }
 
 export interface BoardMember {
@@ -25,11 +136,24 @@ export interface BoardMember {
   appointedAt: string;
   termEnds: string;
   bio: string;
+  nationality: string;
+  idNumber: string;
+  taxResidency: string;
+  lifecycleStatus: BoardMemberLifecycleStatus;
+  termStatus: BoardMemberTermStatus;
+  committees: CommitteeMembership[];
+  attendancePercentage: number;
+  otherDirectorships: string[];
+  remuneration: Remuneration;
   successorId: { _id: string; name: string; role: string } | string | null;
   conflicts: ConflictDisclosure[];
   training: TrainingRecord[];
-  isActive: boolean;
-  skills?: BoardSkill[];
+  skills: BoardSkill[];
+  documents: BoardDocument[];
+  onboardingChecklist: ChecklistItem[];
+  successionPlan: SuccessionPlan | null;
+  offboarding: OffboardingRecord | null;
+  userId: string | null;
 }
 
 export type CommitteeMemberRole = "Chair" | "Secretary" | "Member";
@@ -303,28 +427,75 @@ export const createBoardMember = async (dto: {
   appointedAt: string;
   termEnds: string;
   bio?: string;
+  nationality?: string;
+  idNumber?: string;
+  taxResidency?: string;
+  otherDirectorships?: string[];
 }): Promise<BoardMember> => {
   const res = await api.post("/grc/governance/board-members", dto);
   return res.data?.data ?? res.data;
 };
 
+export const updateBoardMember = async (
+  id: string,
+  dto: Partial<{
+    name: string;
+    role: BoardMemberRole;
+    email: string;
+    termEnds: string;
+    bio: string;
+    nationality: string;
+    idNumber: string;
+    taxResidency: string;
+    lifecycleStatus: BoardMemberLifecycleStatus;
+  }>,
+): Promise<BoardMember> => {
+  const res = await api.patch(`/grc/governance/board-members/${id}`, dto);
+  return res.data?.data ?? res.data;
+};
+
+export const deleteBoardMember = async (id: string): Promise<void> => {
+  await api.delete(`/grc/governance/board-members/${id}`);
+};
+
 export const recordConflict = async (
   id: string,
   note: string,
+  type?: ConflictType,
 ): Promise<BoardMember> => {
   const res = await api.post(`/grc/governance/board-members/${id}/conflicts`, {
     note,
+    type,
   });
+  return res.data?.data ?? res.data;
+};
+
+export const resolveConflict = async (
+  id: string,
+  index: number,
+): Promise<BoardMember> => {
+  const res = await api.patch(
+    `/grc/governance/board-members/${id}/conflicts/${index}/resolve`,
+    {},
+  );
   return res.data?.data ?? res.data;
 };
 
 export const logTraining = async (
   id: string,
-  title: string,
+  dto: {
+    title: string;
+    completedAt?: string;
+    type?: TrainingType;
+    provider?: string;
+    hours?: number;
+    expiresAt?: string;
+  },
 ): Promise<BoardMember> => {
-  const res = await api.post(`/grc/governance/board-members/${id}/training`, {
-    title,
-  });
+  const res = await api.post(
+    `/grc/governance/board-members/${id}/training`,
+    dto,
+  );
   return res.data?.data ?? res.data;
 };
 
@@ -335,6 +506,206 @@ export const setSuccessor = async (
   const res = await api.patch(`/grc/governance/board-members/${id}/successor`, {
     successorId,
   });
+  return res.data?.data ?? res.data;
+};
+
+export const updateRemuneration = async (
+  id: string,
+  dto: Partial<Remuneration>,
+): Promise<BoardMember> => {
+  const res = await api.patch(
+    `/grc/governance/board-members/${id}/remuneration`,
+    dto,
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const setCommittees = async (
+  id: string,
+  committees: CommitteeMembership[],
+): Promise<BoardMember> => {
+  const res = await api.patch(
+    `/grc/governance/board-members/${id}/committees`,
+    { committees },
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const updateAttendance = async (
+  id: string,
+  attendancePercentage: number,
+): Promise<BoardMember> => {
+  const res = await api.patch(
+    `/grc/governance/board-members/${id}/attendance`,
+    { attendancePercentage },
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const addOtherDirectorship = async (
+  id: string,
+  value: string,
+): Promise<BoardMember> => {
+  const res = await api.post(
+    `/grc/governance/board-members/${id}/other-directorships`,
+    { value },
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const removeOtherDirectorship = async (
+  id: string,
+  index: number,
+): Promise<BoardMember> => {
+  const res = await api.delete(
+    `/grc/governance/board-members/${id}/other-directorships/${index}`,
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const addBoardMemberDocument = async (
+  id: string,
+  file: File,
+  category?: BoardDocumentCategory,
+): Promise<BoardMember> => {
+  const form = new FormData();
+  form.append("file", file);
+  if (category) form.append("category", category);
+  const res = await api.post(
+    `/grc/governance/board-members/${id}/documents`,
+    form,
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const removeBoardMemberDocument = async (
+  id: string,
+  index: number,
+): Promise<BoardMember> => {
+  const res = await api.delete(
+    `/grc/governance/board-members/${id}/documents/${index}`,
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const toggleOnboardingItem = async (
+  id: string,
+  index: number,
+): Promise<BoardMember> => {
+  const res = await api.patch(
+    `/grc/governance/board-members/${id}/onboarding/${index}/toggle`,
+    {},
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const initiateSuccession = async (
+  id: string,
+  dto?: { triggerType?: string; triggeredBy?: string },
+): Promise<BoardMember> => {
+  const res = await api.post(
+    `/grc/governance/board-members/${id}/succession`,
+    dto ?? {},
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const updateSuccessionStage = async (
+  id: string,
+  dto: {
+    stageName: SuccessionStageName;
+    status: SuccessionStageStatus;
+    notes?: string;
+  },
+): Promise<BoardMember> => {
+  const res = await api.patch(
+    `/grc/governance/board-members/${id}/succession/stage`,
+    dto,
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const updateRiskAssessment = async (
+  id: string,
+  dto: Partial<{
+    criticality: string;
+    skillsAtRisk: string[];
+    committeeRolesAtRisk: string[];
+    regulatoryImpact: string;
+    diversityImpact: string;
+    institutionalKnowledgeRating: string;
+    internalCandidates: number;
+    externalCandidates: number;
+    timeToReplaceEstimate: string;
+    interimSuccessorId: string | null;
+    interimNotes: string;
+  }>,
+): Promise<BoardMember> => {
+  const res = await api.patch(
+    `/grc/governance/board-members/${id}/succession/risk-assessment`,
+    dto,
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const addSuccessionCandidate = async (
+  id: string,
+  dto: {
+    name: string;
+    source?: string;
+    skillsMatch?: string[];
+    bnrPreCleared?: boolean;
+    availability?: string;
+    assessmentStatus?: string;
+  },
+): Promise<BoardMember> => {
+  const res = await api.post(
+    `/grc/governance/board-members/${id}/succession/candidates`,
+    dto,
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const removeSuccessionCandidate = async (
+  id: string,
+  index: number,
+): Promise<BoardMember> => {
+  const res = await api.delete(
+    `/grc/governance/board-members/${id}/succession/candidates/${index}`,
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const toggleKnowledgeTransferItem = async (
+  id: string,
+  index: number,
+): Promise<BoardMember> => {
+  const res = await api.patch(
+    `/grc/governance/board-members/${id}/succession/knowledge-transfer/${index}/toggle`,
+    {},
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const initiateOffboarding = async (
+  id: string,
+  dto: { reason: string; effectiveDate: string; notes?: string },
+): Promise<BoardMember> => {
+  const res = await api.post(
+    `/grc/governance/board-members/${id}/offboard`,
+    dto,
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const toggleOffboardingItem = async (
+  id: string,
+  index: number,
+): Promise<BoardMember> => {
+  const res = await api.patch(
+    `/grc/governance/board-members/${id}/offboarding/${index}/toggle`,
+    {},
+  );
   return res.data?.data ?? res.data;
 };
 
