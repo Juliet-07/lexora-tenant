@@ -206,7 +206,7 @@ function BoardList({
     (b) => b.lifecycleStatus === "Onboarding",
   ).length;
   const openConflicts = boardMembers.reduce(
-    (a, b) => a + b.conflicts.filter((c) => !c.resolved).length,
+    (a, b) => a + (b.conflicts ?? []).filter((c) => !c.resolved).length,
     0,
   );
   const withPlans = boardMembers.filter((b) => b.successionPlan);
@@ -308,14 +308,14 @@ function BoardList({
                     </Badge>
                   </TableCell>
                   <TableCell className="text-xs">
-                    {b.committees.length === 0
+                    {(b.committees ?? []).length === 0
                       ? "—"
-                      : b.committees
+                      : (b.committees ?? [])
                           .map((c) => c.name + (c.isChair ? " (Chair)" : ""))
                           .join(", ")}
                   </TableCell>
                   <TableCell className="text-xs">
-                    {b.attendancePercentage}%
+                    {b.attendancePercentage ?? 100}%
                   </TableCell>
                   <TableCell
                     className={
@@ -325,7 +325,7 @@ function BoardList({
                     {new Date(b.termEnds).toLocaleDateString()}
                   </TableCell>
                   <TableCell>
-                    {b.conflicts.filter((c) => !c.resolved).length}
+                    {(b.conflicts ?? []).filter((c) => !c.resolved).length}
                   </TableCell>
                 </TableRow>
               ))}
@@ -986,6 +986,9 @@ function KV({ k, v }: { k: string; v: string }) {
 }
 
 function OtherDirectorshipsEditor({ member }: { member: BoardMember }) {
+  // Same lean-read gap as elsewhere on this page — a board member from
+  // before this field existed has it absent, not [], on the object.
+  const otherDirectorships = member.otherDirectorships ?? [];
   const queryClient = useQueryClient();
   const [value, setValue] = useState("");
   const invalidate = () =>
@@ -1004,7 +1007,7 @@ function OtherDirectorshipsEditor({ member }: { member: BoardMember }) {
 
   return (
     <div className="space-y-2">
-      {member.otherDirectorships.map((d, i) => (
+      {otherDirectorships.map((d, i) => (
         <div
           key={i}
           className="text-xs border rounded px-2 py-1 flex justify-between items-center"
@@ -1015,7 +1018,7 @@ function OtherDirectorshipsEditor({ member }: { member: BoardMember }) {
           </button>
         </div>
       ))}
-      {member.otherDirectorships.length === 0 && (
+      {otherDirectorships.length === 0 && (
         <div className="text-xs text-muted-foreground">None recorded.</div>
       )}
       <div className="flex gap-2">
@@ -1038,6 +1041,8 @@ function OtherDirectorshipsEditor({ member }: { member: BoardMember }) {
 }
 
 function CommitteesEditor({ member }: { member: BoardMember }) {
+  // Same lean-read gap as elsewhere on this page.
+  const committees = member.committees ?? [];
   const queryClient = useQueryClient();
   const [name, setName] = useState("");
   const [isChair, setIsChair] = useState(false);
@@ -1050,18 +1055,18 @@ function CommitteesEditor({ member }: { member: BoardMember }) {
 
   const add = () => {
     if (!name.trim()) return;
-    mutation.mutate([...member.committees, { name: name.trim(), isChair }]);
+    mutation.mutate([...committees, { name: name.trim(), isChair }]);
     setName("");
     setIsChair(false);
   };
   const remove = (i: number) => {
-    mutation.mutate(member.committees.filter((_, idx) => idx !== i));
+    mutation.mutate(committees.filter((_, idx) => idx !== i));
   };
 
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap gap-1.5">
-        {member.committees.map((c, i) => (
+        {committees.map((c, i) => (
           <Badge key={i} variant="outline" className="flex items-center gap-1">
             {c.name}
             {c.isChair && " (Chair)"}
@@ -1070,7 +1075,7 @@ function CommitteesEditor({ member }: { member: BoardMember }) {
             </button>
           </Badge>
         ))}
-        {member.committees.length === 0 && (
+        {committees.length === 0 && (
           <span className="text-xs text-muted-foreground">
             No committee assignments.
           </span>
@@ -1104,7 +1109,7 @@ function CommitteesEditor({ member }: { member: BoardMember }) {
 
 function AttendanceEditor({ member }: { member: BoardMember }) {
   const queryClient = useQueryClient();
-  const [value, setValue] = useState(member.attendancePercentage);
+  const [value, setValue] = useState(member.attendancePercentage ?? 100);
   const mutation = useMutation({
     mutationFn: () => updateAttendance(member._id, value),
     onSuccess: () => {
@@ -1137,11 +1142,20 @@ function AttendanceEditor({ member }: { member: BoardMember }) {
 }
 
 function RemunerationEditor({ member }: { member: BoardMember }) {
+  // Same lean-read gap as elsewhere on this page — a board member from
+  // before this field existed has `remuneration` absent, not a zeroed
+  // object, on the object returned by the API.
+  const remuneration = member.remuneration ?? {
+    annualRetainer: 0,
+    committeeChairFee: 0,
+    meetingAttendanceFee: 0,
+    lastReviewedAt: null as string | null,
+  };
   const queryClient = useQueryClient();
   const [f, setF] = useState({
-    annualRetainer: member.remuneration.annualRetainer,
-    committeeChairFee: member.remuneration.committeeChairFee,
-    meetingAttendanceFee: member.remuneration.meetingAttendanceFee,
+    annualRetainer: remuneration.annualRetainer,
+    committeeChairFee: remuneration.committeeChairFee,
+    meetingAttendanceFee: remuneration.meetingAttendanceFee,
   });
   const mutation = useMutation({
     mutationFn: () => updateRemuneration(member._id, f),
@@ -1184,10 +1198,10 @@ function RemunerationEditor({ member }: { member: BoardMember }) {
         />
       </div>
       <div className="sm:col-span-3 flex items-center justify-between">
-        {member.remuneration.lastReviewedAt && (
+        {remuneration.lastReviewedAt && (
           <span className="text-xs text-muted-foreground">
             Last reviewed{" "}
-            {new Date(member.remuneration.lastReviewedAt).toLocaleDateString()}
+            {new Date(remuneration.lastReviewedAt).toLocaleDateString()}
           </span>
         )}
         <Button
@@ -1404,6 +1418,8 @@ function SkillsMatrixSection({
 // ── Training tab ────────────────────────────────────────────────
 
 function TrainingTab({ member }: { member: BoardMember }) {
+  // Same lean-read gap as elsewhere on this page.
+  const training = member.training ?? [];
   const queryClient = useQueryClient();
   const [f, setF] = useState({
     title: "",
@@ -1447,7 +1463,7 @@ function TrainingTab({ member }: { member: BoardMember }) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {member.training.map((t, i) => (
+            {training.map((t, i) => (
               <TableRow key={i}>
                 <TableCell className="text-sm">{t.title}</TableCell>
                 <TableCell>
@@ -1467,7 +1483,7 @@ function TrainingTab({ member }: { member: BoardMember }) {
                 </TableCell>
               </TableRow>
             ))}
-            {member.training.length === 0 && (
+            {training.length === 0 && (
               <TableRow>
                 <TableCell
                   colSpan={6}
@@ -1536,6 +1552,8 @@ function TrainingTab({ member }: { member: BoardMember }) {
 // ── Conflicts tab ────────────────────────────────────────────────
 
 function ConflictsTab({ member }: { member: BoardMember }) {
+  // Same lean-read gap as elsewhere on this page.
+  const conflicts = member.conflicts ?? [];
   const queryClient = useQueryClient();
   const [note, setNote] = useState("");
   const [type, setType] = useState<ConflictType>("Standing");
@@ -1570,7 +1588,7 @@ function ConflictsTab({ member }: { member: BoardMember }) {
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="space-y-1.5">
-          {member.conflicts.map((c, i) => (
+          {conflicts.map((c, i) => (
             <div
               key={i}
               className="text-xs border rounded px-2 py-1.5 flex justify-between items-center gap-2"
@@ -1608,7 +1626,7 @@ function ConflictsTab({ member }: { member: BoardMember }) {
               </div>
             </div>
           ))}
-          {member.conflicts.length === 0 && (
+          {conflicts.length === 0 && (
             <div className="text-xs text-muted-foreground">
               No disclosures on file.
             </div>
@@ -1654,6 +1672,8 @@ function ConflictsTab({ member }: { member: BoardMember }) {
 // ── Documents tab ────────────────────────────────────────────────
 
 function DocumentsTab({ member }: { member: BoardMember }) {
+  // Same lean-read gap as elsewhere on this page.
+  const documents = member.documents ?? [];
   const queryClient = useQueryClient();
   const [category, setCategory] = useState<BoardDocumentCategory>(
     "Governance Document",
@@ -1700,7 +1720,7 @@ function DocumentsTab({ member }: { member: BoardMember }) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {member.documents.map((d, i) => (
+            {documents.map((d, i) => (
               <TableRow key={i}>
                 <TableCell className="text-sm">
                   {d.fileUrl ? (
@@ -1732,7 +1752,7 @@ function DocumentsTab({ member }: { member: BoardMember }) {
                 </TableCell>
               </TableRow>
             ))}
-            {member.documents.length === 0 && (
+            {documents.length === 0 && (
               <TableRow>
                 <TableCell
                   colSpan={5}
@@ -2278,12 +2298,17 @@ function CandidatesEditor({ member }: { member: BoardMember }) {
 }
 
 function ChecklistEditor({
-  items,
+  items: itemsProp,
   onToggle,
 }: {
   items: { label: string; done: boolean; completedAt: string | null }[];
   onToggle: (index: number) => Promise<any>;
 }) {
+  // Pre-existing board members created before onboarding/offboarding
+  // checklists existed on the schema come back from the backend's
+  // .lean() read with these fields absent rather than [] — guard here
+  // rather than trusting every caller to do it.
+  const items = itemsProp ?? [];
   const queryClient = useQueryClient();
   const mutation = useMutation({
     mutationFn: onToggle,
