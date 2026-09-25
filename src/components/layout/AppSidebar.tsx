@@ -20,7 +20,6 @@ import {
   CalendarDays,
   Wallet,
   GraduationCap,
-  LifeBuoy,
   Briefcase,
   ClipboardList,
   Loader2,
@@ -41,7 +40,6 @@ import {
   Leaf,
   FileBarChart,
   Bell,
-  FileSearch,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
@@ -92,6 +90,7 @@ type NavItem = {
   url?: string;
   icon: any;
   adminOnly?: boolean;
+  requiresRole?: string;
   children?: NavChild[];
 };
 
@@ -161,7 +160,7 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
         { title: "Regulatory Obligations", url: "/grc/compliance/obligations" },
         { title: "Compliance Calendar", url: "/grc/compliance/calendar" },
         { title: "Certifications", url: "/grc/compliance/certifications" },
-        { title: "Policies & Procedures", url: "/grc/compliance/policies" },
+        { title: "Policies", url: "/grc/compliance/policies" },
         { title: "Audit Management", url: "/grc/compliance/audits" },
         { title: "Incidents & Breaches", url: "/grc/compliance/incidents" },
         {
@@ -454,29 +453,48 @@ export function AppSidebar() {
   const { currentModule, isLoadingDashboard } = useModule();
 
   // ── Team members get a fixed, minimal sidebar — no module switching,
-  //    no HR/admin areas. Just their workspace essentials.
-  const TEAM_MEMBER_NAV = [
+  //    no HR/admin areas. Just their workspace essentials, grouped
+  //    into CRM / HR / GRC dropdowns per the PO's requested layout.
+  const TEAM_MEMBER_NAV: NavItem[] = [
     { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
     { title: "My Profile", url: "/my/profile", icon: UserCog },
+     { title: "Time Manager", url: "/my/time", icon: Clock },
     {
       title: "My Team",
       url: "/my/team",
       icon: UsersRound,
       requiresRole: "manager",
     },
-    { title: "Clients", url: "/clients", icon: Users },
-    { title: "Projects", url: "/projects", icon: FolderKanban },
-    { title: "Cases", url: "/my/cases", icon: Scale },
-    { title: "Time", url: "/my/time", icon: Clock },
-    { title: "Leave", url: "/my/leave", icon: CalendarDays },
-    { title: "Performance", url: "/my/performance", icon: BarChart3 },
-    { title: "Payslips", url: "/my/payslips", icon: Wallet },
-    { title: "Requisitions", url: "/my/requisitions", icon: ClipboardList },
-    { title: "Service Desk", url: "/my/service-desk", icon: LifeBuoy },
-    { title: "Learning", url: "/my/learning", icon: GraduationCap },
-    { title: "Policies", url: "/my/policies", icon: ShieldCheck },
-    { title: "Audit Requests", url: "/my/audit-requests", icon: FileSearch },
-    { title: "Disputes", url: "/my/disputes", icon: ShieldAlert },
+    {
+      title: "CRM",
+      icon: TrendingUp,
+      children: [
+        { title: "Clients", url: "/clients" },
+        { title: "Projects", url: "/projects" },
+        { title: "Cases", url: "/my/cases" },
+        { title: "Service Desk", url: "/my/service-desk" },
+      ],
+    },
+    {
+      title: "HR",
+      icon: Briefcase,
+      children: [
+        { title: "Leave", url: "/my/leave" },
+        { title: "Performance", url: "/my/performance" },
+        { title: "Payslips", url: "/my/payslips" },
+        { title: "Learning", url: "/my/learning" },
+        { title: "Dispute", url: "/my/disputes" },
+        { title: "Requisition", url: "/my/requisitions" },
+      ],
+    },
+    {
+      title: "GRC",
+      icon: ShieldCheck,
+      children: [
+        { title: "Policies", url: "/my/policies" },
+        { title: "Audit", url: "/my/audit-requests" },
+      ],
+    },
     {
       title: "Team Disputes",
       url: "/my/team-disputes",
@@ -529,21 +547,70 @@ export function AppSidebar() {
                   (item) =>
                     !item.requiresRole ||
                     item.requiresRole === user?.hierarchyRole,
-                ).map((item) => (
-                  <SidebarMenuItem key={item.title + item.url}>
-                    <SidebarMenuButton asChild>
-                      <NavLink
-                        to={item.url}
-                        end={item.url === "/"}
-                        className="hover:bg-sidebar-accent/50 text-sidebar-foreground"
-                        activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                ).map((item) => {
+                  if (item.children && item.children.length > 0) {
+                    const isBranchActive = item.children.some((c) =>
+                      pathname.startsWith(c.url),
+                    );
+                    return (
+                      <Collapsible
+                        key={item.title}
+                        defaultOpen={isBranchActive}
+                        className="group/collapsible"
                       >
-                        <item.icon className="mr-2 h-4 w-4" />
-                        {!collapsed && <span>{item.title}</span>}
-                      </NavLink>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
+                        <SidebarMenuItem>
+                          <CollapsibleTrigger asChild>
+                            <SidebarMenuButton className="hover:bg-sidebar-accent/50 text-sidebar-foreground">
+                              <item.icon className="mr-2 h-4 w-4" />
+                              {!collapsed && (
+                                <>
+                                  <span className="flex-1 text-left">
+                                    {item.title}
+                                  </span>
+                                  <ChevronDown className="h-4 w-4 transition-transform group-data-[state=open]/collapsible:rotate-180" />
+                                </>
+                              )}
+                            </SidebarMenuButton>
+                          </CollapsibleTrigger>
+                          {!collapsed && (
+                            <CollapsibleContent>
+                              <SidebarMenuSub>
+                                {item.children.map((c) => (
+                                  <SidebarMenuSubItem key={c.url}>
+                                    <SidebarMenuSubButton asChild>
+                                      <NavLink
+                                        to={c.url}
+                                        className="hover:bg-sidebar-accent/50 text-sidebar-foreground"
+                                        activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                                      >
+                                        <span>{c.title}</span>
+                                      </NavLink>
+                                    </SidebarMenuSubButton>
+                                  </SidebarMenuSubItem>
+                                ))}
+                              </SidebarMenuSub>
+                            </CollapsibleContent>
+                          )}
+                        </SidebarMenuItem>
+                      </Collapsible>
+                    );
+                  }
+                  return (
+                    <SidebarMenuItem key={item.title + item.url}>
+                      <SidebarMenuButton asChild>
+                        <NavLink
+                          to={item.url!}
+                          end={item.url === "/"}
+                          className="hover:bg-sidebar-accent/50 text-sidebar-foreground"
+                          activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                        >
+                          <item.icon className="mr-2 h-4 w-4" />
+                          {!collapsed && <span>{item.title}</span>}
+                        </NavLink>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  );
+                })}
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
