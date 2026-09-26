@@ -452,6 +452,17 @@ export const createBoardMember = async (dto: {
 // The returned contract is still a draft at this point — call
 // sendContractForSignature (from @/lib/crm/tools-api) separately once
 // the tenant has reviewed/edited it, exactly like the client flow.
+//
+// NOTE on the response shape: BoardMemberService#createWithContract
+// (backend) already returns a full {success, message, data, member,
+// contract} object of its own, and the global TransformInterceptor
+// passes an object through unchanged whenever it already has a
+// `success` key — it does NOT nest it under another `data`. So the
+// axios response body IS this interface, with no further unwrapping,
+// exactly like AddClientWizard.tsx's own createClientWithContract
+// (which returns `res.data` directly, not `res.data?.data`). A
+// generic `res.data?.data ?? res.data` unwrap here would grab just
+// `data: {_id, email}` and silently drop `member`/`contract`.
 export interface CreateBoardMemberWithContractResponse {
   success: boolean;
   message: string;
@@ -493,7 +504,7 @@ export const createBoardMemberWithContract = async (dto: {
     "/grc/governance/board-members/create-with-contract",
     dto,
   );
-  return res.data?.data ?? res.data;
+  return res.data;
 };
 
 // Every appointment-letter contract ever generated for a board
