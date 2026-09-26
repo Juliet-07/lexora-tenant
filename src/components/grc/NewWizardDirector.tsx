@@ -146,9 +146,18 @@ export default function NewDirectorWizard({
   };
 
   // ── Step 2 — Select Contract ────────────────────────────────────
+  // moduleKey "grc" — NOT "governance": the platform template
+  // taxonomy (lexora-super-admin's TEMPLATE_MODULES) scopes templates
+  // by module ("grc") with areas underneath it ("compliance"/"risk"),
+  // and has no "governance" module or area at all. A template tagged
+  // for Board Management is published under GRC (super admins have
+  // been tagging it moduleKey "grc" areaKey "compliance" for lack of
+  // a dedicated area), so this queries by module only — every
+  // published GRC template, regardless of area — rather than a
+  // moduleKey that can never match anything.
   const { data: templates = [], isLoading: templatesLoading } = useQuery({
     queryKey: ["board-appointment-contract-templates"],
-    queryFn: () => fetchAvailableTemplates("governance"),
+    queryFn: () => fetchAvailableTemplates("grc"),
     enabled: step === 2,
   });
 
@@ -418,14 +427,9 @@ export default function NewDirectorWizard({
                 </div>
               ) : templates.length === 0 ? (
                 <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-                  No published contract templates are tagged for Governance yet.
-                  Ask your super admin to publish one under Contract Templates →
-                  Governance, or pick from any published template below.
-                  <div className="mt-3">
-                    <TemplateFallbackPicker
-                      onPick={(t) => setSelectedTemplate(t)}
-                    />
-                  </div>
+                  No published contract templates are tagged for GRC yet. Ask
+                  your super admin to publish one under Contract Templates → GRC
+                  before appointing a new director.
                 </div>
               ) : (
                 <div className="grid sm:grid-cols-2 gap-3">
@@ -677,44 +681,5 @@ export default function NewDirectorWizard({
         />
       )}
     </>
-  );
-}
-
-// If no template is tagged specifically for "governance", let the
-// tenant fall back to any published template rather than dead-ending
-// the wizard — same escape hatch a first-time tenant needs before
-// they've tagged/published anything module-specific yet.
-function TemplateFallbackPicker({
-  onPick,
-}: {
-  onPick: (t: AvailableTemplate) => void;
-}) {
-  const { data: all = [], isLoading } = useQuery({
-    queryKey: ["board-appointment-contract-templates-all"],
-    queryFn: () => fetchAvailableTemplates(),
-  });
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-4 text-muted-foreground">
-        <Loader2 className="h-4 w-4 animate-spin" />
-      </div>
-    );
-  }
-  if (all.length === 0) return null;
-  return (
-    <div className="grid sm:grid-cols-2 gap-2 text-left">
-      {all.map((t) => (
-        <button
-          key={t._id}
-          onClick={() => onPick(t)}
-          className="text-left p-3 rounded-lg border hover:border-primary/40 transition-colors"
-        >
-          <p className="text-sm font-medium truncate">{t.title}</p>
-          <p className="text-xs text-muted-foreground truncate">
-            {t.description || "No description"}
-          </p>
-        </button>
-      ))}
-    </div>
   );
 }
