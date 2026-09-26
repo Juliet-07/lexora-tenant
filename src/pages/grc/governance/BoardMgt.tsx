@@ -52,7 +52,6 @@ import {
 import { toast } from "@/hooks/use-toast";
 import {
   fetchBoardMembers,
-  createBoardMember,
   updateBoardMember,
   deleteBoardMember,
   recordConflict,
@@ -89,6 +88,7 @@ import {
   BoardSkill,
 } from "@/lib/grc/governance-api";
 import { SkillLevel } from "@/lib/grcGovernanceLocal";
+import NewDirectorWizard from "@/components/grc/NewWizardDirector";
 
 const ROLES: BoardMemberRole[] = [
   "Chair",
@@ -429,7 +429,11 @@ function BoardList({
         </Card>
       </div>
 
-      <NewDirectorDialog open={newOpen} onOpenChange={setNewOpen} />
+      <NewDirectorWizard
+        open={newOpen}
+        onClose={() => setNewOpen(false)}
+        onDone={() => setNewOpen(false)}
+      />
     </div>
   );
 }
@@ -449,174 +453,6 @@ function StatCard({ label, value, icon, tone }: any) {
         </div>
       </CardContent>
     </Card>
-  );
-}
-
-function NewDirectorDialog({ open, onOpenChange }: any) {
-  const queryClient = useQueryClient();
-  const [f, setF] = useState({
-    name: "",
-    role: "Non-Executive Director" as BoardMemberRole,
-    email: "",
-    appointedAt: new Date().toISOString().slice(0, 10),
-    termEnds: new Date(Date.now() + 730 * 86400000).toISOString().slice(0, 10),
-    bio: "",
-    nationality: "",
-    idNumber: "",
-    taxResidency: "",
-    otherDirectorships: "",
-  });
-
-  const mutation = useMutation({
-    mutationFn: () =>
-      createBoardMember({
-        ...f,
-        otherDirectorships: f.otherDirectorships
-          .split(/\n|,/)
-          .map((s) => s.trim())
-          .filter(Boolean),
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["grc-board-members"] });
-      toast({
-        title: "Director added",
-        description:
-          "Onboarding checklist created and a Lexora account has been provisioned for them.",
-      });
-      onOpenChange(false);
-    },
-    onError: (err: any) =>
-      toast({
-        title: "Failed to add director",
-        description: err?.response?.data?.message,
-        variant: "destructive",
-      }),
-  });
-
-  const submit = () => {
-    if (!f.name)
-      return toast({ title: "Name required", variant: "destructive" });
-    if (!f.email)
-      return toast({ title: "Email required", variant: "destructive" });
-    mutation.mutate();
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>New director</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <Label>Name</Label>
-              <Input
-                value={f.name}
-                onChange={(e) => setF({ ...f, name: e.target.value })}
-              />
-            </div>
-            <div>
-              <Label>Email</Label>
-              <Input
-                value={f.email}
-                onChange={(e) => setF({ ...f, email: e.target.value })}
-              />
-            </div>
-          </div>
-          <div>
-            <Label>Role</Label>
-            <Select
-              value={f.role}
-              onValueChange={(v) => setF({ ...f, role: v as BoardMemberRole })}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {ROLES.map((r) => (
-                  <SelectItem key={r} value={r}>
-                    {r}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <Label>Appointed</Label>
-              <Input
-                type="date"
-                value={f.appointedAt}
-                onChange={(e) => setF({ ...f, appointedAt: e.target.value })}
-              />
-            </div>
-            <div>
-              <Label>Term ends</Label>
-              <Input
-                type="date"
-                value={f.termEnds}
-                onChange={(e) => setF({ ...f, termEnds: e.target.value })}
-              />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <Label>Nationality</Label>
-              <Input
-                value={f.nationality}
-                onChange={(e) => setF({ ...f, nationality: e.target.value })}
-              />
-            </div>
-            <div>
-              <Label>National ID / Passport</Label>
-              <Input
-                value={f.idNumber}
-                onChange={(e) => setF({ ...f, idNumber: e.target.value })}
-              />
-            </div>
-          </div>
-          <div>
-            <Label>Tax residency</Label>
-            <Input
-              value={f.taxResidency}
-              onChange={(e) => setF({ ...f, taxResidency: e.target.value })}
-            />
-          </div>
-          <div>
-            <Label>Bio</Label>
-            <Textarea
-              rows={2}
-              value={f.bio}
-              onChange={(e) => setF({ ...f, bio: e.target.value })}
-            />
-          </div>
-          <div>
-            <Label>Other directorships (one per line)</Label>
-            <Textarea
-              rows={2}
-              value={f.otherDirectorships}
-              onChange={(e) =>
-                setF({ ...f, otherDirectorships: e.target.value })
-              }
-            />
-          </div>
-          <div className="bg-muted/50 border rounded-md p-3 text-xs text-muted-foreground leading-relaxed">
-            On save: an onboarding checklist is created, and a Lexora account is
-            provisioned for this director (temp password emailed to them —
-            sign-in via the dedicated board portal is coming separately).
-          </div>
-        </div>
-        <DialogFooter>
-          <Button onClick={submit} disabled={mutation.isPending}>
-            {mutation.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin mr-2" />
-            ) : null}
-            Save and start onboarding
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   );
 }
 
@@ -2297,11 +2133,24 @@ function CandidatesEditor({ member }: { member: BoardMember }) {
   );
 }
 
+const STAGE_LABELS: Record<string, string> = {
+  accept: "Accept",
+  "fit-proper": "Fit & Proper",
+  "sign-docs": "Sign docs",
+  training: "Training",
+  induction: "Induction",
+};
+
 function ChecklistEditor({
   items: itemsProp,
   onToggle,
 }: {
-  items: { label: string; done: boolean; completedAt: string | null }[];
+  items: {
+    label: string;
+    done: boolean;
+    completedAt: string | null;
+    stageId?: string | null;
+  }[];
   onToggle: (index: number) => Promise<any>;
 }) {
   // Pre-existing board members created before onboarding/offboarding
@@ -2326,24 +2175,51 @@ function ChecklistEditor({
       <div className="text-xs text-muted-foreground">
         {doneCount}/{items.length} complete
       </div>
-      {items.map((item, i) => (
-        <label
-          key={i}
-          className="flex items-start gap-2 text-sm border-b last:border-0 py-1.5 cursor-pointer"
-        >
-          <Checkbox
-            checked={item.done}
-            disabled={mutation.isPending}
-            onCheckedChange={() => mutation.mutate(i)}
-            className="mt-0.5"
-          />
-          <span
-            className={item.done ? "line-through text-muted-foreground" : ""}
+      {items.map((item, i) => {
+        // The "accept" stage item (appointment letter) is completed
+        // automatically once the director countersigns it — see
+        // board-member.service.ts#onAppointmentContractCountersigned.
+        // Never manually toggleable from either side.
+        const isAutoOnly = item.stageId === "accept";
+        return (
+          <label
+            key={i}
+            className={`flex items-start gap-2 text-sm border-b last:border-0 py-1.5 ${
+              isAutoOnly ? "" : "cursor-pointer"
+            }`}
           >
-            {item.label}
-          </span>
-        </label>
-      ))}
+            <Checkbox
+              checked={item.done}
+              disabled={mutation.isPending || isAutoOnly}
+              onCheckedChange={() => !isAutoOnly && mutation.mutate(i)}
+              className="mt-0.5"
+            />
+            <span className="flex-1">
+              <span
+                className={
+                  item.done ? "line-through text-muted-foreground" : ""
+                }
+              >
+                {item.label}
+              </span>
+              {item.stageId && STAGE_LABELS[item.stageId] && (
+                <Badge
+                  variant="outline"
+                  className="ml-2 text-[10px] font-medium text-muted-foreground align-middle"
+                >
+                  {STAGE_LABELS[item.stageId]}
+                </Badge>
+              )}
+              {isAutoOnly && !item.done && (
+                <span className="block text-[11px] text-muted-foreground mt-0.5">
+                  Completes automatically once the appointment letter is
+                  countersigned.
+                </span>
+              )}
+            </span>
+          </label>
+        );
+      })}
     </div>
   );
 }

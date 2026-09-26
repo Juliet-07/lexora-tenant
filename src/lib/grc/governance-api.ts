@@ -38,10 +38,18 @@ export interface TrainingRecord {
   expiresAt: string | null;
 }
 
+export type BoardOnboardingStageId =
+  | "accept"
+  | "fit-proper"
+  | "sign-docs"
+  | "training"
+  | "induction";
+
 export interface ChecklistItem {
   label: string;
   done: boolean;
   completedAt: string | null;
+  stageId?: BoardOnboardingStageId | null;
 }
 
 export type BoardDocumentCategory = "Governance Document" | "Regulatory Filing";
@@ -154,6 +162,7 @@ export interface BoardMember {
   successionPlan: SuccessionPlan | null;
   offboarding: OffboardingRecord | null;
   userId: string | null;
+  contractId: string | null;
 }
 
 export type CommitteeMemberRole = "Chair" | "Secretary" | "Member";
@@ -434,6 +443,68 @@ export const createBoardMember = async (dto: {
 }): Promise<BoardMember> => {
   const res = await api.post("/grc/governance/board-members", dto);
   return res.data?.data ?? res.data;
+};
+
+// Real, atomic appointment — creates the director's own login and
+// generates their appointment-letter contract together, the same
+// process the "Add Client" wizard uses (see
+// createClientWithContract in components/kyc/AddClientWizard.tsx).
+// The returned contract is still a draft at this point — call
+// sendContractForSignature (from @/lib/crm/tools-api) separately once
+// the tenant has reviewed/edited it, exactly like the client flow.
+export interface CreateBoardMemberWithContractResponse {
+  success: boolean;
+  message: string;
+  data: { _id: string; email: string };
+  member: BoardMember;
+  contract: import("@/lib/crm/tools-api").SignableContract;
+}
+
+export const createBoardMemberWithContract = async (dto: {
+  name: string;
+  role: BoardMemberRole;
+  email: string;
+  appointedAt: string;
+  termEnds: string;
+  bio?: string;
+  nationality?: string;
+  idNumber?: string;
+  taxResidency?: string;
+  otherDirectorships?: string[];
+  templateId: string;
+  templateSource: "platform" | "tenant";
+  contractTitle: string;
+  value?: number;
+  currency?: string;
+  scopeOfWork?: string;
+  tenantCompanyJurisdiction?: string;
+  clientJurisdiction?: string;
+  leadProfessionalName?: string;
+  leadProfessionalTitle?: string;
+  clientRepresentativeName?: string;
+  clientRepresentativeTitle?: string;
+  commencementDate?: string;
+  engagementDuration?: string;
+  tenantRegisteredAddress?: string;
+  clientRegisteredAddress?: string;
+  serviceCategory?: string;
+}): Promise<CreateBoardMemberWithContractResponse> => {
+  const res = await api.post(
+    "/grc/governance/board-members/create-with-contract",
+    dto,
+  );
+  return res.data?.data ?? res.data;
+};
+
+// Every appointment-letter contract ever generated for a board
+// member — the Board Management module's own equivalent of KYC
+// onboarding's Contracting tab.
+export const fetchBoardMemberOnboardingContracts = async (): Promise<
+  import("@/lib/crm/tools-api").SignableContract[]
+> => {
+  const res = await api.get("/grc/governance/board-members/contracts");
+  const d = res.data?.data ?? res.data;
+  return Array.isArray(d) ? d : [];
 };
 
 export const updateBoardMember = async (
