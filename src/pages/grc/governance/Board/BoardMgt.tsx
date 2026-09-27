@@ -33,7 +33,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  Plus,
   ShieldAlert,
   GraduationCap,
   ArrowRightLeft,
@@ -88,7 +87,6 @@ import {
   BoardSkill,
 } from "@/lib/grc/governance-api";
 import { SkillLevel } from "@/lib/grcGovernanceLocal";
-import NewDirectorWizard from "@/components/grc/NewWizardDirector";
 
 const ROLES: BoardMemberRole[] = [
   "Chair",
@@ -142,7 +140,6 @@ function termStatusTone(status: BoardMemberTermStatus): string {
 }
 
 export default function GrcBoardMgt() {
-  const [newOpen, setNewOpen] = useState(false);
   const [viewingId, setViewingId] = useState<string | null>(null);
 
   const { data: boardMembers = [], isLoading } = useQuery({
@@ -173,30 +170,25 @@ export default function GrcBoardMgt() {
     );
   }
 
-  return (
-    <BoardList
-      boardMembers={boardMembers}
-      onOpen={setViewingId}
-      newOpen={newOpen}
-      setNewOpen={setNewOpen}
-    />
-  );
+  return <BoardList boardMembers={boardMembers} onOpen={setViewingId} />;
 }
 
 // ─────────────────────────────────────────────────────────────────
 // LIST VIEW
 // ─────────────────────────────────────────────────────────────────
+//
+// Director creation now lives on the dedicated Board Onboarding page
+// (pages/grc/governance/BoardOnboarding.tsx), the same way "Add
+// Client" lives on Client Onboarding rather than on the main Clients
+// list — this page keeps its original purpose: the full board
+// registry plus composition/skills/succession oversight.
 
 function BoardList({
   boardMembers,
   onOpen,
-  newOpen,
-  setNewOpen,
 }: {
   boardMembers: BoardMember[];
   onOpen: (id: string) => void;
-  newOpen: boolean;
-  setNewOpen: (v: boolean) => void;
 }) {
   const today = new Date().toISOString().slice(0, 10);
   const termsSoon = boardMembers.filter(
@@ -238,10 +230,6 @@ function BoardList({
             training and onboarding/offboarding.
           </p>
         </div>
-        <Button onClick={() => setNewOpen(true)}>
-          <Plus className="h-4 w-4 mr-1" />
-          New director
-        </Button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
@@ -428,12 +416,6 @@ function BoardList({
           </CardContent>
         </Card>
       </div>
-
-      <NewDirectorWizard
-        open={newOpen}
-        onClose={() => setNewOpen(false)}
-        onDone={() => setNewOpen(false)}
-      />
     </div>
   );
 }

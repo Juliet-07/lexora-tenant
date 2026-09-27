@@ -175,6 +175,10 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
       adminOnly: true,
       children: [
         { title: "Organisation Structure", url: "/grc/governance/structure" },
+        {
+          title: "Board Onboarding",
+          url: "/grc/governance/board-onboarding",
+        },
         { title: "Board Management", url: "/grc/governance/board" },
         { title: "Committees", url: "/grc/governance/committees" },
         { title: "Meetings", url: "/grc/governance/meetings" },
@@ -459,7 +463,7 @@ export function AppSidebar() {
   const TEAM_MEMBER_NAV: NavItem[] = [
     { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
     { title: "My Profile", url: "/my/profile", icon: UserCog },
-     { title: "Time Manager", url: "/my/time", icon: Clock },
+    { title: "Time Manager", url: "/my/time", icon: Clock },
     {
       title: "My Team",
       url: "/my/team",

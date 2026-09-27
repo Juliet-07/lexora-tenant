@@ -429,6 +429,11 @@ export const fetchBoardMembers = async (): Promise<BoardMember[]> => {
   return Array.isArray(d) ? d : [];
 };
 
+export const fetchBoardMember = async (id: string): Promise<BoardMember> => {
+  const res = await api.get(`/grc/governance/board-members/${id}`);
+  return res.data?.data ?? res.data;
+};
+
 export const createBoardMember = async (dto: {
   name: string;
   role: BoardMemberRole;
@@ -514,6 +519,33 @@ export const fetchBoardMemberOnboardingContracts = async (): Promise<
   import("@/lib/crm/tools-api").SignableContract[]
 > => {
   const res = await api.get("/grc/governance/board-members/contracts");
+  const d = res.data?.data ?? res.data;
+  return Array.isArray(d) ? d : [];
+};
+
+// Board Onboarding monitoring page — mirrors fetchPendingApprovals /
+// fetchOnboardingInProgress for KYC clients (src/lib/kyc-api.ts).
+// "Awaiting appointment" = appointment contract not yet countersigned
+// (no board-portal account yet); "In progress" = account active,
+// still working through the fit-and-proper/docs/training/induction
+// checklist. Both hit the endpoints added alongside board-member
+// onboarding's other listing route (getAll/contracts).
+export const fetchBoardMembersAwaitingAppointment = async (): Promise<
+  BoardMember[]
+> => {
+  const res = await api.get(
+    "/grc/governance/board-members/onboarding/awaiting-appointment",
+  );
+  const d = res.data?.data ?? res.data;
+  return Array.isArray(d) ? d : [];
+};
+
+export const fetchBoardMembersOnboardingInProgress = async (): Promise<
+  BoardMember[]
+> => {
+  const res = await api.get(
+    "/grc/governance/board-members/onboarding/in-progress",
+  );
   const d = res.data?.data ?? res.data;
   return Array.isArray(d) ? d : [];
 };
