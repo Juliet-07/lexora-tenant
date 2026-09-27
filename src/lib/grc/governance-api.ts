@@ -62,6 +62,38 @@ export interface BoardDocument {
   uploadedAt: string;
   uploadedBy: string;
   signedAt: string | null;
+  // Snapshot of the BoardDocumentFolder's name this was filed under —
+  // "" means Uncategorized. See BoardDocumentFolder.
+  folder: string;
+}
+
+export interface BoardDocumentFolder {
+  _id: string;
+  name: string;
+}
+
+// A document the tenant has set up for this director to sign during
+// onboarding (Step 3) — a snapshot of a published GovernanceCode taken
+// at the moment it was assigned (see resolveDocumentsToSign on the
+// backend), not a live reference.
+export interface BoardSignableDocument {
+  _id: string;
+  title: string;
+  category: string;
+  sourceCodeId: string | null;
+  fileUrl: string | null;
+  version: number;
+}
+
+// One real file in a director's induction pack (Step 5) — how the
+// tenant actually sends the pack: uploading files here.
+export interface InductionPackItem {
+  _id: string;
+  name: string;
+  fileUrl: string | null;
+  mimeType: string | null;
+  size: number;
+  uploadedBy: string;
 }
 
 export interface CommitteeMembership {
@@ -158,6 +190,9 @@ export interface BoardMember {
   training: TrainingRecord[];
   skills: BoardSkill[];
   documents: BoardDocument[];
+  documentFolders: BoardDocumentFolder[];
+  documentsToSign: BoardSignableDocument[];
+  inductionPack: InductionPackItem[];
   onboardingChecklist: ChecklistItem[];
   successionPlan: SuccessionPlan | null;
   offboarding: OffboardingRecord | null;
@@ -313,7 +348,14 @@ export type GovernanceCodeCategory =
   | "Board Charter"
   | "Ethics"
   | "Other";
-export type GovernanceCodeStatus = "Draft" | "Published";
+// Internal review / Board / Committee approval are real, server-enforced
+// stages now (previously tracked only in browser localStorage) — the
+// strings match the tenant UI's existing Stage badges exactly.
+export type GovernanceCodeStatus =
+  | "Draft"
+  | "Internal review"
+  | "Board / Committee approval"
+  | "Published";
 
 export interface CodeAttachment {
   name: string;
@@ -321,6 +363,18 @@ export interface CodeAttachment {
   mimeType: string | null;
   size: number;
   uploadedAt: string;
+}
+
+export type CodeApprovalDecision = "Pending" | "Approved" | "Rejected";
+
+export interface CodeBoardApproval {
+  boardMemberId: string;
+  name: string;
+  email: string;
+  decision: CodeApprovalDecision;
+  notes: string;
+  decidedAt: string | null;
+  requestedAt: string;
 }
 
 export interface GovernanceCode {
@@ -331,7 +385,22 @@ export interface GovernanceCode {
   documents: CodeAttachment[];
   version: number;
   status: GovernanceCodeStatus;
+  templateId: string | null;
+  boardApprovals: CodeBoardApproval[];
   updatedAt: string;
+}
+
+export interface GovernanceCodeTemplateSection {
+  title: string;
+  content: string;
+}
+
+export interface GovernanceCodeTemplate {
+  _id: string;
+  title: string;
+  category: string;
+  description: string;
+  sections: GovernanceCodeTemplateSection[];
 }
 
 export type SkillCategory =
@@ -445,6 +514,7 @@ export const createBoardMember = async (dto: {
   idNumber?: string;
   taxResidency?: string;
   otherDirectorships?: string[];
+  documentIds?: string[];
 }): Promise<BoardMember> => {
   const res = await api.post("/grc/governance/board-members", dto);
   return res.data?.data ?? res.data;
@@ -487,6 +557,7 @@ export const createBoardMemberWithContract = async (dto: {
   idNumber?: string;
   taxResidency?: string;
   otherDirectorships?: string[];
+  documentIds?: string[];
   templateId: string;
   templateSource: "platform" | "tenant";
   contractTitle: string;
@@ -681,10 +752,12 @@ export const addBoardMemberDocument = async (
   id: string,
   file: File,
   category?: BoardDocumentCategory,
+  folder?: string,
 ): Promise<BoardMember> => {
   const form = new FormData();
   form.append("file", file);
   if (category) form.append("category", category);
+  if (folder) form.append("folder", folder);
   const res = await api.post(
     `/grc/governance/board-members/${id}/documents`,
     form,
@@ -698,6 +771,61 @@ export const removeBoardMemberDocument = async (
 ): Promise<BoardMember> => {
   const res = await api.delete(
     `/grc/governance/board-members/${id}/documents/${index}`,
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const addBoardDocumentFolder = async (
+  id: string,
+  name: string,
+): Promise<BoardMember> => {
+  const res = await api.post(
+    `/grc/governance/board-members/${id}/document-folders`,
+    { name },
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const removeBoardDocumentFolder = async (
+  id: string,
+  folderId: string,
+): Promise<BoardMember> => {
+  const res = await api.delete(
+    `/grc/governance/board-members/${id}/document-folders/${folderId}`,
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const setBoardMemberDocumentsToSign = async (
+  id: string,
+  documentIds: string[],
+): Promise<BoardMember> => {
+  const res = await api.patch(
+    `/grc/governance/board-members/${id}/documents-to-sign`,
+    { documentIds },
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const addBoardMemberInductionItem = async (
+  id: string,
+  file: File,
+): Promise<BoardMember> => {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await api.post(
+    `/grc/governance/board-members/${id}/induction-pack`,
+    form,
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const removeBoardMemberInductionItem = async (
+  id: string,
+  index: number,
+): Promise<BoardMember> => {
+  const res = await api.delete(
+    `/grc/governance/board-members/${id}/induction-pack/${index}`,
   );
   return res.data?.data ?? res.data;
 };
@@ -1040,9 +1168,23 @@ export const createGovernanceCode = async (dto: {
   title: string;
   category: GovernanceCodeCategory;
   body?: string;
+  templateId?: string;
 }): Promise<GovernanceCode> => {
   const res = await api.post("/grc/governance/codes", dto);
   return res.data?.data ?? res.data;
+};
+
+// Real, super-admin-managed templates (shared with Policies —
+// appliesTo scopes this fetch to the ones flagged for Governance
+// Codes) — replaces the old hardcoded local TEMPLATES list.
+export const fetchGovernanceCodeTemplates = async (): Promise<
+  GovernanceCodeTemplate[]
+> => {
+  const res = await api.get("/grc/compliance/policy-templates", {
+    params: { appliesTo: "Governance Code" },
+  });
+  const d = res.data?.data ?? res.data;
+  return Array.isArray(d) ? d : [];
 };
 
 export const updateCodeBody = async (
@@ -1075,6 +1217,23 @@ export const removeCodeDocument = async (
 
 export const publishCode = async (id: string): Promise<GovernanceCode> => {
   const res = await api.post(`/grc/governance/codes/${id}/publish`, {});
+  return res.data?.data ?? res.data;
+};
+
+export const sendCodeForReview = async (
+  id: string,
+): Promise<GovernanceCode> => {
+  const res = await api.post(`/grc/governance/codes/${id}/send-for-review`, {});
+  return res.data?.data ?? res.data;
+};
+
+export const sendCodeForBoardApproval = async (
+  id: string,
+): Promise<GovernanceCode> => {
+  const res = await api.post(
+    `/grc/governance/codes/${id}/send-for-board-approval`,
+    {},
+  );
   return res.data?.data ?? res.data;
 };
 

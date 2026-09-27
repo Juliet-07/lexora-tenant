@@ -47,6 +47,11 @@ import {
   Upload,
   Users,
   ClipboardList,
+  Folder,
+  FolderPlus,
+  FolderOpen,
+  Send,
+  Download,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import {
@@ -66,6 +71,12 @@ import {
   removeOtherDirectorship,
   addBoardMemberDocument,
   removeBoardMemberDocument,
+  addBoardDocumentFolder,
+  removeBoardDocumentFolder,
+  setBoardMemberDocumentsToSign,
+  addBoardMemberInductionItem,
+  removeBoardMemberInductionItem,
+  fetchGovernanceCodes,
   toggleOnboardingItem,
   initiateSuccession,
   updateSuccessionStage,
@@ -84,6 +95,7 @@ import {
   type BoardDocumentCategory,
   type SuccessionStageName,
   type SuccessionStageStatus,
+  type GovernanceCode,
   BoardSkill,
 } from "@/lib/grc/governance-api";
 import { SkillLevel } from "@/lib/grcGovernanceLocal";
@@ -1487,21 +1499,38 @@ function ConflictsTab({ member }: { member: BoardMember }) {
   );
 }
 
-// ── Documents tab ────────────────────────────────────────────────
+// ── Documents tab — folder-structured, mirrors AuditFolder's
+// tenant-created-folders pattern (see compliance's Audit engagement
+// document-request portal): folders are created up front, documents
+// are filed into one when uploaded, and a folder can't be removed
+// while it still has documents in it. ─────────────────────────────
+
+const UNCATEGORIZED = "__uncategorized__";
 
 function DocumentsTab({ member }: { member: BoardMember }) {
   // Same lean-read gap as elsewhere on this page.
   const documents = member.documents ?? [];
+  const folders = member.documentFolders ?? [];
   const queryClient = useQueryClient();
   const [category, setCategory] = useState<BoardDocumentCategory>(
     "Governance Document",
   );
+  const [activeFolder, setActiveFolder] = useState<string | null>(null); // null = folder grid; UNCATEGORIZED or a folder name otherwise
+  const [newFolderOpen, setNewFolderOpen] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: ["grc-board-members"] });
 
   const uploadMutation = useMutation({
     mutationFn: (file: File) =>
-      addBoardMemberDocument(member._id, file, category),
+      addBoardMemberDocument(
+        member._id,
+        file,
+        category,
+        activeFolder && activeFolder !== UNCATEGORIZED
+          ? activeFolder
+          : undefined,
+      ),
     onSuccess: () => {
       invalidate();
       toast({ title: "Document uploaded" });
@@ -1517,13 +1546,147 @@ function DocumentsTab({ member }: { member: BoardMember }) {
     mutationFn: (index: number) => removeBoardMemberDocument(member._id, index),
     onSuccess: invalidate,
   });
+  const addFolderMutation = useMutation({
+    mutationFn: (name: string) => addBoardDocumentFolder(member._id, name),
+    onSuccess: () => {
+      invalidate();
+      setNewFolderOpen(false);
+      setNewFolderName("");
+      toast({ title: "Folder created" });
+    },
+    onError: (err: any) =>
+      toast({
+        title: "Could not create folder",
+        description: err?.response?.data?.message,
+        variant: "destructive",
+      }),
+  });
+  const removeFolderMutation = useMutation({
+    mutationFn: (folderId: string) =>
+      removeBoardDocumentFolder(member._id, folderId),
+    onSuccess: () => {
+      invalidate();
+      toast({ title: "Folder removed" });
+    },
+    onError: (err: any) =>
+      toast({
+        title: "Could not remove folder",
+        description:
+          err?.response?.data?.message ??
+          "Move or delete the documents in it first.",
+        variant: "destructive",
+      }),
+  });
+
+  // ── Folder grid ──────────────────────────────────────────────
+  if (activeFolder === null) {
+    const uncategorizedCount = documents.filter((d) => !d.folder).length;
+    return (
+      <Card>
+        <CardHeader className="pb-2 flex-row items-center justify-between">
+          <CardTitle className="text-sm flex items-center gap-2">
+            <FileText className="h-4 w-4" />
+            Signed governance documents &amp; regulatory filings
+          </CardTitle>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setNewFolderOpen(true)}
+          >
+            <FolderPlus className="h-3.5 w-3.5 mr-1.5" /> New folder
+          </Button>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {folders.map((f) => {
+              const count = documents.filter((d) => d.folder === f.name).length;
+              return (
+                <div
+                  key={f._id}
+                  className="group relative rounded-lg border p-3 cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-colors"
+                  onClick={() => setActiveFolder(f.name)}
+                >
+                  <button
+                    className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      removeFolderMutation.mutate(f._id);
+                    }}
+                  >
+                    <Trash2 className="h-3 w-3 text-muted-foreground hover:text-destructive" />
+                  </button>
+                  <Folder className="h-6 w-6 text-primary mb-1.5" />
+                  <p className="text-sm font-medium truncate pr-4">{f.name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {count} document{count === 1 ? "" : "s"}
+                  </p>
+                </div>
+              );
+            })}
+            <div
+              className="rounded-lg border border-dashed p-3 cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-colors"
+              onClick={() => setActiveFolder(UNCATEGORIZED)}
+            >
+              <Folder className="h-6 w-6 text-muted-foreground mb-1.5" />
+              <p className="text-sm font-medium">Uncategorized</p>
+              <p className="text-xs text-muted-foreground">
+                {uncategorizedCount} document
+                {uncategorizedCount === 1 ? "" : "s"}
+              </p>
+            </div>
+          </div>
+        </CardContent>
+
+        <Dialog open={newFolderOpen} onOpenChange={setNewFolderOpen}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle>New folder</DialogTitle>
+            </DialogHeader>
+            <Input
+              value={newFolderName}
+              onChange={(e) => setNewFolderName(e.target.value)}
+              placeholder="e.g. Regulatory Filings 2026"
+              autoFocus
+            />
+            <DialogFooter>
+              <Button
+                disabled={!newFolderName.trim() || addFolderMutation.isPending}
+                onClick={() => addFolderMutation.mutate(newFolderName.trim())}
+              >
+                {addFolderMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : null}
+                Create
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </Card>
+    );
+  }
+
+  // ── Inside a folder ──────────────────────────────────────────
+  const folderLabel =
+    activeFolder === UNCATEGORIZED ? "Uncategorized" : activeFolder;
+  const folderDocuments = documents.filter((d) =>
+    activeFolder === UNCATEGORIZED ? !d.folder : d.folder === activeFolder,
+  );
 
   return (
     <Card>
       <CardHeader className="pb-2">
+        <button
+          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground mb-1"
+          onClick={() => setActiveFolder(null)}
+        >
+          <ArrowLeft className="h-3.5 w-3.5" /> All folders
+        </button>
         <CardTitle className="text-sm flex items-center gap-2">
-          <FileText className="h-4 w-4" />
-          Signed governance documents &amp; regulatory filings
+          <FolderOpen className="h-4 w-4" />
+          {folderLabel}
+          <Badge variant="outline" className="text-[10px] font-normal">
+            {folderDocuments.length}
+          </Badge>
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -1538,45 +1701,48 @@ function DocumentsTab({ member }: { member: BoardMember }) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {documents.map((d, i) => (
-              <TableRow key={i}>
-                <TableCell className="text-sm">
-                  {d.fileUrl ? (
-                    <a
-                      href={resolveGrcFileUrl(d.fileUrl)}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-primary underline"
-                    >
-                      {d.name}
-                    </a>
-                  ) : (
-                    d.name
-                  )}
-                </TableCell>
-                <TableCell>
-                  <Badge variant="outline" className="text-[10px]">
-                    {d.category}
-                  </Badge>
-                </TableCell>
-                <TableCell className="text-xs">{d.uploadedBy}</TableCell>
-                <TableCell className="text-xs">
-                  {new Date(d.uploadedAt).toLocaleDateString()}
-                </TableCell>
-                <TableCell>
-                  <button onClick={() => removeMutation.mutate(i)}>
-                    <Trash2 className="h-3 w-3 text-muted-foreground" />
-                  </button>
-                </TableCell>
-              </TableRow>
-            ))}
-            {documents.length === 0 && (
+            {folderDocuments.map((d) => {
+              const i = documents.indexOf(d);
+              return (
+                <TableRow key={i}>
+                  <TableCell className="text-sm">
+                    {d.fileUrl ? (
+                      <a
+                        href={resolveGrcFileUrl(d.fileUrl)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-primary underline"
+                      >
+                        {d.name}
+                      </a>
+                    ) : (
+                      d.name
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className="text-[10px]">
+                      {d.category}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-xs">{d.uploadedBy}</TableCell>
+                  <TableCell className="text-xs">
+                    {new Date(d.uploadedAt).toLocaleDateString()}
+                  </TableCell>
+                  <TableCell>
+                    <button onClick={() => removeMutation.mutate(i)}>
+                      <Trash2 className="h-3 w-3 text-muted-foreground" />
+                    </button>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+            {folderDocuments.length === 0 && (
               <TableRow>
                 <TableCell
                   colSpan={5}
                   className="text-center text-xs text-muted-foreground py-6"
                 >
-                  No documents uploaded.
+                  No documents in this folder yet.
                 </TableCell>
               </TableRow>
             )}
@@ -1618,7 +1784,7 @@ function DocumentsTab({ member }: { member: BoardMember }) {
               ) : (
                 <Upload className="h-3 w-3" />
               )}
-              Upload document
+              Upload to {folderLabel}
             </span>
           </label>
         </div>
@@ -2223,6 +2389,9 @@ function OnboardingOffboardingTab({ member }: { member: BoardMember }) {
         </CardContent>
       </Card>
 
+      <DocumentsToSignCard member={member} />
+      <InductionPackCard member={member} />
+
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-sm">Director offboarding</CardTitle>
@@ -2262,5 +2431,232 @@ function OnboardingOffboardingTab({ member }: { member: BoardMember }) {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+// ── Documents to sign ────────────────────────────────────────────
+// How the tenant sets up the Board Charter / Code of Conduct for this
+// director to sign in Step 3 of onboarding: pick from the tenant's own
+// published Governance Codes (see Codes.tsx). A snapshot of each pick
+// is stored on the member (BoardSignableDocument) so a later edit to
+// the source code never rewrites what the director already saw.
+
+function DocumentsToSignCard({ member }: { member: BoardMember }) {
+  const queryClient = useQueryClient();
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [selected, setSelected] = useState<string[]>([]);
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: ["grc-board-members"] });
+
+  const { data: codes = [] } = useQuery({
+    queryKey: ["grc-gov-codes"],
+    queryFn: fetchGovernanceCodes,
+    enabled: pickerOpen,
+  });
+  const publishedCodes = codes.filter(
+    (c: GovernanceCode) => c.status === "Published" && c.documents.length > 0,
+  );
+
+  const setMutation = useMutation({
+    mutationFn: (documentIds: string[]) =>
+      setBoardMemberDocumentsToSign(member._id, documentIds),
+    onSuccess: () => {
+      invalidate();
+      setPickerOpen(false);
+      toast({ title: "Documents to sign updated" });
+    },
+    onError: (err: any) =>
+      toast({
+        title: "Could not update documents to sign",
+        description: err?.response?.data?.message,
+        variant: "destructive",
+      }),
+  });
+
+  const openPicker = () => {
+    setSelected(
+      (member.documentsToSign ?? [])
+        .map((d) => d.sourceCodeId)
+        .filter((id): id is string => !!id),
+    );
+    setPickerOpen(true);
+  };
+
+  return (
+    <Card>
+      <CardHeader className="pb-2 flex-row items-center justify-between">
+        <CardTitle className="text-sm">Documents to sign</CardTitle>
+        <Button size="sm" variant="outline" onClick={openPicker}>
+          <FileText className="h-3.5 w-3.5 mr-1.5" /> Set up
+        </Button>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {member.documentsToSign?.length ? (
+          member.documentsToSign.map((d) => (
+            <div
+              key={d._id}
+              className="flex items-center justify-between rounded-lg border p-2.5 text-sm"
+            >
+              <span className="flex items-center gap-2">
+                <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+                {d.title}
+              </span>
+              <Badge variant="outline" className="text-[10px]">
+                {d.category}
+              </Badge>
+            </div>
+          ))
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            Nothing set up yet — {member.name} will see no documents to sign in
+            Step 3 of their onboarding until you set some up from your published
+            Governance Codes.
+          </p>
+        )}
+      </CardContent>
+
+      <Dialog open={pickerOpen} onOpenChange={setPickerOpen}>
+        <DialogContent className="max-w-md max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Documents for {member.name} to sign</DialogTitle>
+          </DialogHeader>
+          <p className="text-xs text-muted-foreground">
+            Only published Governance Codes with at least one attached file can
+            be assigned. Publish one from Governance → Codes first if you don't
+            see it here.
+          </p>
+          <div className="space-y-2">
+            {publishedCodes.map((c: GovernanceCode) => (
+              <label
+                key={c._id}
+                className="flex items-center gap-2.5 rounded-lg border p-2.5 text-sm cursor-pointer hover:bg-muted/40"
+              >
+                <Checkbox
+                  checked={selected.includes(c._id)}
+                  onCheckedChange={(v) =>
+                    setSelected((s) =>
+                      v ? [...s, c._id] : s.filter((id) => id !== c._id),
+                    )
+                  }
+                />
+                <span className="flex-1">{c.title}</span>
+                <Badge variant="outline" className="text-[10px]">
+                  {c.category}
+                </Badge>
+              </label>
+            ))}
+            {publishedCodes.length === 0 && (
+              <p className="text-xs text-muted-foreground text-center py-6">
+                No published Governance Codes with an attached file yet.
+              </p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              disabled={setMutation.isPending}
+              onClick={() => setMutation.mutate(selected)}
+            >
+              {setMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : null}
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </Card>
+  );
+}
+
+// ── Induction pack ───────────────────────────────────────────────
+// Answers "how does the tenant send the induction pack": by uploading
+// the real files here. They appear to the director in the board
+// portal's Step 5 as soon as they're uploaded — no separate "send"
+// action needed, and nothing stops the tenant adding more later.
+
+function InductionPackCard({ member }: { member: BoardMember }) {
+  const queryClient = useQueryClient();
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: ["grc-board-members"] });
+
+  const uploadMutation = useMutation({
+    mutationFn: (file: File) => addBoardMemberInductionItem(member._id, file),
+    onSuccess: () => {
+      invalidate();
+      toast({ title: "Added to induction pack" });
+    },
+    onError: (err: any) =>
+      toast({
+        title: "Failed to upload",
+        description: err?.response?.data?.message,
+        variant: "destructive",
+      }),
+  });
+  const removeMutation = useMutation({
+    mutationFn: (index: number) =>
+      removeBoardMemberInductionItem(member._id, index),
+    onSuccess: invalidate,
+  });
+
+  return (
+    <Card>
+      <CardHeader className="pb-2 flex-row items-center justify-between">
+        <CardTitle className="text-sm">Induction pack</CardTitle>
+        <label>
+          <input
+            type="file"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) uploadMutation.mutate(file);
+              e.target.value = "";
+            }}
+          />
+          <span className="inline-flex items-center gap-1.5 text-xs border rounded px-3 py-1.5 cursor-pointer hover:bg-muted/50">
+            {uploadMutation.isPending ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <Send className="h-3 w-3" />
+            )}
+            Send document
+          </span>
+        </label>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {member.inductionPack?.length ? (
+          member.inductionPack.map((item, i) => (
+            <div
+              key={item._id}
+              className="flex items-center justify-between rounded-lg border p-2.5 text-sm"
+            >
+              <span className="flex items-center gap-2 min-w-0">
+                <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                {item.fileUrl ? (
+                  <a
+                    href={resolveGrcFileUrl(item.fileUrl)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-primary underline truncate"
+                  >
+                    {item.name}
+                  </a>
+                ) : (
+                  <span className="truncate">{item.name}</span>
+                )}
+              </span>
+              <button onClick={() => removeMutation.mutate(i)}>
+                <Trash2 className="h-3 w-3 text-muted-foreground shrink-0" />
+              </button>
+            </div>
+          ))
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            Nothing sent yet — {member.name} will see an empty induction pack in
+            Step 5 until you send documents here (strategy docs, latest
+            financials, org chart, key policies, etc).
+          </p>
+        )}
+      </CardContent>
+    </Card>
   );
 }

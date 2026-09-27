@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -41,7 +42,9 @@ import {
 } from "@/lib/crm/tools-api";
 import {
   createBoardMemberWithContract,
+  fetchGovernanceCodes,
   type BoardMemberRole,
+  type GovernanceCode,
 } from "@/lib/grc/governance-api";
 
 // ─────────────────────────────────────────────────────────────
@@ -102,6 +105,7 @@ export default function NewDirectorWizard({
     taxResidency: "",
     otherDirectorships: "",
   });
+  const [documentIds, setDocumentIds] = useState<string[]>([]);
   const [selectedTemplate, setSelectedTemplate] =
     useState<AvailableTemplate | null>(null);
   const [contractValue, setContractValue] = useState("");
@@ -125,6 +129,7 @@ export default function NewDirectorWizard({
       taxResidency: "",
       otherDirectorships: "",
     });
+    setDocumentIds([]);
     setSelectedTemplate(null);
     setContractValue("");
     setContractCurrency("USD");
@@ -161,6 +166,20 @@ export default function NewDirectorWizard({
     enabled: step === 2,
   });
 
+  // Published Governance Codes the tenant can hand this director to
+  // sign during onboarding (Step 3 there) — see
+  // BoardMemberService.resolveDocumentsToSign. Only codes with at
+  // least one attached file are offered; a code with no file has
+  // nothing for the director to actually view and sign.
+  const { data: governanceCodes = [] } = useQuery({
+    queryKey: ["grc-gov-codes"],
+    queryFn: fetchGovernanceCodes,
+    enabled: step === 1,
+  });
+  const signableCodes = governanceCodes.filter(
+    (c: GovernanceCode) => c.status === "Published" && c.documents.length > 0,
+  );
+
   // Real, atomic call — creates the director's login and generates
   // their appointment-letter contract together. See
   // BoardMemberService#createWithContract for why this can never
@@ -184,6 +203,7 @@ export default function NewDirectorWizard({
           .split(/\n|,/)
           .map((s) => s.trim())
           .filter(Boolean),
+        documentIds,
         templateId: selectedTemplate._id,
         templateSource: "platform",
         contractTitle: `${selectedTemplate.title} — ${form.name}`,
@@ -399,6 +419,47 @@ export default function NewDirectorWizard({
                     setForm({ ...form, otherDirectorships: e.target.value })
                   }
                 />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Documents for them to sign during onboarding</Label>
+                {signableCodes.length === 0 ? (
+                  <p className="text-xs text-muted-foreground rounded-lg border border-dashed p-2.5">
+                    No published Governance Codes with an attached file yet.
+                    Publish your Board Charter / Code of Conduct under
+                    Governance → Codes first, or set this up later from Board
+                    Management.
+                  </p>
+                ) : (
+                  <div className="space-y-1.5 max-h-36 overflow-y-auto">
+                    {signableCodes.map((c: GovernanceCode) => (
+                      <label
+                        key={c._id}
+                        className="flex items-center gap-2.5 rounded-lg border p-2 text-sm cursor-pointer hover:bg-muted/40"
+                      >
+                        <Checkbox
+                          checked={documentIds.includes(c._id)}
+                          onCheckedChange={(v) =>
+                            setDocumentIds((ids) =>
+                              v
+                                ? [...ids, c._id]
+                                : ids.filter((id) => id !== c._id),
+                            )
+                          }
+                        />
+                        <span className="flex-1">{c.title}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {c.category}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Selected documents will be available for{" "}
+                  {form.name || "the director"} to review and sign in their
+                  onboarding portal. You can change this any time from Board
+                  Management.
+                </p>
               </div>
               <p className="text-xs text-muted-foreground">
                 Next, you'll pick an appointment contract for{" "}
