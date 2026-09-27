@@ -1,448 +1,102 @@
-import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Card, CardContent } from "@/components/ui/card";
+import { useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ArrowLeft, CalendarDays, CheckCircle2, ClipboardList, FileText, Loader2, Plus, Trash2, Users2 } from "lucide-react";
+import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Plus, Users2, Trash2, CheckCircle2, Loader2 } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Progress } from "@/components/ui/progress";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
+import { usePersistentState } from "@/lib/grc/usePersistentState";
 import {
-  fetchCommittees,
-  createCommittee,
-  addCommitteeMember,
-  removeCommitteeMember,
-  addCommitteeTask,
-  updateCommitteeTaskStatus,
-  type Committee,
-  type CommitteeMemberRole,
-  type CommitteeTaskStatus,
+  addCommitteeMember, addCommitteeTask, createCommittee, fetchCommittees, fetchGovernanceCodes,
+  fetchMeetings, removeCommitteeMember, updateCommitteeTaskStatus,
+  type Committee, type CommitteeMemberRole, type CommitteeTaskStatus,
 } from "@/lib/grc/governance-api";
 
+type Details = { cadence: string; quorum: string; charter: string; nextMeeting: string; taskSources: Record<string, string> };
+const defaults: Details = { cadence: "Quarterly", quorum: "Majority of voting members", charter: "", nextMeeting: "", taskSources: {} };
+const demoSeed: Committee[] = [
+  { _id: "demo_audit", name: "Audit Committee", purpose: "Oversees financial reporting, internal controls, external audit and assurance.", chair: "Naledi Mokoena", members: [
+    { name: "Naledi Mokoena", email: "naledi@example.com", role: "Chair" }, { name: "Mkhululi Ndlovu", email: "mkhululi@example.com", role: "Member" }, { name: "James Karenzi", email: "james@example.com", role: "Secretary" },
+  ], tasks: [
+    { title: "Review Q2 internal audit findings", owner: "Naledi Mokoena", dueDate: "2026-09-30", status: "In Progress" },
+    { title: "Assess external auditor independence", owner: "Company Secretary", dueDate: "2026-10-10", status: "Open" },
+    { title: "Review audit management letter", owner: "Naledi Mokoena", dueDate: "2026-08-15", status: "Done" },
+  ] },
+  { _id: "demo_risk", name: "Risk Committee", purpose: "Oversees the risk framework, appetite, controls and emerging risks.", chair: "Eric Nsabimana", members: [{ name: "Eric Nsabimana", email: "eric@example.com", role: "Chair" }, { name: "Grace Kamau", email: "grace@example.com", role: "Member" }], tasks: [{ title: "Review enterprise risk register", owner: "Eric Nsabimana", dueDate: "2026-10-20", status: "In Progress" }] },
+  { _id: "demo_nomination", name: "Nomination Committee", purpose: "Leads board composition, appointments and succession planning.", chair: "Upendo Mbeki", members: [{ name: "Upendo Mbeki", email: "upendo@example.com", role: "Chair" }], tasks: [{ title: "Review board succession pipeline", owner: "Upendo Mbeki", dueDate: "2026-10-05", status: "Open" }] },
+  { _id: "demo_esg", name: "ESG Committee", purpose: "Guides environmental, social and governance priorities and reporting.", chair: "Grace Kamau", members: [{ name: "Grace Kamau", email: "grace@example.com", role: "Chair" }], tasks: [] },
+];
+const demoDetails: Record<string, Details> = {
+  demo_audit: { ...defaults, charter: "Audit Committee Charter", taskSources: { "Review Q2 internal audit findings": "Q2 Board meeting", "Assess external auditor independence": "Annual cycle", "Review audit management letter": "Annual cycle" } },
+  demo_risk: { ...defaults, charter: "Risk Committee Charter" },
+  demo_nomination: { ...defaults, cadence: "Bi-annually & as needed", charter: "Board Charter" },
+  demo_esg: { ...defaults, charter: "" },
+};
+const shortDate = (value?: string) => value ? new Date(value).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "Not scheduled";
+const percentage = (c: Committee) => c.tasks.length ? Math.round(c.tasks.filter(t => t.status === "Done").length / c.tasks.length * 100) : 0;
+
 export default function GrcCommittees() {
+  const qc = useQueryClient();
+  const { data: apiCommittees = [], isLoading, isError } = useQuery({ queryKey: ["grc-committees"], queryFn: fetchCommittees, retry: 1 });
+  const { data: meetings = [] } = useQuery({ queryKey: ["grc-meetings"], queryFn: fetchMeetings, retry: 1 });
+  const { data: codes = [] } = useQuery({ queryKey: ["grc-gov-codes"], queryFn: fetchGovernanceCodes, retry: 1 });
+  const [demoCommittees, setDemoCommittees] = usePersistentState<Committee[]>("grc_committee_demo_v1", demoSeed);
+  const [metadata, setMetadata] = usePersistentState<Record<string, Details>>("grc_committee_details_v1", demoDetails);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [newOpen, setNewOpen] = useState(false);
-  const [selected, setSelected] = useState<Committee | null>(null);
+  const [createForm, setCreateForm] = useState({ name: "", purpose: "", cadence: "Quarterly", quorum: "Majority of voting members", charter: "" });
+  const [member, setMember] = useState<{ name: string; email: string; role: CommitteeMemberRole }>({ name: "", email: "", role: "Member" });
+  const [task, setTask] = useState({ title: "", owner: "", dueDate: "", source: "" });
+  const [editing, setEditing] = useState(false);
+  const isDemo = apiCommittees.length === 0;
+  const committees = isDemo ? demoCommittees : apiCommittees;
+  const selected = committees.find(c => c._id === selectedId);
+  const details = selected ? metadata[selected._id] ?? defaults : defaults;
+  const relatedMeetings = useMemo(() => selected ? meetings.filter(m => m.committeeId === selected._id || (isDemo && m.type === "Committee" && m.title.toLowerCase().includes(selected.name.split(" ")[0].toLowerCase()))).sort((a,b) => b.date.localeCompare(a.date)) : [], [meetings, selected, isDemo]);
+  const nextDate = selected ? relatedMeetings.filter(m => new Date(m.date).getTime() >= Date.now()).sort((a,b) => a.date.localeCompare(b.date))[0]?.date ?? details.nextMeeting : "";
+  const updateDetails = (id: string, change: Partial<Details>) => setMetadata(prev => ({ ...prev, [id]: { ...(prev[id] ?? defaults), ...change } }));
+  const updateDemo = (id: string, fn: (c: Committee) => Committee) => setDemoCommittees(prev => prev.map(c => c._id === id ? fn(c) : c));
+  const invalidate = () => qc.invalidateQueries({ queryKey: ["grc-committees"] });
+  const failure = (error: unknown) => toast({ title: "Could not save committee change", description: error instanceof Error ? error.message : "Please try again.", variant: "destructive" });
+  const create = useMutation({ mutationFn: () => createCommittee({ name: createForm.name.trim(), purpose: createForm.purpose.trim() }), onSuccess: c => { updateDetails(c._id, { cadence: createForm.cadence, quorum: createForm.quorum, charter: createForm.charter }); invalidate(); setSelectedId(c._id); setNewOpen(false); setCreateForm({ name: "", purpose: "", cadence: "Quarterly", quorum: defaults.quorum, charter: "" }); toast({ title: "Committee created" }); }, onError: failure });
+  const addMember = useMutation({ mutationFn: () => addCommitteeMember(selected?._id ?? "", member), onSuccess: () => { invalidate(); setMember({ name: "", email: "", role: "Member" }); toast({ title: "Member added" }); }, onError: failure });
+  const removeMember = useMutation({ mutationFn: (index: number) => removeCommitteeMember(selected?._id ?? "", index), onSuccess: invalidate, onError: failure });
+  const addTask = useMutation({ mutationFn: () => addCommitteeTask(selected?._id ?? "", { title: task.title.trim(), owner: task.owner.trim(), dueDate: task.dueDate }), onSuccess: () => { if (selected) updateDetails(selected._id, { taskSources: { ...details.taskSources, [task.title.trim()]: task.source.trim() } }); invalidate(); setTask({ title: "", owner: "", dueDate: "", source: "" }); toast({ title: "Task added" }); }, onError: failure });
+  const setStatus = useMutation({ mutationFn: ({ index, status }: { index: number; status: CommitteeTaskStatus }) => updateCommitteeTaskStatus(selected?._id ?? "", index, status), onSuccess: invalidate, onError: failure });
+  const submitMember = () => { if (!selected || !member.name.trim() || !/^\S+@\S+\.\S+$/.test(member.email)) return toast({ title: "Enter a name and valid email", variant: "destructive" }); if (isDemo) { updateDemo(selected._id, c => ({ ...c, chair: member.role === "Chair" ? member.name : c.chair, members: [...c.members, member] })); setMember({ name: "", email: "", role: "Member" }); } else addMember.mutate(); };
+  const submitTask = () => { if (!selected || !task.title.trim() || !task.owner.trim() || !task.dueDate) return toast({ title: "Task, owner and due date required", variant: "destructive" }); if (isDemo) { updateDemo(selected._id, c => ({ ...c, tasks: [...c.tasks, { title: task.title.trim(), owner: task.owner.trim(), dueDate: task.dueDate, status: "Open" }] })); updateDetails(selected._id, { taskSources: { ...details.taskSources, [task.title.trim()]: task.source.trim() } }); setTask({ title: "", owner: "", dueDate: "", source: "" }); } else addTask.mutate(); };
+  const submitCreate = () => { if (!createForm.name.trim()) return toast({ title: "Committee name required", variant: "destructive" }); if (isDemo && !isError) { const id = `demo_${Date.now()}`; setDemoCommittees(prev => [...prev, { _id: id, name: createForm.name.trim(), purpose: createForm.purpose.trim(), chair: null, members: [], tasks: [] }]); updateDetails(id, { cadence: createForm.cadence, quorum: createForm.quorum, charter: createForm.charter }); setSelectedId(id); setNewOpen(false); } else create.mutate(); };
+  const meetingCount = (id: string) => meetings.filter(m => m.committeeId === id && m.status === "Held").length;
+  const completed = committees.reduce((n,c) => n + c.tasks.filter(t => t.status === "Done").length, 0);
+  const total = committees.reduce((n,c) => n + c.tasks.length, 0);
 
-  const { data: committees = [], isLoading } = useQuery({
-    queryKey: ["grc-committees"],
-    queryFn: fetchCommittees,
-  });
-
-  const selectedLive = selected
-    ? (committees.find((c) => c._id === selected._id) ?? selected)
-    : null;
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-24 gap-2 text-muted-foreground">
-        <Loader2 className="h-5 w-5 animate-spin" />
-        <span className="text-sm">Loading committees…</span>
+  if (isLoading) return <div className="flex items-center justify-center gap-2 py-24 text-muted-foreground"><Loader2 className="h-5 w-5 animate-spin" />Loading committees…</div>;
+  return <div className="space-y-6">
+    {selected ? <>
+      <Button variant="ghost" size="sm" onClick={() => { setSelectedId(null); setEditing(false); }}><ArrowLeft className="mr-2 h-4 w-4" />Back to Committees</Button>
+      <div className="flex flex-wrap items-start justify-between gap-4"><div className="space-y-2"><Badge variant={details.charter ? "secondary" : "outline"}>{details.charter ? "On track" : "Charter pending"}</Badge><h1 className="text-2xl font-bold">{selected.name}</h1><p className="text-sm text-muted-foreground">{selected.purpose || "No mandate description yet."}</p></div><div className="flex gap-2"><Button variant="outline" asChild><Link to="/grc/governance/codes"><FileText className="mr-2 h-4 w-4" />Governance codes</Link></Button><Button onClick={() => document.getElementById("committee-task-title")?.focus()}><Plus className="mr-2 h-4 w-4" />Add task</Button></div></div>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <section className="space-y-3"><h2 className="font-semibold">Members <span className="text-muted-foreground font-normal">({selected.members.length})</span></h2><div className="rounded-md border bg-card divide-y">{selected.members.map((m,i) => <div key={`${m.email}-${i}`} className="flex items-center gap-3 p-3"><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent text-accent-foreground text-xs font-semibold">{m.name.split(" ").map(w => w[0]).slice(0,2).join("")}</div><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><span className="font-medium text-sm">{m.name}</span><Badge variant="outline">{m.role}</Badge></div><p className="truncate text-xs text-muted-foreground">{m.email}</p></div><Button variant="ghost" size="icon" aria-label={`Remove ${m.name}`} title="Remove member" disabled={removeMember.isPending} onClick={() => { if (isDemo) updateDemo(selected._id, c => { const members = c.members.filter((_,j) => j !== i); return { ...c, members, chair: members.find(x => x.role === "Chair")?.name ?? null }; }); else removeMember.mutate(i); }}><Trash2 className="h-4 w-4" /></Button></div>)}{!selected.members.length && <p className="p-4 text-sm text-muted-foreground">No members yet.</p>}</div><div className="grid gap-2 sm:grid-cols-[1fr_1fr_120px_auto]"><Input aria-label="Member name" placeholder="Name" value={member.name} onChange={e => setMember({ ...member, name: e.target.value })} /><Input aria-label="Member email" type="email" placeholder="Email" value={member.email} onChange={e => setMember({ ...member, email: e.target.value })} /><Select value={member.role} onValueChange={v => setMember({ ...member, role: v as CommitteeMemberRole })}><SelectTrigger aria-label="Member role"><SelectValue /></SelectTrigger><SelectContent>{["Chair", "Secretary", "Member"].map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent></Select><Button variant="outline" disabled={addMember.isPending} onClick={submitMember}><Plus className="mr-1 h-4 w-4" />Add</Button></div></section>
+        <section className="space-y-3"><div className="flex items-center justify-between"><h2 className="font-semibold">Committee details</h2><Button variant="ghost" size="sm" onClick={() => setEditing(v => !v)}>{editing ? "Done" : "Edit details"}</Button></div><div className="rounded-md border bg-card p-4 space-y-3 text-sm">{editing ? <><div><Label>Mandate / linked charter</Label><Input value={details.charter} onChange={e => updateDetails(selected._id, { charter: e.target.value })} placeholder="e.g. Audit Committee Charter" /></div><div><Label>Meeting cadence</Label><Select value={details.cadence} onValueChange={v => updateDetails(selected._id, { cadence: v })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["Monthly", "Quarterly", "Bi-annually", "Annually", "Bi-annually & as needed", "As needed"].map(v => <SelectItem key={v} value={v}>{v}</SelectItem>)}</SelectContent></Select></div><div><Label>Quorum</Label><Input value={details.quorum} onChange={e => updateDetails(selected._id, { quorum: e.target.value })} /></div><div><Label>Next meeting (if not linked)</Label><Input type="date" value={details.nextMeeting} onChange={e => updateDetails(selected._id, { nextMeeting: e.target.value })} /></div><p className="text-xs text-muted-foreground">These details are saved as demo data until supported by the committee service.</p></> : <><Detail label="Mandate" value={details.charter || "Charter not linked"} /><Detail label="Cadence" value={details.cadence} /><Detail label="Quorum" value={details.quorum} /><Detail label="Next meeting" value={shortDate(nextDate)} /><Detail label="Meetings held YTD" value={String(meetingCount(selected._id))} /></>}</div></section>
       </div>
-    );
-  }
-
-  return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-start flex-wrap gap-2">
-        <div>
-          <h1 className="text-2xl font-bold">Committees</h1>
-          <p className="text-sm text-muted-foreground">
-            Compose committees, assign members, track responsibilities and
-            tasks.
-          </p>
-        </div>
-        <Button onClick={() => setNewOpen(true)}>
-          <Plus className="h-4 w-4 mr-1" />
-          New committee
-        </Button>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {committees.map((c) => (
-          <Card
-            key={c._id}
-            className="cursor-pointer hover:shadow-md transition"
-            onClick={() => setSelected(c)}
-          >
-            <CardContent className="p-4 space-y-2">
-              <div className="flex justify-between items-start">
-                <div className="font-semibold">{c.name}</div>
-                <Badge variant="outline">
-                  <Users2 className="h-3 w-3 mr-1" />
-                  {c.members.length}
-                </Badge>
-              </div>
-              <div className="text-xs text-muted-foreground">
-                Chair: {c.chair ?? "Not yet assigned"}
-              </div>
-              <p className="text-sm text-muted-foreground line-clamp-2">
-                {c.purpose}
-              </p>
-              <div className="text-xs flex gap-2">
-                <Badge variant="secondary">
-                  {c.tasks.filter((t) => t.status !== "Done").length} open tasks
-                </Badge>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-        {committees.length === 0 && (
-          <p className="col-span-2 text-center text-sm text-muted-foreground py-8">
-            No committees yet.
-          </p>
-        )}
-      </div>
-
-      <NewCommitteeDialog open={newOpen} onOpenChange={setNewOpen} />
-      <CommitteeSheet
-        committee={selectedLive}
-        onClose={() => setSelected(null)}
-      />
-    </div>
-  );
+      <section className="space-y-3"><h2 className="font-semibold">Tasks & responsibilities</h2><div className="overflow-x-auto rounded-md border bg-card"><Table><TableHeader><TableRow><TableHead>Task</TableHead><TableHead>Owner</TableHead><TableHead>Due</TableHead><TableHead>Status</TableHead><TableHead>Source</TableHead></TableRow></TableHeader><TableBody>{selected.tasks.map((t,i) => <TableRow key={`${t.title}-${i}`}><TableCell className={t.status === "Done" ? "line-through text-muted-foreground" : "font-medium"}>{t.title}</TableCell><TableCell>{t.owner}</TableCell><TableCell>{shortDate(t.dueDate)}</TableCell><TableCell><Select value={t.status} onValueChange={v => { if (isDemo) updateDemo(selected._id, c => ({ ...c, tasks: c.tasks.map((task,j) => j === i ? { ...task, status: v as CommitteeTaskStatus } : task) })); else setStatus.mutate({ index: i, status: v as CommitteeTaskStatus }); }}><SelectTrigger className="w-32 h-8" aria-label={`Status for ${t.title}`}><SelectValue /></SelectTrigger><SelectContent>{["Open", "In Progress", "Done"].map(v => <SelectItem key={v} value={v}>{v}</SelectItem>)}</SelectContent></Select></TableCell><TableCell className="text-muted-foreground">{details.taskSources[t.title] || "Committee"}</TableCell></TableRow>)}{!selected.tasks.length && <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground">No tasks yet.</TableCell></TableRow>}</TableBody></Table></div><div className="grid gap-2 sm:grid-cols-[2fr_1fr_150px_1fr_auto]"><Input id="committee-task-title" placeholder="Task title" aria-label="Task title" value={task.title} onChange={e => setTask({ ...task, title: e.target.value })} /><Input placeholder="Owner" aria-label="Task owner" value={task.owner} onChange={e => setTask({ ...task, owner: e.target.value })} /><Input type="date" aria-label="Due date" value={task.dueDate} onChange={e => setTask({ ...task, dueDate: e.target.value })} /><Input placeholder="Source (optional)" aria-label="Task source" value={task.source} onChange={e => setTask({ ...task, source: e.target.value })} /><Button variant="outline" disabled={addTask.isPending} onClick={submitTask}><Plus className="mr-1 h-4 w-4" />Add</Button></div></section>
+      <section className="space-y-3"><div className="flex items-center justify-between"><h2 className="font-semibold">Recent meetings</h2><Button variant="link" asChild><Link to="/grc/governance/meetings">View meetings</Link></Button></div><div className="space-y-2">{relatedMeetings.length ? relatedMeetings.slice(0,5).map(m => <div key={m._id} className="flex flex-wrap items-center gap-4 border-b py-3"><CalendarDays className="h-5 w-5 text-primary" /><div className="flex-1"><p className="font-medium text-sm">{m.title}</p><p className="text-xs text-muted-foreground">{shortDate(m.date)} · {m.location || m.venue || "Location not set"}</p></div><Badge variant="outline">{m.status}</Badge></div>) : <p className="text-sm text-muted-foreground">No linked meetings yet. Schedule one in Meetings and select this committee.</p>}</div></section>
+    </> : <>
+      <div className="flex flex-wrap items-start justify-between gap-3"><div><h1 className="text-2xl font-bold">Committees</h1><p className="text-sm text-muted-foreground">Mandates, membership, meeting cadence, and open tasks for each board committee.</p></div><Button onClick={() => setNewOpen(true)}><Plus className="mr-2 h-4 w-4" />New committee</Button></div>
+      {isDemo && <p className="text-xs text-muted-foreground">Showing sample committees until live committee records are available.</p>}
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><Metric icon={Users2} label="Active committees" value={committees.length} /><Metric icon={ClipboardList} label="Total open tasks" value={total - completed} /><Metric icon={CheckCircle2} label="Task completion" value={`${total ? Math.round(completed / total * 100) : 0}%`} /><Metric icon={FileText} label="Charters missing" value={committees.filter(c => !(metadata[c._id]?.charter)).length} /></div>
+      <div className="space-y-3">{committees.map(c => { const d = metadata[c._id] ?? defaults; const linked = meetings.filter(m => m.committeeId === c._id && new Date(m.date).getTime() >= Date.now()).sort((a,b) => a.date.localeCompare(b.date))[0]; return <Button key={c._id} variant="outline" className="h-auto w-full justify-start whitespace-normal px-5 py-4 text-left font-normal transition-colors hover:border-primary" onClick={() => setSelectedId(c._id)}><div className="w-full min-w-0 space-y-3"><div className="flex flex-wrap justify-between gap-2"><span className="font-semibold text-foreground">{c.name}</span><Badge variant={d.charter ? "secondary" : "outline"}>{d.charter ? "On track" : "Charter pending"}</Badge></div><p className="text-xs text-muted-foreground">Chair: {c.chair || "Not assigned"} · {c.members.length} members · {d.cadence} · Next: {shortDate(linked?.date ?? d.nextMeeting)} · Mandate: {d.charter || "Not linked"}</p><Progress value={percentage(c)} className="h-1.5" /><p className="text-xs text-muted-foreground">{c.tasks.filter(t => t.status === "Done").length}/{c.tasks.length} tasks complete</p></div></Button>; })}{!committees.length && <p className="py-12 text-center text-sm text-muted-foreground">No committees yet. Create one to get started.</p>}</div>
+    </>}
+    <Dialog open={newOpen} onOpenChange={setNewOpen}><DialogContent className="max-h-[90vh] overflow-y-auto"><DialogHeader><DialogTitle>New committee</DialogTitle></DialogHeader><div className="space-y-3"><div><Label htmlFor="committee-name">Committee name</Label><Input id="committee-name" value={createForm.name} onChange={e => setCreateForm({ ...createForm, name: e.target.value })} /></div><div><Label htmlFor="committee-purpose">Mandate / purpose</Label><Textarea id="committee-purpose" value={createForm.purpose} onChange={e => setCreateForm({ ...createForm, purpose: e.target.value })} /></div><div><Label>Meeting cadence</Label><Select value={createForm.cadence} onValueChange={v => setCreateForm({ ...createForm, cadence: v })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["Monthly", "Quarterly", "Bi-annually", "Annually", "Bi-annually & as needed", "As needed"].map(v => <SelectItem key={v} value={v}>{v}</SelectItem>)}</SelectContent></Select></div><div><Label htmlFor="committee-quorum">Quorum</Label><Input id="committee-quorum" value={createForm.quorum} onChange={e => setCreateForm({ ...createForm, quorum: e.target.value })} /></div><div><Label htmlFor="committee-charter">Linked charter or governance code</Label><Input id="committee-charter" list="governance-code-options" placeholder="Select or enter a charter" value={createForm.charter} onChange={e => setCreateForm({ ...createForm, charter: e.target.value })} /><datalist id="governance-code-options">{codes.map(c => <option key={c._id} value={c.title} />)}</datalist></div><p className="text-xs text-muted-foreground">Add members and tasks after creating the committee.</p></div><DialogFooter><Button variant="outline" onClick={() => setNewOpen(false)}>Cancel</Button><Button disabled={create.isPending} onClick={submitCreate}>{create.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Create committee</Button></DialogFooter></DialogContent></Dialog>
+  </div>;
 }
-
-function NewCommitteeDialog({ open, onOpenChange }: any) {
-  const queryClient = useQueryClient();
-  const [f, setF] = useState({ name: "", purpose: "" });
-
-  const mutation = useMutation({
-    mutationFn: () => createCommittee(f),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["grc-committees"] });
-      toast({ title: "Committee created" });
-      onOpenChange(false);
-      setF({ name: "", purpose: "" });
-    },
-    onError: (err: any) =>
-      toast({
-        title: "Failed to create committee",
-        description: err?.response?.data?.message,
-        variant: "destructive",
-      }),
-  });
-
-  const submit = () => {
-    if (!f.name)
-      return toast({ title: "Name required", variant: "destructive" });
-    mutation.mutate();
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>New committee</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-3">
-          <div>
-            <Label>Name</Label>
-            <Input
-              value={f.name}
-              onChange={(e) => setF({ ...f, name: e.target.value })}
-            />
-          </div>
-          <div>
-            <Label>Purpose</Label>
-            <Textarea
-              rows={3}
-              value={f.purpose}
-              onChange={(e) => setF({ ...f, purpose: e.target.value })}
-            />
-          </div>
-          <p className="text-xs text-muted-foreground">
-            The chair is set when you add members below — select "Chair" as
-            their role.
-          </p>
-        </div>
-        <DialogFooter>
-          <Button onClick={submit} disabled={mutation.isPending}>
-            {mutation.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin mr-2" />
-            ) : null}
-            Create
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function CommitteeSheet({
-  committee,
-  onClose,
-}: {
-  committee: Committee | null;
-  onClose: () => void;
-}) {
-  const queryClient = useQueryClient();
-  const [mem, setMem] = useState<{
-    name: string;
-    email: string;
-    role: CommitteeMemberRole;
-  }>({
-    name: "",
-    email: "",
-    role: "Member",
-  });
-  const [tk, setTk] = useState({
-    title: "",
-    owner: "",
-    dueDate: new Date().toISOString().slice(0, 10),
-  });
-
-  const invalidate = () =>
-    queryClient.invalidateQueries({ queryKey: ["grc-committees"] });
-
-  const addMemberMutation = useMutation({
-    mutationFn: () => addCommitteeMember(committee!._id, mem),
-    onSuccess: () => {
-      invalidate();
-      setMem({ name: "", email: "", role: "Member" });
-    },
-    onError: (err: any) =>
-      toast({
-        title: "Failed to add member",
-        description: err?.response?.data?.message,
-        variant: "destructive",
-      }),
-  });
-
-  const removeMemberMutation = useMutation({
-    mutationFn: (index: number) => removeCommitteeMember(committee!._id, index),
-    onSuccess: invalidate,
-    onError: (err: any) =>
-      toast({
-        title: "Failed to remove member",
-        description: err?.response?.data?.message,
-        variant: "destructive",
-      }),
-  });
-
-  const addTaskMutation = useMutation({
-    mutationFn: () => addCommitteeTask(committee!._id, tk),
-    onSuccess: () => {
-      invalidate();
-      setTk({
-        title: "",
-        owner: "",
-        dueDate: new Date().toISOString().slice(0, 10),
-      });
-    },
-    onError: (err: any) =>
-      toast({
-        title: "Failed to add task",
-        description: err?.response?.data?.message,
-        variant: "destructive",
-      }),
-  });
-
-  const taskStatusMutation = useMutation({
-    mutationFn: ({
-      index,
-      status,
-    }: {
-      index: number;
-      status: CommitteeTaskStatus;
-    }) => updateCommitteeTaskStatus(committee!._id, index, status),
-    onSuccess: invalidate,
-    onError: (err: any) =>
-      toast({
-        title: "Failed to update task",
-        description: err?.response?.data?.message,
-        variant: "destructive",
-      }),
-  });
-
-  if (!committee) return null;
-
-  return (
-    <Sheet open onOpenChange={(o) => !o && onClose()}>
-      <SheetContent className="w-full sm:max-w-2xl overflow-y-auto">
-        <SheetHeader>
-          <SheetTitle>{committee.name}</SheetTitle>
-        </SheetHeader>
-        <div className="mt-4 space-y-5">
-          <div className="text-sm text-muted-foreground">
-            {committee.purpose}
-          </div>
-
-          <section className="border-t pt-4 space-y-2">
-            <div className="font-medium text-sm">Members</div>
-            <div className="space-y-1">
-              {committee.members.map((m, i) => (
-                <div
-                  key={i}
-                  className="flex justify-between text-xs border rounded px-2 py-1 items-center"
-                >
-                  <span>
-                    {m.name}{" "}
-                    <span className="text-muted-foreground">{m.email}</span>
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="text-xs">
-                      {m.role}
-                    </Badge>
-                    <button
-                      onClick={() => removeMemberMutation.mutate(i)}
-                      disabled={removeMemberMutation.isPending}
-                    >
-                      <Trash2 className="h-3 w-3 text-muted-foreground" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-              {committee.members.length === 0 && (
-                <div className="text-xs text-muted-foreground">
-                  No members yet.
-                </div>
-              )}
-            </div>
-            <div className="grid grid-cols-4 gap-2">
-              <Input
-                placeholder="Name"
-                value={mem.name}
-                onChange={(e) => setMem({ ...mem, name: e.target.value })}
-              />
-              <Input
-                placeholder="Email"
-                value={mem.email}
-                onChange={(e) => setMem({ ...mem, email: e.target.value })}
-              />
-              <Select
-                value={mem.role}
-                onValueChange={(v) =>
-                  setMem({ ...mem, role: v as CommitteeMemberRole })
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {["Chair", "Secretary", "Member"].map((r) => (
-                    <SelectItem key={r} value={r}>
-                      {r}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={
-                  !mem.name || !mem.email || addMemberMutation.isPending
-                }
-                onClick={() => addMemberMutation.mutate()}
-              >
-                {addMemberMutation.isPending ? (
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                ) : (
-                  "Add"
-                )}
-              </Button>
-            </div>
-          </section>
-
-          <section className="border-t pt-4 space-y-2">
-            <div className="font-medium text-sm">Tasks & responsibilities</div>
-            <div className="space-y-1">
-              {committee.tasks.map((t, i) => (
-                <div
-                  key={i}
-                  className="flex justify-between text-xs border rounded px-2 py-1 items-center"
-                >
-                  <div>
-                    <div className="font-medium">{t.title}</div>
-                    <div className="text-muted-foreground">
-                      {t.owner} · due {new Date(t.dueDate).toLocaleDateString()}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Select
-                      value={t.status}
-                      onValueChange={(v) =>
-                        taskStatusMutation.mutate({
-                          index: i,
-                          status: v as CommitteeTaskStatus,
-                        })
-                      }
-                    >
-                      <SelectTrigger className="h-7 w-32">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {["Open", "In Progress", "Done"].map((s) => (
-                          <SelectItem key={s} value={s}>
-                            {s}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    {t.status === "Done" && (
-                      <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                    )}
-                  </div>
-                </div>
-              ))}
-              {committee.tasks.length === 0 && (
-                <div className="text-xs text-muted-foreground">
-                  No tasks yet.
-                </div>
-              )}
-            </div>
-            <div className="grid grid-cols-4 gap-2">
-              <Input
-                className="col-span-2"
-                placeholder="Task title"
-                value={tk.title}
-                onChange={(e) => setTk({ ...tk, title: e.target.value })}
-              />
-              <Input
-                placeholder="Owner"
-                value={tk.owner}
-                onChange={(e) => setTk({ ...tk, owner: e.target.value })}
-              />
-              <Input
-                type="date"
-                value={tk.dueDate}
-                onChange={(e) => setTk({ ...tk, dueDate: e.target.value })}
-              />
-            </div>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={!tk.title || addTaskMutation.isPending}
-              onClick={() => addTaskMutation.mutate()}
-            >
-              {addTaskMutation.isPending ? (
-                <Loader2 className="h-3 w-3 animate-spin mr-2" />
-              ) : null}
-              Add task
-            </Button>
-          </section>
-        </div>
-      </SheetContent>
-    </Sheet>
-  );
-}
+function Detail({ label, value }: { label: string; value: string }) { return <div className="flex justify-between gap-4 border-b pb-2 last:border-0 last:pb-0"><span className="text-muted-foreground">{label}</span><span className="text-right font-medium">{value}</span></div>; }
+function Metric({ icon: Icon, label, value }: { icon: typeof Users2; label: string; value: string | number }) { return <Card><CardContent className="flex items-center gap-3 p-4"><div className="rounded-md bg-accent p-2 text-accent-foreground"><Icon className="h-5 w-5" /></div><div><p className="text-xs text-muted-foreground">{label}</p><p className="text-2xl font-semibold">{value}</p></div></CardContent></Card>; }
