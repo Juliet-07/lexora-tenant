@@ -805,6 +805,287 @@ function OverviewTab({
           />
         </CardContent>
       </Card>
+
+      <OnboardingSubmissionSection member={member} />
+    </div>
+  );
+}
+
+// Human-readable text for the Yes/No onboarding questions, keyed by
+// question id — mirrors REGULATORY_QUESTION_IDS / COI_QUESTION_IDS on the
+// backend board-member schema.
+const ONBOARDING_QUESTION_TEXT: Record<string, string> = {
+  sanction:
+    "Have you ever been subject to any regulatory sanction or disciplinary action?",
+  bankrupt:
+    "Have you ever been declared bankrupt or been party to a company insolvency/liquidation?",
+  convictions: "Do you have any unspent criminal convictions?",
+  interest:
+    "Do you, or a close family member, have any financial interest in transactions involving the company?",
+  related:
+    "Are you related to, or do you have a close personal relationship with, any other director or senior manager?",
+};
+
+function YesNoAnswerRow({
+  questionId,
+  yes,
+  detail,
+}: {
+  questionId: string;
+  yes: boolean;
+  detail: string;
+}) {
+  return (
+    <div className="border-b last:border-0 py-1.5 space-y-0.5">
+      <div className="flex items-start justify-between gap-3 text-sm">
+        <span className="flex-1">
+          {ONBOARDING_QUESTION_TEXT[questionId] ?? questionId}
+        </span>
+        {yes ? (
+          <Badge
+            variant="outline"
+            className="shrink-0 gap-1 text-amber-600 border-amber-300"
+          >
+            <CheckCircle2 className="h-3 w-3" /> Yes
+          </Badge>
+        ) : (
+          <Badge
+            variant="outline"
+            className="shrink-0 gap-1 text-muted-foreground"
+          >
+            <XCircle className="h-3 w-3" /> No
+          </Badge>
+        )}
+      </div>
+      {yes && detail ? (
+        <div className="text-xs text-muted-foreground pl-0.5">{detail}</div>
+      ) : null}
+    </div>
+  );
+}
+
+function DirectorshipsList({
+  directorships,
+}: {
+  directorships: { company: string; position: string; detail: string }[];
+}) {
+  if (!directorships.length) {
+    return <div className="text-xs text-muted-foreground">None declared.</div>;
+  }
+  return (
+    <div className="space-y-1.5">
+      {directorships.map((d, i) => (
+        <div
+          key={i}
+          className="text-sm border-b last:border-0 pb-1.5 last:pb-0"
+        >
+          <div className="font-medium">{d.company}</div>
+          <div className="text-xs text-muted-foreground">
+            {d.position}
+            {d.detail ? ` — ${d.detail}` : ""}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Surfaces what this director actually submitted during self-service
+// onboarding (Fit & Proper declaration, Documents & COI declaration,
+// mandatory training, induction acknowledgement) — rather than the static
+// profile fields the rest of this tab already shows.
+function OnboardingSubmissionSection({ member }: { member: BoardMember }) {
+  const fpd = member.fitProperDeclaration;
+  const coi = member.documentsCoiDeclaration;
+  const trainingProgress = member.onboardingTraining;
+  const induction = member.inductionAcknowledgement;
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm">
+            Fit &amp; Proper declaration (as submitted during onboarding)
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm">
+          {fpd ? (
+            <>
+              <div className="space-y-2">
+                <KV k="Full name" v={fpd.fullName || "—"} />
+                <KV
+                  k="Date of birth"
+                  v={fpd.dob ? new Date(fpd.dob).toLocaleDateString() : "—"}
+                />
+                <KV k="National ID / Passport" v={fpd.idNumber || "—"} />
+                <KV k="Nationality" v={fpd.nationality || "—"} />
+                <KV k="Address" v={fpd.address || "—"} />
+                <KV
+                  k="Reference"
+                  v={
+                    fpd.referenceName
+                      ? `${fpd.referenceName} (${fpd.referenceRelationship || "—"})${
+                          fpd.referenceEmail ? ` · ${fpd.referenceEmail}` : ""
+                        }`
+                      : "—"
+                  }
+                />
+                <KV
+                  k="Submitted"
+                  v={
+                    fpd.submittedAt
+                      ? new Date(fpd.submittedAt).toLocaleString()
+                      : "—"
+                  }
+                />
+              </div>
+              <Separator />
+              <div>
+                <Label className="text-xs text-muted-foreground">
+                  Other directorships declared
+                </Label>
+                <div className="mt-1.5">
+                  <DirectorshipsList directorships={fpd.directorships} />
+                </div>
+              </div>
+              <Separator />
+              <div>
+                <Label className="text-xs text-muted-foreground">
+                  Regulatory declarations
+                </Label>
+                <div className="mt-1.5">
+                  {fpd.answers.map((a) => (
+                    <YesNoAnswerRow key={a.questionId} {...a} />
+                  ))}
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="text-xs text-muted-foreground py-2">
+              Not yet submitted — pending the Fit &amp; Proper onboarding step.
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm">
+            Documents &amp; conflict-of-interest declaration
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm">
+          {coi ? (
+            <>
+              <KV
+                k="Documents signed"
+                v={`${coi.signedDocumentIds.length} document(s)`}
+              />
+              <KV
+                k="Holds other directorships"
+                v={coi.holdsOtherDirectorships ? "Yes" : "No"}
+              />
+              <KV
+                k="Submitted"
+                v={
+                  coi.submittedAt
+                    ? new Date(coi.submittedAt).toLocaleString()
+                    : "—"
+                }
+              />
+              {coi.holdsOtherDirectorships && (
+                <>
+                  <Separator />
+                  <div>
+                    <Label className="text-xs text-muted-foreground">
+                      Current directorships
+                    </Label>
+                    <div className="mt-1.5">
+                      <DirectorshipsList
+                        directorships={coi.currentDirectorships}
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
+              <Separator />
+              <div>
+                <Label className="text-xs text-muted-foreground">
+                  Conflict-of-interest declarations
+                </Label>
+                <div className="mt-1.5">
+                  {coi.answers.map((a) => (
+                    <YesNoAnswerRow key={a.questionId} {...a} />
+                  ))}
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="text-xs text-muted-foreground py-2">
+              Not yet submitted — pending the Documents &amp; COI onboarding
+              step.
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Onboarding training</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm">
+            <KV
+              k="Modules completed"
+              v={`${trainingProgress?.completedModuleIds?.length ?? 0}`}
+            />
+            <KV
+              k="Completed at"
+              v={
+                trainingProgress?.completedAt
+                  ? new Date(trainingProgress.completedAt).toLocaleString()
+                  : "—"
+              }
+            />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Induction acknowledgement</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm">
+            {induction ? (
+              <>
+                <KV
+                  k="Scheduled date"
+                  v={
+                    induction.scheduledDate
+                      ? new Date(induction.scheduledDate).toLocaleDateString()
+                      : "—"
+                  }
+                />
+                <KV
+                  k="Documents acknowledged"
+                  v={`${induction.acknowledgedDocumentIds.length} document(s)`}
+                />
+                <KV
+                  k="Acknowledged at"
+                  v={
+                    induction.acknowledgedAt
+                      ? new Date(induction.acknowledgedAt).toLocaleString()
+                      : "—"
+                  }
+                />
+              </>
+            ) : (
+              <div className="text-xs text-muted-foreground py-2">
+                Not yet acknowledged.
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

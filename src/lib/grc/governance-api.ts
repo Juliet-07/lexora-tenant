@@ -188,6 +188,57 @@ export interface OffboardingRecord {
   initiatedAt: string;
 }
 
+export interface BoardDirectorshipEntry {
+  company: string;
+  position: string;
+  detail: string;
+}
+
+export interface OnboardingYesNoAnswer {
+  questionId: string;
+  yes: boolean;
+  detail: string;
+}
+
+// What the director submitted on the "Fit & Proper" onboarding step —
+// mirrors FitProperDeclaration on the backend board-member schema.
+export interface FitProperDeclaration {
+  fullName: string;
+  dob: string;
+  idNumber: string;
+  nationality: string;
+  address: string;
+  directorships: BoardDirectorshipEntry[];
+  // question ids: 'sanction' | 'bankrupt' | 'convictions'
+  answers: OnboardingYesNoAnswer[];
+  referenceName: string;
+  referenceRelationship: string;
+  referenceEmail: string;
+  submittedAt: string;
+}
+
+// What the director submitted on the "Documents & COI" onboarding step —
+// mirrors DocumentsCoiDeclaration on the backend board-member schema.
+export interface DocumentsCoiDeclaration {
+  signedDocumentIds: string[];
+  holdsOtherDirectorships: boolean;
+  currentDirectorships: BoardDirectorshipEntry[];
+  // question ids: 'interest' | 'related'
+  answers: OnboardingYesNoAnswer[];
+  submittedAt: string;
+}
+
+export interface OnboardingTrainingProgress {
+  completedModuleIds: string[];
+  completedAt: string | null;
+}
+
+export interface InductionAcknowledgement {
+  scheduledDate: string | null;
+  acknowledgedDocumentIds: string[];
+  acknowledgedAt: string | null;
+}
+
 export interface BoardMember {
   _id: string;
   name: string;
@@ -218,6 +269,12 @@ export interface BoardMember {
   documentsToSign: BoardSignableDocument[];
   inductionPack: InductionPackItem[];
   onboardingChecklist: ChecklistItem[];
+  // What this director actually submitted during self-service onboarding —
+  // null/default until each step is completed.
+  fitProperDeclaration: FitProperDeclaration | null;
+  documentsCoiDeclaration: DocumentsCoiDeclaration | null;
+  onboardingTraining: OnboardingTrainingProgress;
+  inductionAcknowledgement: InductionAcknowledgement | null;
   successionPlan: SuccessionPlan | null;
   offboarding: OffboardingRecord | null;
   userId: string | null;
