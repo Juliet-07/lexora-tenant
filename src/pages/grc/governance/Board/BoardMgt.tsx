@@ -74,9 +74,11 @@ import {
   addBoardDocumentFolder,
   removeBoardDocumentFolder,
   setBoardMemberDocumentsToSign,
-  addBoardMemberInductionItem,
   removeBoardMemberInductionItem,
   fetchGovernanceCodes,
+  fetchBoardTrainingModules,
+  createBoardTrainingModule,
+  deleteBoardTrainingModule,
   toggleOnboardingItem,
   initiateSuccession,
   updateSuccessionStage,
@@ -96,6 +98,7 @@ import {
   type SuccessionStageName,
   type SuccessionStageStatus,
   type GovernanceCode,
+  type BoardTrainingModule,
   BoardSkill,
 } from "@/lib/grc/governance-api";
 import { SkillLevel } from "@/lib/grcGovernanceLocal";
@@ -2574,16 +2577,46 @@ function DocumentsToSignCard({ member }: { member: BoardMember }) {
 // portal's Step 5 as soon as they're uploaded — no separate "send"
 // action needed, and nothing stops the tenant adding more later.
 
+// Everything the director will see and have to acknowledge one by one
+// in Step 5 — every entry in member.documents (whichever tab it was
+// uploaded through) plus any leftover legacy inductionPack items.
+// Mirrors effectiveInductionPack() on the backend exactly.
+function effectiveInductionPack(member: BoardMember) {
+  return [
+    ...(member.documents ?? []).map((d, i) => ({
+      key: `doc-${d._id ?? i}`,
+      name: d.name,
+      fileUrl: d.fileUrl,
+      kind: "document" as const,
+      index: i,
+    })),
+    ...(member.inductionPack ?? []).map((d, i) => ({
+      key: `legacy-${d._id ?? i}`,
+      name: d.name,
+      fileUrl: d.fileUrl,
+      kind: "legacy" as const,
+      index: i,
+    })),
+  ];
+}
+
 function InductionPackCard({ member }: { member: BoardMember }) {
   const queryClient = useQueryClient();
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: ["grc-board-members"] });
 
+  // Uploads here go through the same real Documents endpoint as the
+  // Documents tab above (tagged into an "Induction Pack" folder for
+  // tidiness) — there is only one place a document lands now, so a
+  // document sent from either tab reaches the director. Fixes the
+  // earlier bug where documents sent from the Documents tab never
+  // reached the board portal's induction step at all.
   const uploadMutation = useMutation({
-    mutationFn: (file: File) => addBoardMemberInductionItem(member._id, file),
+    mutationFn: (file: File) =>
+      addBoardMemberDocument(member._id, file, undefined, "Induction Pack"),
     onSuccess: () => {
       invalidate();
-      toast({ title: "Added to induction pack" });
+      toast({ title: "Sent to induction pack" });
     },
     onError: (err: any) =>
       toast({
@@ -2592,16 +2625,29 @@ function InductionPackCard({ member }: { member: BoardMember }) {
         variant: "destructive",
       }),
   });
-  const removeMutation = useMutation({
+  const removeDocMutation = useMutation({
+    mutationFn: (index: number) => removeBoardMemberDocument(member._id, index),
+    onSuccess: invalidate,
+  });
+  const removeLegacyMutation = useMutation({
     mutationFn: (index: number) =>
       removeBoardMemberInductionItem(member._id, index),
     onSuccess: invalidate,
   });
 
+  const pack = effectiveInductionPack(member);
+
   return (
     <Card>
       <CardHeader className="pb-2 flex-row items-center justify-between">
-        <CardTitle className="text-sm">Induction pack</CardTitle>
+        <div>
+          <CardTitle className="text-sm">Induction pack</CardTitle>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Everything here is shown to {member.name} in Step 5 of their
+            onboarding, one document at a time — they must review and
+            acknowledge each one before onboarding can complete.
+          </p>
+        </div>
         <label>
           <input
             type="file"
@@ -2612,7 +2658,7 @@ function InductionPackCard({ member }: { member: BoardMember }) {
               e.target.value = "";
             }}
           />
-          <span className="inline-flex items-center gap-1.5 text-xs border rounded px-3 py-1.5 cursor-pointer hover:bg-muted/50">
+          <span className="inline-flex items-center gap-1.5 text-xs border rounded px-3 py-1.5 cursor-pointer hover:bg-muted/50 shrink-0">
             {uploadMutation.isPending ? (
               <Loader2 className="h-3 w-3 animate-spin" />
             ) : (
@@ -2623,10 +2669,10 @@ function InductionPackCard({ member }: { member: BoardMember }) {
         </label>
       </CardHeader>
       <CardContent className="space-y-2">
-        {member.inductionPack?.length ? (
-          member.inductionPack.map((item, i) => (
+        {pack.length ? (
+          pack.map((item) => (
             <div
-              key={item._id}
+              key={item.key}
               className="flex items-center justify-between rounded-lg border p-2.5 text-sm"
             >
               <span className="flex items-center gap-2 min-w-0">
@@ -2644,16 +2690,22 @@ function InductionPackCard({ member }: { member: BoardMember }) {
                   <span className="truncate">{item.name}</span>
                 )}
               </span>
-              <button onClick={() => removeMutation.mutate(i)}>
+              <button
+                onClick={() =>
+                  item.kind === "document"
+                    ? removeDocMutation.mutate(item.index)
+                    : removeLegacyMutation.mutate(item.index)
+                }
+              >
                 <Trash2 className="h-3 w-3 text-muted-foreground shrink-0" />
               </button>
             </div>
           ))
         ) : (
           <p className="text-xs text-muted-foreground">
-            Nothing sent yet — {member.name} will see an empty induction pack in
-            Step 5 until you send documents here (strategy docs, latest
-            financials, org chart, key policies, etc).
+            Nothing sent yet — {member.name} can't complete onboarding until you
+            send at least one document here (strategy docs, latest financials,
+            org chart, key policies, etc).
           </p>
         )}
       </CardContent>

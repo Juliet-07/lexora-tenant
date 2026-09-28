@@ -160,7 +160,7 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
         { title: "Regulatory Obligations", url: "/grc/compliance/obligations" },
         { title: "Compliance Calendar", url: "/grc/compliance/calendar" },
         { title: "Certifications", url: "/grc/compliance/certifications" },
-        { title: "Policies", url: "/grc/compliance/policies" },
+        { title: "Policies & Procedures", url: "/grc/compliance/policies" },
         { title: "Audit Management", url: "/grc/compliance/audits" },
         { title: "Incidents & Breaches", url: "/grc/compliance/incidents" },
         {
@@ -175,6 +175,7 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
       adminOnly: true,
       children: [
         { title: "Organisation Structure", url: "/grc/governance/structure" },
+        { title: "Governance Codes", url: "/grc/governance/codes" },
         {
           title: "Board Onboarding",
           url: "/grc/governance/board-onboarding",
@@ -182,7 +183,6 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
         { title: "Board Management", url: "/grc/governance/board" },
         { title: "Committees", url: "/grc/governance/committees" },
         { title: "Meetings", url: "/grc/governance/meetings" },
-        { title: "Governance Codes", url: "/grc/governance/codes" },
         { title: "Resolutions", url: "/grc/governance/resolutions" },
       ],
     },

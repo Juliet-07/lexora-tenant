@@ -53,7 +53,10 @@ export interface ChecklistItem {
 }
 
 export type BoardDocumentCategory = "Governance Document" | "Regulatory Filing";
+// Every entry here also doubles as the director's induction pack (Step
+// 5 in the board portal) — see effectiveInductionPack on the backend.
 export interface BoardDocument {
+  _id: string;
   name: string;
   category: BoardDocumentCategory;
   fileUrl: string | null;
@@ -85,8 +88,10 @@ export interface BoardSignableDocument {
   version: number;
 }
 
-// One real file in a director's induction pack (Step 5) — how the
-// tenant actually sends the pack: uploading files here.
+// LEGACY — induction-pack files uploaded before "Documents" and
+// "Induction pack" were unified onto one array (BoardMember.documents,
+// see BoardDocument above). Kept only so pre-existing items still show
+// up; new uploads go through the Documents tab.
 export interface InductionPackItem {
   _id: string;
   name: string;
@@ -94,6 +99,17 @@ export interface InductionPackItem {
   mimeType: string | null;
   size: number;
   uploadedBy: string;
+}
+
+// A real, tenant-authored mandatory training module for board
+// onboarding (Step 4) — see board-training-module.schema.ts.
+export interface BoardTrainingModule {
+  _id: string;
+  title: string;
+  description: string;
+  resourceUrl: string | null;
+  resourceMimeType: string | null;
+  order: number;
 }
 
 export interface CommitteeMembership {
@@ -807,19 +823,11 @@ export const setBoardMemberDocumentsToSign = async (
   return res.data?.data ?? res.data;
 };
 
-export const addBoardMemberInductionItem = async (
-  id: string,
-  file: File,
-): Promise<BoardMember> => {
-  const form = new FormData();
-  form.append("file", file);
-  const res = await api.post(
-    `/grc/governance/board-members/${id}/induction-pack`,
-    form,
-  );
-  return res.data?.data ?? res.data;
-};
-
+// The dedicated induction-pack UPLOAD endpoint is gone from this app's
+// UI — "Documents" (addBoardMemberDocument above) is now the one real
+// place to send a director files; everything uploaded there becomes
+// their induction pack too. See BoardDocument's comment. Removal is
+// kept, only to let a tenant clean up items sent before this change.
 export const removeBoardMemberInductionItem = async (
   id: string,
   index: number,
@@ -828,6 +836,34 @@ export const removeBoardMemberInductionItem = async (
     `/grc/governance/board-members/${id}/induction-pack/${index}`,
   );
   return res.data?.data ?? res.data;
+};
+
+// ── Board Training Modules (Step 4) — a tenant-wide catalog, not
+// scoped to one director. See board-training-module.schema.ts. ──────
+
+export const fetchBoardTrainingModules = async (): Promise<
+  BoardTrainingModule[]
+> => {
+  const res = await api.get("/grc/governance/board-training-modules");
+  const d = res.data?.data ?? res.data;
+  return Array.isArray(d) ? d : [];
+};
+
+export const createBoardTrainingModule = async (
+  title: string,
+  description: string,
+  file?: File,
+): Promise<BoardTrainingModule> => {
+  const form = new FormData();
+  form.append("title", title);
+  if (description) form.append("description", description);
+  if (file) form.append("file", file);
+  const res = await api.post("/grc/governance/board-training-modules", form);
+  return res.data?.data ?? res.data;
+};
+
+export const deleteBoardTrainingModule = async (id: string): Promise<void> => {
+  await api.delete(`/grc/governance/board-training-modules/${id}`);
 };
 
 export const toggleOnboardingItem = async (

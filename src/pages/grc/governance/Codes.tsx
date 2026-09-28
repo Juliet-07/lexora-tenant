@@ -53,7 +53,7 @@ import {
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { RichTextEditor } from "@/components/RichTextEditor";
-import { usePersistentState, uid, fmtDate } from "@/lib/grc/usePersistentState";
+import { usePersistentState, fmtDate } from "@/lib/grc/usePersistentState";
 import {
   fetchGovernanceCodes,
   createGovernanceCode,
@@ -83,15 +83,6 @@ const STAGES: Stage[] = [
   "Published",
 ];
 
-const sectionsToBody = (
-  title: string,
-  sections: { title: string; content: string }[],
-) =>
-  `<h2>${title.toUpperCase()}</h2>` +
-  sections
-    .map((s, i) => `<h3>${i + 1}. ${s.title}</h3>${s.content || ""}`)
-    .join("");
-
 interface CodeMeta {
   owner: string;
   standard: string;
@@ -115,21 +106,9 @@ interface CodeRow {
   body: string;
   version: number;
   updatedAt: string;
-  demo: boolean;
   boardApprovals: CodeBoardApproval[];
   meta: CodeMeta;
 }
-
-// Demo/sample content only (empty-state fixture data below) — real
-// templates now come from the super admin's Policy Templates catalog
-// (fetchGovernanceCodeTemplates), not a hardcoded list.
-const DEMO_SECTIONS = [
-  "Purpose",
-  "Scope",
-  "Policy statement",
-  "Responsibilities",
-  "Review & amendment",
-];
 
 const CLAUSES: Record<string, string> = {
   "Quorum requirement":
@@ -144,16 +123,12 @@ const CLAUSES: Record<string, string> = {
     "All Board deliberations and papers are confidential and shall not be disclosed without authorisation of the Chair.",
 };
 
-const buildDemoBody = (title: string) =>
-  `<h2>${title.toUpperCase()}</h2><p><i>{{company_name}} · Adopted by resolution of the Board</i></p>` +
-  DEMO_SECTIONS.map(
-    (s, i) =>
-      `<h3>${i + 1}. ${s}</h3><p>${i === 0 ? `This ${title} sets out the framework adopted by {{company_name}} (the "Company").` : "[Draft this section]"}</p>`,
-  ).join("");
-
 const daysFrom = (n: number) =>
   new Date(Date.now() + n * 864e5).toISOString().slice(0, 10);
 
+// Defaults applied to a freshly created code's local-only metadata (see
+// metaStore below) — zeroed rather than pre-populated, since a new code
+// really does start with no audience acknowledgements yet.
 const defaultMeta = (title: string, published: boolean): CodeMeta => ({
   owner: "Company Secretary",
   standard: "Custom",
@@ -164,170 +139,11 @@ const defaultMeta = (title: string, published: boolean): CodeMeta => ({
   nextReview: daysFrom(300),
   nextAction: published ? "—" : "Complete draft, send for internal review",
   audience: "All staff",
-  audienceSize: 12,
-  acknowledged: published ? 9 : 0,
+  audienceSize: 0,
+  acknowledged: 0,
   comments: [],
   history: [{ at: new Date().toISOString(), text: `${title} created` }],
 });
-
-const DEMO: CodeRow[] = [
-  [
-    "demo_bc",
-    "Board Charter",
-    "Board Charter",
-    3,
-    "Published",
-    "Rudo Sibanda (Company Secretary)",
-    "King V (2026) aligned",
-    "Governs board purpose, composition, roles, and meeting cadence",
-    52,
-    "Directors",
-    7,
-    7,
-  ],
-  [
-    "demo_coc",
-    "Code of Conduct & Ethics",
-    "Code of Conduct",
-    2,
-    "Published",
-    "HR & Compliance",
-    "ISO 37301 informed",
-    "Standards of behaviour for directors and employees",
-    100,
-    "All staff",
-    12,
-    10,
-  ],
-  [
-    "demo_doa",
-    "Delegation of Authority Policy",
-    "Governance Charter",
-    4,
-    "Published",
-    "James Karenzi (CFO)",
-    "Custom",
-    "Approval limits and financial authority by role",
-    150,
-    "Management",
-    5,
-    5,
-  ],
-  [
-    "demo_coi",
-    "Conflict of Interest Policy",
-    "Ethics",
-    2,
-    "Internal review",
-    "Rudo Sibanda",
-    "King V aligned",
-    "Declaration and management of director/employee conflicts",
-    -5,
-    "Directors",
-    7,
-    0,
-  ],
-  [
-    "demo_wb",
-    "Whistleblower Protection Policy",
-    "Ethics",
-    1,
-    "Published",
-    "Compliance",
-    "Custom",
-    "Reporting channels and non-retaliation protections",
-    30,
-    "All staff",
-    12,
-    9,
-  ],
-  [
-    "demo_abc",
-    "Anti-Bribery & Corruption Policy",
-    "Ethics",
-    1,
-    "Draft",
-    "Rudo Sibanda",
-    "ISO 37001 aligned",
-    "ISO 37001-aligned anti-bribery controls",
-    365,
-    "All staff",
-    12,
-    0,
-  ],
-  [
-    "demo_rpt",
-    "Related Party Transactions Policy",
-    "Governance Charter",
-    1,
-    "Draft",
-    "Amara Nkurunziza",
-    "King V aligned",
-    "Identification, disclosure, and approval of related party deals",
-    365,
-    "Directors",
-    7,
-    0,
-  ],
-].map(
-  ([
-    id,
-    title,
-    category,
-    version,
-    stage,
-    owner,
-    standard,
-    description,
-    review,
-    audience,
-    size,
-    ack,
-  ]: any) => {
-    return {
-      id,
-      title,
-      category,
-      version,
-      demo: true,
-      updatedAt: new Date().toISOString(),
-      body: buildDemoBody(title),
-      boardApprovals: [],
-      meta: {
-        ...defaultMeta(title, stage === "Published"),
-        owner,
-        standard,
-        description,
-        stage,
-        nextReview: daysFrom(review),
-        audience,
-        audienceSize: size,
-        acknowledged: ack,
-        nextAction:
-          stage === "Draft"
-            ? "Complete remaining sections, send for internal review"
-            : stage === "Internal review"
-              ? "Complete review and submit to Board"
-              : "—",
-        comments:
-          id === "demo_bc"
-            ? [
-                {
-                  by: "Rudo Sibanda",
-                  at: "2 days ago",
-                  text: "Confirmed quorum number with legal counsel — using 4 (majority of 7) per King V guidance.",
-                },
-                {
-                  by: "Upendo Mbeki",
-                  at: "1 day ago",
-                  text: "Please add a term-limit clause under Composition before this goes to the Nomination Committee.",
-                },
-              ]
-            : [],
-      },
-    } as CodeRow;
-  },
-);
 
 const stageVariant = (s: Stage) =>
   (s === "Published"
@@ -348,13 +164,15 @@ export default function GrcCodes() {
     queryFn: fetchGovernanceCodeTemplates,
     retry: 1,
   });
+  // Supplementary metadata (owner, standard, review cycle, audience
+  // tracking, comments, history) has no home on the real backend
+  // GovernanceCode schema yet, so it's kept as real, tenant-entered data
+  // in local storage, keyed by the code's real _id — not dummy/sample
+  // content, just a client-side field until the backend grows these
+  // columns.
   const [metaStore, setMetaStore] = usePersistentState<
     Record<string, CodeMeta>
   >("grc_codes_meta_v1", {});
-  const [demoStore, setDemoStore] = usePersistentState<CodeRow[]>(
-    "grc_codes_demo_v1",
-    DEMO,
-  );
   const [view, setView] = useState<"library" | "templates" | "editor">(
     "library",
   );
@@ -362,43 +180,32 @@ export default function GrcCodes() {
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState<"all" | Stage>("all");
 
-  const isDemo = apiCodes.length === 0;
   const rows: CodeRow[] = useMemo(
     () =>
-      isDemo
-        ? demoStore
-        : apiCodes.map((c: GovernanceCode) => {
-            const m =
-              metaStore[c._id] ??
-              defaultMeta(c.title, c.status === "Published");
-            return {
-              id: c._id,
-              title: c.title,
-              category: c.category,
-              body: c.body || "",
-              version: c.version,
-              updatedAt: c.updatedAt,
-              demo: false,
-              boardApprovals: c.boardApprovals ?? [],
-              // Stage is real, server-tracked state now — mirror it
-              // directly rather than merging with anything stored
-              // locally.
-              meta: { ...m, stage: c.status },
-            };
-          }),
-    [isDemo, apiCodes, metaStore, demoStore],
+      apiCodes.map((c: GovernanceCode) => {
+        const m =
+          metaStore[c._id] ?? defaultMeta(c.title, c.status === "Published");
+        return {
+          id: c._id,
+          title: c.title,
+          category: c.category,
+          body: c.body || "",
+          version: c.version,
+          updatedAt: c.updatedAt,
+          boardApprovals: c.boardApprovals ?? [],
+          // Stage is real, server-tracked state now — mirror it
+          // directly rather than merging with anything stored
+          // locally.
+          meta: { ...m, stage: c.status },
+        };
+      }),
+    [apiCodes, metaStore],
   );
 
   const setMeta = (id: string, patch: Partial<CodeMeta>) => {
     const row = rows.find((r) => r.id === id);
     if (!row) return;
-    if (row.demo)
-      setDemoStore((s) =>
-        s.map((r) =>
-          r.id === id ? { ...r, meta: { ...r.meta, ...patch } } : r,
-        ),
-      );
-    else setMetaStore((s) => ({ ...s, [id]: { ...row.meta, ...patch } }));
+    setMetaStore((s) => ({ ...s, [id]: { ...row.meta, ...patch } }));
   };
   const logHistory = (id: string, text: string) => {
     const row = rows.find((r) => r.id === id);
@@ -433,24 +240,7 @@ export default function GrcCodes() {
       }),
   });
 
-  const startFromTemplate = (t: GovernanceCodeTemplate) => {
-    if (!isDemo) return createMut.mutate(t);
-    const row: CodeRow = {
-      id: uid("demo"),
-      title: t.title,
-      category: t.category as GovernanceCodeCategory,
-      body: sectionsToBody(t.title, t.sections),
-      version: 1,
-      updatedAt: new Date().toISOString(),
-      demo: true,
-      boardApprovals: [],
-      meta: { ...defaultMeta(t.title, false), description: t.description },
-    };
-    setDemoStore((s) => [row, ...s]);
-    setEditingId(row.id);
-    setView("editor");
-    toast({ title: "Draft created from template" });
-  };
+  const startFromTemplate = (t: GovernanceCodeTemplate) => createMut.mutate(t);
 
   if (isLoading)
     return (
@@ -469,38 +259,14 @@ export default function GrcCodes() {
         setMeta={(p) => setMeta(editing.id, p)}
         logHistory={(t) => logHistory(editing.id, t)}
         onSaveBody={async (body) => {
-          if (editing.demo)
-            setDemoStore((s) =>
-              s.map((r) =>
-                r.id === editing.id
-                  ? { ...r, body, updatedAt: new Date().toISOString() }
-                  : r,
-              ),
-            );
-          else {
-            await updateCodeBody(editing.id, body);
-            qc.invalidateQueries({ queryKey: ["grc-gov-codes"] });
-          }
+          await updateCodeBody(editing.id, body);
+          qc.invalidateQueries({ queryKey: ["grc-gov-codes"] });
         }}
         onSendForReview={async () => {
-          if (editing.demo) {
-            setMeta(editing.id, {
-              stage: "Internal review",
-              nextAction: "Complete review and submit to Board",
-            });
-            return;
-          }
           await sendCodeForReview(editing.id);
           qc.invalidateQueries({ queryKey: ["grc-gov-codes"] });
         }}
         onSendForBoardApproval={async () => {
-          if (editing.demo) {
-            setMeta(editing.id, {
-              stage: "Board / Committee approval",
-              nextAction: "Awaiting Board / Committee approval",
-            });
-            return;
-          }
           const updated = await sendCodeForBoardApproval(editing.id);
           qc.invalidateQueries({ queryKey: ["grc-gov-codes"] });
           if (updated.status === "Published") {
@@ -640,13 +406,6 @@ export default function GrcCodes() {
           New code
         </Button>
       </div>
-      {isDemo && (
-        <div className="text-xs rounded-md border bg-muted/40 px-3 py-2 text-muted-foreground">
-          Showing sample codes. Create your first code from a template to start
-          your own library.
-        </div>
-      )}
-
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         {[
           ["Total codes", counts.all, ""],
@@ -808,14 +567,10 @@ export default function GrcCodes() {
                       <AlertDialogCancel>Cancel</AlertDialogCancel>
                       <AlertDialogAction
                         onClick={async () => {
-                          if (r.demo)
-                            setDemoStore((s) => s.filter((x) => x.id !== r.id));
-                          else {
-                            await deleteGovernanceCode(r.id);
-                            qc.invalidateQueries({
-                              queryKey: ["grc-gov-codes"],
-                            });
-                          }
+                          await deleteGovernanceCode(r.id);
+                          qc.invalidateQueries({
+                            queryKey: ["grc-gov-codes"],
+                          });
                           toast({ title: "Code deleted" });
                         }}
                       >
@@ -829,7 +584,9 @@ export default function GrcCodes() {
           })}
           {filtered.length === 0 && (
             <div className="text-center text-sm text-muted-foreground py-8">
-              No codes match.
+              {rows.length === 0
+                ? "No governance codes yet. Create your first code from a template to start your library."
+                : "No codes match."}
             </div>
           )}
         </CardContent>
@@ -886,19 +643,6 @@ export default function GrcCodes() {
                         size="sm"
                         variant="outline"
                         onClick={async () => {
-                          const next = STAGES[STAGES.indexOf(r.meta.stage) + 1];
-                          if (r.demo) {
-                            setMeta(r.id, {
-                              stage: next,
-                              nextAction:
-                                next === "Internal review"
-                                  ? "Complete review and submit to Board"
-                                  : "Awaiting Board / Committee approval",
-                            });
-                            logHistory(r.id, `Moved to ${next}`);
-                            toast({ title: `${r.title} moved to ${next}` });
-                            return;
-                          }
                           try {
                             const updated =
                               r.meta.stage === "Draft"
@@ -1117,7 +861,6 @@ function CodeEditor({
               {row.meta.stage}
             </Badge>
             <Badge variant="outline">v{row.version}</Badge>
-            {row.demo && <Badge variant="outline">Sample</Badge>}
           </div>
           <h1 className="text-2xl font-bold mt-1">{row.title}</h1>
         </div>
@@ -1276,10 +1019,10 @@ function CodeEditor({
                 Approval
               </TabsTrigger>
               <TabsTrigger value="comments" className="flex-1">
-                Comments
+                Comms
               </TabsTrigger>
               <TabsTrigger value="props" className="flex-1">
-                Properties
+                Props
               </TabsTrigger>
               <TabsTrigger value="history" className="flex-1">
                 History
