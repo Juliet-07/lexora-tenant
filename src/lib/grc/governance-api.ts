@@ -349,6 +349,25 @@ export interface BoardPackDoc {
   uploadedAt: string;
 }
 
+export type MeetingActionItemStatus = "Open" | "Done";
+
+export interface MeetingActionItem {
+  _id: string;
+  title: string;
+  description: string;
+  assigneeName: string;
+  assigneeEmail: string;
+  // Real link to a BoardMember, resolved server-side from the
+  // assignee's email — null for an Employee/guest attendee, who has
+  // no BoardMember record. This is what lets a director's board
+  // portal filter to action items assigned to them specifically.
+  assigneeBoardMemberId: string | null;
+  dueDate: string | null;
+  status: MeetingActionItemStatus;
+  completedAt: string | null;
+  createdAt: string;
+}
+
 const GRC_API_BASE = (api.defaults as any)?.baseURL ?? "/api";
 export const resolveGrcFileUrl = (url: string): string => {
   if (!url) return url;
@@ -403,6 +422,7 @@ export interface Meeting {
     comment: string;
     submittedAt: string;
   }[];
+  actionItems: MeetingActionItem[];
 }
 
 export interface MinutesReviewSnapshot {
@@ -1314,6 +1334,48 @@ export const resumeMeeting = async (id: string): Promise<Meeting> => {
 
 export const deleteMeeting = async (id: string): Promise<void> => {
   await api.delete(`/grc/governance/meetings/${id}`);
+};
+
+// Action items arising from a meeting — the assignee must already be
+// a real attendee of the meeting (picked from meeting.attendees, no
+// free-text name/email), matching the same "no manual adding of
+// name/email" convention used for committee members and task owners.
+export const addMeetingActionItem = async (
+  id: string,
+  dto: {
+    title: string;
+    description?: string;
+    assigneeEmail: string;
+    dueDate?: string;
+  },
+): Promise<Meeting> => {
+  const res = await api.post(
+    `/grc/governance/meetings/${id}/action-items`,
+    dto,
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const removeMeetingActionItem = async (
+  id: string,
+  actionItemId: string,
+): Promise<Meeting> => {
+  const res = await api.delete(
+    `/grc/governance/meetings/${id}/action-items/${actionItemId}`,
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const setMeetingActionItemStatus = async (
+  id: string,
+  actionItemId: string,
+  status: MeetingActionItemStatus,
+): Promise<Meeting> => {
+  const res = await api.patch(
+    `/grc/governance/meetings/${id}/action-items/${actionItemId}/status`,
+    { status },
+  );
+  return res.data?.data ?? res.data;
 };
 
 export const fetchGovernanceCodes = async (): Promise<GovernanceCode[]> => {
