@@ -34,6 +34,7 @@ import {
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { MeetingChecklist, MeetingNotice, useMeetingPreparation } from "@/components/grc/meetings/MeetingPreparation";
+import { MinutesDrafter } from "@/components/grc/meetings/MinutesDrafter";
 import {
   dispatchMeeting,
   addMeetingActionItem,
@@ -567,6 +568,7 @@ export function MeetingWorkspace({
 
         {/* MINUTES */}
         <TabsContent value="minutes" className="space-y-4">
+          <MinutesDrafter meeting={meeting} />
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Minutes</CardTitle>
