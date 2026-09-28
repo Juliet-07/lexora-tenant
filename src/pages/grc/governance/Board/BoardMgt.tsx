@@ -2456,8 +2456,14 @@ function DocumentsToSignCard({ member }: { member: BoardMember }) {
     queryFn: fetchGovernanceCodes,
     enabled: pickerOpen,
   });
+  // Codes are authored in-app as rich text (body), not uploaded as
+  // files, so almost none have an attached file — a code is eligible
+  // as long as it has real body content (or a file, for the rare code
+  // that also has one).
   const publishedCodes = codes.filter(
-    (c: GovernanceCode) => c.status === "Published" && c.documents.length > 0,
+    (c: GovernanceCode) =>
+      c.status === "Published" &&
+      ((c.body && c.body.trim().length > 0) || c.documents.length > 0),
   );
 
   const setMutation = useMutation({
@@ -2524,9 +2530,8 @@ function DocumentsToSignCard({ member }: { member: BoardMember }) {
             <DialogTitle>Documents for {member.name} to sign</DialogTitle>
           </DialogHeader>
           <p className="text-xs text-muted-foreground">
-            Only published Governance Codes with at least one attached file can
-            be assigned. Publish one from Governance → Codes first if you don't
-            see it here.
+            Only published Governance Codes can be assigned. Publish one from
+            Governance → Codes first if you don't see it here.
           </p>
           <div className="space-y-2">
             {publishedCodes.map((c: GovernanceCode) => (
@@ -2550,7 +2555,7 @@ function DocumentsToSignCard({ member }: { member: BoardMember }) {
             ))}
             {publishedCodes.length === 0 && (
               <p className="text-xs text-muted-foreground text-center py-6">
-                No published Governance Codes with an attached file yet.
+                No published Governance Codes yet.
               </p>
             )}
           </div>

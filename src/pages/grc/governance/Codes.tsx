@@ -62,10 +62,12 @@ import {
   fetchGovernanceCodeTemplates,
   sendCodeForReview,
   sendCodeForBoardApproval,
+  fetchBoardMembers,
   type GovernanceCode,
   type GovernanceCodeCategory,
   type GovernanceCodeTemplate,
   type CodeBoardApproval,
+  type CodeAcknowledgement,
 } from "@/lib/grc/governance-api";
 
 // Matches GovernanceCodeStatus exactly — a code's stage is now real,
@@ -107,6 +109,7 @@ interface CodeRow {
   version: number;
   updatedAt: string;
   boardApprovals: CodeBoardApproval[];
+  acknowledgedBy: CodeAcknowledgement[];
   meta: CodeMeta;
 }
 
@@ -164,6 +167,17 @@ export default function GrcCodes() {
     queryFn: fetchGovernanceCodeTemplates,
     retry: 1,
   });
+  // Used only to decide whether a Board Charter can bootstrap straight
+  // from Draft to Published (no board yet to review/approve it) — see
+  // hasActiveBoardMembers below and its use in the Draft-stage action.
+  const { data: boardMembers = [] } = useQuery({
+    queryKey: ["grc-board-members"],
+    queryFn: fetchBoardMembers,
+    retry: 1,
+  });
+  const hasActiveBoardMembers = (boardMembers as any[]).some(
+    (m: any) => m.isActive,
+  );
   // Supplementary metadata (owner, standard, review cycle, audience
   // tracking, comments, history) has no home on the real backend
   // GovernanceCode schema yet, so it's kept as real, tenant-entered data
@@ -193,6 +207,7 @@ export default function GrcCodes() {
           version: c.version,
           updatedAt: c.updatedAt,
           boardApprovals: c.boardApprovals ?? [],
+          acknowledgedBy: c.acknowledgedBy ?? [],
           // Stage is real, server-tracked state now — mirror it
           // directly rather than merging with anything stored
           // locally.
@@ -255,6 +270,9 @@ export default function GrcCodes() {
     return (
       <CodeEditor
         row={editing}
+        bootstrapPublish={
+          editing.category === "Board Charter" && !hasActiveBoardMembers
+        }
         onBack={() => setView("library")}
         setMeta={(p) => setMeta(editing.id, p)}
         logHistory={(t) => logHistory(editing.id, t)}
@@ -263,8 +281,9 @@ export default function GrcCodes() {
           qc.invalidateQueries({ queryKey: ["grc-gov-codes"] });
         }}
         onSendForReview={async () => {
-          await sendCodeForReview(editing.id);
+          const updated = await sendCodeForReview(editing.id);
           qc.invalidateQueries({ queryKey: ["grc-gov-codes"] });
+          return updated;
         }}
         onSendForBoardApproval={async () => {
           const updated = await sendCodeForBoardApproval(editing.id);
@@ -790,6 +809,7 @@ export default function GrcCodes() {
 
 function CodeEditor({
   row,
+  bootstrapPublish,
   onBack,
   setMeta,
   logHistory,
@@ -798,11 +818,16 @@ function CodeEditor({
   onSendForBoardApproval,
 }: {
   row: CodeRow;
+  // Board Charter, zero active board members: there's no board yet to
+  // review or approve it, so the Draft-stage action skips straight to
+  // Publish instead of Send for review — see GovernanceCodeService
+  // #sendForReview's matching bootstrap branch, which this only relabels.
+  bootstrapPublish: boolean;
   onBack: () => void;
   setMeta: (p: Partial<CodeMeta>) => void;
   logHistory: (t: string) => void;
   onSaveBody: (body: string) => Promise<void>;
-  onSendForReview: () => Promise<void>;
+  onSendForReview: () => Promise<GovernanceCode>;
   onSendForBoardApproval: () => Promise<void>;
 }) {
   const [body, setBody] = useState(row.body);
@@ -895,12 +920,23 @@ function CodeEditor({
                 setAdvancing(true);
                 try {
                   await save(true);
-                  await onSendForReview();
-                  logHistory("Sent for internal review");
-                  toast({ title: "Sent for internal review" });
+                  const updated = await onSendForReview();
+                  if (updated.status === "Published") {
+                    logHistory("Published directly — no board members yet");
+                    toast({
+                      title: "Code published",
+                      description:
+                        "No active board members yet, so this Board Charter was published directly.",
+                    });
+                  } else {
+                    logHistory("Sent for internal review");
+                    toast({ title: "Sent for internal review" });
+                  }
                 } catch (e: any) {
                   toast({
-                    title: "Could not send for review",
+                    title: bootstrapPublish
+                      ? "Could not publish"
+                      : "Could not send for review",
                     description: e?.response?.data?.message ?? e.message,
                     variant: "destructive",
                   });
@@ -910,7 +946,7 @@ function CodeEditor({
               }}
             >
               <Send className="h-4 w-4 mr-1" />
-              Send for review
+              {bootstrapPublish ? "Publish" : "Send for review"}
             </Button>
           )}
           {row.meta.stage === "Internal review" && (
@@ -1062,6 +1098,32 @@ function CodeEditor({
                   </div>
                 ))
               )}
+              <div className="pt-3 mt-1 border-t">
+                <div className="text-xs uppercase tracking-wide text-muted-foreground mb-2">
+                  Signed by directors during onboarding
+                </div>
+                {row.acknowledgedBy.length === 0 ? (
+                  <div className="text-sm text-muted-foreground flex gap-2 py-1">
+                    <CheckCircle2 className="h-4 w-4 shrink-0 opacity-50" />
+                    No director has signed this code from their onboarding yet.
+                  </div>
+                ) : (
+                  <div className="space-y-1.5">
+                    {row.acknowledgedBy.map((a, i) => (
+                      <div
+                        key={i}
+                        className="flex items-center gap-2 text-sm border rounded-lg p-2"
+                      >
+                        <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                        <span className="font-medium">{a.name}</span>
+                        <span className="text-xs text-muted-foreground ml-auto">
+                          {fmtDate(a.acknowledgedAt)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </TabsContent>
             <TabsContent value="comments" className="space-y-3">
               {row.meta.comments.map((c, i) => (

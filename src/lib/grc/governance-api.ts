@@ -84,6 +84,10 @@ export interface BoardSignableDocument {
   title: string;
   category: string;
   sourceCodeId: string | null;
+  // The code's rich-text body at assignment time — codes are authored
+  // in-app, not uploaded as files, so this (not fileUrl) is what lets
+  // a director actually read and review what they're signing.
+  body: string;
   fileUrl: string | null;
   version: number;
 }
@@ -197,6 +201,10 @@ export interface BoardMember {
   taxResidency: string;
   lifecycleStatus: BoardMemberLifecycleStatus;
   termStatus: BoardMemberTermStatus;
+  // True unless the member has been Offboarded — mirrors
+  // BoardMemberService#getAll on the backend. Used to decide, e.g.,
+  // whether a Board Charter can bootstrap-publish (no active board yet).
+  isActive: boolean;
   committees: CommitteeMembership[];
   attendancePercentage: number;
   otherDirectorships: string[];
@@ -393,6 +401,15 @@ export interface CodeBoardApproval {
   requestedAt: string;
 }
 
+// A real signature — recorded the moment a director clicks "Sign now"
+// on this code during their own onboarding. Distinct from
+// boardApprovals above (a publish-gate approval round).
+export interface CodeAcknowledgement {
+  boardMemberId: string;
+  name: string;
+  acknowledgedAt: string;
+}
+
 export interface GovernanceCode {
   _id: string;
   title: string;
@@ -403,6 +420,7 @@ export interface GovernanceCode {
   status: GovernanceCodeStatus;
   templateId: string | null;
   boardApprovals: CodeBoardApproval[];
+  acknowledgedBy: CodeAcknowledgement[];
   updatedAt: string;
 }
 

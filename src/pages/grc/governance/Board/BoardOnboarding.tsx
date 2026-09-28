@@ -25,8 +25,10 @@ import {
   fetchBoardTrainingModules,
   createBoardTrainingModule,
   deleteBoardTrainingModule,
+  fetchGovernanceCodes,
   type BoardMember,
   type BoardTrainingModule,
+  type GovernanceCode,
 } from "@/lib/grc/governance-api";
 import NewDirectorWizard from "@/components/grc/NewWizardDirector";
 import BoardOnboardingContractingTab from "./BoardOnboardingContractingTab";
@@ -44,6 +46,7 @@ import BoardOnboardingContractingTab from "./BoardOnboardingContractingTab";
 
 export default function BoardOnboarding() {
   const [wizardOpen, setWizardOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState("awaiting");
 
   const {
     data: awaiting = [],
@@ -79,6 +82,26 @@ export default function BoardOnboarding() {
   const awaitingSignatureCount = contracts.filter(
     (c) => c.signatureStatus === "sent",
   ).length;
+
+  // Onboarding prerequisites (see BoardMemberService
+  // #assertOnboardingPrerequisites on the backend, which is the real
+  // enforcement — this is only so the "New Director" button reflects
+  // it instead of letting the tenant hit a server error after filling
+  // out the whole wizard). Shares its cache key with TrainingModulesTab
+  // below, so this adds no extra request.
+  const { data: trainingModules = [] } = useQuery({
+    queryKey: ["board-training-modules"],
+    queryFn: fetchBoardTrainingModules,
+  });
+  const { data: governanceCodes = [] } = useQuery({
+    queryKey: ["grc-gov-codes"],
+    queryFn: fetchGovernanceCodes,
+  });
+  const hasTraining = trainingModules.length > 0;
+  const hasBoardCharter = (governanceCodes as GovernanceCode[]).some(
+    (c) => c.category === "Board Charter" && c.status === "Published",
+  );
+  const prerequisitesMet = hasTraining && hasBoardCharter;
 
   const loading = awaitingLoading || inProgressLoading;
   const refreshing =
@@ -123,6 +146,12 @@ export default function BoardOnboarding() {
             <Button
               className="bg-gradient-to-r from-primary to-secondary text-white shadow-md shadow-primary/25"
               onClick={() => setWizardOpen(true)}
+              disabled={!prerequisitesMet}
+              title={
+                prerequisitesMet
+                  ? undefined
+                  : "Set up training and a published Board Charter first"
+              }
             >
               <Plus className="h-4 w-4 mr-2" />
               New Director
@@ -135,6 +164,30 @@ export default function BoardOnboarding() {
             />
           </div>
         </div>
+
+        {!loading && !prerequisitesMet && (
+          <div className="relative mt-6 rounded-xl border border-amber-300/60 bg-amber-50 dark:bg-amber-950/30 p-3.5 text-sm text-amber-900 dark:text-amber-200">
+            Before appointing a director, set up{" "}
+            {!hasTraining && (
+              <button
+                className="underline font-medium"
+                onClick={() => setActiveTab("training")}
+              >
+                at least one mandatory training module
+              </button>
+            )}
+            {!hasTraining && !hasBoardCharter && " and "}
+            {!hasBoardCharter && (
+              <Link
+                to="/grc/governance/codes"
+                className="underline font-medium"
+              >
+                a published Board Charter
+              </Link>
+            )}
+            .
+          </div>
+        )}
 
         {/* Pipeline stats */}
         <div className="relative grid grid-cols-1 sm:grid-cols-3 gap-3 mt-6">
@@ -181,7 +234,7 @@ export default function BoardOnboarding() {
       </div>
 
       {/* Tabs */}
-      <Tabs defaultValue="awaiting">
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="bg-muted/60 p-1 rounded-xl">
           <TabsTrigger value="awaiting" className="rounded-lg">
             Awaiting Appointment

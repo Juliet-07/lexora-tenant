@@ -168,16 +168,20 @@ export default function NewDirectorWizard({
 
   // Published Governance Codes the tenant can hand this director to
   // sign during onboarding (Step 3 there) — see
-  // BoardMemberService.resolveDocumentsToSign. Only codes with at
-  // least one attached file are offered; a code with no file has
-  // nothing for the director to actually view and sign.
+  // BoardMemberService.resolveDocumentsToSign. Codes are authored
+  // in-app as rich text (body), not uploaded as files, so almost none
+  // have an attached file — a code is offered as long as it has real
+  // body content (or a file, for the rare code that also has one) for
+  // the director to actually review and sign.
   const { data: governanceCodes = [] } = useQuery({
     queryKey: ["grc-gov-codes"],
     queryFn: fetchGovernanceCodes,
     enabled: step === 1,
   });
   const signableCodes = governanceCodes.filter(
-    (c: GovernanceCode) => c.status === "Published" && c.documents.length > 0,
+    (c: GovernanceCode) =>
+      c.status === "Published" &&
+      ((c.body && c.body.trim().length > 0) || c.documents.length > 0),
   );
 
   // Real, atomic call — creates the director's login and generates
@@ -424,10 +428,9 @@ export default function NewDirectorWizard({
                 <Label>Documents for them to sign during onboarding</Label>
                 {signableCodes.length === 0 ? (
                   <p className="text-xs text-muted-foreground rounded-lg border border-dashed p-2.5">
-                    No published Governance Codes with an attached file yet.
-                    Publish your Board Charter / Code of Conduct under
-                    Governance → Codes first, or set this up later from Board
-                    Management.
+                    No published Governance Codes yet. Publish your Board
+                    Charter / Code of Conduct under Governance → Codes first, or
+                    set this up later from Board Management.
                   </p>
                 ) : (
                   <div className="space-y-1.5 max-h-36 overflow-y-auto">
