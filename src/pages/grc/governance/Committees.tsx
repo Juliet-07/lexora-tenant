@@ -3,7 +3,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
   CalendarDays,
+  Check,
   CheckCircle2,
+  ChevronsUpDown,
   ClipboardList,
   FileText,
   Loader2,
@@ -16,6 +18,14 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
   Dialog,
   DialogContent,
   DialogFooter,
@@ -24,6 +34,11 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Progress } from "@/components/ui/progress";
 import {
   Select,
@@ -42,6 +57,7 @@ import {
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
 import {
   addCommitteeMember,
   addCommitteeTask,
@@ -56,6 +72,7 @@ import {
   type Committee,
   type CommitteeMemberRole,
   type CommitteeTaskStatus,
+  type GovernanceCode,
 } from "@/lib/grc/governance-api";
 
 const shortDate = (value?: string | null) =>
@@ -429,19 +446,11 @@ export default function GrcCommittees() {
                   <>
                     <div>
                       <Label>Mandate / linked charter</Label>
-                      <Input
-                        list="governance-code-options-edit"
+                      <CharterPicker
+                        codes={codes}
                         value={selected.charter}
-                        onChange={(e) =>
-                          updateDetails.mutate({ charter: e.target.value })
-                        }
-                        placeholder="e.g. Audit Committee Charter"
+                        onChange={(v) => updateDetails.mutate({ charter: v })}
                       />
-                      <datalist id="governance-code-options-edit">
-                        {codes.map((c) => (
-                          <option key={c._id} value={c.title} />
-                        ))}
-                      </datalist>
                     </div>
                     <div>
                       <Label>Meeting cadence</Label>
@@ -792,20 +801,12 @@ export default function GrcCommittees() {
               <Label htmlFor="committee-charter">
                 Linked charter or governance code
               </Label>
-              <Input
+              <CharterPicker
                 id="committee-charter"
-                list="governance-code-options"
-                placeholder="Select or enter a charter"
+                codes={codes}
                 value={createForm.charter}
-                onChange={(e) =>
-                  setCreateForm({ ...createForm, charter: e.target.value })
-                }
+                onChange={(v) => setCreateForm({ ...createForm, charter: v })}
               />
-              <datalist id="governance-code-options">
-                {codes.map((c) => (
-                  <option key={c._id} value={c.title} />
-                ))}
-              </datalist>
             </div>
             <p className="text-xs text-muted-foreground">
               Add members and tasks after creating the committee.
@@ -856,5 +857,99 @@ function Metric({
         </div>
       </CardContent>
     </Card>
+  );
+}
+// A searchable dropdown of the tenant's own Published Governance Codes
+// (Draft/pending-approval codes aren't offered — only something already
+// published is a real, citable charter). Stores the picked code's title,
+// matching the field's existing plain-string shape on Committee. The list
+// scrolls (CommandList's own max-height) but never shows a scrollbar —
+// wheel/trackpad/keyboard scrolling still work via the .scrollbar-hide
+// utility, it just doesn't render the browser's scrollbar chrome.
+function CharterPicker({
+  id,
+  codes,
+  value,
+  onChange,
+}: {
+  id?: string;
+  codes: GovernanceCode[];
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const published = codes.filter((c) => c.status === "Published");
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          id={id}
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="w-full justify-between font-normal"
+        >
+          <span className={cn("truncate", !value && "text-muted-foreground")}>
+            {value || "Select a governance code…"}
+          </span>
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        className="w-[--radix-popover-trigger-width] p-0"
+      >
+        <Command>
+          <CommandInput placeholder="Search governance codes…" />
+          <CommandList className="max-h-64 scrollbar-hide">
+            <CommandEmpty>
+              {published.length
+                ? "No matching codes."
+                : "No published governance codes yet — publish one under Governance → Codes."}
+            </CommandEmpty>
+            <CommandGroup>
+              <CommandItem
+                value="__none__"
+                onSelect={() => {
+                  onChange("");
+                  setOpen(false);
+                }}
+              >
+                <Check
+                  className={cn(
+                    "mr-2 h-4 w-4",
+                    !value ? "opacity-100" : "opacity-0",
+                  )}
+                />
+                No linked charter
+              </CommandItem>
+              {published.map((c) => (
+                <CommandItem
+                  key={c._id}
+                  value={c.title}
+                  onSelect={() => {
+                    onChange(c.title);
+                    setOpen(false);
+                  }}
+                >
+                  <Check
+                    className={cn(
+                      "mr-2 h-4 w-4 shrink-0",
+                      value === c.title ? "opacity-100" : "opacity-0",
+                    )}
+                  />
+                  <span className="flex min-w-0 flex-col">
+                    <span className="truncate">{c.title}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {c.category}
+                    </span>
+                  </span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
   );
 }
