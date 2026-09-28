@@ -144,24 +144,20 @@
     background-size: 72px 72px;
   }
 
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
   .intro-reveal {
     animation: intro-reveal 800ms cubic-bezier(0.22, 1, 0.36, 1) both;
   }
 
   .intro-delay {
     animation-delay: 140ms;
-  }
-
-  /* Keeps a panel scrollable (wheel/trackpad/keyboard still work) without
-     showing the browser's own scrollbar chrome — used for compact dropdown
-     lists (e.g. searchable comboboxes) where a visible scrollbar reads as
-     clutter. */
-  .scrollbar-hide {
-    scrollbar-width: none; /* Firefox */
-    -ms-overflow-style: none; /* IE and Edge */
-  }
-  .scrollbar-hide::-webkit-scrollbar {
-    display: none; /* Chrome, Safari, Opera */
   }
 }
 

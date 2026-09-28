@@ -116,7 +116,11 @@ export interface BoardTrainingModule {
   order: number;
 }
 
+// Computed from the real Committee.members link (see Committee below)
+// rather than stored on the board member — a director's committees
+// are whichever committees list them as a member, nothing typed here.
 export interface CommitteeMembership {
+  committeeId: string;
   name: string;
   isChair: boolean;
 }
@@ -288,11 +292,18 @@ export interface CommitteeMember {
   name: string;
   email: string;
   role: CommitteeMemberRole;
+  // Real link back to the board member record. Null only for legacy
+  // members added before this link existed — new members always carry it.
+  boardMemberId: string | null;
 }
 
 export interface CommitteeTask {
   title: string;
+  // Display snapshot of the owner's name, resolved server-side.
   owner: string;
+  // Real link to the board member this task is assigned to — must be a
+  // current member of this committee.
+  ownerBoardMemberId: string | null;
   dueDate: string;
   status: CommitteeTaskStatus;
 }
@@ -800,16 +811,9 @@ export const updateRemuneration = async (
   return res.data?.data ?? res.data;
 };
 
-export const setCommittees = async (
-  id: string,
-  committees: CommitteeMembership[],
-): Promise<BoardMember> => {
-  const res = await api.patch(
-    `/grc/governance/board-members/${id}/committees`,
-    { committees },
-  );
-  return res.data?.data ?? res.data;
-};
+// There is no longer a way to set a board member's committees directly —
+// membership is computed from Committee.members. Use addCommitteeMember /
+// removeCommitteeMemberByBoardMember (below) on the committee side instead.
 
 export const updateAttendance = async (
   id: string,
@@ -1103,9 +1107,11 @@ export const deleteCommittee = async (committeeId: string): Promise<void> => {
   await api.delete(`/grc/governance/committees/${committeeId}`);
 };
 
+// Adds an existing board member to the committee — name/email are resolved
+// server-side from the board member record, never typed here.
 export const addCommitteeMember = async (
   committeeId: string,
-  dto: { name: string; email: string; role?: CommitteeMemberRole },
+  dto: { boardMemberId: string; role?: CommitteeMemberRole },
 ): Promise<Committee> => {
   const res = await api.post(
     `/grc/governance/committees/${committeeId}/members`,
@@ -1124,9 +1130,23 @@ export const removeCommitteeMember = async (
   return res.data?.data ?? res.data;
 };
 
+// Same removal, addressed by the board member's id rather than their row
+// index — used from the board member's own page (BoardMgt.tsx), which
+// doesn't have the committee's member array/index handy.
+export const removeCommitteeMemberByBoardMember = async (
+  committeeId: string,
+  boardMemberId: string,
+): Promise<void> => {
+  await api.delete(
+    `/grc/governance/committees/${committeeId}/members/board-member/${boardMemberId}`,
+  );
+};
+
+// Owner must be a current member of this committee (validated server-side);
+// the owner name shown on the task is a snapshot resolved from that member.
 export const addCommitteeTask = async (
   committeeId: string,
-  dto: { title: string; owner: string; dueDate: string },
+  dto: { title: string; ownerBoardMemberId: string; dueDate: string },
 ): Promise<Committee> => {
   const res = await api.post(
     `/grc/governance/committees/${committeeId}/tasks`,

@@ -18,14 +18,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
-import {
   Dialog,
   DialogContent,
   DialogFooter,
@@ -34,12 +26,20 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Progress } from "@/components/ui/progress";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Progress } from "@/components/ui/progress";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import {
   Select,
   SelectContent,
@@ -57,23 +57,99 @@ import {
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
-import { cn } from "@/lib/utils";
 import {
   addCommitteeMember,
   addCommitteeTask,
   createCommittee,
   deleteCommittee,
+  fetchBoardMembers,
   fetchCommittees,
   fetchGovernanceCodes,
   fetchMeetings,
   removeCommitteeMember,
   updateCommitteeDetails,
   updateCommitteeTaskStatus,
+  type BoardMember,
   type Committee,
   type CommitteeMemberRole,
   type CommitteeTaskStatus,
-  type GovernanceCode,
 } from "@/lib/grc/governance-api";
+
+// A small searchable "type to filter, click to pick" combobox shared by the
+// member and charter pickers below — plain Select doesn't scale once a
+// tenant has more than a handful of board members or governance codes.
+function ComboPicker({
+  value,
+  onChange,
+  options,
+  placeholder,
+  searchPlaceholder,
+  emptyText,
+  disabled,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string; sublabel?: string }[];
+  placeholder: string;
+  searchPlaceholder: string;
+  emptyText: string;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = options.find((o) => o.value === value);
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          role="combobox"
+          disabled={disabled}
+          className="w-full justify-between font-normal"
+        >
+          <span className="truncate">
+            {selected ? selected.label : placeholder}
+          </span>
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+        <Command>
+          <CommandInput placeholder={searchPlaceholder} />
+          <CommandList className="scrollbar-hide">
+            <CommandEmpty>{emptyText}</CommandEmpty>
+            <CommandGroup>
+              {options.map((o) => (
+                <CommandItem
+                  key={o.value}
+                  value={o.label}
+                  onSelect={() => {
+                    onChange(o.value);
+                    setOpen(false);
+                  }}
+                >
+                  <Check
+                    className={`mr-2 h-4 w-4 ${
+                      value === o.value ? "opacity-100" : "opacity-0"
+                    }`}
+                  />
+                  <div className="flex flex-col">
+                    <span>{o.label}</span>
+                    {o.sublabel && (
+                      <span className="text-[11px] text-muted-foreground">
+                        {o.sublabel}
+                      </span>
+                    )}
+                  </div>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 const shortDate = (value?: string | null) =>
   value
@@ -110,6 +186,12 @@ export default function GrcCommittees() {
     queryFn: fetchGovernanceCodes,
     retry: 1,
   });
+  const { data: boardMembers = [] } = useQuery({
+    queryKey: ["grc-board-members"],
+    queryFn: fetchBoardMembers,
+    retry: 1,
+  });
+  const publishedCodes = codes.filter((c) => c.status === "Published");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [newOpen, setNewOpen] = useState(false);
   const [createForm, setCreateForm] = useState({
@@ -120,11 +202,14 @@ export default function GrcCommittees() {
     charter: "",
   });
   const [member, setMember] = useState<{
-    name: string;
-    email: string;
+    boardMemberId: string;
     role: CommitteeMemberRole;
-  }>({ name: "", email: "", role: "Member" });
-  const [task, setTask] = useState({ title: "", owner: "", dueDate: "" });
+  }>({ boardMemberId: "", role: "Member" });
+  const [task, setTask] = useState({
+    title: "",
+    ownerBoardMemberId: "",
+    dueDate: "",
+  });
   const [editing, setEditing] = useState(false);
   const selected = committees.find((c) => c._id === selectedId);
   const relatedMeetings = useMemo(
@@ -190,7 +275,8 @@ export default function GrcCommittees() {
     mutationFn: () => addCommitteeMember(selected?._id ?? "", member),
     onSuccess: () => {
       invalidate();
-      setMember({ name: "", email: "", role: "Member" });
+      qc.invalidateQueries({ queryKey: ["grc-board-members"] });
+      setMember({ boardMemberId: "", role: "Member" });
       toast({ title: "Member added" });
     },
     onError: failure,
@@ -198,19 +284,22 @@ export default function GrcCommittees() {
   const removeMember = useMutation({
     mutationFn: (index: number) =>
       removeCommitteeMember(selected?._id ?? "", index),
-    onSuccess: invalidate,
+    onSuccess: () => {
+      invalidate();
+      qc.invalidateQueries({ queryKey: ["grc-board-members"] });
+    },
     onError: failure,
   });
   const addTask = useMutation({
     mutationFn: () =>
       addCommitteeTask(selected?._id ?? "", {
         title: task.title.trim(),
-        owner: task.owner.trim(),
+        ownerBoardMemberId: task.ownerBoardMemberId,
         dueDate: task.dueDate,
       }),
     onSuccess: () => {
       invalidate();
-      setTask({ title: "", owner: "", dueDate: "" });
+      setTask({ title: "", ownerBoardMemberId: "", dueDate: "" });
       toast({ title: "Task added" });
     },
     onError: failure,
@@ -237,19 +326,20 @@ export default function GrcCommittees() {
     onError: failure,
   });
   const submitMember = () => {
-    if (
-      !selected ||
-      !member.name.trim() ||
-      !/^\S+@\S+\.\S+$/.test(member.email)
-    )
+    if (!selected || !member.boardMemberId)
       return toast({
-        title: "Enter a name and valid email",
+        title: "Select a board member",
         variant: "destructive",
       });
     addMember.mutate();
   };
   const submitTask = () => {
-    if (!selected || !task.title.trim() || !task.owner.trim() || !task.dueDate)
+    if (
+      !selected ||
+      !task.title.trim() ||
+      !task.ownerBoardMemberId ||
+      !task.dueDate
+    )
       return toast({
         title: "Task, owner and due date required",
         variant: "destructive",
@@ -260,6 +350,13 @@ export default function GrcCommittees() {
     if (!createForm.name.trim())
       return toast({
         title: "Committee name required",
+        variant: "destructive",
+      });
+    if (!boardMembers.length)
+      return toast({
+        title: "Add a board member first",
+        description:
+          "A committee can't be created until at least one board member exists.",
         variant: "destructive",
       });
     create.mutate();
@@ -348,7 +445,7 @@ export default function GrcCommittees() {
               <div className="rounded-md border bg-card divide-y">
                 {selected.members.map((m, i) => (
                   <div
-                    key={`${m.email}-${i}`}
+                    key={m.boardMemberId ?? `${m.email}-${i}`}
                     className="flex items-center gap-3 p-3"
                   >
                     <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent text-accent-foreground text-xs font-semibold">
@@ -385,23 +482,25 @@ export default function GrcCommittees() {
                   </p>
                 )}
               </div>
-              <div className="grid gap-2 sm:grid-cols-[1fr_1fr_120px_auto]">
-                <Input
-                  aria-label="Member name"
-                  placeholder="Name"
-                  value={member.name}
-                  onChange={(e) =>
-                    setMember({ ...member, name: e.target.value })
-                  }
-                />
-                <Input
-                  aria-label="Member email"
-                  type="email"
-                  placeholder="Email"
-                  value={member.email}
-                  onChange={(e) =>
-                    setMember({ ...member, email: e.target.value })
-                  }
+              <div className="grid gap-2 sm:grid-cols-[1fr_120px_auto]">
+                <ComboPicker
+                  value={member.boardMemberId}
+                  onChange={(v) => setMember({ ...member, boardMemberId: v })}
+                  options={boardMembers
+                    .filter(
+                      (bm) =>
+                        !selected.members.some(
+                          (m) => m.boardMemberId === bm._id,
+                        ),
+                    )
+                    .map((bm) => ({
+                      value: bm._id,
+                      label: bm.name,
+                      sublabel: bm.role,
+                    }))}
+                  placeholder="Select a board member…"
+                  searchPlaceholder="Search board members…"
+                  emptyText="No board members available to add."
                 />
                 <Select
                   value={member.role}
@@ -422,7 +521,7 @@ export default function GrcCommittees() {
                 </Select>
                 <Button
                   variant="outline"
-                  disabled={addMember.isPending}
+                  disabled={addMember.isPending || !member.boardMemberId}
                   onClick={submitMember}
                 >
                   <Plus className="mr-1 h-4 w-4" />
@@ -446,10 +545,26 @@ export default function GrcCommittees() {
                   <>
                     <div>
                       <Label>Mandate / linked charter</Label>
-                      <CharterPicker
-                        codes={codes}
-                        value={selected.charter}
-                        onChange={(v) => updateDetails.mutate({ charter: v })}
+                      <ComboPicker
+                        value={
+                          publishedCodes.find(
+                            (c) => c.title === selected.charter,
+                          )?._id ?? ""
+                        }
+                        onChange={(id) => {
+                          const code = publishedCodes.find((c) => c._id === id);
+                          updateDetails.mutate({
+                            charter: code?.title ?? "",
+                          });
+                        }}
+                        options={publishedCodes.map((c) => ({
+                          value: c._id,
+                          label: c.title,
+                          sublabel: c.category,
+                        }))}
+                        placeholder="Select a governance code…"
+                        searchPlaceholder="Search published codes…"
+                        emptyText="No published governance codes yet."
                       />
                     </div>
                     <div>
@@ -593,12 +708,32 @@ export default function GrcCommittees() {
                 value={task.title}
                 onChange={(e) => setTask({ ...task, title: e.target.value })}
               />
-              <Input
-                placeholder="Owner"
-                aria-label="Task owner"
-                value={task.owner}
-                onChange={(e) => setTask({ ...task, owner: e.target.value })}
-              />
+              <Select
+                value={task.ownerBoardMemberId}
+                onValueChange={(v) =>
+                  setTask({ ...task, ownerBoardMemberId: v })
+                }
+              >
+                <SelectTrigger aria-label="Task owner">
+                  <SelectValue placeholder="Owner" />
+                </SelectTrigger>
+                <SelectContent>
+                  {selected.members.map((m) => (
+                    <SelectItem
+                      key={m.boardMemberId ?? m.email}
+                      value={m.boardMemberId ?? "_legacy"}
+                      disabled={!m.boardMemberId}
+                    >
+                      {m.name}
+                    </SelectItem>
+                  ))}
+                  {!selected.members.length && (
+                    <SelectItem value="_none" disabled>
+                      Add a member first
+                    </SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
               <Input
                 type="date"
                 aria-label="Due date"
@@ -659,11 +794,32 @@ export default function GrcCommittees() {
                 board committee.
               </p>
             </div>
-            <Button onClick={() => setNewOpen(true)}>
+            <Button
+              onClick={() => setNewOpen(true)}
+              disabled={!boardMembers.length}
+              title={
+                boardMembers.length
+                  ? undefined
+                  : "Add a board member before creating a committee"
+              }
+            >
               <Plus className="mr-2 h-4 w-4" />
               New committee
             </Button>
           </div>
+          {!boardMembers.length && (
+            <p className="rounded-md border border-dashed bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
+              You need at least one board member before you can create a
+              committee.{" "}
+              <Link
+                to="/grc/governance/board"
+                className="font-medium text-primary underline underline-offset-2"
+              >
+                Add a board member
+              </Link>
+              .
+            </p>
+          )}
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <Metric
               icon={Users2}
@@ -801,11 +957,23 @@ export default function GrcCommittees() {
               <Label htmlFor="committee-charter">
                 Linked charter or governance code
               </Label>
-              <CharterPicker
-                id="committee-charter"
-                codes={codes}
-                value={createForm.charter}
-                onChange={(v) => setCreateForm({ ...createForm, charter: v })}
+              <ComboPicker
+                value={
+                  publishedCodes.find((c) => c.title === createForm.charter)
+                    ?._id ?? ""
+                }
+                onChange={(id) => {
+                  const code = publishedCodes.find((c) => c._id === id);
+                  setCreateForm({ ...createForm, charter: code?.title ?? "" });
+                }}
+                options={publishedCodes.map((c) => ({
+                  value: c._id,
+                  label: c.title,
+                  sublabel: c.category,
+                }))}
+                placeholder="Select a governance code…"
+                searchPlaceholder="Search published codes…"
+                emptyText="No published governance codes yet."
               />
             </div>
             <p className="text-xs text-muted-foreground">
@@ -857,99 +1025,5 @@ function Metric({
         </div>
       </CardContent>
     </Card>
-  );
-}
-// A searchable dropdown of the tenant's own Published Governance Codes
-// (Draft/pending-approval codes aren't offered — only something already
-// published is a real, citable charter). Stores the picked code's title,
-// matching the field's existing plain-string shape on Committee. The list
-// scrolls (CommandList's own max-height) but never shows a scrollbar —
-// wheel/trackpad/keyboard scrolling still work via the .scrollbar-hide
-// utility, it just doesn't render the browser's scrollbar chrome.
-function CharterPicker({
-  id,
-  codes,
-  value,
-  onChange,
-}: {
-  id?: string;
-  codes: GovernanceCode[];
-  value: string;
-  onChange: (v: string) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const published = codes.filter((c) => c.status === "Published");
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button
-          id={id}
-          variant="outline"
-          role="combobox"
-          aria-expanded={open}
-          className="w-full justify-between font-normal"
-        >
-          <span className={cn("truncate", !value && "text-muted-foreground")}>
-            {value || "Select a governance code…"}
-          </span>
-          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent
-        align="start"
-        className="w-[--radix-popover-trigger-width] p-0"
-      >
-        <Command>
-          <CommandInput placeholder="Search governance codes…" />
-          <CommandList className="max-h-64 scrollbar-hide">
-            <CommandEmpty>
-              {published.length
-                ? "No matching codes."
-                : "No published governance codes yet — publish one under Governance → Codes."}
-            </CommandEmpty>
-            <CommandGroup>
-              <CommandItem
-                value="__none__"
-                onSelect={() => {
-                  onChange("");
-                  setOpen(false);
-                }}
-              >
-                <Check
-                  className={cn(
-                    "mr-2 h-4 w-4",
-                    !value ? "opacity-100" : "opacity-0",
-                  )}
-                />
-                No linked charter
-              </CommandItem>
-              {published.map((c) => (
-                <CommandItem
-                  key={c._id}
-                  value={c.title}
-                  onSelect={() => {
-                    onChange(c.title);
-                    setOpen(false);
-                  }}
-                >
-                  <Check
-                    className={cn(
-                      "mr-2 h-4 w-4 shrink-0",
-                      value === c.title ? "opacity-100" : "opacity-0",
-                    )}
-                  />
-                  <span className="flex min-w-0 flex-col">
-                    <span className="truncate">{c.title}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {c.category}
-                    </span>
-                  </span>
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          </CommandList>
-        </Command>
-      </PopoverContent>
-    </Popover>
   );
 }

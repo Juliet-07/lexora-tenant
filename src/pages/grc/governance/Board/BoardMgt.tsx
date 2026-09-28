@@ -65,7 +65,9 @@ import {
   addSkill,
   removeSkill,
   updateRemuneration,
-  setCommittees,
+  fetchCommittees,
+  addCommitteeMember,
+  removeCommitteeMemberByBoardMember,
   updateAttendance,
   addOtherDirectorship,
   removeOtherDirectorship,
@@ -1155,36 +1157,73 @@ function OtherDirectorshipsEditor({ member }: { member: BoardMember }) {
 }
 
 function CommitteesEditor({ member }: { member: BoardMember }) {
-  // Same lean-read gap as elsewhere on this page.
+  // Computed on the backend from Committee.members — this is who the
+  // member actually belongs to, not something typed here.
   const committees = member.committees ?? [];
   const queryClient = useQueryClient();
-  const [name, setName] = useState("");
+  const { data: allCommittees = [] } = useQuery({
+    queryKey: ["grc-committees"],
+    queryFn: fetchCommittees,
+    retry: 1,
+  });
+  const [committeeId, setCommitteeId] = useState("");
   const [isChair, setIsChair] = useState(false);
-  const mutation = useMutation({
-    mutationFn: (committees: { name: string; isChair: boolean }[]) =>
-      setCommittees(member._id, committees),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ["grc-board-members"] }),
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ["grc-board-members"] });
+    queryClient.invalidateQueries({ queryKey: ["grc-committees"] });
+  };
+  const addMutation = useMutation({
+    mutationFn: () =>
+      addCommitteeMember(committeeId, {
+        boardMemberId: member._id,
+        role: isChair ? "Chair" : "Member",
+      }),
+    onSuccess: () => {
+      invalidate();
+      setCommitteeId("");
+      setIsChair(false);
+    },
+    onError: (error: unknown) =>
+      toast({
+        title: "Could not add to committee",
+        description:
+          error instanceof Error ? error.message : "Please try again.",
+        variant: "destructive",
+      }),
+  });
+  const removeMutation = useMutation({
+    mutationFn: (targetCommitteeId: string) =>
+      removeCommitteeMemberByBoardMember(targetCommitteeId, member._id),
+    onSuccess: invalidate,
+    onError: (error: unknown) =>
+      toast({
+        title: "Could not remove from committee",
+        description:
+          error instanceof Error ? error.message : "Please try again.",
+        variant: "destructive",
+      }),
   });
 
-  const add = () => {
-    if (!name.trim()) return;
-    mutation.mutate([...committees, { name: name.trim(), isChair }]);
-    setName("");
-    setIsChair(false);
-  };
-  const remove = (i: number) => {
-    mutation.mutate(committees.filter((_, idx) => idx !== i));
-  };
+  const availableCommittees = allCommittees.filter(
+    (c) => !committees.some((m) => m.committeeId === c._id),
+  );
 
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap gap-1.5">
-        {committees.map((c, i) => (
-          <Badge key={i} variant="outline" className="flex items-center gap-1">
+        {committees.map((c) => (
+          <Badge
+            key={c.committeeId}
+            variant="outline"
+            className="flex items-center gap-1"
+          >
             {c.name}
             {c.isChair && " (Chair)"}
-            <button onClick={() => remove(i)}>
+            <button
+              onClick={() => removeMutation.mutate(c.committeeId)}
+              disabled={removeMutation.isPending}
+              aria-label={`Remove from ${c.name}`}
+            >
               <XCircle className="h-3 w-3" />
             </button>
           </Badge>
@@ -1196,11 +1235,23 @@ function CommitteesEditor({ member }: { member: BoardMember }) {
         )}
       </div>
       <div className="flex gap-2 items-center">
-        <Input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Committee name"
-        />
+        <Select value={committeeId} onValueChange={setCommitteeId}>
+          <SelectTrigger className="flex-1" aria-label="Committee">
+            <SelectValue placeholder="Select a committee…" />
+          </SelectTrigger>
+          <SelectContent>
+            {availableCommittees.map((c) => (
+              <SelectItem key={c._id} value={c._id}>
+                {c.name}
+              </SelectItem>
+            ))}
+            {!availableCommittees.length && (
+              <SelectItem value="_none" disabled>
+                No committees available
+              </SelectItem>
+            )}
+          </SelectContent>
+        </Select>
         <label className="text-xs flex items-center gap-1.5 shrink-0">
           <Checkbox
             checked={isChair}
@@ -1211,8 +1262,8 @@ function CommitteesEditor({ member }: { member: BoardMember }) {
         <Button
           size="sm"
           variant="outline"
-          disabled={!name || mutation.isPending}
-          onClick={add}
+          disabled={!committeeId || addMutation.isPending}
+          onClick={() => addMutation.mutate()}
         >
           Add
         </Button>
