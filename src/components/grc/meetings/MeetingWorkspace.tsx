@@ -33,6 +33,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { MeetingChecklist, MeetingNotice, useMeetingPreparation } from "@/components/grc/meetings/MeetingPreparation";
 import {
   dispatchMeeting,
   addMeetingActionItem,
@@ -93,6 +94,7 @@ export function MeetingWorkspace({
   onManage?: () => void;
 }) {
   const queryClient = useQueryClient();
+  const preparation = useMeetingPreparation(meeting);
   const [newAction, setNewAction] = useState({
     title: "",
     assigneeEmail: "",
@@ -162,6 +164,16 @@ export function MeetingWorkspace({
     state: "done" | "current" | "todo";
   }[] = [
     { label: "Scheduled", sub: fmt(date), state: "done" },
+    {
+      label: "Notice sent",
+      sub: preparation.notice.dispatchedAt ? fmt(new Date(preparation.notice.dispatchedAt)) : "Demo record pending",
+      state: preparation.notice.dispatchedAt ? "done" : "current",
+    },
+    {
+      label: "Preparing pack",
+      sub: `${Object.keys(preparation.completed).length}/10 checks`,
+      state: meeting.sentAt ? "done" : "current",
+    },
     {
       label: "Pack dispatched",
       sub: meeting.sentAt ? fmt(new Date(meeting.sentAt)) : "—",
@@ -248,14 +260,19 @@ export function MeetingWorkspace({
 
       <Stepper steps={steps} />
 
-      <Tabs defaultValue="agenda">
+      <Tabs defaultValue="checklist">
         <TabsList className="flex-wrap h-auto">
+          <TabsTrigger value="checklist">Preparation checklist</TabsTrigger>
+          <TabsTrigger value="notice">Notice</TabsTrigger>
           <TabsTrigger value="agenda">Agenda</TabsTrigger>
           <TabsTrigger value="pack">Board pack</TabsTrigger>
           <TabsTrigger value="attendance">Attendance & quorum</TabsTrigger>
           <TabsTrigger value="minutes">Minutes</TabsTrigger>
           <TabsTrigger value="actions">Actions & follow-up</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="checklist"><MeetingChecklist meeting={meeting} state={preparation} /></TabsContent>
+        <TabsContent value="notice"><MeetingNotice meeting={meeting} state={preparation} /></TabsContent>
 
         {/* AGENDA */}
         <TabsContent value="agenda">
