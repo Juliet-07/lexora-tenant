@@ -93,7 +93,7 @@ export function MeetingNotice({ meeting, state }: { meeting: Meeting; state: Pre
   deadline.setDate(deadline.getDate() - notice.minimumDays);
   const sender = [user?.firstName, user?.lastName].filter(Boolean).join(" ") || "Company Secretary";
   const defaultBody = `NOTICE OF ${meeting.type.toUpperCase()} MEETING\n\nDear colleague,\n\nNotice is hereby given that ${meeting.title} will be held on ${validDate(meeting.date) ? formatDate(meeting.date) : meeting.date} at ${validDate(meeting.date) ? meetingDate.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) : "the scheduled time"}.\n\nVenue: ${meeting.location || meeting.venue || meeting.meetingLink || "To be confirmed"}\n\nAgenda: ${meeting.agenda.length ? meeting.agenda.map((a, i) => `${i + 1}. ${a.title}`).join("; ") : "To follow"}\n\nThe board pack will follow. Please declare any conflicts of interest in advance and confirm your attendance or apologies${notice.rsvpDeadline ? ` by ${notice.rsvpDeadline}` : ""}.\n\nYours faithfully,\n${sender}\nCompany Secretary`;
-  const body = draft ?? notice.body || defaultBody;
+  const body = draft ?? (notice.body || defaultBody);
   const sent = notice.dispatchedAt;
   const download = () => {
     const w = window.open("", "_blank");
