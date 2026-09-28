@@ -304,6 +304,10 @@ export interface Committee {
   chair: string | null;
   members: CommitteeMember[];
   tasks: CommitteeTask[];
+  cadence: string;
+  quorum: string;
+  charter: string;
+  nextMeeting: string | null;
 }
 
 export type MeetingAudienceType =
@@ -1071,9 +1075,32 @@ export const fetchCommittees = async (): Promise<Committee[]> => {
 export const createCommittee = async (dto: {
   name: string;
   purpose?: string;
+  cadence?: string;
+  quorum?: string;
+  charter?: string;
+  nextMeeting?: string;
 }): Promise<Committee> => {
   const res = await api.post("/grc/governance/committees", dto);
   return res.data?.data ?? res.data;
+};
+
+export const updateCommitteeDetails = async (
+  committeeId: string,
+  dto: {
+    name?: string;
+    purpose?: string;
+    cadence?: string;
+    quorum?: string;
+    charter?: string;
+    nextMeeting?: string | null;
+  },
+): Promise<Committee> => {
+  const res = await api.patch(`/grc/governance/committees/${committeeId}`, dto);
+  return res.data?.data ?? res.data;
+};
+
+export const deleteCommittee = async (committeeId: string): Promise<void> => {
+  await api.delete(`/grc/governance/committees/${committeeId}`);
 };
 
 export const addCommitteeMember = async (
