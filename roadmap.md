@@ -6,7 +6,7 @@
 - [x] Match platform introduction, retain pricing content and animate its introduction
 - [x] Replace Solutions with Industries and recreate the reference's sector views
 - [x] Recreate Advisory and Insights views from the reference
-- [ ] Verify public-page navigation, visual states and mobile layouts
+- [x] Verify public-page navigation, visual states and mobile layouts
 
 - [ ] Add persistent demo workflow data for API-backed policies
 - [ ] Build grouped policy register, filters, metrics, reminders, and exports
