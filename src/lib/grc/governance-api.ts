@@ -1893,3 +1893,59 @@ export const closeShareholder = async (id: string): Promise<Resolution> => {
   );
   return res.data?.data ?? res.data;
 };
+
+// ══════════════════════════════════════════════════════════════
+// Organisation Structure — the real org chart, derived server-side
+// from HR's own Employee records (reportsToManagerId/jobTitle/teamId),
+// per the PO's explicit choice of HR-derived over a freeform
+// tenant-designed structure. Read-only: the hierarchy itself is
+// managed on the HR → Employees pages (reporting line, job title,
+// team), not edited here.
+// ══════════════════════════════════════════════════════════════
+
+export type EmployeeHierarchyRole =
+  | "regular"
+  | "manager"
+  | "head_of_department"
+  | "owner";
+
+export interface OrgChartNode {
+  id: string;
+  name: string;
+  jobTitle: string;
+  hierarchyRole: EmployeeHierarchyRole;
+  employeeNumber: string;
+  email: string;
+  teamId: string | null;
+  teamName: string | null;
+  reportCount: number;
+  children: OrgChartNode[];
+}
+
+export interface OrgChart {
+  stats: {
+    totalEmployees: number;
+    teams: number;
+    headsOfDepartment: number;
+    managers: number;
+    teamsWithoutHead: number;
+  };
+  roots: OrgChartNode[];
+}
+
+export const fetchOrgChart = async (): Promise<OrgChart> => {
+  const res = await api.get("/grc/governance/org-structure");
+  return (
+    res.data?.data ??
+    res.data ?? {
+      stats: {
+        totalEmployees: 0,
+        teams: 0,
+        headsOfDepartment: 0,
+        managers: 0,
+        teamsWithoutHead: 0,
+      },
+      roots: [],
+    }
+  );
+};
