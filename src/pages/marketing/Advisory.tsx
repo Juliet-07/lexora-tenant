@@ -1,6 +1,7 @@
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, ArrowRight, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { FloatingStars } from "@/components/marketing/FloatingStars";
 import { CtaBand, MarketingLayout } from "@/components/marketing/MarketingLayout";
 import { referenceImages, services } from "@/data/referenceMarketing";
 

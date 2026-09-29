@@ -13,6 +13,7 @@ import {
   Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { FloatingStars } from "@/components/marketing/FloatingStars";
 import { CtaBand, MarketingLayout } from "@/components/marketing/MarketingLayout";
 import { pillars, testimonials } from "@/data/marketingContent";
 import dashboardPreview from "@/assets/dashboard-preview.png";
@@ -44,6 +45,7 @@ export default function Intro() {
     <MarketingLayout>
       <section id="top" className="marketing-hero relative overflow-hidden">
         <div className="absolute inset-0 intro-grid opacity-30" aria-hidden="true" />
+        <FloatingStars />
         <div className="relative mx-auto grid max-w-[1440px] items-center gap-14 px-5 py-16 sm:px-8 lg:grid-cols-[0.95fr_1.05fr] lg:px-12 lg:py-20">
           <div className="relative z-10 max-w-2xl intro-reveal">
             <div className="hidden mb-8 inline-flex items-center gap-2 rounded-full border border-intro-accent/30 bg-intro-accent/10 px-3 py-1.5 text-xs font-semibold uppercase text-intro-accent">

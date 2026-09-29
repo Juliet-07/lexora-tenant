@@ -94,8 +94,9 @@ export default function About() {
       </section>
       <CtaBand title="Start building your governance infrastructure" copy="Explore the platform, seek advisory support, or request a tailored walkthrough." />
     </> : <>
-      <section className="marketing-hero border-b border-intro-foreground/10 px-5 pb-14 pt-20 sm:px-8 sm:pt-24">
-        <div className="mx-auto max-w-[1100px] text-center"><p className="marketing-enter text-xs font-bold uppercase text-intro-accent">About</p><h1 className="marketing-enter marketing-delay mx-auto mt-5 max-w-4xl font-display text-4xl leading-tight sm:text-6xl">Governance infrastructure for Africa's next generation of businesses</h1></div>
+      <section className="marketing-hero relative overflow-hidden border-b border-intro-foreground/10 px-5 pb-14 pt-20 sm:px-8 sm:pt-24">
+        <FloatingStars />
+        <div className="relative mx-auto max-w-[1100px] text-center"><p className="marketing-enter text-xs font-bold uppercase text-intro-accent">About</p><h1 className="marketing-enter marketing-delay mx-auto mt-5 max-w-4xl font-display text-4xl leading-tight sm:text-6xl">Governance infrastructure for Africa's next generation of businesses</h1></div>
       </section>
       <section className="bg-intro-soft px-5 py-12 text-intro-soft-foreground sm:px-8 sm:py-16">
         <div className="mx-auto grid max-w-[1100px] items-center gap-10 lg:grid-cols-2">
