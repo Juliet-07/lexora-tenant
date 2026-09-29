@@ -15,7 +15,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { CtaBand, MarketingLayout } from "@/components/marketing/MarketingLayout";
 import { pillars, testimonials } from "@/data/marketingContent";
-import dashboardPreview from "@/assets/dashboard-preview.png.asset.json";
+import dashboardPreview from "@/assets/dashboard-preview.png";
 import executiveImage from "@/assets/intro-executive.jpg";
 import boardroomImage from "@/assets/intro-boardroom.jpg";
 
@@ -137,7 +137,7 @@ export default function Intro() {
           <p className="mx-auto mt-5 max-w-xl text-sm leading-7 text-intro-muted">One view across governance, clients, delivery, people and finance.</p>
           <div className="marketing-showcase mx-auto mt-12 max-w-[1100px] overflow-hidden rounded-lg border border-intro-foreground/15 bg-intro-surface shadow-intro-deep">
             <div className="flex h-9 items-center gap-1.5 border-b border-intro-foreground/10 bg-intro-surface px-4" aria-hidden="true"><span className="h-2 w-2 rounded-full bg-destructive"/><span className="h-2 w-2 rounded-full bg-warning"/><span className="h-2 w-2 rounded-full bg-success"/></div>
-            <img src={dashboardPreview.url} alt="Lexora GRC dashboard showing business pulse, cross-module performance and governance navigation" loading="lazy" className="block h-auto w-full"/>
+             <img src={dashboardPreview} alt="Lexora GRC dashboard showing business pulse, cross-module performance and governance navigation" loading="lazy" className="block h-auto w-full"/>
           </div>
           <div className="mt-10 flex justify-center">
             <Button asChild variant="outline" className="border-intro-foreground/20 bg-transparent text-intro-foreground hover:bg-intro-foreground/10">
