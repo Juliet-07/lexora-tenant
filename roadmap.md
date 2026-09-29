@@ -1,5 +1,13 @@
 # Roadmap
 
+## Public website reference update
+- [x] Change public-site typography and animate public-page introductions
+- [x] Replace home module cards with supplied dashboard image
+- [x] Match platform introduction, retain pricing content and animate its introduction
+- [x] Replace Solutions with Industries and recreate the reference's sector views
+- [x] Recreate Advisory and Insights views from the reference
+- [x] Verify public-page navigation, visual states and mobile layouts
+
 - [ ] Add persistent demo workflow data for API-backed policies
 - [ ] Build grouped policy register, filters, metrics, reminders, and exports
 - [ ] Build structured new-policy upload flow

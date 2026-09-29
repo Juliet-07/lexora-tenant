@@ -14,7 +14,8 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CtaBand, MarketingLayout } from "@/components/marketing/MarketingLayout";
-import { modules, pillars, testimonials } from "@/data/marketingContent";
+import { pillars, testimonials } from "@/data/marketingContent";
+import dashboardPreview from "@/assets/dashboard-preview.png.asset.json";
 import executiveImage from "@/assets/intro-executive.jpg";
 import boardroomImage from "@/assets/intro-boardroom.jpg";
 
@@ -41,7 +42,7 @@ const whyLexora = [
 export default function Intro() {
   return (
     <MarketingLayout>
-      <section id="top" className="relative overflow-hidden">
+      <section id="top" className="marketing-hero relative overflow-hidden">
         <div className="absolute inset-0 intro-grid opacity-30" aria-hidden="true" />
         <div className="relative mx-auto grid max-w-[1440px] items-center gap-14 px-5 py-16 sm:px-8 lg:grid-cols-[0.95fr_1.05fr] lg:px-12 lg:py-20">
           <div className="relative z-10 max-w-2xl intro-reveal">
@@ -82,7 +83,7 @@ export default function Intro() {
             </p>
           </div>
 
-          <div className="relative mx-auto w-full max-w-[620px] intro-reveal intro-delay">
+           <div className="relative mx-auto w-full max-w-[620px] intro-reveal intro-delay marketing-float">
             <div className="relative ml-auto w-[88%] overflow-hidden rounded-2xl border border-intro-foreground/10 bg-intro-surface shadow-intro-deep">
               <img src={executiveImage} alt="African business leader in a modern Kigali office" width={1024} height={1280} className="aspect-[4/5] w-full object-cover" />
               <div className="absolute inset-0 bg-gradient-to-t from-intro via-transparent to-transparent" />
@@ -129,44 +130,17 @@ export default function Intro() {
         </div>
       </section>
 
-      <section className="bg-intro-soft py-20 text-intro-soft-foreground sm:py-28">
-        <div className="mx-auto max-w-[1320px] px-5 sm:px-8">
-          <div className="grid gap-10 lg:grid-cols-[0.8fr_1.2fr] lg:items-end">
-            <div>
-              <p className="text-xs font-semibold uppercase text-intro-primary">The platform</p>
-              <h2 className="mt-5 max-w-2xl font-display text-4xl leading-none sm:text-5xl">
-                Five modules. Zero fragmentation.
-              </h2>
-            </div>
-            <p className="max-w-xl text-base leading-7 text-intro-soft-muted lg:justify-self-end">
-              Each module works independently. Together, they form a complete operating system for governance,
-              delivery, money, and people.
-            </p>
+      <section className="border-y border-intro-foreground/10 bg-intro py-20 text-intro-foreground sm:py-28">
+        <div className="mx-auto max-w-[1320px] px-5 text-center sm:px-8">
+          <p className="text-xs font-semibold uppercase text-intro-accent">The platform</p>
+          <h2 className="mt-5 font-display text-4xl sm:text-5xl">Your entire operation, one screen.</h2>
+          <p className="mx-auto mt-5 max-w-xl text-sm leading-7 text-intro-muted">One view across governance, clients, delivery, people and finance.</p>
+          <div className="marketing-showcase mx-auto mt-12 max-w-[1100px] overflow-hidden rounded-lg border border-intro-foreground/15 bg-intro-surface shadow-intro-deep">
+            <div className="flex h-9 items-center gap-1.5 border-b border-intro-foreground/10 bg-intro-surface px-4" aria-hidden="true"><span className="h-2 w-2 rounded-full bg-destructive"/><span className="h-2 w-2 rounded-full bg-warning"/><span className="h-2 w-2 rounded-full bg-success"/></div>
+            <img src={dashboardPreview.url} alt="Lexora GRC dashboard showing business pulse, cross-module performance and governance navigation" loading="lazy" className="block h-auto w-full"/>
           </div>
-
-          <div className="mt-14 grid gap-px overflow-hidden rounded-xl border border-intro-soft-border bg-intro-soft-border lg:grid-cols-3">
-            {modules.map((module, i) => {
-              const Icon = module.icon;
-              return (
-                <article
-                  key={module.name}
-                  className={`group min-h-60 bg-intro-soft p-7 transition-colors hover:bg-intro-soft-raised sm:p-9 ${
-                    i === 0 || i === 4 ? "lg:col-span-2" : ""
-                  }`}
-                >
-                  <div className="flex items-start justify-between">
-                    <span className="text-xs text-intro-soft-muted">{module.number}</span>
-                    <Icon className="h-6 w-6 text-intro-primary" />
-                  </div>
-                  <h3 className="mt-14 max-w-md font-display text-2xl leading-tight sm:text-3xl">{module.name}</h3>
-                  <p className="mt-4 max-w-md text-sm leading-6 text-intro-soft-muted">{module.short}</p>
-                </article>
-              );
-            })}
-          </div>
-
           <div className="mt-10 flex justify-center">
-            <Button asChild variant="outline" className="border-intro-soft-border bg-transparent text-intro-soft-foreground hover:bg-intro-soft-raised">
+            <Button asChild variant="outline" className="border-intro-foreground/20 bg-transparent text-intro-foreground hover:bg-intro-foreground/10">
               <Link to="/platform">See every feature <ArrowRight /></Link>
             </Button>
           </div>

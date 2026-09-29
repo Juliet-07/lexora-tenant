@@ -1,67 +1,18 @@
-import { GraduationCap, Handshake } from "lucide-react";
-import { CtaBand, MarketingLayout, PageHero } from "@/components/marketing/MarketingLayout";
-import { advisoryServices, trainingProgrammes } from "@/data/marketingContent";
+import { Link, useParams } from "react-router-dom";
+import { ArrowLeft, ArrowRight, Check } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { CtaBand, MarketingLayout } from "@/components/marketing/MarketingLayout";
+import { referenceImages, services } from "@/data/referenceMarketing";
 
 export default function Advisory() {
-  return (
-    <MarketingLayout>
-      <PageHero
-        eyebrow="Advisory & Training"
-        title="The human layer that makes the platform work."
-        subtitle="Implementation support and capacity building that accelerate platform adoption and build lasting institutional strength."
-      />
-
-      <section className="py-20 sm:py-24">
-        <div className="mx-auto max-w-[1320px] px-5 sm:px-8">
-          <div className="flex items-center gap-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-intro-primary/15 text-intro-accent">
-              <Handshake className="h-5 w-5" />
-            </span>
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-intro-accent">Advisory</p>
-              <h2 className="font-display text-3xl">Implementation that sticks</h2>
-            </div>
-          </div>
-          <div className="mt-10 grid gap-4 lg:grid-cols-2">
-            {advisoryServices.map((item) => (
-              <article key={item.title} className="rounded-2xl border border-intro-foreground/10 bg-intro-surface p-7">
-                <h3 className="text-lg font-semibold">{item.title}</h3>
-                <p className="mt-3 text-sm leading-6 text-intro-muted">{item.copy}</p>
-              </article>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className="bg-intro-soft py-20 text-intro-soft-foreground sm:py-24">
-        <div className="mx-auto max-w-[1320px] px-5 sm:px-8">
-          <div className="flex items-center gap-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-intro-primary/10 text-intro-primary">
-              <GraduationCap className="h-5 w-5" />
-            </span>
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-intro-primary">Training</p>
-              <h2 className="font-display text-3xl">Capacity that compounds</h2>
-            </div>
-          </div>
-          <div className="mt-10 grid gap-4 lg:grid-cols-2">
-            {trainingProgrammes.map((item) => (
-              <article
-                key={item.title}
-                className="rounded-2xl border border-intro-soft-border bg-intro-soft-raised p-7"
-              >
-                <h3 className="text-lg font-semibold">{item.title}</h3>
-                <p className="mt-3 text-sm leading-6 text-intro-soft-muted">{item.copy}</p>
-              </article>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <CtaBand
-        title="Bring governance to life."
-        copy="Advisory engagements and training programmes tailored to your organisation."
-      />
-    </MarketingLayout>
-  );
+  const { serviceId } = useParams();
+  const service = services.find(item=>item.id===serviceId);
+  return <MarketingLayout>{service ? <>
+    <section className="border-b border-intro-foreground/10 px-5 py-20 sm:px-8"><div className="mx-auto max-w-[1200px]"><Link to="/advisory" className="inline-flex items-center gap-2 text-sm text-intro-muted hover:text-intro-foreground"><ArrowLeft size={16}/> All services</Link><div className="mt-9 grid gap-12 lg:grid-cols-2"><div className="marketing-enter"><p className="text-xs font-bold uppercase text-intro-accent">{service.name}</p><h1 className="mt-4 font-display text-5xl leading-tight">{service.headline}</h1><p className="mt-5 leading-7 text-intro-muted">{service.description}</p></div><img src={service.image} alt="" className="marketing-enter marketing-delay aspect-[4/3] w-full rounded-lg object-cover"/></div></div></section>
+    <section className="bg-intro-soft px-5 py-20 text-intro-soft-foreground sm:px-8"><div className="mx-auto grid max-w-[1200px] gap-4 md:grid-cols-2">{service.items.map(item=><article key={item.title} className="border-t border-intro-soft-border pt-6"><Check className="h-5 w-5 text-intro-primary"/><h2 className="mt-3 text-lg font-semibold">{item.title}</h2><p className="mt-2 text-sm leading-6 text-intro-soft-muted">{item.copy}</p></article>)}</div></section><CtaBand title={service.cta} copy="Talk to our advisory team about your organisation."/>
+  </> : <>
+    <section className="marketing-hero relative overflow-hidden border-b border-intro-foreground/10 px-5 py-20 sm:px-8"><div className="mx-auto grid max-w-[1200px] items-center gap-12 lg:grid-cols-2"><div className="marketing-enter"><p className="text-xs font-semibold uppercase text-intro-accent">Advisory & Training</p><h1 className="mt-5 font-display text-5xl leading-tight sm:text-6xl">Beyond software: strategy, implementation, and capacity building across Africa</h1><p className="mt-6 max-w-xl leading-7 text-intro-muted">Three operating arms working together. The advisory practice designs frameworks. Training builds internal capacity. Technology operationalises everything into a system.</p><div className="mt-7 flex flex-wrap gap-3"><Button asChild className="bg-intro-primary text-intro-foreground"><Link to="/contact">Get in touch <ArrowRight size={16}/></Link></Button><Button asChild variant="outline" className="border-intro-foreground/20 bg-transparent text-intro-foreground"><Link to="/platform">See the platform</Link></Button></div></div><div className="marketing-enter marketing-delay marketing-gallery aspect-[5/4] overflow-hidden rounded-lg">{referenceImages.advisory.map((src,i)=><img key={i} src={src} alt="African business collaboration" className="marketing-gallery-frame h-full w-full object-cover"/>)}</div></div></section>
+    <section className="bg-intro-soft px-5 py-16 text-intro-soft-foreground sm:px-8"><div className="mx-auto max-w-[1200px]"><h2 className="font-display text-3xl">Advisory services</h2><div className="mt-6 grid gap-4 sm:grid-cols-2">{services.slice(0,4).map(item=><ServiceTile key={item.id} item={item}/>)}</div><h2 className="mt-16 font-display text-3xl">Training programmes</h2><div className="mt-6 grid gap-4 sm:grid-cols-2">{services.slice(4).map(item=><ServiceTile key={item.id} item={item}/>)}</div></div></section>
+  </>}</MarketingLayout>;
 }
+function ServiceTile({item}:{item:typeof services[number]}) { return <Link to={`/advisory/${item.id}`} className="group flex gap-5 rounded-lg border border-intro-soft-border bg-intro-soft-raised p-6 transition-transform hover:-translate-y-1"><span className="mt-1 h-10 w-10 shrink-0 rounded-md bg-intro-primary/10 text-center leading-10 text-intro-primary">✦</span><div><h3 className="font-semibold">{item.name}</h3><p className="mt-2 text-sm leading-6 text-intro-soft-muted">{item.summary}</p><span className="mt-4 inline-flex items-center gap-1 text-xs font-semibold text-intro-primary">Explore <ArrowRight size={14}/></span></div></Link> }

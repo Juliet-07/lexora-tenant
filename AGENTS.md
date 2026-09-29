@@ -1,2 +1,3 @@
 - Keep committee members and tasks on the existing governance API; store only API-uncovered committee metadata locally, keyed by committee ID, because the backend contract does not support cadence, quorum, or charter links.
 - Keep meeting notice and preparation records in tenant-and-meeting-keyed prototype storage while the governance API lacks those fields; never represent local dispatch tracking as actual email delivery.
+- Keep the marketing site on its own typography and reference content layer so changes to public pages do not alter authenticated application styling.

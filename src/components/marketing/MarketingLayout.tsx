@@ -8,7 +8,7 @@ export const marketingNav = [
   { label: "Home", to: "/" },
   { label: "Platform", to: "/platform" },
   { label: "Pricing", to: "/pricing" },
-  { label: "Solutions", to: "/solutions" },
+  { label: "Industries", to: "/industries" },
   { label: "Advisory & Training", to: "/advisory" },
   { label: "Insights", to: "/insights" },
   { label: "About", to: "/about" },
@@ -146,13 +146,13 @@ export function MarketingLayout({ children }: { children: React.ReactNode }) {
             ]}
           />
           <FooterCol
-            title="Solutions"
+            title="Industries"
             links={[
-              ["For boards", "/solutions"],
-              ["For regulated entities", "/solutions"],
-              ["For fund administrators", "/solutions"],
-              ["For professional services", "/solutions"],
-              ["For SMEs", "/solutions"],
+              ["Professional services", "/industries/proserv"],
+              ["Financial services", "/industries/finance"],
+              ["Fund managers", "/industries/funds"],
+              ["Manufacturing", "/industries/manufacturing"],
+              ["All industries", "/industries"],
             ]}
           />
           <FooterCol
@@ -231,26 +231,22 @@ export function PageHero({
   subtitle?: string;
 }) {
   return (
-    <section className="relative overflow-hidden border-b border-intro-foreground/10 py-20 sm:py-24">
+    <section className="marketing-hero relative overflow-hidden border-b border-intro-foreground/10 py-20 sm:py-24">
       <div
         className="absolute inset-0 intro-grid opacity-30"
         aria-hidden="true"
       />
-      <div
-        className="absolute left-1/2 top-[-220px] h-[420px] w-[820px] -translate-x-1/2 rounded-full bg-intro-primary/20 blur-3xl"
-        aria-hidden="true"
-      />
       <div className="relative mx-auto max-w-[900px] px-5 text-center sm:px-8">
         {eyebrow && (
-          <span className="inline-flex rounded-full border border-intro-accent/30 bg-intro-accent/10 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-intro-accent">
+          <span className="marketing-enter inline-flex rounded-full border border-intro-accent/30 bg-intro-accent/10 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-intro-accent">
             {eyebrow}
           </span>
         )}
-        <h1 className="mt-6 font-display text-5xl leading-[1.02] sm:text-6xl">
+        <h1 className="marketing-enter marketing-delay mt-6 font-display text-5xl leading-[1.02] sm:text-6xl">
           {title}
         </h1>
         {subtitle && (
-          <p className="mx-auto mt-6 max-w-2xl text-base leading-7 text-intro-muted">
+          <p className="marketing-enter marketing-delay-2 mx-auto mt-6 max-w-2xl text-base leading-7 text-intro-muted">
             {subtitle}
           </p>
         )}
