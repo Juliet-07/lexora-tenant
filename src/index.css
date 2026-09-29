@@ -182,6 +182,16 @@
   .marketing-float { animation: marketing-rise 900ms both, marketing-breathe 8s ease-in-out 1s infinite; }
   .marketing-showcase { transform: perspective(1200px) rotateX(2deg); transition: transform 600ms ease; }
   .marketing-showcase:hover { transform: perspective(1200px) rotateX(0); }
+  .marketing-star {
+    position: absolute;
+    border-radius: 9999px;
+    background: var(--star-color, hsl(var(--intro-foreground)));
+    box-shadow: 0 0 8px 1px var(--star-color, hsl(var(--intro-foreground)) / 0.4);
+    opacity: 0.2;
+    animation:
+      marketing-star-twinkle 6s ease-in-out infinite,
+      marketing-star-drift 15s linear infinite;
+  }
   .marketing-gallery { position: relative; }
   .marketing-gallery-frame { position: absolute; inset: 0; opacity: 0; animation: marketing-gallery 16s infinite; }
   .marketing-gallery-frame:nth-child(2) { animation-delay: 4s; }
@@ -193,6 +203,15 @@
 @keyframes marketing-sheen { 0%, 20% { background-position: 130% 0; } 70%, 100% { background-position: -130% 0; } }
 @keyframes marketing-breathe { 0%, 100% { translate: 0 0; } 50% { translate: 0 -8px; } }
 @keyframes marketing-gallery { 0%, 23% { opacity: 1; } 25%, 98% { opacity: 0; } 100% { opacity: 1; } }
+@keyframes marketing-star-twinkle {
+  0%, 100% { opacity: 0.12; }
+  50% { opacity: 0.75; }
+}
+@keyframes marketing-star-drift {
+  0% { transform: translate3d(0, 0, 0); }
+  50% { transform: translate3d(var(--star-drift-x, 6px), var(--star-drift-y, -10px), 0); }
+  100% { transform: translate3d(0, 0, 0); }
+}
 
 @keyframes intro-reveal {
   from {
@@ -211,6 +230,7 @@
   }
   .marketing-gallery-frame:first-child { opacity: 1; }
   .marketing-showcase { transform: none; }
+  .marketing-star { animation: none; opacity: 0.3; }
 }
 
 @layer components {
