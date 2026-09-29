@@ -7,8 +7,8 @@ export default function Platform() {
     <MarketingLayout>
       <PageHero
         eyebrow="The platform"
-        title={<>Five integrated modules.<br />One unified data layer.</>}
-        subtitle="Each module works independently. Together, they form a complete operating system for a governance-focused organisation."
+        title="Five modules that work as one"
+        subtitle="Every plan includes every module. No feature gates. The only variable is team size."
       />
 
       <section className="bg-intro-soft py-20 text-intro-soft-foreground sm:py-24">

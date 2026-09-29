@@ -159,7 +159,40 @@
   .intro-delay {
     animation-delay: 140ms;
   }
+
+  .intro-page {
+    font-family: "DM Sans", system-ui, sans-serif;
+  }
+  .intro-page .font-display {
+    font-family: "DM Serif Display", Georgia, serif;
+  }
+
+  .marketing-enter { animation: marketing-rise 900ms cubic-bezier(.22, 1, .36, 1) both; }
+  .marketing-delay { animation-delay: 170ms; }
+  .marketing-delay-2 { animation-delay: 320ms; }
+  .marketing-hero::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background-image: linear-gradient(120deg, transparent 40%, hsl(var(--intro-highlight) / .045) 50%, transparent 60%);
+    background-size: 220% 100%;
+    animation: marketing-sheen 12s ease-in-out infinite;
+  }
+  .marketing-float { animation: marketing-rise 900ms both, marketing-breathe 8s ease-in-out 1s infinite; }
+  .marketing-showcase { transform: perspective(1200px) rotateX(2deg); transition: transform 600ms ease; }
+  .marketing-showcase:hover { transform: perspective(1200px) rotateX(0); }
+  .marketing-gallery { position: relative; }
+  .marketing-gallery-frame { position: absolute; inset: 0; opacity: 0; animation: marketing-gallery 16s infinite; }
+  .marketing-gallery-frame:nth-child(2) { animation-delay: 4s; }
+  .marketing-gallery-frame:nth-child(3) { animation-delay: 8s; }
+  .marketing-gallery-frame:nth-child(4) { animation-delay: 12s; }
 }
+
+@keyframes marketing-rise { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes marketing-sheen { 0%, 20% { background-position: 130% 0; } 70%, 100% { background-position: -130% 0; } }
+@keyframes marketing-breathe { 0%, 100% { translate: 0 0; } 50% { translate: 0 -8px; } }
+@keyframes marketing-gallery { 0%, 23% { opacity: 1; } 25%, 98% { opacity: 0; } 100% { opacity: 1; } }
 
 @keyframes intro-reveal {
   from {
@@ -173,9 +206,11 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .intro-reveal {
+  .intro-reveal, .marketing-enter, .marketing-float, .marketing-gallery-frame, .marketing-hero::after {
     animation: none;
   }
+  .marketing-gallery-frame:first-child { opacity: 1; }
+  .marketing-showcase { transform: none; }
 }
 
 @layer components {

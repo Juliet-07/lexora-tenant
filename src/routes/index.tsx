@@ -23,7 +23,7 @@ import SignToolContractPage from "@/pages/public/SignToolContractPage";
 import Intro from "@/pages/Intro";
 import Platform from "@/pages/marketing/Platform";
 import Pricing from "@/pages/marketing/Pricing";
-import Solutions from "@/pages/marketing/Solutions";
+import Industries from "@/pages/marketing/Industries";
 import Advisory from "@/pages/marketing/Advisory";
 import MarketingInsights from "@/pages/marketing/Insights";
 import AboutPage from "@/pages/marketing/About";
@@ -93,8 +93,10 @@ export function AppRoutes() {
         <Route path="/login" element={<Login />} />
         <Route path="/platform" element={<Platform />} />
         <Route path="/pricing" element={<Pricing />} />
-        <Route path="/solutions" element={<Solutions />} />
+        <Route path="/industries" element={<Industries />} />
+        <Route path="/industries/:industryId" element={<Industries />} />
         <Route path="/advisory" element={<Advisory />} />
+        <Route path="/advisory/:serviceId" element={<Advisory />} />
         <Route path="/insights" element={<MarketingInsights />} />
         <Route path="/about" element={<AboutPage />} />
         <Route path="/contact" element={<ContactPage />} />
