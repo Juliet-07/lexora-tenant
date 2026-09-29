@@ -1,8 +1,8 @@
 # Roadmap
 
 ## About page reference rebuild
-- [ ] Recreate the uploaded About landing page, leadership profiles and partners section
-- [ ] Verify About page and profile navigation on desktop and mobile
+- [x] Recreate the uploaded About landing page, leadership profiles and partners section
+- [x] Verify About page and profile navigation on desktop and mobile
 
 ## Public website reference update
 - [x] Replace Advisory and Industries imagery with Africa-focused, directly viewable image files or links
