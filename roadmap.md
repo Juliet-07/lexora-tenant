@@ -1,6 +1,7 @@
 # Roadmap
 
 ## Public website reference update
+- [ ] Replace Advisory and Industries imagery with Africa-focused, directly viewable image files or links
 - [x] Change public-site typography and animate public-page introductions
 - [x] Replace home module cards with supplied dashboard image
 - [x] Match platform introduction, retain pricing content and animate its introduction
