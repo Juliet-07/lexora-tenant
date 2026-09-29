@@ -2,6 +2,7 @@ import { Link, NavLink, useLocation } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { ArrowRight, Building2, Mail, Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { FloatingStars } from "@/components/marketing/FloatingStars";
 import { cn } from "@/lib/utils";
 
 export const marketingNav = [
@@ -236,6 +237,7 @@ export function PageHero({
         className="absolute inset-0 intro-grid opacity-30"
         aria-hidden="true"
       />
+      <FloatingStars />
       <div className="relative mx-auto max-w-[900px] px-5 text-center sm:px-8">
         {eyebrow && (
           <span className="marketing-enter inline-flex rounded-full border border-intro-accent/30 bg-intro-accent/10 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-intro-accent">
