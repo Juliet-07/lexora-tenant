@@ -368,6 +368,151 @@ export interface MeetingActionItem {
   createdAt: string;
 }
 
+// ── Preparation checklist — the fixed 10-item list mirrors
+// MEETING_CHECKLIST_ITEMS on the backend exactly (same ids/titles),
+// the same convention already used for MeetingMode/MeetingPlatform
+// enums above (duplicated, not fetched). Completing all 10 is what
+// gates the Dispatch button. ─────────────────────────────────────────
+export interface MeetingChecklistItemDef {
+  id: string;
+  title: string;
+  detail: string;
+}
+export const MEETING_CHECKLIST_ITEMS: MeetingChecklistItemDef[] = [
+  {
+    id: "convened",
+    title: "Meeting properly convened",
+    detail:
+      "Confirm the meeting has been called in line with the constitution/charter.",
+  },
+  {
+    id: "notice-issued",
+    title: "Required notice issued on time",
+    detail: "The notice period for this meeting type has been met.",
+  },
+  {
+    id: "agenda-complete",
+    title: "Agenda complete",
+    detail: "All agenda items and presenters are confirmed.",
+  },
+  {
+    id: "minutes-reviewed",
+    title: "Previous minutes and outstanding actions reviewed",
+    detail: "Prior minutes are accurate and open actions are tracked.",
+  },
+  {
+    id: "resolutions-prepared",
+    title: "Draft resolutions prepared",
+    detail: "Any resolutions expected at this meeting are drafted.",
+  },
+  {
+    id: "quorum-confirmed",
+    title: "Quorum confirmed",
+    detail: "Expected attendance meets the quorum requirement.",
+  },
+  {
+    id: "coi-checked",
+    title: "Conflicts of interest checked",
+    detail: "Known conflicts for this agenda have been identified.",
+  },
+  {
+    id: "papers-circulated",
+    title: "Board papers reviewed and circulated",
+    detail: "Supporting papers are final and ready to circulate.",
+  },
+  {
+    id: "statutory-checked",
+    title: "Statutory and governance requirements checked",
+    detail:
+      "Any statutory filings or governance steps tied to this meeting are accounted for.",
+  },
+  {
+    id: "actions-identified",
+    title: "Post-meeting actions identified",
+    detail: "Likely follow-up actions have been anticipated.",
+  },
+];
+
+export interface MeetingChecklistRecord {
+  itemId: string;
+  completedAt: string;
+  completedBy: string;
+}
+
+export type NoticeRsvpStatus = "Pending" | "Confirmed" | "Apologies";
+
+export interface NoticeRecipient {
+  name: string;
+  email: string;
+  rsvp: NoticeRsvpStatus;
+  openedAt: string | null;
+  lastReminderSentAt: string | null;
+}
+
+export interface MeetingNotice {
+  body: string;
+  minimumDays: number;
+  rsvpDeadline: string | null;
+  dispatchedAt: string | null;
+  dispatchedBy: string | null;
+  recipients: NoticeRecipient[];
+}
+
+export type MinuteSectionKind =
+  | "Procedural"
+  | "Noting"
+  | "Discussion"
+  | "Resolution";
+export type MinutesDraftStatus =
+  | "Draft"
+  | "Sent for Chair review"
+  | "Chair approved"
+  | "Tabled for Board adoption"
+  | "Adopted and signed";
+export type MinuteResolutionOutcome =
+  | "Passed"
+  | "Not passed"
+  | "Deferred"
+  | "Withdrawn";
+
+export interface MinuteResolution {
+  ref: string;
+  proposedBy: string;
+  secondedBy: string;
+  for: number;
+  against: number;
+  abstained: number;
+  outcome: MinuteResolutionOutcome;
+}
+
+export interface MinuteSection {
+  _id: string;
+  title: string;
+  kind: MinuteSectionKind;
+  presenter: string;
+  time: string;
+  body: string;
+  resolution: MinuteResolution | null;
+}
+
+export interface MinutesDraftAction {
+  action: string;
+  owner: string;
+  due: string;
+}
+
+export interface MinutesDraft {
+  chair: string;
+  minuteTaker: string;
+  quorumText: string;
+  conflicts: string;
+  sections: MinuteSection[];
+  actions: MinutesDraftAction[];
+  status: MinutesDraftStatus;
+  updatedAt: string | null;
+  updatedBy: string | null;
+}
+
 const GRC_API_BASE = (api.defaults as any)?.baseURL ?? "/api";
 export const resolveGrcFileUrl = (url: string): string => {
   if (!url) return url;
@@ -423,6 +568,9 @@ export interface Meeting {
     submittedAt: string;
   }[];
   actionItems: MeetingActionItem[];
+  checklist: MeetingChecklistRecord[];
+  notice: MeetingNotice;
+  minutesDraft: MinutesDraft | null;
 }
 
 export interface MinutesReviewSnapshot {
@@ -1275,6 +1423,36 @@ export const updateMeetingNotes = async (
   return res.data?.data ?? res.data;
 };
 
+export interface NoticeRsvpSnapshot {
+  title: string;
+  type: string;
+  date: string;
+  location: string;
+  chair: string;
+  noticeBody: string;
+  rsvpDeadline: string | null;
+  prefillName: string;
+  currentRsvp: NoticeRsvpStatus;
+}
+
+export const fetchNoticeRsvpSnapshot = async (
+  token: string,
+): Promise<NoticeRsvpSnapshot> => {
+  const res = await api.get(`/grc/governance/meetings/notice-rsvp/${token}`);
+  return res.data?.data ?? res.data;
+};
+
+export const submitPublicNoticeRsvp = async (
+  token: string,
+  dto: { name: string; rsvp: "Confirmed" | "Apologies" },
+): Promise<{ success: boolean }> => {
+  const res = await api.post(
+    `/grc/governance/meetings/notice-rsvp/${token}`,
+    dto,
+  );
+  return res.data?.data ?? res.data;
+};
+
 export const fetchAckSnapshot = async (token: string): Promise<AckSnapshot> => {
   const res = await api.get(`/grc/governance/meetings/ack/${token}`);
   return res.data?.data ?? res.data;
@@ -1300,6 +1478,66 @@ export const updateMeetingMinutes = async (
   const res = await api.patch(`/grc/governance/meetings/${id}/minutes`, {
     minutes,
   });
+  return res.data?.data ?? res.data;
+};
+
+// ── Preparation checklist ────────────────────────────────────────
+export const setMeetingChecklistItem = async (
+  id: string,
+  itemId: string,
+  completed: boolean,
+): Promise<Meeting> => {
+  const res = await api.patch(
+    `/grc/governance/meetings/${id}/checklist/${itemId}`,
+    { completed },
+  );
+  return res.data?.data ?? res.data;
+};
+
+// ── Notice — drafted, then dispatched to attendees ───────────────
+export const updateMeetingNotice = async (
+  id: string,
+  dto: { body: string; minimumDays?: number; rsvpDeadline?: string },
+): Promise<Meeting> => {
+  const res = await api.patch(`/grc/governance/meetings/${id}/notice`, dto);
+  return res.data?.data ?? res.data;
+};
+
+export const dispatchMeetingNotice = async (id: string): Promise<Meeting> => {
+  const res = await api.post(
+    `/grc/governance/meetings/${id}/notice/dispatch`,
+    {},
+  );
+  return res.data?.data ?? res.data;
+};
+
+// ── Structured minutes drafting ──────────────────────────────────
+export const updateMeetingMinutesDraft = async (
+  id: string,
+  dto: {
+    chair?: string;
+    minuteTaker?: string;
+    quorumText?: string;
+    conflicts?: string;
+    sections: Omit<MinuteSection, "_id">[];
+    actions: MinutesDraftAction[];
+  },
+): Promise<Meeting> => {
+  const res = await api.patch(
+    `/grc/governance/meetings/${id}/minutes-draft`,
+    dto,
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const setMeetingMinutesDraftStatus = async (
+  id: string,
+  status: MinutesDraftStatus,
+): Promise<Meeting> => {
+  const res = await api.patch(
+    `/grc/governance/meetings/${id}/minutes-draft/status`,
+    { status },
+  );
   return res.data?.data ?? res.data;
 };
 

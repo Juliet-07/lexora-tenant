@@ -13,8 +13,9 @@ import { grcRoutes } from "./grc.routes";
 import { financeRoutes } from "./finance.routes";
 import { employeeRoutes } from "./employee.routes";
 import SignContractPage from "@/pages/public/SigninContractPage";
-import MeetingAckPage from "@/pages/grc/governance/MeetingAck";
-import MinutesReviewPage from "@/pages/grc/governance/MinutesReview";
+import MeetingAckPage from "@/pages/grc/governance/Meeting/MeetingAck";
+import MinutesReviewPage from "@/pages/grc/governance/Meeting/MinutesReview";
+import MeetingNoticeRsvpPage from "@/pages/grc/governance/Meeting/MeetingNoticeRsvp";
 import PolicyAckPage from "@/pages/grc/compliance/PolicyAck";
 import PolicyApprovalPage from "@/pages/grc/compliance/PolicyApproval";
 import DealContractReviewPage from "@/pages/grc/deals/DealContractReview";
@@ -66,6 +67,10 @@ export function AppRoutes() {
         />
         <Route path="/meeting-ack/:token" element={<MeetingAckPage />} />
         <Route path="/minutes-review/:token" element={<MinutesReviewPage />} />
+        <Route
+          path="/meeting-notice/:token"
+          element={<MeetingNoticeRsvpPage />}
+        />
         <Route path="/policy-ack/:token" element={<PolicyAckPage />} />
         <Route
           path="/policy-approval/:token"

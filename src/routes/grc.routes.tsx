@@ -15,7 +15,7 @@ import GrcAudits from "@/pages/grc/compliance/Audits";
 import IncidentsBreaches from "@/pages/grc/compliance/IncidentsBreaches";
 import GrcVendors from "@/pages/grc/risk/Vendors";
 import GrcBcp from "@/pages/grc/risk/Bcp";
-import GrcMeetings from "@/pages/grc/governance/Meetings";
+import GrcMeetings from "@/pages/grc/governance/Meeting/Meetings";
 import GrcOrgStructure from "@/pages/grc/governance/OrgStructure";
 import GrcCommittees from "@/pages/grc/governance/Committees";
 import GrcBoardMgt from "@/pages/grc/governance/Board/BoardMgt";

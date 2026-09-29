@@ -64,10 +64,8 @@ import {
   removeAgendaItem,
   addBoardPackDoc,
   removeBoardPackDoc,
-  updateMeetingNotes,
   updateMeetingMinutes,
   markMeetingHeld,
-  dispatchMeeting,
   sendMeetingMinutes,
   fetchBoardMembers,
   fetchCommittees,
@@ -509,7 +507,15 @@ function NewMeetingDialog({ open, onOpenChange }: any) {
                   ))}
                 </SelectContent>
               </Select>
+              <p className="text-xs text-muted-foreground mt-1">
+                Attendees are automatically every member of this committee.
+              </p>
             </div>
+          )}
+          {f.type === "Board" && (
+            <p className="text-xs text-muted-foreground">
+              Attendees are automatically every active board member.
+            </p>
           )}
           <div>
             <Label>Meeting mode</Label>
@@ -581,14 +587,6 @@ function NewMeetingDialog({ open, onOpenChange }: any) {
               onChange={(e) => setF({ ...f, chair: e.target.value })}
             />
           </div>
-          <div>
-            <Label>Notes to attendees</Label>
-            <Textarea
-              rows={2}
-              value={f.notes}
-              onChange={(e) => setF({ ...f, notes: e.target.value })}
-            />
-          </div>
         </div>
         <DialogFooter>
           <Button onClick={submit} disabled={mutation.isPending}>
@@ -618,14 +616,17 @@ function MeetingSheet({
     durationMinutes: 10,
   });
   const [pendingFile, setPendingFile] = useState<File | null>(null);
-  const [notes, setNotes] = useState(meeting?.notes ?? "");
   const [minutes, setMinutes] = useState(meeting?.minutes ?? "");
   const [postponeOpen, setPostponeOpen] = useState(false);
   const [postponeReason, setPostponeReason] = useState("");
+  // Attendees are automatic for Board/Committee meetings (see
+  // MeetingService#computeAutoAttendees) — only an Executive/Ad-hoc
+  // meeting still has a manual attendee list to manage here.
+  const manualAttendees =
+    meeting?.type === "Executive" || meeting?.type === "Ad-hoc";
 
   useEffect(() => {
     setMinutes(meeting?.minutes ?? "");
-    setNotes(meeting?.notes ?? "");
   }, [meeting?._id]);
 
   const invalidate = () =>
@@ -675,25 +676,6 @@ function MeetingSheet({
     mutationFn: (i: number) => removeBoardPackDoc(meeting!._id, i),
     onSuccess: invalidate,
     onError: onErr("Failed to remove document"),
-  });
-  const notesMut = useMutation({
-    mutationFn: () => updateMeetingNotes(meeting!._id, notes),
-    onSuccess: () => {
-      invalidate();
-      toast({ title: "Notes saved" });
-    },
-    onError: onErr("Failed to save notes"),
-  });
-  const dispatchMut = useMutation({
-    mutationFn: () => dispatchMeeting(meeting!._id),
-    onSuccess: () => {
-      invalidate();
-      toast({
-        title: "Meeting pack dispatched",
-        description: `Sent to ${meeting!.attendees.length} recipient(s).`,
-      });
-    },
-    onError: onErr("Failed to dispatch"),
   });
   const heldMut = useMutation({
     mutationFn: () => markMeetingHeld(meeting!._id),
@@ -894,11 +876,19 @@ function MeetingSheet({
             )}
           </div>
 
-          {/* Attendees */}
+          {/* Attendees — automatic for Board/Committee meetings (every
+              active board member, or every member of the selected
+              committee), so no manual add/remove there. Only an
+              Executive/Ad-hoc meeting still builds its list by hand. */}
           <section className="border-t pt-4 space-y-2">
             <div className="font-medium text-sm flex items-center gap-2">
               <Users2 className="h-4 w-4" />
               Attendees ({meeting.attendees.length})
+              {!manualAttendees && (
+                <span className="text-xs font-normal text-muted-foreground">
+                  — automatic for a {meeting.type} meeting
+                </span>
+              )}
             </div>
             <div className="space-y-1">
               {meeting.attendees.map((a, i) => (
@@ -910,45 +900,58 @@ function MeetingSheet({
                     {a.name}{" "}
                     <span className="text-muted-foreground">{a.email}</span>
                   </span>
-                  <div className="flex items-center gap-1 shrink-0">
-                    <button onClick={() => rmAttMut.mutate(i)}>
-                      <Trash2 className="h-3 w-3 text-muted-foreground" />
-                    </button>
-                  </div>
+                  {manualAttendees && (
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button onClick={() => rmAttMut.mutate(i)}>
+                        <Trash2 className="h-3 w-3 text-muted-foreground" />
+                      </button>
+                    </div>
+                  )}
                 </div>
               ))}
+              {meeting.attendees.length === 0 && (
+                <div className="text-xs text-muted-foreground">
+                  {manualAttendees
+                    ? "No attendees yet."
+                    : meeting.type === "Committee"
+                      ? "The selected committee has no members yet."
+                      : "No active board members yet."}
+                </div>
+              )}
             </div>
-            <div className="grid grid-cols-3 gap-2">
-              <Input
-                placeholder="Name"
-                value={att.name}
-                onChange={(e) => setAtt({ ...att, name: e.target.value })}
-              />
-              <Input
-                placeholder="Email"
-                value={att.email}
-                onChange={(e) => setAtt({ ...att, email: e.target.value })}
-              />
-              <div className="flex gap-1">
+            {manualAttendees && (
+              <div className="grid grid-cols-3 gap-2">
                 <Input
-                  placeholder="Role"
-                  value={att.role}
-                  onChange={(e) => setAtt({ ...att, role: e.target.value })}
+                  placeholder="Name"
+                  value={att.name}
+                  onChange={(e) => setAtt({ ...att, name: e.target.value })}
                 />
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={!att.name || !att.email || addAttMut.isPending}
-                  onClick={() => addAttMut.mutate()}
-                >
-                  {addAttMut.isPending ? (
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                  ) : (
-                    "Add"
-                  )}
-                </Button>
+                <Input
+                  placeholder="Email"
+                  value={att.email}
+                  onChange={(e) => setAtt({ ...att, email: e.target.value })}
+                />
+                <div className="flex gap-1">
+                  <Input
+                    placeholder="Role"
+                    value={att.role}
+                    onChange={(e) => setAtt({ ...att, role: e.target.value })}
+                  />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={!att.name || !att.email || addAttMut.isPending}
+                    onClick={() => addAttMut.mutate()}
+                  >
+                    {addAttMut.isPending ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      "Add"
+                    )}
+                  </Button>
+                </div>
               </div>
-            </div>
+            )}
           </section>
 
           {/* Agenda */}
@@ -984,12 +987,21 @@ function MeetingSheet({
                 value={ag.title}
                 onChange={(e) => setAg({ ...ag, title: e.target.value })}
               />
-              <Input
-                className="col-span-2"
-                placeholder="Presenter"
-                value={ag.presenter}
-                onChange={(e) => setAg({ ...ag, presenter: e.target.value })}
-              />
+              <Select
+                value={ag.presenter || undefined}
+                onValueChange={(v) => setAg({ ...ag, presenter: v })}
+              >
+                <SelectTrigger className="col-span-2">
+                  <SelectValue placeholder="Presenter" />
+                </SelectTrigger>
+                <SelectContent>
+                  {meeting.attendees.map((a) => (
+                    <SelectItem key={a.email} value={a.name}>
+                      {a.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <Input
                 type="number"
                 placeholder="min"
@@ -999,6 +1011,12 @@ function MeetingSheet({
                 }
               />
             </div>
+            {meeting.attendees.length === 0 && (
+              <p className="text-xs text-muted-foreground">
+                No attendees yet, so the presenter can't be picked — the item
+                can still be added without one.
+              </p>
+            )}
             <Button
               size="sm"
               variant="outline"
@@ -1064,55 +1082,10 @@ function MeetingSheet({
             </div>
           </section>
 
-          {/* Notes / cover message */}
-          <section className="border-t pt-4 space-y-2">
-            <div className="font-medium text-sm">Notes / cover message</div>
-            <Textarea
-              rows={3}
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-            />
-            <div className="flex justify-end">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => notesMut.mutate()}
-                disabled={notesMut.isPending}
-              >
-                Save notes
-              </Button>
-            </div>
-          </section>
-
-          {/* Step 1: dispatch the pre-meeting pack */}
-          {meeting.status !== "Postponed" && (
-            <section className="border-t pt-4 space-y-2">
-              <div className="font-medium text-sm">Send meeting pack</div>
-              <p className="text-xs text-muted-foreground">
-                Sends the notes, agenda, and board pack to all attendees ahead
-                of the meeting.
-              </p>
-              <Button
-                onClick={() => dispatchMut.mutate()}
-                disabled={
-                  meeting.status === "Sent" ||
-                  meeting.status === "Held" ||
-                  dispatchMut.isPending
-                }
-              >
-                <Send className="h-4 w-4 mr-1" />
-                {meeting.status === "Sent" || meeting.status === "Held"
-                  ? "Dispatched"
-                  : "Send meeting pack"}
-              </Button>
-              {meeting.sentAt && (
-                <div className="text-xs text-muted-foreground flex items-center gap-1">
-                  <Mail className="h-3 w-3" />
-                  Dispatched {new Date(meeting.sentAt).toLocaleString()}
-                </div>
-              )}
-            </section>
-          )}
+          {/* Notice and board-pack Dispatch now live on the meeting
+              workspace page (Notice tab; Dispatch button, gated on the
+              preparation checklist) — this sheet is now scoped to
+              Agenda and board-pack documents only. */}
 
           {/* Acknowledgements from external attendees */}
           <section className="border-t pt-4 space-y-2">
@@ -1412,7 +1385,7 @@ function AttendanceSection({ meeting }: { meeting: Meeting }) {
           </Button>
           {meeting.attendees.length === 0 && (
             <p className="text-[11px] text-muted-foreground">
-              Add attendees above before registering attendance.
+              This meeting has no attendees yet.
             </p>
           )}
           {meeting.attendees.length > 0 && meeting.status !== "Held" && (

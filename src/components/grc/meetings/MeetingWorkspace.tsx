@@ -31,11 +31,17 @@ import {
   Circle,
   Trash2,
   Loader2,
+  ListChecks,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
-import { MeetingChecklist, MeetingNotice, useMeetingPreparation } from "@/components/grc/meetings/MeetingPreparation";
+import {
+  MeetingChecklist,
+  MeetingNotice,
+  useMeetingPreparation,
+} from "@/components/grc/meetings/MeetingPreparation";
 import { MinutesDrafter } from "@/components/grc/meetings/MinutesDrafter";
 import {
+  MEETING_CHECKLIST_ITEMS,
   dispatchMeeting,
   addMeetingActionItem,
   removeMeetingActionItem,
@@ -107,6 +113,8 @@ export function MeetingWorkspace({
   const quorumNeeded = Math.floor(meeting.attendees.length / 2) + 1;
   const acknowledgments = meeting.acknowledgments ?? [];
   const actionItems = meeting.actionItems ?? [];
+  const checklistDone = Object.keys(preparation.completed).length;
+  const checklistComplete = checklistDone >= MEETING_CHECKLIST_ITEMS.length;
 
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: ["grc-meetings"] });
@@ -167,18 +175,24 @@ export function MeetingWorkspace({
     { label: "Scheduled", sub: fmt(date), state: "done" },
     {
       label: "Notice sent",
-      sub: preparation.notice.dispatchedAt ? fmt(new Date(preparation.notice.dispatchedAt)) : "Demo record pending",
-      state: preparation.notice.dispatchedAt ? "done" : "current",
+      sub: meeting.notice.dispatchedAt
+        ? fmt(new Date(meeting.notice.dispatchedAt))
+        : "Not sent yet",
+      state: meeting.notice.dispatchedAt ? "done" : "current",
     },
     {
       label: "Preparing pack",
-      sub: `${Object.keys(preparation.completed).length}/10 checks`,
-      state: meeting.sentAt ? "done" : "current",
+      sub: `${checklistDone}/${MEETING_CHECKLIST_ITEMS.length} checks`,
+      state: meeting.sentAt
+        ? "done"
+        : checklistComplete
+          ? "current"
+          : "current",
     },
     {
       label: "Pack dispatched",
       sub: meeting.sentAt ? fmt(new Date(meeting.sentAt)) : "—",
-      state: meeting.sentAt ? "done" : "current",
+      state: meeting.sentAt ? "done" : "todo",
     },
     {
       label: "Meeting held",
@@ -201,6 +215,11 @@ export function MeetingWorkspace({
     w.document.close();
     w.print();
   };
+
+  const dispatchDisabled =
+    dispatchMut.isPending ||
+    meeting.attendees.length === 0 ||
+    (!meeting.sentAt && !checklistComplete);
 
   return (
     <div className="space-y-5">
@@ -238,24 +257,35 @@ export function MeetingWorkspace({
             · {meeting.location || meeting.venue || meeting.meetingLink}
           </p>
         </div>
-        <div className="flex gap-2">
-          {onManage && (
-            <Button variant="outline" onClick={onManage}>
-              <Settings2 className="h-4 w-4 mr-1" />
-              Manage meeting
-            </Button>
-          )}
-          <Button
-            onClick={() => dispatchMut.mutate()}
-            disabled={dispatchMut.isPending || meeting.attendees.length === 0}
-          >
-            {dispatchMut.isPending ? (
-              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-            ) : (
-              <Package className="h-4 w-4 mr-1" />
+        <div className="flex flex-col items-end gap-1">
+          <div className="flex gap-2">
+            {onManage && (
+              <Button variant="outline" onClick={onManage}>
+                <Settings2 className="h-4 w-4 mr-1" />
+                Manage meeting
+              </Button>
             )}
-            {meeting.sentAt ? "Re-dispatch board pack" : "Dispatch board pack"}
-          </Button>
+            <Button
+              onClick={() => dispatchMut.mutate()}
+              disabled={dispatchDisabled}
+            >
+              {dispatchMut.isPending ? (
+                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+              ) : (
+                <Package className="h-4 w-4 mr-1" />
+              )}
+              {meeting.sentAt
+                ? "Re-dispatch board pack"
+                : "Dispatch board pack"}
+            </Button>
+          </div>
+          {!meeting.sentAt && !checklistComplete && (
+            <p className="text-[11px] text-muted-foreground flex items-center gap-1">
+              <ListChecks className="h-3 w-3" />
+              Complete the preparation checklist ({checklistDone}/
+              {MEETING_CHECKLIST_ITEMS.length}) to unlock
+            </p>
+          )}
         </div>
       </div>
 
@@ -272,8 +302,12 @@ export function MeetingWorkspace({
           <TabsTrigger value="actions">Actions & follow-up</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="checklist"><MeetingChecklist meeting={meeting} state={preparation} /></TabsContent>
-        <TabsContent value="notice"><MeetingNotice meeting={meeting} state={preparation} /></TabsContent>
+        <TabsContent value="checklist">
+          <MeetingChecklist meeting={meeting} state={preparation} />
+        </TabsContent>
+        <TabsContent value="notice">
+          <MeetingNotice meeting={meeting} state={preparation} />
+        </TabsContent>
 
         {/* AGENDA */}
         <TabsContent value="agenda">
@@ -555,7 +589,7 @@ export function MeetingWorkspace({
               </Table>
               {onManage && (
                 <p className="text-xs text-muted-foreground mt-3">
-                  Add attendees or record actual attendance via{" "}
+                  Record actual attendance via{" "}
                   <button className="underline" onClick={onManage}>
                     Manage meeting
                   </button>
@@ -571,7 +605,7 @@ export function MeetingWorkspace({
           <MinutesDrafter meeting={meeting} />
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Minutes</CardTitle>
+              <CardTitle className="text-base">Final minutes</CardTitle>
               <p className="text-sm text-muted-foreground">
                 {!held
                   ? `Meeting upcoming (${fmt(date)}) — minutes can be drafted once the meeting is marked held.`
@@ -605,7 +639,7 @@ export function MeetingWorkspace({
               )}
               {onManage && (
                 <p className="text-xs text-muted-foreground">
-                  Draft, edit or send minutes via{" "}
+                  Send minutes via{" "}
                   <button className="underline" onClick={onManage}>
                     Manage meeting
                   </button>
@@ -740,8 +774,7 @@ export function MeetingWorkspace({
               </div>
               {meeting.attendees.length === 0 && (
                 <p className="text-xs text-muted-foreground">
-                  Add attendees first (via Manage meeting) before assigning
-                  action items.
+                  This meeting has no attendees to assign action items to yet.
                 </p>
               )}
             </CardContent>
