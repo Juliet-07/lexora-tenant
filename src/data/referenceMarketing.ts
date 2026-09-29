@@ -1,10 +1,10 @@
-// Content adapted from the supplied Lexora HTML reference. Visuals are hosted project assets.
+// Content adapted from the supplied Lexora HTML reference. Visuals are directly viewable JPG files under src/assets/marketing.
 export const industries = [
   {
     "id": "proserv",
     "name": "Professional Services",
     "summary": "Advisory, consulting, and professional practices managing client mandates, timesheets, billing, and SLA compliance.",
-    "image": "/__l5e/assets-v1/128a2922-4153-4cf5-8268-fcba9f372bc7/industry-0.jpg",
+    "image": "/src/assets/marketing/industry-0.jpg",
     "headline": "Run your practice. Deliver your mandates. Bill every hour.",
     "description": "From client pitch through delivery and invoicing. Lexora unifies CRM, matter management, timesheets, billing, contract lifecycle, SLA tracking, and a legal knowledge base in one platform designed for advisory practices.",
     "stats": [
@@ -105,7 +105,7 @@ export const industries = [
     "id": "projects",
     "name": "Project Companies",
     "summary": "Infrastructure, construction, and capital project delivery with milestones, Gantt scheduling, and stakeholder management.",
-    "image": "/__l5e/assets-v1/bde74cf5-75d9-4649-bfb6-b40c75380d28/industry-1.jpg",
+    "image": "/src/assets/marketing/industry-1.jpg",
     "headline": "Deliver capital projects on time, on budget, on record.",
     "description": "Infrastructure, construction, and capital project delivery with milestone tracking, Gantt scheduling, stakeholder management, procurement workflows, and full financial controls from inception to close-out.",
     "stats": [
@@ -170,7 +170,7 @@ export const industries = [
     "id": "epcm",
     "name": "EPCM",
     "summary": "Engineering, procurement, and construction management with integrated cost control, schedule tracking, and site visibility.",
-    "image": "/__l5e/assets-v1/218cfac7-af73-446f-a854-c5e7c139d427/industry-2.jpg",
+    "image": "/src/assets/marketing/industry-2.jpg",
     "headline": "Engineering precision meets governance discipline.",
     "description": "Unify every phase of capital project delivery in one auditable system. Track engineering hours against budget, govern procurement pipelines, monitor construction milestones, and maintain the decision audit trail that keeps complex projects accountable.",
     "stats": [
@@ -271,7 +271,7 @@ export const industries = [
     "id": "realestate",
     "name": "Real Estate",
     "summary": "Property development, asset management, tenant relations, lease administration, and regulatory compliance.",
-    "image": "/__l5e/assets-v1/a69c9f26-630d-4c31-847c-d0313264fddf/industry-3.jpg",
+    "image": "/src/assets/marketing/industry-3.jpg",
     "headline": "Governance infrastructure for property portfolios.",
     "description": "Development projects, asset management, tenant relations, lease administration, vendor procurement, and regulatory compliance. One platform for the full property lifecycle.",
     "stats": [
@@ -332,7 +332,7 @@ export const industries = [
     "id": "manufacturing",
     "name": "Manufacturing",
     "summary": "Production oversight, quality compliance, supply chain governance, workforce management, and operational risk controls.",
-    "image": "/__l5e/assets-v1/f07c504f-11b6-4ec7-903d-bf7c432ab41e/industry-4.jpg",
+    "image": "/src/assets/marketing/industry-4.jpg",
     "headline": "Operational governance for production-driven businesses.",
     "description": "Production oversight, quality compliance, supply chain governance, workforce management, vendor control, and operational risk frameworks. Structure the operational backbone behind your production line.",
     "stats": [
@@ -393,7 +393,7 @@ export const industries = [
     "id": "natural",
     "name": "Natural Resources",
     "summary": "Mining, oil, gas, and agriculture. Concession management, ESG, community development agreements, and environmental compliance.",
-    "image": "/__l5e/assets-v1/2e5f3d9b-3127-4dbc-a091-51032bcd15cb/industry-5.jpg",
+    "image": "/src/assets/marketing/industry-5.jpg",
     "headline": "Governance infrastructure for mining, oil, gas, and agriculture.",
     "description": "Concession management, mining code compliance, environmental and social governance, community development agreements, regulatory filings, and stakeholder management across complex licence structures.",
     "stats": [
@@ -458,7 +458,7 @@ export const industries = [
     "id": "trade",
     "name": "Trade & Logistics",
     "summary": "Import/export compliance, vendor management, procurement workflows, customs documentation, and supply chain risk.",
-    "image": "/__l5e/assets-v1/97821d2f-c6de-4f2d-9cab-1718a4d21a1f/industry-6.jpg",
+    "image": "/src/assets/marketing/industry-6.jpg",
     "headline": "Compliance and control across every border crossing.",
     "description": "Import/export compliance, vendor management, procurement workflows, customs documentation, supply chain risk, and financial controls for trading businesses operating across African markets.",
     "stats": [
@@ -519,7 +519,7 @@ export const industries = [
     "id": "serviceteams",
     "name": "Service-Focused Teams",
     "summary": "Client support operations, SLA management, ticket resolution, client portals, and service delivery governance.",
-    "image": "/__l5e/assets-v1/9c1d16d8-7bb1-4b2e-bf5f-6f051915ff7f/industry-7.jpg",
+    "image": "/src/assets/marketing/industry-7.jpg",
     "headline": "Client excellence starts with operational discipline.",
     "description": "SLA management, client portals, service delivery tracking, ticket resolution, relationship intelligence, and governance frameworks for teams whose product is the quality of their service.",
     "stats": [
@@ -580,7 +580,7 @@ export const industries = [
     "id": "tech",
     "name": "Technology Teams",
     "summary": "Product delivery, sprint tracking, resource allocation, client management, IP governance, and compliance frameworks.",
-    "image": "/__l5e/assets-v1/528cec02-fbfd-4130-b2c9-87e27e6f1dce/industry-8.jpg",
+    "image": "/src/assets/marketing/industry-8.jpg",
     "headline": "Ship products. Manage clients. Govern operations.",
     "description": "Product delivery, resource allocation, client management, IP governance, compliance frameworks, HR, and finance for technology companies that need more than a project board.",
     "stats": [
@@ -641,7 +641,7 @@ export const industries = [
     "id": "finance",
     "name": "Financial Services",
     "summary": "AML/KYC, trust accounting, regulatory reporting, client onboarding, transaction monitoring, and regulatory compliance.",
-    "image": "/__l5e/assets-v1/d2d6ae89-e854-4c92-926d-7c71c2c312a7/industry-9.jpg",
+    "image": "/src/assets/marketing/industry-9.jpg",
     "headline": "The compliance backbone for licensed financial institutions.",
     "description": "AML/KYC onboarding, trust accounting, regulatory reporting, transaction monitoring, client portals, and fiduciary compliance for banks, TCSPs, microfinance institutions, and insurance companies operating under central bank supervision.",
     "stats": [
@@ -742,7 +742,7 @@ export const industries = [
     "id": "sme",
     "name": "SMEs & Growth-Stage Companies",
     "summary": "All-in-one operations: HR, finance, CRM, governance, deal rooms, investor readiness, and the GRC Health Score.",
-    "image": "/__l5e/assets-v1/4f6ce0e8-5a26-4a54-b61b-ec8d44f3e364/industry-10.jpg",
+    "image": "/src/assets/marketing/industry-10.jpg",
     "headline": "Scale with structure, not spreadsheets.",
     "description": "HR, finance, CRM, projects, governance, deal rooms, investor readiness, and the GRC Health Score. The full operational backbone that turns a growing company into a scalable one, from day one.",
     "stats": [
@@ -807,7 +807,7 @@ export const industries = [
     "id": "investment",
     "name": "Investment & Transaction Teams",
     "summary": "Deal pipeline, data rooms, due diligence workflows, valuation, stakeholder mapping, and transaction governance.",
-    "image": "/__l5e/assets-v1/f1175424-7dca-4150-91ad-50ff4ea94d3a/industry-11.jpg",
+    "image": "/src/assets/marketing/industry-11.jpg",
     "headline": "Deal intelligence. Transaction governance. Close faster.",
     "description": "Deal pipeline management, virtual data rooms, due diligence workflows, company valuation, stakeholder mapping, and transaction governance. From origination through close and post-completion integration.",
     "stats": [
@@ -872,7 +872,7 @@ export const industries = [
     "id": "funds",
     "name": "Fund Managers & Private Equity",
     "summary": "Fund accounting, NAV computation, capital calls, distributions, waterfall analysis, LP reporting, and regulatory compliance.",
-    "image": "/__l5e/assets-v1/b6bbd6f6-6f1c-44f5-8462-e5b051a19640/industry-12.jpg",
+    "image": "/src/assets/marketing/industry-12.jpg",
     "headline": "Full-stack fund operations for African capital.",
     "description": "Fund accounting, NAV computation, capital calls, distributions, waterfall analysis, LP reporting, investor portal, and securities regulator compliance. From fund formation through exit, in one platform designed for African financial centre ecosystems.",
     "stats": [
@@ -959,7 +959,7 @@ export const services = [
         "copy": "Map current practices against applicable governance codes and regulatory requirements. Prioritised remediation roadmap with implementation timelines."
       }
     ],
-    "image": "/__l5e/assets-v1/c1822c5a-f4b3-428f-87fd-4966136f5614/advisory-detail-0.jpg",
+    "image": "/src/assets/marketing/advisory-detail-0.jpg",
     "cta": "Ready to build your governance framework?"
   },
   {
@@ -986,7 +986,7 @@ export const services = [
         "copy": "Audit planning, control testing methodology, findings classification, remediation tracking, and board audit committee reporting."
       }
     ],
-    "image": "/__l5e/assets-v1/88ccda87-765c-41a1-bd75-1821ad0ca579/advisory-detail-1.jpg",
+    "image": "/src/assets/marketing/advisory-detail-1.jpg",
     "cta": "Ready to professionalise your risk management?"
   },
   {
@@ -1013,7 +1013,7 @@ export const services = [
         "copy": "Multi-jurisdiction holding company design with tax treaty analysis, substance requirements, and regulatory approval workflows."
       }
     ],
-    "image": "/__l5e/assets-v1/34eab844-19b2-4b7e-b0b4-c36c665b0e76/advisory-detail-2.jpg",
+    "image": "/src/assets/marketing/advisory-detail-2.jpg",
     "cta": "Ready to structure your next vehicle?"
   },
   {
@@ -1040,7 +1040,7 @@ export const services = [
         "copy": "Virtual data room architecture, document indexing, access control design, and Q&A management for sell-side and buy-side processes."
       }
     ],
-    "image": "/__l5e/assets-v1/7ae8d501-75a6-4022-8979-943ab8c5be09/advisory-detail-3.jpg",
+    "image": "/src/assets/marketing/advisory-detail-3.jpg",
     "cta": "Ready to close your next transaction?"
   },
   {
@@ -1067,7 +1067,7 @@ export const services = [
         "copy": "Collaborative global research on governance and critical business issues, published resources, and a curated book shelf of recommended governance reading."
       }
     ],
-    "image": "/__l5e/assets-v1/e0b25ac0-7b5d-42e2-968a-b8da430bd139/advisory-detail-4.jpg",
+    "image": "/src/assets/marketing/advisory-detail-4.jpg",
     "cta": "Learn more about the Good Governance Academy"
   },
   {
@@ -1098,7 +1098,7 @@ export const services = [
         "copy": "Data classification, consent management, breach notification procedures, cross-border data transfer rules, and privacy impact assessments."
       }
     ],
-    "image": "/__l5e/assets-v1/5e4c4a9c-a123-4d40-9a82-a0a5ebb53a87/advisory-detail-5.jpg",
+    "image": "/src/assets/marketing/advisory-detail-5.jpg",
     "cta": "Ready to upskill your risk and compliance team?"
   },
   {
@@ -1129,7 +1129,7 @@ export const services = [
         "copy": "Audit committee, risk committee, nomination committee, and remuneration committee operating standards and best practice."
       }
     ],
-    "image": "/__l5e/assets-v1/e003a08a-5f2a-4fd5-8c89-13b0e5836998/advisory-detail-6.jpg",
+    "image": "/src/assets/marketing/advisory-detail-6.jpg",
     "cta": "Ready to elevate your board?"
   }
 ];
@@ -1167,15 +1167,15 @@ export const referenceInsights = [
 ];
 export const referenceImages = {
   "strip": [
-    "/__l5e/assets-v1/95668e10-2fa2-4508-81d7-aa87b269beb5/strip-0.jpg",
-    "/__l5e/assets-v1/29f9d9b2-15ac-4ecf-96f1-12d772641c19/strip-1.jpg",
-    "/__l5e/assets-v1/cedd7f78-707f-46c6-8d3a-99053187bd0b/strip-2.jpg",
-    "/__l5e/assets-v1/04e3f5cd-19ab-467b-8ca9-39cc95969660/strip-3.jpg"
+    "/src/assets/marketing/strip-0.jpg",
+    "/src/assets/marketing/strip-1.jpg",
+    "/src/assets/marketing/strip-2.jpg",
+    "/src/assets/marketing/strip-3.jpg"
   ],
   "advisory": [
-    "/__l5e/assets-v1/dbdf1358-dbf8-48b5-aa4c-028a6f9698be/advisory-0.jpg",
-    "/__l5e/assets-v1/bc48bd02-5bf1-4663-bf19-21e6ffebcc96/advisory-1.jpg",
-    "/__l5e/assets-v1/a9c113c5-0ea0-4a3a-b3e4-9c7c10267f33/advisory-2.jpg",
-    "/__l5e/assets-v1/d185a1f9-2a5d-488f-a8d1-71cafd96eb0e/advisory-3.jpg"
+    "/src/assets/marketing/advisory-0.jpg",
+    "/src/assets/marketing/advisory-1.jpg",
+    "/src/assets/marketing/advisory-2.jpg",
+    "/src/assets/marketing/advisory-3.jpg"
   ]
 };
