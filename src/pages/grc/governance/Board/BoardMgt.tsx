@@ -542,7 +542,6 @@ function DirectorDetail({
       <Tabs defaultValue="overview">
         <TabsList className="flex-wrap h-auto">
           <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="training">Training &amp; CPD</TabsTrigger>
           <TabsTrigger value="conflicts">Conflict register</TabsTrigger>
           <TabsTrigger value="documents">Documents</TabsTrigger>
           <TabsTrigger value="succession">Succession</TabsTrigger>
@@ -551,9 +550,6 @@ function DirectorDetail({
 
         <TabsContent value="overview" className="mt-4">
           <OverviewTab member={member} allMembers={allMembers} />
-        </TabsContent>
-        <TabsContent value="training" className="mt-4">
-          <TrainingTab member={member} />
         </TabsContent>
         <TabsContent value="conflicts" className="mt-4">
           <ConflictsTab member={member} />
