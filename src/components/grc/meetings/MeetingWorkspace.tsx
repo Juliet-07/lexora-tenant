@@ -41,6 +41,17 @@ import {
 } from "@/components/grc/meetings/MeetingPreparation";
 import { MinutesDrafter } from "@/components/grc/meetings/MinutesDrafter";
 import {
+  MeetingHeaderControls,
+  PostponedBanner,
+  AgendaAddRow,
+  PackUploadRow,
+  AttendeesEditor,
+  MinutesDistribution,
+  useRemoveAgenda,
+  useRemovePackDoc,
+} from "@/components/grc/meetings/MeetingControls";
+import { AttendanceSection } from "@/components/grc/meetings/MeetingSections";
+import {
   MEETING_CHECKLIST_ITEMS,
   dispatchMeeting,
   addMeetingActionItem,
@@ -94,12 +105,12 @@ function Stepper({
 export function MeetingWorkspace({
   meeting,
   onBack,
-  onManage,
 }: {
   meeting: Meeting;
   onBack: () => void;
-  onManage?: () => void;
 }) {
+  const removeAgenda = useRemoveAgenda(meeting);
+  const removeDoc = useRemovePackDoc(meeting);
   const queryClient = useQueryClient();
   const preparation = useMeetingPreparation(meeting);
   const [newAction, setNewAction] = useState({
@@ -258,13 +269,8 @@ export function MeetingWorkspace({
           </p>
         </div>
         <div className="flex flex-col items-end gap-1">
-          <div className="flex gap-2">
-            {onManage && (
-              <Button variant="outline" onClick={onManage}>
-                <Settings2 className="h-4 w-4 mr-1" />
-                Manage meeting
-              </Button>
-            )}
+          <div className="flex flex-wrap justify-end gap-2">
+            <MeetingHeaderControls meeting={meeting} onDeleted={onBack} />
             <Button
               onClick={() => dispatchMut.mutate()}
               disabled={dispatchDisabled}
@@ -289,6 +295,7 @@ export function MeetingWorkspace({
         </div>
       </div>
 
+      <PostponedBanner meeting={meeting} />
       <Stepper steps={steps} />
 
       <Tabs defaultValue="checklist">
@@ -315,11 +322,6 @@ export function MeetingWorkspace({
             <CardHeader className="flex-row items-center justify-between space-y-0">
               <CardTitle className="text-base">Meeting agenda</CardTitle>
               <div className="flex gap-2">
-                {onManage && (
-                  <Button size="sm" variant="outline" onClick={onManage}>
-                    Edit agenda
-                  </Button>
-                )}
                 <Button
                   size="sm"
                   variant="outline"
@@ -342,6 +344,7 @@ export function MeetingWorkspace({
                     <TableHead>Agenda item</TableHead>
                     <TableHead>Presenter</TableHead>
                     <TableHead>Duration</TableHead>
+                    <TableHead />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -351,12 +354,17 @@ export function MeetingWorkspace({
                       <TableCell className="font-medium">{a.title}</TableCell>
                       <TableCell>{a.presenter || "—"}</TableCell>
                       <TableCell>{a.durationMinutes}m</TableCell>
+                      <TableCell className="text-right">
+                        <Button size="icon" variant="ghost" aria-label="Remove agenda item" onClick={() => removeAgenda.mutate(i)}>
+                          <Trash2 className="h-4 w-4 text-muted-foreground" />
+                        </Button>
+                      </TableCell>
                     </TableRow>
                   ))}
                   {meeting.agenda.length === 0 && (
                     <TableRow>
                       <TableCell
-                        colSpan={4}
+                        colSpan={5}
                         className="text-center text-muted-foreground py-6"
                       >
                         No agenda items yet.
@@ -365,6 +373,7 @@ export function MeetingWorkspace({
                   )}
                 </TableBody>
               </Table>
+              <AgendaAddRow meeting={meeting} />
             </CardContent>
           </Card>
         </TabsContent>
@@ -374,12 +383,6 @@ export function MeetingWorkspace({
           <Card>
             <CardHeader className="flex-row items-center justify-between space-y-0">
               <CardTitle className="text-base">Board pack documents</CardTitle>
-              {onManage && (
-                <Button size="sm" variant="outline" onClick={onManage}>
-                  <Plus className="h-4 w-4 mr-1" />
-                  Add document
-                </Button>
-              )}
             </CardHeader>
             <CardContent className="space-y-2">
               {meeting.boardPack.map((d, i) => (
@@ -397,6 +400,7 @@ export function MeetingWorkspace({
                       </div>
                     </div>
                   </div>
+                  <div className="flex items-center">
                   {d.fileUrl && (
                     <Button size="sm" variant="ghost" asChild>
                       <a
@@ -409,6 +413,10 @@ export function MeetingWorkspace({
                       </a>
                     </Button>
                   )}
+                  <Button size="icon" variant="ghost" aria-label="Remove document" onClick={() => removeDoc.mutate(i)}>
+                    <Trash2 className="h-4 w-4 text-muted-foreground" />
+                  </Button>
+                  </div>
                 </div>
               ))}
               {meeting.boardPack.length === 0 && (
@@ -416,6 +424,7 @@ export function MeetingWorkspace({
                   No documents uploaded yet.
                 </p>
               )}
+              <PackUploadRow meeting={meeting} />
             </CardContent>
           </Card>
           <Card>
@@ -587,17 +596,10 @@ export function MeetingWorkspace({
                   )}
                 </TableBody>
               </Table>
-              {onManage && (
-                <p className="text-xs text-muted-foreground mt-3">
-                  Record actual attendance via{" "}
-                  <button className="underline" onClick={onManage}>
-                    Manage meeting
-                  </button>
-                  .
-                </p>
-              )}
+              <AttendanceSection meeting={meeting} />
             </CardContent>
           </Card>
+          <AttendeesEditor meeting={meeting} />
         </TabsContent>
 
         {/* MINUTES */}
@@ -605,7 +607,7 @@ export function MeetingWorkspace({
           <MinutesDrafter meeting={meeting} />
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Final minutes</CardTitle>
+              <CardTitle className="text-base">Approved minutes</CardTitle>
               <p className="text-sm text-muted-foreground">
                 {!held
                   ? `Meeting upcoming (${fmt(date)}) — minutes can be drafted once the meeting is marked held.`
@@ -637,15 +639,7 @@ export function MeetingWorkspace({
                   </a>
                 </Button>
               )}
-              {onManage && (
-                <p className="text-xs text-muted-foreground">
-                  Send minutes via{" "}
-                  <button className="underline" onClick={onManage}>
-                    Manage meeting
-                  </button>
-                  .
-                </p>
-              )}
+              <MinutesDistribution meeting={meeting} />
             </CardContent>
           </Card>
         </TabsContent>
