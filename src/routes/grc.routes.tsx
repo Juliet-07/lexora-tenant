@@ -20,6 +20,7 @@ import GrcOrgStructure from "@/pages/grc/governance/OrgStructure";
 import GrcCommittees from "@/pages/grc/governance/Committees";
 import GrcBoardMgt from "@/pages/grc/governance/Board/BoardMgt";
 import BoardOnboarding from "@/pages/grc/governance/Board/BoardOnboarding";
+import BoardTraining from "@/pages/grc/governance/Board/BoardTraining";
 import BoardOnboardingDetail from "@/pages/grc/governance/Board/BoardOnboardingDetail";
 import GrcCodes from "@/pages/grc/governance/Codes";
 import GrcResolutions from "@/pages/grc/governance/Resolutions";
@@ -166,6 +167,11 @@ export const grcRoutes = ({ isAdmin, accessibleModules }: RouteContext) => {
         key="grc-gov-board-onboarding-detail"
         path="/grc/governance/board-onboarding/:id"
         element={layout(<BoardOnboardingDetail />)}
+      />,
+      <Route
+        key="grc-gov-board-training"
+        path="/grc/governance/board-training"
+        element={layout(<BoardTraining />)}
       />,
       <Route
         key="grc-gov-codes"
