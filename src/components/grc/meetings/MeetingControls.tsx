@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,10 +31,12 @@ import {
 } from "@/components/ui/select";
 import {
   CheckCircle2,
+  ClipboardList,
   Loader2,
   Mail,
   Send,
   Trash2,
+  Upload,
   Users2,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
@@ -44,13 +46,18 @@ import {
   addAgendaItem,
   removeAgendaItem,
   addBoardPackDoc,
+  addBoardPackRequirement,
+  fulfillBoardPackDoc,
   removeBoardPackDoc,
+  updateBoardPackDueDate,
   markMeetingHeld,
   sendMeetingMinutes,
   postponeMeeting,
   resumeMeeting,
   deleteMeeting,
+  AGENDA_ITEM_TYPES,
   type Meeting,
+  type AgendaItemType,
 } from "@/lib/grc/governance-api";
 import { MinutesReviewsSection } from "./MeetingSections";
 
@@ -271,23 +278,24 @@ export function useRemovePackDoc(meeting: Meeting) {
 
 export function AgendaAddRow({ meeting }: { meeting: Meeting }) {
   const { invalidate, onError, id } = useActions(meeting);
-  const [ag, setAg] = useState({
-    title: "",
-    presenter: "",
-    durationMinutes: 10,
-  });
+  const [ag, setAg] = useState<{
+    title: string;
+    presenter: string;
+    durationMinutes: number;
+    type: AgendaItemType;
+  }>({ title: "", presenter: "", durationMinutes: 10, type: "Noting" });
   const mut = useMutation({
     mutationFn: () => addAgendaItem(id, ag),
     onSuccess: () => {
       invalidate();
-      setAg({ title: "", presenter: "", durationMinutes: 10 });
+      setAg({ title: "", presenter: "", durationMinutes: 10, type: "Noting" });
     },
     onError: onError("Failed to add agenda item"),
   });
   return (
     <div className="grid grid-cols-12 gap-2 mt-4">
       <Input
-        className="col-span-6"
+        className="col-span-4"
         placeholder="New agenda item"
         value={ag.title}
         onChange={(e) => setAg({ ...ag, title: e.target.value })}
@@ -307,6 +315,21 @@ export function AgendaAddRow({ meeting }: { meeting: Meeting }) {
           ))}
         </SelectContent>
       </Select>
+      <Select
+        value={ag.type}
+        onValueChange={(v) => setAg({ ...ag, type: v as AgendaItemType })}
+      >
+        <SelectTrigger className="col-span-2">
+          <SelectValue placeholder="Type" />
+        </SelectTrigger>
+        <SelectContent>
+          {AGENDA_ITEM_TYPES.map((t) => (
+            <SelectItem key={t} value={t}>
+              {t}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
       <Input
         className="col-span-1"
         type="number"
@@ -322,41 +345,6 @@ export function AgendaAddRow({ meeting }: { meeting: Meeting }) {
         onClick={() => mut.mutate()}
       >
         Add item
-      </Button>
-    </div>
-  );
-}
-
-export function PackUploadRow({ meeting }: { meeting: Meeting }) {
-  const { invalidate, onError, id } = useActions(meeting);
-  const [file, setFile] = useState<File | null>(null);
-  const [key, setKey] = useState(0);
-  const mut = useMutation({
-    mutationFn: () => addBoardPackDoc(id, file!),
-    onSuccess: () => {
-      invalidate();
-      setFile(null);
-      setKey((k) => k + 1);
-    },
-    onError: onError("Failed to upload document"),
-  });
-  return (
-    <div className="flex gap-2 pt-2">
-      <Input
-        key={key}
-        type="file"
-        onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-      />
-      <Button
-        variant="outline"
-        disabled={!file || mut.isPending}
-        onClick={() => mut.mutate()}
-      >
-        {mut.isPending ? (
-          <Loader2 className="h-4 w-4 animate-spin" />
-        ) : (
-          "Upload"
-        )}
       </Button>
     </div>
   );
@@ -476,6 +464,380 @@ export function MinutesDistribution({ meeting }: { meeting: Meeting }) {
         )
       )}
       {meeting.minutesSentAt && <MinutesReviewsSection meeting={meeting} />}
+    </div>
+  );
+}
+
+/** Agenda-item picker shared by the upload and request dialogs below —
+ * blank/"__none__" means the general "Procedural documents" bucket. */
+function AgendaItemPicker({
+  meeting,
+  value,
+  onChange,
+}: {
+  meeting: Meeting;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <Select
+      value={value || "__none__"}
+      onValueChange={(v) => onChange(v === "__none__" ? "" : v)}
+    >
+      <SelectTrigger className="mt-1">
+        <SelectValue placeholder="Procedural documents" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="__none__">
+          Procedural documents (no agenda item)
+        </SelectItem>
+        {meeting.agenda.map((a, i) => (
+          <SelectItem key={i} value={a.title}>
+            {a.title}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+/** "+ Upload document" — a direct file upload, optionally tagged to an
+ * agenda item so it shows up grouped under that item on the Board Pack
+ * tab (see MeetingWorkspace.tsx's BoardPackSection). */
+export function UploadBoardPackDialog({ meeting }: { meeting: Meeting }) {
+  const { invalidate, onError, id } = useActions(meeting);
+  const [open, setOpen] = useState(false);
+  const [file, setFile] = useState<File | null>(null);
+  const [agendaItemTitle, setAgendaItemTitle] = useState("");
+  const mut = useMutation({
+    mutationFn: () =>
+      addBoardPackDoc(id, file as File, agendaItemTitle || undefined),
+    onSuccess: () => {
+      invalidate();
+      setOpen(false);
+      setFile(null);
+      setAgendaItemTitle("");
+      toast({ title: "Document uploaded" });
+    },
+    onError: onError("Failed to upload document"),
+  });
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button size="sm" variant="outline">
+          <Upload className="h-4 w-4 mr-1" />
+          Upload document
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Upload a board pack document</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs text-muted-foreground">File</label>
+            <Input
+              type="file"
+              className="mt-1"
+              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+            />
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground">
+              Link to agenda item (optional)
+            </label>
+            <AgendaItemPicker
+              meeting={meeting}
+              value={agendaItemTitle}
+              onChange={setAgendaItemTitle}
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button
+            disabled={!file || mut.isPending}
+            onClick={() => mut.mutate()}
+          >
+            {mut.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              "Upload"
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** "+ Request document" — creates an "Outstanding" placeholder (no file
+ * yet) that someone can be chased for, matching the reference mockup's
+ * amber "Awaiting upload from X · Expected by …" rows. */
+export function RequestBoardPackDocDialog({ meeting }: { meeting: Meeting }) {
+  const { invalidate, onError, id } = useActions(meeting);
+  const [open, setOpen] = useState(false);
+  const [req, setReq] = useState({
+    name: "",
+    agendaItemTitle: "",
+    assignedToName: "",
+    assignedToEmail: "",
+    dueDate: "",
+  });
+  const mut = useMutation({
+    mutationFn: () =>
+      addBoardPackRequirement(id, {
+        name: req.name,
+        agendaItemTitle: req.agendaItemTitle || undefined,
+        assignedToName: req.assignedToName || undefined,
+        assignedToEmail: req.assignedToEmail || undefined,
+        dueDate: req.dueDate || undefined,
+      }),
+    onSuccess: () => {
+      invalidate();
+      setOpen(false);
+      setReq({
+        name: "",
+        agendaItemTitle: "",
+        assignedToName: "",
+        assignedToEmail: "",
+        dueDate: "",
+      });
+      toast({ title: "Document requested" });
+    },
+    onError: onError("Failed to request document"),
+  });
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button size="sm" variant="outline">
+          <ClipboardList className="h-4 w-4 mr-1" />
+          Request document
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Request a board pack document</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs text-muted-foreground">
+              Document name
+            </label>
+            <Input
+              className="mt-1"
+              placeholder="e.g. Q3 Finance Report"
+              value={req.name}
+              onChange={(e) => setReq({ ...req, name: e.target.value })}
+            />
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground">
+              Link to agenda item (optional)
+            </label>
+            <AgendaItemPicker
+              meeting={meeting}
+              value={req.agendaItemTitle}
+              onChange={(v) => setReq({ ...req, agendaItemTitle: v })}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-xs text-muted-foreground">
+                Assignee name
+              </label>
+              <Input
+                className="mt-1"
+                value={req.assignedToName}
+                onChange={(e) =>
+                  setReq({ ...req, assignedToName: e.target.value })
+                }
+              />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">
+                Assignee email
+              </label>
+              <Input
+                className="mt-1"
+                type="email"
+                value={req.assignedToEmail}
+                onChange={(e) =>
+                  setReq({ ...req, assignedToEmail: e.target.value })
+                }
+              />
+            </div>
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground">Due date</label>
+            <Input
+              className="mt-1"
+              type="date"
+              value={req.dueDate}
+              onChange={(e) => setReq({ ...req, dueDate: e.target.value })}
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button
+            disabled={!req.name.trim() || mut.isPending}
+            onClick={() => mut.mutate()}
+          >
+            {mut.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              "Request"
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** Small inline "Upload" action on an Outstanding row — attaches a file
+ * to that existing placeholder row rather than creating a new one. */
+export function FulfillBoardPackDocButton({
+  meeting,
+  index,
+}: {
+  meeting: Meeting;
+  index: number;
+}) {
+  const { invalidate, onError, id } = useActions(meeting);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const mut = useMutation({
+    mutationFn: (file: File) => fulfillBoardPackDoc(id, index, file),
+    onSuccess: () => {
+      invalidate();
+      toast({ title: "Document uploaded" });
+    },
+    onError: onError("Failed to upload document"),
+  });
+  return (
+    <>
+      <input
+        ref={inputRef}
+        type="file"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) mut.mutate(f);
+          e.target.value = "";
+        }}
+      />
+      <Button
+        size="sm"
+        variant="outline"
+        disabled={mut.isPending}
+        onClick={() => inputRef.current?.click()}
+      >
+        {mut.isPending ? (
+          <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+        ) : (
+          <Upload className="h-3.5 w-3.5 mr-1" />
+        )}
+        Upload
+      </Button>
+    </>
+  );
+}
+
+/** Due-date / completeness banner at the top of the Board Pack tab —
+ * mirrors the reference mockup's "Board pack due: 26 August 2026 (7
+ * days before meeting)" strip. boardPackDueDate is a tenant override;
+ * when unset we default to 7 days before the meeting, computed here
+ * rather than trusting a server-computed value (see Meeting.boardPackDueDate
+ * in governance-api.ts). */
+export function BoardPackDueDateBanner({ meeting }: { meeting: Meeting }) {
+  const { invalidate, onError, id } = useActions(meeting);
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState("");
+
+  const defaultDue = new Date(meeting.date);
+  defaultDue.setDate(defaultDue.getDate() - 7);
+  const effective = meeting.boardPackDueDate
+    ? new Date(meeting.boardPackDueDate)
+    : defaultDue;
+  const required = meeting.boardPack.filter((d) => d.required);
+  const uploaded = required.filter((d) => d.fileUrl).length;
+  const outstanding = required.length - uploaded;
+
+  const mut = useMutation({
+    mutationFn: () =>
+      updateBoardPackDueDate(id, value ? new Date(value).toISOString() : null),
+    onSuccess: () => {
+      invalidate();
+      setEditing(false);
+      toast({ title: "Board pack due date updated" });
+    },
+    onError: onError("Failed to update due date"),
+  });
+
+  return (
+    <div className="rounded-md border bg-muted/20 p-3 flex flex-wrap items-center justify-between gap-3 text-sm">
+      <div>
+        <span className="font-medium">
+          Board pack due:{" "}
+          {effective.toLocaleDateString("en-GB", {
+            day: "numeric",
+            month: "long",
+            year: "numeric",
+          })}
+        </span>
+        {!meeting.boardPackDueDate && (
+          <span className="text-muted-foreground">
+            {" "}
+            (7 days before meeting)
+          </span>
+        )}
+        <div className="text-xs text-muted-foreground mt-0.5">
+          {required.length === 0
+            ? "No required documents yet."
+            : `${uploaded} of ${required.length} required document${required.length === 1 ? "" : "s"} uploaded${outstanding > 0 ? `, ${outstanding} outstanding` : ""}.`}
+        </div>
+      </div>
+      {editing ? (
+        <div className="flex items-center gap-2">
+          <Input
+            type="date"
+            className="h-8 w-40"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+          />
+          <Button
+            size="sm"
+            disabled={mut.isPending}
+            onClick={() => mut.mutate()}
+          >
+            {mut.isPending ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              "Save"
+            )}
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>
+            Cancel
+          </Button>
+        </div>
+      ) : (
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => {
+            setValue(
+              (meeting.boardPackDueDate
+                ? new Date(meeting.boardPackDueDate)
+                : defaultDue
+              )
+                .toISOString()
+                .slice(0, 10),
+            );
+            setEditing(true);
+          }}
+        >
+          Edit due date
+        </Button>
+      )}
     </div>
   );
 }

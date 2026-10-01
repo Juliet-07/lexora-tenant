@@ -395,18 +395,38 @@ export interface MeetingConflictDeclaration {
   recordedAt: string;
   source: "tenant" | "board-member";
 }
+export type AgendaItemType = "Procedural" | "Noting" | "Resolution";
+export const AGENDA_ITEM_TYPES: AgendaItemType[] = [
+  "Procedural",
+  "Noting",
+  "Resolution",
+];
+
 export interface MeetingAgendaItem {
   title: string;
   presenter: string;
   durationMinutes: number;
+  type: AgendaItemType;
 }
 
+// A document is filed either under one of the meeting's own agenda
+// item titles, or — when `agendaItemTitle` is blank — in the general
+// "Procedural documents" bucket (meeting notice, prior minutes,
+// action tracker). `fileUrl: null` with `required: true` is an
+// "Outstanding" row the tenant has asked for but not yet received —
+// see fulfillBoardPackDoc.
 export interface BoardPackDoc {
   name: string;
   fileUrl: string | null;
   mimeType: string | null;
   size: number;
   uploadedAt: string;
+  agendaItemTitle: string;
+  required: boolean;
+  assignedToName: string;
+  assignedToEmail: string;
+  dueDate: string | null;
+  uploadedBy: string;
 }
 
 export type MeetingActionItemStatus = "Open" | "Done";
@@ -598,6 +618,12 @@ export interface Meeting {
   attendees: MeetingAttendee[];
   agenda: MeetingAgendaItem[];
   boardPack: BoardPackDoc[];
+  // Tenant-set override of when the board pack must be complete by;
+  // null means "use the default 7 days before the meeting" — compute
+  // the effective date client-side (see boardPackDueDateFor in
+  // MeetingWorkspace.tsx) rather than trusting a possibly-stale
+  // server-computed value.
+  boardPackDueDate: string | null;
   sentAt: string | null;
   minutes: string | null;
   minutesSentAt: string | null;
@@ -1546,7 +1572,12 @@ export const removeAttendee = async (
 
 export const addAgendaItem = async (
   id: string,
-  dto: { title: string; presenter?: string; durationMinutes?: number },
+  dto: {
+    title: string;
+    presenter?: string;
+    durationMinutes?: number;
+    type?: AgendaItemType;
+  },
 ): Promise<Meeting> => {
   const res = await api.post(`/grc/governance/meetings/${id}/agenda`, dto);
   return res.data?.data ?? res.data;
@@ -1562,13 +1593,52 @@ export const removeAgendaItem = async (
   return res.data?.data ?? res.data;
 };
 
+// agendaItemTitle blank or omitted files the document under the
+// general "Procedural documents" bucket.
 export const addBoardPackDoc = async (
   id: string,
+  file: File,
+  agendaItemTitle?: string,
+): Promise<Meeting> => {
+  const form = new FormData();
+  form.append("file", file);
+  if (agendaItemTitle) form.append("agendaItemTitle", agendaItemTitle);
+  const res = await api.post(`/grc/governance/meetings/${id}/board-pack`, form);
+  return res.data?.data ?? res.data;
+};
+
+// Creates an "Outstanding" placeholder — a required document the
+// tenant is asking for but hasn't received yet.
+export const addBoardPackRequirement = async (
+  id: string,
+  dto: {
+    name: string;
+    agendaItemTitle?: string;
+    assignedToName?: string;
+    assignedToEmail?: string;
+    dueDate?: string;
+  },
+): Promise<Meeting> => {
+  const res = await api.post(
+    `/grc/governance/meetings/${id}/board-pack/requirement`,
+    dto,
+  );
+  return res.data?.data ?? res.data;
+};
+
+// Attaches a file to an existing outstanding requirement (by its
+// index in boardPack) instead of creating a duplicate row.
+export const fulfillBoardPackDoc = async (
+  id: string,
+  index: number,
   file: File,
 ): Promise<Meeting> => {
   const form = new FormData();
   form.append("file", file);
-  const res = await api.post(`/grc/governance/meetings/${id}/board-pack`, form);
+  const res = await api.post(
+    `/grc/governance/meetings/${id}/board-pack/${index}/fulfill`,
+    form,
+  );
   return res.data?.data ?? res.data;
 };
 
@@ -1578,6 +1648,17 @@ export const removeBoardPackDoc = async (
 ): Promise<Meeting> => {
   const res = await api.delete(
     `/grc/governance/meetings/${id}/board-pack/${index}`,
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const updateBoardPackDueDate = async (
+  id: string,
+  dueDate: string | null,
+): Promise<Meeting> => {
+  const res = await api.patch(
+    `/grc/governance/meetings/${id}/board-pack-due-date`,
+    { dueDate },
   );
   return res.data?.data ?? res.data;
 };

@@ -44,7 +44,10 @@ import {
   MeetingHeaderControls,
   PostponedBanner,
   AgendaAddRow,
-  PackUploadRow,
+  UploadBoardPackDialog,
+  RequestBoardPackDocDialog,
+  FulfillBoardPackDocButton,
+  BoardPackDueDateBanner,
   AttendeesEditor,
   MinutesDistribution,
   useRemoveAgenda,
@@ -60,6 +63,8 @@ import {
   resolveGrcFileUrl,
   type Meeting,
   type MeetingActionItemStatus,
+  type AgendaItemType,
+  type BoardPackDoc,
 } from "@/lib/grc/governance-api";
 
 const fmt = (d: Date) =>
@@ -98,6 +103,125 @@ function Stepper({
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+function AgendaTypeBadge({ type }: { type: AgendaItemType }) {
+  const cls =
+    type === "Resolution"
+      ? "border-sky-400 text-sky-700 bg-sky-50"
+      : type === "Procedural"
+        ? "border-muted-foreground/30 text-muted-foreground bg-muted/40"
+        : "border-violet-400 text-violet-700 bg-violet-50";
+  return (
+    <Badge variant="outline" className={cls}>
+      {type}
+    </Badge>
+  );
+}
+
+/** One group of the Board Pack tab — either the "Procedural documents"
+ * bucket (agendaItemTitle === "") or the documents linked to one agenda
+ * item. Always rendered, even when empty, so the Agenda ↔ Board Pack
+ * link this tab exists to show is visible before anything is uploaded. */
+function BoardPackSection({
+  title,
+  docs,
+  meeting,
+  removeDoc,
+}: {
+  title: string;
+  docs: { d: BoardPackDoc; i: number }[];
+  meeting: Meeting;
+  removeDoc: { mutate: (i: number) => void };
+}) {
+  return (
+    <div>
+      <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+        {title}
+      </div>
+      {docs.length === 0 ? (
+        <p className="text-xs text-muted-foreground italic">
+          No documents linked yet.
+        </p>
+      ) : (
+        <div className="space-y-2">
+          {docs.map(({ d, i }) => (
+            <div
+              key={i}
+              className={`flex items-center justify-between border rounded-lg p-3 ${
+                !d.fileUrl ? "border-warning/40 bg-warning/5" : ""
+              }`}
+            >
+              <div className="flex gap-3 items-center">
+                <FileText
+                  className={`h-5 w-5 ${!d.fileUrl ? "text-warning" : "text-muted-foreground"}`}
+                />
+                <div>
+                  <div className="text-sm font-medium flex items-center gap-2">
+                    {d.name}
+                    {d.fileUrl ? (
+                      <Badge
+                        variant="outline"
+                        className="bg-success/15 text-success border-success/30 text-[10px] px-1.5 py-0"
+                      >
+                        Uploaded
+                      </Badge>
+                    ) : (
+                      <Badge
+                        variant="outline"
+                        className="bg-warning/15 text-warning border-warning/30 text-[10px] px-1.5 py-0"
+                      >
+                        Outstanding
+                      </Badge>
+                    )}
+                  </div>
+                  {d.fileUrl ? (
+                    <div className="text-xs text-muted-foreground">
+                      Uploaded{" "}
+                      {d.uploadedAt ? fmt(new Date(d.uploadedAt)) : "—"}
+                      {d.uploadedBy ? ` by ${d.uploadedBy}` : ""}
+                    </div>
+                  ) : (
+                    <div className="text-xs text-warning">
+                      Awaiting upload
+                      {d.assignedToName ? ` from ${d.assignedToName}` : ""}
+                      {d.dueDate
+                        ? ` · Expected by ${fmt(new Date(d.dueDate))}`
+                        : ""}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-1">
+                {d.fileUrl ? (
+                  <Button size="sm" variant="ghost" asChild>
+                    <a
+                      href={resolveGrcFileUrl(d.fileUrl)}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      <Download className="h-4 w-4 mr-1" />
+                      View
+                    </a>
+                  </Button>
+                ) : (
+                  <FulfillBoardPackDocButton meeting={meeting} index={i} />
+                )}
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  aria-label="Remove document"
+                  onClick={() => removeDoc.mutate(i)}
+                >
+                  <Trash2 className="h-4 w-4 text-muted-foreground" />
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -342,34 +466,49 @@ export function MeetingWorkspace({
                   <TableRow>
                     <TableHead>#</TableHead>
                     <TableHead>Agenda item</TableHead>
+                    <TableHead>Type</TableHead>
                     <TableHead>Presenter</TableHead>
                     <TableHead>Duration</TableHead>
+                    <TableHead>Papers</TableHead>
                     <TableHead />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {meeting.agenda.map((a, i) => (
-                    <TableRow key={i}>
-                      <TableCell>{i + 1}</TableCell>
-                      <TableCell className="font-medium">{a.title}</TableCell>
-                      <TableCell>{a.presenter || "—"}</TableCell>
-                      <TableCell>{a.durationMinutes}m</TableCell>
-                      <TableCell className="text-right">
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          aria-label="Remove agenda item"
-                          onClick={() => removeAgenda.mutate(i)}
-                        >
-                          <Trash2 className="h-4 w-4 text-muted-foreground" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {meeting.agenda.map((a, i) => {
+                    const papers = meeting.boardPack.filter(
+                      (d) => d.agendaItemTitle === a.title,
+                    );
+                    return (
+                      <TableRow key={i}>
+                        <TableCell>{i + 1}</TableCell>
+                        <TableCell className="font-medium">{a.title}</TableCell>
+                        <TableCell>
+                          <AgendaTypeBadge type={a.type} />
+                        </TableCell>
+                        <TableCell>{a.presenter || "—"}</TableCell>
+                        <TableCell>{a.durationMinutes}m</TableCell>
+                        <TableCell className="text-xs text-muted-foreground max-w-[220px]">
+                          {papers.length > 0
+                            ? papers.map((d) => d.name).join(", ")
+                            : "—"}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            aria-label="Remove agenda item"
+                            onClick={() => removeAgenda.mutate(i)}
+                          >
+                            <Trash2 className="h-4 w-4 text-muted-foreground" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                   {meeting.agenda.length === 0 && (
                     <TableRow>
                       <TableCell
-                        colSpan={5}
+                        colSpan={7}
                         className="text-center text-muted-foreground py-6"
                       >
                         No agenda items yet.
@@ -385,56 +524,35 @@ export function MeetingWorkspace({
 
         {/* BOARD PACK */}
         <TabsContent value="pack" className="space-y-4">
+          <BoardPackDueDateBanner meeting={meeting} />
           <Card>
-            <CardHeader className="flex-row items-center justify-between space-y-0">
+            <CardHeader className="flex-row items-center justify-between space-y-0 flex-wrap gap-2">
               <CardTitle className="text-base">Board pack documents</CardTitle>
+              <div className="flex gap-2">
+                <RequestBoardPackDocDialog meeting={meeting} />
+                <UploadBoardPackDialog meeting={meeting} />
+              </div>
             </CardHeader>
-            <CardContent className="space-y-2">
-              {meeting.boardPack.map((d, i) => (
-                <div
-                  key={i}
-                  className="flex items-center justify-between border rounded-lg p-3"
-                >
-                  <div className="flex gap-3 items-center">
-                    <FileText className="h-5 w-5 text-muted-foreground" />
-                    <div>
-                      <div className="text-sm font-medium">{d.name}</div>
-                      <div className="text-xs text-muted-foreground">
-                        Uploaded{" "}
-                        {d.uploadedAt ? fmt(new Date(d.uploadedAt)) : "—"}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center">
-                    {d.fileUrl && (
-                      <Button size="sm" variant="ghost" asChild>
-                        <a
-                          href={resolveGrcFileUrl(d.fileUrl)}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          <Download className="h-4 w-4 mr-1" />
-                          View
-                        </a>
-                      </Button>
-                    )}
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      aria-label="Remove document"
-                      onClick={() => removeDoc.mutate(i)}
-                    >
-                      <Trash2 className="h-4 w-4 text-muted-foreground" />
-                    </Button>
-                  </div>
-                </div>
+            <CardContent className="space-y-5">
+              <BoardPackSection
+                title="Procedural documents"
+                docs={meeting.boardPack
+                  .map((d, i) => ({ d, i }))
+                  .filter(({ d }) => !d.agendaItemTitle)}
+                meeting={meeting}
+                removeDoc={removeDoc}
+              />
+              {meeting.agenda.map((a, ai) => (
+                <BoardPackSection
+                  key={ai}
+                  title={a.title}
+                  docs={meeting.boardPack
+                    .map((d, i) => ({ d, i }))
+                    .filter(({ d }) => d.agendaItemTitle === a.title)}
+                  meeting={meeting}
+                  removeDoc={removeDoc}
+                />
               ))}
-              {meeting.boardPack.length === 0 && (
-                <p className="text-sm text-muted-foreground text-center py-6">
-                  No documents uploaded yet.
-                </p>
-              )}
-              <PackUploadRow meeting={meeting} />
             </CardContent>
           </Card>
           <Card>
