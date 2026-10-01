@@ -107,7 +107,10 @@ export default function MeetingNoticeRsvpPage() {
         <Card>
           <CardContent className="p-4 space-y-3">
             <div className="font-semibold text-sm">Notice</div>
-            <p className="text-sm whitespace-pre-wrap">{snap.noticeBody}</p>
+            <div
+              className="text-sm prose prose-sm max-w-none [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5"
+              dangerouslySetInnerHTML={{ __html: snap.noticeBody }}
+            />
             {snap.rsvpDeadline && (
               <p className="text-xs text-amber-700">
                 Please RSVP by{" "}

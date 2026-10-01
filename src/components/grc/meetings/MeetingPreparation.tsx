@@ -4,8 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { RichTextEditor } from "@/components/RichTextEditor";
 import {
   Table,
   TableBody,
@@ -235,14 +235,15 @@ export function MeetingNotice({
         </CardHeader>
         <CardContent className="space-y-3">
           {dispatched ? (
-            <div className="rounded-md border bg-muted/20 p-3 whitespace-pre-wrap text-sm">
-              {notice.body}
-            </div>
+            <div
+              className="rounded-md border bg-muted/20 p-3 prose prose-sm max-w-none text-sm [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5"
+              dangerouslySetInnerHTML={{ __html: notice.body }}
+            />
           ) : (
-            <Textarea
-              rows={8}
+            <RichTextEditor
               value={body}
-              onChange={(e) => setBody(e.target.value)}
+              onChange={setBody}
+              minHeight={200}
               placeholder="Draft the notice to send to attendees ahead of this meeting…"
             />
           )}

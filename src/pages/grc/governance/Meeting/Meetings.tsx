@@ -76,7 +76,6 @@ import {
   type MeetingMode,
   type MeetingPlatform,
   postponeMeeting,
-  resumeMeeting,
   deleteMeeting,
 } from "@/lib/grc/governance-api";
 import {

@@ -499,6 +499,7 @@ export function AppSidebar() {
       children: [
         { title: "Policies", url: "/my/policies" },
         { title: "Audit", url: "/my/audit-requests" },
+        { title: "Board Pack", url: "/my/board-pack-requests" },
       ],
     },
     {

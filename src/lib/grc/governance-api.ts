@@ -423,8 +423,12 @@ export interface BoardPackDoc {
   uploadedAt: string;
   agendaItemTitle: string;
   required: boolean;
+  // A real Employee (picked from a dropdown, not typed in) — null
+  // for an unassigned outstanding row. assignedToName is a resolved
+  // display-name snapshot from request time. See MyBoardPackRequests
+  // for the employee's own portal view of rows assigned to them.
+  assignedToEmployeeId: string | null;
   assignedToName: string;
-  assignedToEmail: string;
   dueDate: string | null;
   uploadedBy: string;
 }
@@ -618,11 +622,10 @@ export interface Meeting {
   attendees: MeetingAttendee[];
   agenda: MeetingAgendaItem[];
   boardPack: BoardPackDoc[];
-  // Tenant-set override of when the board pack must be complete by;
-  // null means "use the default 7 days before the meeting" — compute
-  // the effective date client-side (see boardPackDueDateFor in
-  // MeetingWorkspace.tsx) rather than trusting a possibly-stale
-  // server-computed value.
+  // Tenant-set override of when the board pack must be complete by.
+  // Not currently surfaced in the UI (pulled 2026-10 — see
+  // MeetingControls.tsx) but kept on the type/backend for a possible
+  // return to it later.
   boardPackDueDate: string | null;
   sentAt: string | null;
   minutes: string | null;
@@ -1614,8 +1617,7 @@ export const addBoardPackRequirement = async (
   dto: {
     name: string;
     agendaItemTitle?: string;
-    assignedToName?: string;
-    assignedToEmail?: string;
+    assignedToEmployeeId?: string;
     dueDate?: string;
   },
 ): Promise<Meeting> => {
@@ -1659,6 +1661,38 @@ export const updateBoardPackDueDate = async (
   const res = await api.patch(
     `/grc/governance/meetings/${id}/board-pack-due-date`,
     { dueDate },
+  );
+  return res.data?.data ?? res.data;
+};
+
+// A board pack document request assigned to the logged-in employee,
+// flattened with its parent meeting's context — same shape as
+// MyAuditRequest in compliance-api.ts, what GET
+// /grc/governance/meetings/my/board-pack-requests returns.
+export interface MyBoardPackRequest extends BoardPackDoc {
+  meetingId: string;
+  meetingTitle: string;
+  meetingDate: string;
+  index: number;
+}
+
+export const fetchMyBoardPackRequests = async (): Promise<
+  MyBoardPackRequest[]
+> => {
+  const res = await api.get("/grc/governance/meetings/my/board-pack-requests");
+  return res.data?.data ?? res.data;
+};
+
+export const submitMyBoardPackDoc = async (
+  meetingId: string,
+  index: number,
+  file: File,
+): Promise<Meeting> => {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await api.post(
+    `/grc/governance/meetings/my/board-pack-requests/${meetingId}/${index}/file`,
+    form,
   );
   return res.data?.data ?? res.data;
 };
@@ -1817,10 +1851,9 @@ export const postponeMeeting = async (
   return res.data?.data ?? res.data;
 };
 
-export const resumeMeeting = async (id: string): Promise<Meeting> => {
-  const res = await api.post(`/grc/governance/meetings/${id}/resume`, {});
-  return res.data?.data ?? res.data;
-};
+// No resumeMeeting: postponing a meeting already moves its `date`, so
+// every upcoming/past split (date-based, not status-based) picks it
+// back up on its own — there's no separate "resume" step or endpoint.
 
 export const deleteMeeting = async (id: string): Promise<void> => {
   await api.delete(`/grc/governance/meetings/${id}`);

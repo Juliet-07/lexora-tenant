@@ -47,7 +47,6 @@ import {
   UploadBoardPackDialog,
   RequestBoardPackDocDialog,
   FulfillBoardPackDocButton,
-  BoardPackDueDateBanner,
   AttendeesEditor,
   MinutesDistribution,
   useRemoveAgenda,
@@ -524,7 +523,6 @@ export function MeetingWorkspace({
 
         {/* BOARD PACK */}
         <TabsContent value="pack" className="space-y-4">
-          <BoardPackDueDateBanner meeting={meeting} />
           <Card>
             <CardHeader className="flex-row items-center justify-between space-y-0 flex-wrap gap-2">
               <CardTitle className="text-base">Board pack documents</CardTitle>

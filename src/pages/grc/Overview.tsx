@@ -123,8 +123,10 @@ export default function GrcOverview() {
   ).length;
 
   // ── Governance
+  // Date alone decides "upcoming" — postponing a meeting already moves
+  // its date, so a rescheduled meeting belongs here like any other.
   const upcomingMeetings = g.meetings.filter(
-    (m) => m.status !== "Postponed" && m.date.slice(0, 10) >= today,
+    (m) => m.date.slice(0, 10) >= today,
   ).length;
   const draftMeetings = g.meetings.filter((m) => m.status === "Draft").length;
   const committees = g.committees.length;

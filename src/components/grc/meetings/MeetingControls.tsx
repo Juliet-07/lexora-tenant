@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -49,16 +49,15 @@ import {
   addBoardPackRequirement,
   fulfillBoardPackDoc,
   removeBoardPackDoc,
-  updateBoardPackDueDate,
   markMeetingHeld,
   sendMeetingMinutes,
   postponeMeeting,
-  resumeMeeting,
   deleteMeeting,
   AGENDA_ITEM_TYPES,
   type Meeting,
   type AgendaItemType,
 } from "@/lib/grc/governance-api";
+import { fetchEmployees, type Employee } from "@/lib/hr/hr-api";
 import { MinutesReviewsSection } from "./MeetingSections";
 
 function useActions(meeting: Meeting) {
@@ -109,14 +108,6 @@ export function MeetingHeaderControls({
     },
     onError: onError("Failed to postpone meeting"),
   });
-  const resumeMut = useMutation({
-    mutationFn: () => resumeMeeting(id),
-    onSuccess: () => {
-      invalidate();
-      toast({ title: "Meeting resumed" });
-    },
-    onError: onError("Failed to resume meeting"),
-  });
   const deleteMut = useMutation({
     mutationFn: () => deleteMeeting(id),
     onSuccess: () => {
@@ -126,22 +117,15 @@ export function MeetingHeaderControls({
     },
     onError: onError("Failed to delete meeting"),
   });
-  const active = meeting.status !== "Held" && meeting.status !== "Postponed";
+  // Postponed is not a dead end: postponing already moves the meeting to
+  // its new date (reappearing under Upcoming on its own), so the only
+  // real end state is Held — a postponed meeting can still be postponed
+  // again or marked as held once it happens, with no separate "resume"
+  // step in between.
+  const active = meeting.status !== "Held";
 
   return (
     <>
-      {meeting.status === "Postponed" && (
-        <Button
-          variant="outline"
-          onClick={() => resumeMut.mutate()}
-          disabled={resumeMut.isPending}
-        >
-          {resumeMut.isPending && (
-            <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-          )}
-          Resume meeting
-        </Button>
-      )}
       {active && (
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
@@ -579,17 +563,26 @@ export function RequestBoardPackDocDialog({ meeting }: { meeting: Meeting }) {
   const [req, setReq] = useState({
     name: "",
     agendaItemTitle: "",
-    assignedToName: "",
-    assignedToEmail: "",
+    assignedToEmployeeId: "",
     dueDate: "",
   });
+  // Assignee is a real employee picked from a dropdown — same
+  // fetchEmployees/Select pattern as AuditDetail's document-request
+  // form — rather than free-text name/email: once assigned, the
+  // employee sees this request on their own portal and uploads it
+  // themselves (see MyBoardPackRequests).
+  const { data: employeesPage } = useQuery({
+    queryKey: ["hr-employees-for-board-pack-picker"],
+    queryFn: () => fetchEmployees({ limit: 500 }),
+    enabled: open,
+  });
+  const employees = employeesPage?.items ?? [];
   const mut = useMutation({
     mutationFn: () =>
       addBoardPackRequirement(id, {
         name: req.name,
         agendaItemTitle: req.agendaItemTitle || undefined,
-        assignedToName: req.assignedToName || undefined,
-        assignedToEmail: req.assignedToEmail || undefined,
+        assignedToEmployeeId: req.assignedToEmployeeId || undefined,
         dueDate: req.dueDate || undefined,
       }),
     onSuccess: () => {
@@ -598,8 +591,7 @@ export function RequestBoardPackDocDialog({ meeting }: { meeting: Meeting }) {
       setReq({
         name: "",
         agendaItemTitle: "",
-        assignedToName: "",
-        assignedToEmail: "",
+        assignedToEmployeeId: "",
         dueDate: "",
       });
       toast({ title: "Document requested" });
@@ -640,32 +632,36 @@ export function RequestBoardPackDocDialog({ meeting }: { meeting: Meeting }) {
               onChange={(v) => setReq({ ...req, agendaItemTitle: v })}
             />
           </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="text-xs text-muted-foreground">
-                Assignee name
-              </label>
-              <Input
-                className="mt-1"
-                value={req.assignedToName}
-                onChange={(e) =>
-                  setReq({ ...req, assignedToName: e.target.value })
-                }
-              />
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground">
-                Assignee email
-              </label>
-              <Input
-                className="mt-1"
-                type="email"
-                value={req.assignedToEmail}
-                onChange={(e) =>
-                  setReq({ ...req, assignedToEmail: e.target.value })
-                }
-              />
-            </div>
+          <div>
+            <label className="text-xs text-muted-foreground">
+              Assign to employee (optional)
+            </label>
+            <Select
+              value={req.assignedToEmployeeId || "__unassigned__"}
+              onValueChange={(v) =>
+                setReq({
+                  ...req,
+                  assignedToEmployeeId: v === "__unassigned__" ? "" : v,
+                })
+              }
+            >
+              <SelectTrigger className="mt-1">
+                <SelectValue placeholder="Select an employee" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__unassigned__">Unassigned</SelectItem>
+                {employees.map((emp: Employee) => (
+                  <SelectItem key={emp._id} value={emp._id}>
+                    {emp.firstName} {emp.lastName}
+                    {emp.jobTitle ? ` — ${emp.jobTitle}` : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-[11px] text-muted-foreground mt-1">
+              They'll see this on their employee portal and can upload it
+              themselves.
+            </p>
           </div>
           <div>
             <label className="text-xs text-muted-foreground">Due date</label>
@@ -742,102 +738,9 @@ export function FulfillBoardPackDocButton({
   );
 }
 
-/** Due-date / completeness banner at the top of the Board Pack tab —
- * mirrors the reference mockup's "Board pack due: 26 August 2026 (7
- * days before meeting)" strip. boardPackDueDate is a tenant override;
- * when unset we default to 7 days before the meeting, computed here
- * rather than trusting a server-computed value (see Meeting.boardPackDueDate
- * in governance-api.ts). */
-export function BoardPackDueDateBanner({ meeting }: { meeting: Meeting }) {
-  const { invalidate, onError, id } = useActions(meeting);
-  const [editing, setEditing] = useState(false);
-  const [value, setValue] = useState("");
-
-  const defaultDue = new Date(meeting.date);
-  defaultDue.setDate(defaultDue.getDate() - 7);
-  const effective = meeting.boardPackDueDate
-    ? new Date(meeting.boardPackDueDate)
-    : defaultDue;
-  const required = meeting.boardPack.filter((d) => d.required);
-  const uploaded = required.filter((d) => d.fileUrl).length;
-  const outstanding = required.length - uploaded;
-
-  const mut = useMutation({
-    mutationFn: () =>
-      updateBoardPackDueDate(id, value ? new Date(value).toISOString() : null),
-    onSuccess: () => {
-      invalidate();
-      setEditing(false);
-      toast({ title: "Board pack due date updated" });
-    },
-    onError: onError("Failed to update due date"),
-  });
-
-  return (
-    <div className="rounded-md border bg-muted/20 p-3 flex flex-wrap items-center justify-between gap-3 text-sm">
-      <div>
-        <span className="font-medium">
-          Board pack due:{" "}
-          {effective.toLocaleDateString("en-GB", {
-            day: "numeric",
-            month: "long",
-            year: "numeric",
-          })}
-        </span>
-        {!meeting.boardPackDueDate && (
-          <span className="text-muted-foreground">
-            {" "}
-            (7 days before meeting)
-          </span>
-        )}
-        <div className="text-xs text-muted-foreground mt-0.5">
-          {required.length === 0
-            ? "No required documents yet."
-            : `${uploaded} of ${required.length} required document${required.length === 1 ? "" : "s"} uploaded${outstanding > 0 ? `, ${outstanding} outstanding` : ""}.`}
-        </div>
-      </div>
-      {editing ? (
-        <div className="flex items-center gap-2">
-          <Input
-            type="date"
-            className="h-8 w-40"
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-          />
-          <Button
-            size="sm"
-            disabled={mut.isPending}
-            onClick={() => mut.mutate()}
-          >
-            {mut.isPending ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              "Save"
-            )}
-          </Button>
-          <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>
-            Cancel
-          </Button>
-        </div>
-      ) : (
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={() => {
-            setValue(
-              (meeting.boardPackDueDate
-                ? new Date(meeting.boardPackDueDate)
-                : defaultDue
-              )
-                .toISOString()
-                .slice(0, 10),
-            );
-            setEditing(true);
-          }}
-        >
-          Edit due date
-        </Button>
-      )}
-    </div>
-  );
-}
+// BoardPackDueDateBanner removed (2026-10, PO feedback): the "board
+// pack due" computation (7 days before meeting, tenant-overridable)
+// wasn't landing with users and is pulled from the Board Pack tab for
+// now. The backend field/endpoint (Meeting.boardPackDueDate,
+// updateBoardPackDueDate) is left in place for a possible return to
+// this later — only the UI is gone.

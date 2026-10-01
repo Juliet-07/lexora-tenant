@@ -94,7 +94,6 @@ import {
   type MeetingConflictStatus,
   type MeetingConflictDeclaration,
   postponeMeeting,
-  resumeMeeting,
   deleteMeeting,
 } from "@/lib/grc/governance-api";
 import {
