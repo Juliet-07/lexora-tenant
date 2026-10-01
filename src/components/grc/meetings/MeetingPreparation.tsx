@@ -6,13 +6,23 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Check, Loader2, Mail, Send } from "lucide-react";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Check, Download, Loader2, Mail, RefreshCw, Send } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import {
   MEETING_CHECKLIST_ITEMS,
   setMeetingChecklistItem,
   updateMeetingNotice,
   dispatchMeetingNotice,
+  resendNotice,
+  downloadNoticePdf,
   type Meeting,
 } from "@/lib/grc/governance-api";
 
@@ -70,6 +80,18 @@ export function useMeetingPreparation(meeting: Meeting) {
     onError: onErr("Failed to send notice"),
   });
 
+  const resendNoticeMut = useMutation({
+    mutationFn: () => resendNotice(meeting._id),
+    onSuccess: (res) => {
+      invalidate();
+      toast({
+        title: "Notice resent",
+        description: `Resent to ${res.resentTo} pending recipient(s).`,
+      });
+    },
+    onError: onErr("Failed to resend notice"),
+  });
+
   const completed: Record<string, { at: string; by: string }> = {};
   (meeting.checklist ?? []).forEach((c) => {
     completed[c.itemId] = { at: c.completedAt, by: c.completedBy };
@@ -89,6 +111,8 @@ export function useMeetingPreparation(meeting: Meeting) {
     isSavingNotice: noticeMut.isPending,
     dispatchNotice: () => dispatchNoticeMut.mutate(),
     isDispatchingNotice: dispatchNoticeMut.isPending,
+    resendNotice: () => resendNoticeMut.mutate(),
+    isResendingNotice: resendNoticeMut.isPending,
   };
 }
 
@@ -182,32 +206,32 @@ export function MeetingNotice({
   const [rsvpDeadline, setRsvpDeadline] = useState(
     notice.rsvpDeadline ? notice.rsvpDeadline.slice(0, 10) : "",
   );
-
-  const autoDraft = () => {
-    const date = new Date(meeting.date);
-    const agendaLines = meeting.agenda
-      .map(
-        (a, i) =>
-          `  ${i + 1}. ${a.title}${a.presenter ? ` — ${a.presenter}` : ""}`,
-      )
-      .join("\n");
-    setBody(
-      `Notice is hereby given of the ${meeting.type} meeting "${meeting.title}", to be held on ${date.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })} at ${date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}, ${meeting.location}.\n\nAgenda:\n${agendaLines || "  (to be confirmed)"}\n\nPlease confirm your attendance.`,
-    );
-  };
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
 
   const dispatched = !!notice.dispatchedAt;
+  const roleByEmail = new Map(
+    meeting.attendees.map((a) => [a.email.toLowerCase(), a.role]),
+  );
+
+  const downloadPdf = async () => {
+    setDownloadingPdf(true);
+    try {
+      await downloadNoticePdf(meeting._id, meeting.title);
+    } catch {
+      toast({
+        title: "Failed to download the notice PDF",
+        variant: "destructive",
+      });
+    } finally {
+      setDownloadingPdf(false);
+    }
+  };
 
   return (
     <div className="space-y-4">
       <Card>
         <CardHeader className="flex-row items-center justify-between space-y-0">
           <CardTitle className="text-base">Meeting notice</CardTitle>
-          {!dispatched && (
-            <Button size="sm" variant="outline" onClick={autoDraft}>
-              Auto-draft
-            </Button>
-          )}
         </CardHeader>
         <CardContent className="space-y-3">
           {dispatched ? (
@@ -301,46 +325,115 @@ export function MeetingNotice({
 
       {dispatched && (
         <Card>
-          <CardHeader>
-            <CardTitle className="text-base">RSVPs</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-1.5">
-            {notice.recipients.map((r) => (
-              <div
-                key={r.email}
-                className="flex items-center justify-between text-sm border rounded-md px-3 py-2"
+          <CardHeader className="flex-row items-center justify-between space-y-0">
+            <CardTitle className="text-base">
+              Recipients and dispatch status
+            </CardTitle>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={downloadingPdf}
+                onClick={downloadPdf}
               >
-                <div>
-                  <span className="font-medium">{r.name}</span>{" "}
-                  <span className="text-xs text-muted-foreground">
-                    {r.email}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  {r.openedAt && (
-                    <span className="text-[11px] text-muted-foreground">
-                      Opened {new Date(r.openedAt).toLocaleDateString()}
-                    </span>
+                {downloadingPdf ? (
+                  <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                ) : (
+                  <Download className="h-3.5 w-3.5 mr-1" />
+                )}
+                Download notice PDF
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={
+                  state.isResendingNotice ||
+                  notice.recipients.every((r) => r.rsvp !== "Pending")
+                }
+                onClick={() => state.resendNotice()}
+              >
+                {state.isResendingNotice ? (
+                  <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-3.5 w-3.5 mr-1" />
+                )}
+                Resend to non-respondents
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Recipient</TableHead>
+                    <TableHead>Role</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Dispatched</TableHead>
+                    <TableHead>Opened</TableHead>
+                    <TableHead>RSVP</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {notice.recipients.map((r) => (
+                    <TableRow key={r.email}>
+                      <TableCell className="font-medium">{r.name}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {roleByEmail.get(r.email.toLowerCase()) || "—"}
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {r.email}
+                      </TableCell>
+                      <TableCell className="text-xs whitespace-nowrap">
+                        {notice.dispatchedAt
+                          ? new Date(notice.dispatchedAt).toLocaleString()
+                          : "—"}
+                      </TableCell>
+                      <TableCell className="text-xs whitespace-nowrap">
+                        {r.openedAt ? (
+                          new Date(r.openedAt).toLocaleString()
+                        ) : (
+                          <span className="text-muted-foreground">
+                            Not opened
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={
+                            r.rsvp === "Confirmed"
+                              ? "default"
+                              : r.rsvp === "Apologies"
+                                ? "secondary"
+                                : "outline"
+                          }
+                        >
+                          {r.rsvp}
+                        </Badge>
+                        {r.rsvp === "Pending" && r.lastReminderSentAt && (
+                          <div className="text-[10px] text-muted-foreground mt-0.5">
+                            Reminder sent{" "}
+                            {new Date(
+                              r.lastReminderSentAt,
+                            ).toLocaleDateString()}
+                          </div>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {notice.recipients.length === 0 && (
+                    <TableRow>
+                      <TableCell
+                        colSpan={6}
+                        className="text-center text-muted-foreground py-6"
+                      >
+                        No recipients.
+                      </TableCell>
+                    </TableRow>
                   )}
-                  <Badge
-                    variant={
-                      r.rsvp === "Confirmed"
-                        ? "default"
-                        : r.rsvp === "Apologies"
-                          ? "secondary"
-                          : "outline"
-                    }
-                  >
-                    {r.rsvp}
-                  </Badge>
-                </div>
-              </div>
-            ))}
-            {notice.recipients.length === 0 && (
-              <p className="text-sm text-muted-foreground text-center py-4">
-                No recipients.
-              </p>
-            )}
+                </TableBody>
+              </Table>
+            </div>
           </CardContent>
         </Card>
       )}

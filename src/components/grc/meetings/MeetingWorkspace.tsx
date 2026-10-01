@@ -355,7 +355,12 @@ export function MeetingWorkspace({
                       <TableCell>{a.presenter || "—"}</TableCell>
                       <TableCell>{a.durationMinutes}m</TableCell>
                       <TableCell className="text-right">
-                        <Button size="icon" variant="ghost" aria-label="Remove agenda item" onClick={() => removeAgenda.mutate(i)}>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          aria-label="Remove agenda item"
+                          onClick={() => removeAgenda.mutate(i)}
+                        >
                           <Trash2 className="h-4 w-4 text-muted-foreground" />
                         </Button>
                       </TableCell>
@@ -401,21 +406,26 @@ export function MeetingWorkspace({
                     </div>
                   </div>
                   <div className="flex items-center">
-                  {d.fileUrl && (
-                    <Button size="sm" variant="ghost" asChild>
-                      <a
-                        href={resolveGrcFileUrl(d.fileUrl)}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        <Download className="h-4 w-4 mr-1" />
-                        View
-                      </a>
+                    {d.fileUrl && (
+                      <Button size="sm" variant="ghost" asChild>
+                        <a
+                          href={resolveGrcFileUrl(d.fileUrl)}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          <Download className="h-4 w-4 mr-1" />
+                          View
+                        </a>
+                      </Button>
+                    )}
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      aria-label="Remove document"
+                      onClick={() => removeDoc.mutate(i)}
+                    >
+                      <Trash2 className="h-4 w-4 text-muted-foreground" />
                     </Button>
-                  )}
-                  <Button size="icon" variant="ghost" aria-label="Remove document" onClick={() => removeDoc.mutate(i)}>
-                    <Trash2 className="h-4 w-4 text-muted-foreground" />
-                  </Button>
                   </div>
                 </div>
               ))}
@@ -549,6 +559,7 @@ export function MeetingWorkspace({
                     <TableHead>Role</TableHead>
                     <TableHead>Agenda acknowledged</TableHead>
                     <TableHead>Attendance</TableHead>
+                    <TableHead>Conflict of interest</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -557,9 +568,32 @@ export function MeetingWorkspace({
                       (x) =>
                         x.attendeeEmail.toLowerCase() === a.email.toLowerCase(),
                     );
-                    const present = meeting.attendanceRecordedAt
-                      ? meeting.attendanceAllPresent ||
-                        meeting.attendancePresentIndices?.includes(i)
+                    const entry = meeting.attendanceEntries?.find(
+                      (e) => e.index === i,
+                    );
+                    const status = entry
+                      ? entry.status
+                      : meeting.attendanceRecordedAt
+                        ? meeting.attendanceAllPresent ||
+                          meeting.attendancePresentIndices?.includes(i)
+                          ? "Present"
+                          : "Absent"
+                        : null;
+                    const conflicts = meeting.conflictDeclarations?.filter(
+                      (c) =>
+                        c.declaredByEmail.toLowerCase() ===
+                        a.email.toLowerCase(),
+                    );
+                    // Most recent declaration stands for this attendee — the
+                    // four conflict-status values (see governance-api.ts)
+                    // describe the current state directly, there's no
+                    // separate declared/resolved lifecycle to pick from.
+                    const latestConflict = conflicts?.length
+                      ? [...conflicts].sort(
+                          (x, y) =>
+                            new Date(y.recordedAt).getTime() -
+                            new Date(x.recordedAt).getTime(),
+                        )[0]
                       : null;
                     return (
                       <TableRow key={a.email}>
@@ -573,12 +607,41 @@ export function MeetingWorkspace({
                           )}
                         </TableCell>
                         <TableCell>
-                          {present === null ? (
+                          {status === null ? (
                             "—"
-                          ) : present ? (
+                          ) : status === "Present" ? (
                             <Badge>Present</Badge>
+                          ) : status === "Proxy" ? (
+                            <Badge variant="secondary">
+                              Proxy
+                              {entry?.proxyHolderName
+                                ? ` — ${entry.proxyHolderName}`
+                                : ""}
+                            </Badge>
+                          ) : status === "Apology" ? (
+                            <Badge variant="outline">Apology</Badge>
                           ) : (
                             <Badge variant="secondary">Absent</Badge>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {!latestConflict ? (
+                            "—"
+                          ) : (
+                            <Badge
+                              variant="outline"
+                              className={
+                                latestConflict.status ===
+                                "Conflict declared — recusal required"
+                                  ? "border-destructive/40 text-destructive"
+                                  : latestConflict.status ===
+                                      "Standing declaration — ongoing"
+                                    ? "border-sky-400 text-sky-700"
+                                    : "border-amber-400 text-amber-700"
+                              }
+                            >
+                              {latestConflict.status}
+                            </Badge>
                           )}
                         </TableCell>
                       </TableRow>
@@ -587,7 +650,7 @@ export function MeetingWorkspace({
                   {meeting.attendees.length === 0 && (
                     <TableRow>
                       <TableCell
-                        colSpan={4}
+                        colSpan={5}
                         className="text-center text-muted-foreground py-6"
                       >
                         No attendees yet.

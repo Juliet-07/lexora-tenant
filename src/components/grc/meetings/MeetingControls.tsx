@@ -29,7 +29,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { CheckCircle2, Loader2, Mail, Send, Trash2, Users2 } from "lucide-react";
+import {
+  CheckCircle2,
+  Loader2,
+  Mail,
+  Send,
+  Trash2,
+  Users2,
+} from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import {
   addAttendee,
@@ -51,7 +58,11 @@ function useActions(meeting: Meeting) {
   const qc = useQueryClient();
   const invalidate = () => qc.invalidateQueries({ queryKey: ["grc-meetings"] });
   const onError = (title: string) => (err: any) =>
-    toast({ title, description: err?.response?.data?.message, variant: "destructive" });
+    toast({
+      title,
+      description: err?.response?.data?.message,
+      variant: "destructive",
+    });
   return { invalidate, onError, id: meeting._id };
 }
 
@@ -66,6 +77,7 @@ export function MeetingHeaderControls({
   const { invalidate, onError, id } = useActions(meeting);
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState("");
+  const [newDate, setNewDate] = useState("");
   const heldMut = useMutation({
     mutationFn: () => markMeetingHeld(id),
     onSuccess: () => {
@@ -75,11 +87,17 @@ export function MeetingHeaderControls({
     onError: onError("Failed to mark meeting as done"),
   });
   const postponeMut = useMutation({
-    mutationFn: () => postponeMeeting(id, reason),
+    mutationFn: () =>
+      postponeMeeting(
+        id,
+        reason,
+        newDate ? new Date(newDate).toISOString() : undefined,
+      ),
     onSuccess: () => {
       invalidate();
       setOpen(false);
       setReason("");
+      setNewDate("");
       toast({ title: "Meeting postponed" });
     },
     onError: onError("Failed to postpone meeting"),
@@ -106,8 +124,14 @@ export function MeetingHeaderControls({
   return (
     <>
       {meeting.status === "Postponed" && (
-        <Button variant="outline" onClick={() => resumeMut.mutate()} disabled={resumeMut.isPending}>
-          {resumeMut.isPending && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
+        <Button
+          variant="outline"
+          onClick={() => resumeMut.mutate()}
+          disabled={resumeMut.isPending}
+        >
+          {resumeMut.isPending && (
+            <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+          )}
           Resume meeting
         </Button>
       )}
@@ -120,26 +144,52 @@ export function MeetingHeaderControls({
             <DialogHeader>
               <DialogTitle>Postpone this meeting</DialogTitle>
             </DialogHeader>
-            <Textarea
-              rows={3}
-              placeholder="Reason for postponement…"
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-            />
+            <div className="space-y-3">
+              <Textarea
+                rows={3}
+                placeholder="Reason for postponement…"
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+              />
+              <div>
+                <label className="text-xs text-muted-foreground">
+                  New date &amp; time (optional — timezone: {meeting.timezone})
+                </label>
+                <Input
+                  type="datetime-local"
+                  className="mt-1"
+                  value={newDate}
+                  onChange={(e) => setNewDate(e.target.value)}
+                />
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  If set, this is included in the postponement email and
+                  reflected on the board calendar. Leave blank to postpone
+                  indefinitely and confirm a date later.
+                </p>
+              </div>
+            </div>
             <DialogFooter>
               <Button
                 variant="destructive"
                 disabled={!reason.trim() || postponeMut.isPending}
                 onClick={() => postponeMut.mutate()}
               >
-                Confirm postponement
+                {postponeMut.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  "Confirm postponement"
+                )}
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
       )}
       {active && (
-        <Button variant="outline" onClick={() => heldMut.mutate()} disabled={heldMut.isPending}>
+        <Button
+          variant="outline"
+          onClick={() => heldMut.mutate()}
+          disabled={heldMut.isPending}
+        >
           {heldMut.isPending ? (
             <Loader2 className="h-4 w-4 mr-1 animate-spin" />
           ) : (
@@ -150,7 +200,10 @@ export function MeetingHeaderControls({
       )}
       <AlertDialog>
         <AlertDialogTrigger asChild>
-          <Button variant="ghost" className="text-destructive hover:text-destructive hover:bg-destructive/10">
+          <Button
+            variant="ghost"
+            className="text-destructive hover:text-destructive hover:bg-destructive/10"
+          >
             <Trash2 className="h-4 w-4 mr-1" />
             Delete
           </Button>
@@ -159,8 +212,8 @@ export function MeetingHeaderControls({
           <AlertDialogHeader>
             <AlertDialogTitle>Delete this meeting?</AlertDialogTitle>
             <AlertDialogDescription>
-              This permanently removes "{meeting.title}", its agenda, attendees, board pack, minutes
-              and acknowledgements. This cannot be undone.
+              This permanently removes "{meeting.title}", its agenda, attendees,
+              board pack, minutes and acknowledgements. This cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -180,11 +233,20 @@ export function MeetingHeaderControls({
 
 export function PostponedBanner({ meeting }: { meeting: Meeting }) {
   if (meeting.status !== "Postponed") return null;
+  const lastHistory =
+    meeting.postponementHistory?.[meeting.postponementHistory.length - 1];
   return (
     <div className="rounded-md border border-warning/40 bg-warning/10 p-3 text-sm">
       <span className="font-medium">Postponed</span>
-      {meeting.postponedAt && ` on ${new Date(meeting.postponedAt).toLocaleDateString()}`}
+      {meeting.postponedAt &&
+        ` on ${new Date(meeting.postponedAt).toLocaleDateString()}`}
       {meeting.postponementReason && `: ${meeting.postponementReason}`}
+      {lastHistory?.toDate && (
+        <div className="mt-1 text-xs text-muted-foreground">
+          Rescheduled to {new Date(lastHistory.toDate).toLocaleString()} (
+          {meeting.timezone})
+        </div>
+      )}
     </div>
   );
 }
@@ -209,7 +271,11 @@ export function useRemovePackDoc(meeting: Meeting) {
 
 export function AgendaAddRow({ meeting }: { meeting: Meeting }) {
   const { invalidate, onError, id } = useActions(meeting);
-  const [ag, setAg] = useState({ title: "", presenter: "", durationMinutes: 10 });
+  const [ag, setAg] = useState({
+    title: "",
+    presenter: "",
+    durationMinutes: 10,
+  });
   const mut = useMutation({
     mutationFn: () => addAgendaItem(id, ag),
     onSuccess: () => {
@@ -226,7 +292,10 @@ export function AgendaAddRow({ meeting }: { meeting: Meeting }) {
         value={ag.title}
         onChange={(e) => setAg({ ...ag, title: e.target.value })}
       />
-      <Select value={ag.presenter || undefined} onValueChange={(v) => setAg({ ...ag, presenter: v })}>
+      <Select
+        value={ag.presenter || undefined}
+        onValueChange={(v) => setAg({ ...ag, presenter: v })}
+      >
         <SelectTrigger className="col-span-3">
           <SelectValue placeholder="Presenter" />
         </SelectTrigger>
@@ -242,9 +311,16 @@ export function AgendaAddRow({ meeting }: { meeting: Meeting }) {
         className="col-span-1"
         type="number"
         value={ag.durationMinutes}
-        onChange={(e) => setAg({ ...ag, durationMinutes: Number(e.target.value) })}
+        onChange={(e) =>
+          setAg({ ...ag, durationMinutes: Number(e.target.value) })
+        }
       />
-      <Button className="col-span-2" variant="outline" disabled={!ag.title || mut.isPending} onClick={() => mut.mutate()}>
+      <Button
+        className="col-span-2"
+        variant="outline"
+        disabled={!ag.title || mut.isPending}
+        onClick={() => mut.mutate()}
+      >
         Add item
       </Button>
     </div>
@@ -266,9 +342,21 @@ export function PackUploadRow({ meeting }: { meeting: Meeting }) {
   });
   return (
     <div className="flex gap-2 pt-2">
-      <Input key={key} type="file" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
-      <Button variant="outline" disabled={!file || mut.isPending} onClick={() => mut.mutate()}>
-        {mut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Upload"}
+      <Input
+        key={key}
+        type="file"
+        onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+      />
+      <Button
+        variant="outline"
+        disabled={!file || mut.isPending}
+        onClick={() => mut.mutate()}
+      >
+        {mut.isPending ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
+          "Upload"
+        )}
       </Button>
     </div>
   );
@@ -298,7 +386,10 @@ export function AttendeesEditor({ meeting }: { meeting: Meeting }) {
         <Users2 className="h-4 w-4" /> Manage attendees
       </div>
       {meeting.attendees.map((a, i) => (
-        <div key={i} className="flex justify-between items-center text-xs border rounded px-2 py-1">
+        <div
+          key={i}
+          className="flex justify-between items-center text-xs border rounded px-2 py-1"
+        >
           <span>
             {a.name} <span className="text-muted-foreground">{a.email}</span>
           </span>
@@ -308,10 +399,26 @@ export function AttendeesEditor({ meeting }: { meeting: Meeting }) {
         </div>
       ))}
       <div className="grid grid-cols-4 gap-2">
-        <Input placeholder="Name" value={att.name} onChange={(e) => setAtt({ ...att, name: e.target.value })} />
-        <Input placeholder="Email" value={att.email} onChange={(e) => setAtt({ ...att, email: e.target.value })} />
-        <Input placeholder="Role" value={att.role} onChange={(e) => setAtt({ ...att, role: e.target.value })} />
-        <Button variant="outline" disabled={!att.name || !att.email || addMut.isPending} onClick={() => addMut.mutate()}>
+        <Input
+          placeholder="Name"
+          value={att.name}
+          onChange={(e) => setAtt({ ...att, name: e.target.value })}
+        />
+        <Input
+          placeholder="Email"
+          value={att.email}
+          onChange={(e) => setAtt({ ...att, email: e.target.value })}
+        />
+        <Input
+          placeholder="Role"
+          value={att.role}
+          onChange={(e) => setAtt({ ...att, role: e.target.value })}
+        />
+        <Button
+          variant="outline"
+          disabled={!att.name || !att.email || addMut.isPending}
+          onClick={() => addMut.mutate()}
+        >
           Add
         </Button>
       </div>
@@ -334,7 +441,11 @@ export function MinutesDistribution({ meeting }: { meeting: Meeting }) {
   const allApproved =
     meeting.attendees.length > 0 &&
     meeting.attendees.every((a) =>
-      reviews.some((r) => r.attendeeEmail.toLowerCase() === a.email.toLowerCase() && r.decision === "approved"),
+      reviews.some(
+        (r) =>
+          r.attendeeEmail.toLowerCase() === a.email.toLowerCase() &&
+          r.decision === "approved",
+      ),
     );
   return (
     <div className="space-y-2">
@@ -346,13 +457,19 @@ export function MinutesDistribution({ meeting }: { meeting: Meeting }) {
       ) : (
         meeting.status === "Held" && (
           <div className="flex items-center gap-3 flex-wrap">
-            <Button onClick={() => mut.mutate()} disabled={mut.isPending || !meeting.minutes?.trim()}>
+            <Button
+              onClick={() => mut.mutate()}
+              disabled={mut.isPending || !meeting.minutes?.trim()}
+            >
               <Send className="h-4 w-4 mr-1" />
-              {meeting.minutesSentAt ? "Resend minutes" : "Send minutes to attendees"}
+              {meeting.minutesSentAt
+                ? "Resend minutes"
+                : "Send minutes to attendees"}
             </Button>
             {meeting.minutesSentAt && (
               <span className="text-xs text-muted-foreground flex items-center gap-1">
-                <Mail className="h-3 w-3" /> Sent {new Date(meeting.minutesSentAt).toLocaleString()}
+                <Mail className="h-3 w-3" /> Sent{" "}
+                {new Date(meeting.minutesSentAt).toLocaleString()}
               </span>
             )}
           </div>

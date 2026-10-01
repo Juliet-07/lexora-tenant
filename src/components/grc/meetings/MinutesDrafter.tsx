@@ -20,6 +20,7 @@ import {
   ChevronRight,
   Loader2,
   Plus,
+  RefreshCw,
   Trash2,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
@@ -73,9 +74,28 @@ const inferKind = (title: string): MinuteSectionKind => {
 let seq = 0;
 const tmpId = () => `tmp_${Date.now()}_${seq++}`;
 
+// Formats every conflict-of-interest declaration recorded for this
+// meeting (whether recorded by the tenant from the Attendance
+// register, or self-declared by a board member from their portal)
+// into the minutes' "Declarations of interest" text — so neither side
+// has to retype what was already captured there.
+function formatConflictsText(meeting: Meeting): string {
+  const declarations = meeting.conflictDeclarations ?? [];
+  if (declarations.length === 0) return "None declared.";
+  return declarations
+    .map((c) => {
+      const agenda = c.agendaItems?.length
+        ? ` (re: ${c.agendaItems.join(", ")})`
+        : "";
+      return `${c.declaredByName}${agenda}: ${c.natureOfConflict} — ${c.actionTaken}.`;
+    })
+    .join("\n");
+}
+
 function buildInitial(meeting: Meeting): {
   sections: MinuteSection[];
   quorumText: string;
+  conflicts: string;
 } {
   const present = meeting.attendanceRecordedAt
     ? meeting.attendanceAllPresent
@@ -104,7 +124,7 @@ function buildInitial(meeting: Meeting): {
         }))
       : [];
 
-  return { sections, quorumText };
+  return { sections, quorumText, conflicts: formatConflictsText(meeting) };
 }
 
 export function MinutesDrafter({ meeting }: { meeting: Meeting }) {
@@ -126,7 +146,9 @@ export function MinutesDrafter({ meeting }: { meeting: Meeting }) {
   const [quorumText, setQuorumText] = useState(
     draft?.quorumText ?? seed?.quorumText ?? "",
   );
-  const [conflicts, setConflicts] = useState(draft?.conflicts ?? "");
+  const [conflicts, setConflicts] = useState(
+    draft?.conflicts ?? seed?.conflicts ?? "",
+  );
   const [sections, setSections] = useState<MinuteSection[]>(
     draft?.sections ?? seed?.sections ?? [],
   );
@@ -326,13 +348,34 @@ export function MinutesDrafter({ meeting }: { meeting: Meeting }) {
             </div>
           </div>
           <div>
-            <Label className="text-xs">Declarations of interest</Label>
+            <div className="flex items-center justify-between">
+              <Label className="text-xs">Declarations of interest</Label>
+              {(meeting.conflictDeclarations?.length ?? 0) > 0 && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="h-6 text-[11px] px-2"
+                  onClick={() => setConflicts(formatConflictsText(meeting))}
+                >
+                  <RefreshCw className="h-3 w-3 mr-1" />
+                  Sync from Attendance register
+                </Button>
+              )}
+            </div>
             <Textarea
               rows={2}
               value={conflicts}
               onChange={(e) => setConflicts(e.target.value)}
               placeholder="None declared, or list conflicts raised…"
             />
+            {(meeting.conflictDeclarations?.length ?? 0) > 0 && (
+              <p className="text-[11px] text-muted-foreground mt-1">
+                {meeting.conflictDeclarations!.length} conflict(s) recorded on
+                the Attendance register — pulled in automatically; edit freely
+                above.
+              </p>
+            )}
           </div>
 
           <div className="space-y-3">

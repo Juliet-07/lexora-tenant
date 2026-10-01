@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
@@ -31,33 +31,32 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { GraduationCap, Plus, Trash2, CheckCircle2, Clock, AlertTriangle, Download } from "lucide-react";
+import {
+  GraduationCap,
+  Plus,
+  Trash2,
+  CheckCircle2,
+  Clock,
+  AlertTriangle,
+  Download,
+  Loader2,
+  FileText,
+  Paperclip,
+} from "lucide-react";
 import { toast } from "@/hooks/use-toast";
-import { fetchBoardMembers } from "@/lib/grc/governance-api";
-import { usePersistentState, uid, fmtDate } from "@/lib/grc/usePersistentState";
+import {
+  fetchBoardMembers,
+  fetchTrainings,
+  createTraining,
+  deleteTraining,
+  resolveGrcFileUrl,
+  TRAINING_CATEGORIES,
+  type TrainingCategory,
+  type TrainingFormat,
+  type GovernanceTraining,
+} from "@/lib/grc/governance-api";
+import { fmtDate } from "@/lib/grc/usePersistentState";
 import { TrainingModulesTab } from "@/components/grc/BoardTrainingModules";
-
-type Category = "Governance" | "Regulatory" | "Risk" | "ESG" | "Cyber" | "Finance" | "Ethics";
-const CATEGORIES: Category[] = ["Governance", "Regulatory", "Risk", "ESG", "Cyber", "Finance", "Ethics"];
-
-interface Training {
-  id: string;
-  title: string;
-  description: string;
-  category: Category;
-  provider: string;
-  format: "In-person" | "Online" | "Self-paced";
-  cpdHours: number;
-  dueDate: string;
-  mandatory: boolean;
-  assignedTo: string[]; // member ids; empty = all members
-  createdAt: string;
-}
-interface Completion {
-  trainingId: string;
-  memberId: string;
-  completedAt: string;
-}
 
 interface Member {
   id: string;
@@ -65,151 +64,146 @@ interface Member {
   role: string;
 }
 
-const DEMO_MEMBERS: Member[] = [
-  { id: "demo-1", name: "Amara Okafor", role: "Chair" },
-  { id: "demo-2", name: "Kwame Mensah", role: "Independent Director" },
-  { id: "demo-3", name: "Thandiwe Ndlovu", role: "Non-Executive Director" },
-  { id: "demo-4", name: "Joseph Kariuki", role: "Executive Director" },
-];
-
-const daysFromNow = (n: number) => new Date(Date.now() + n * 864e5).toISOString().slice(0, 10);
-
-const SEED: Training[] = [
-  {
-    id: "trn_seed1",
-    title: "Directors' fiduciary duties refresher",
-    description: "Duties of care, skill and diligence; conflicts of interest; business judgement.",
-    category: "Governance",
-    provider: "Institute of Directors",
-    format: "In-person",
-    cpdHours: 4,
-    dueDate: daysFromNow(30),
-    mandatory: true,
-    assignedTo: [],
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: "trn_seed2",
-    title: "AML/CFT oversight for boards",
-    description: "Board-level accountability for financial crime risk and reporting.",
-    category: "Regulatory",
-    provider: "Lexora Academy",
-    format: "Online",
-    cpdHours: 2,
-    dueDate: daysFromNow(-5),
-    mandatory: true,
-    assignedTo: [],
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: "trn_seed3",
-    title: "Cyber risk for non-technical directors",
-    description: "Understanding threat landscape, incident response and board questions to ask.",
-    category: "Cyber",
-    provider: "Lexora Academy",
-    format: "Self-paced",
-    cpdHours: 1.5,
-    dueDate: daysFromNow(60),
-    mandatory: false,
-    assignedTo: [],
-    createdAt: new Date().toISOString(),
-  },
-];
-
-const empty = (): Omit<Training, "id" | "createdAt"> => ({
+const emptyForm = () => ({
   title: "",
   description: "",
-  category: "Governance",
+  category: "Governance" as TrainingCategory,
   provider: "",
-  format: "Online",
+  format: "Online" as TrainingFormat,
   cpdHours: 1,
-  dueDate: daysFromNow(30),
+  dueDate: "",
   mandatory: true,
-  assignedTo: [],
+  assignedTo: [] as string[],
+  file: undefined as File | undefined,
 });
 
 export default function BoardTraining() {
+  const queryClient = useQueryClient();
   const { data: apiMembers = [] } = useQuery({
     queryKey: ["grc-board-members"],
     queryFn: fetchBoardMembers,
-    retry: 1,
   });
-  const members: Member[] = useMemo(() => {
-    const live = apiMembers
-      .filter((m: any) => m.isActive !== false)
-      .map((m) => ({ id: m._id, name: m.name, role: String(m.role ?? "") }));
-    return live.length ? live : DEMO_MEMBERS;
-  }, [apiMembers]);
-  const usingDemo = apiMembers.length === 0;
-
-  const [trainings, setTrainings] = usePersistentState<Training[]>("grc_board_training_v1", SEED);
-  const [completions, setCompletions] = usePersistentState<Completion[]>(
-    "grc_board_training_completions_v1",
-    [
-      { trainingId: "trn_seed1", memberId: "demo-1", completedAt: new Date().toISOString() },
-      { trainingId: "trn_seed2", memberId: "demo-1", completedAt: new Date().toISOString() },
-      { trainingId: "trn_seed2", memberId: "demo-2", completedAt: new Date().toISOString() },
-    ],
+  const members: Member[] = useMemo(
+    () =>
+      apiMembers
+        .filter((m: any) => m.isActive !== false)
+        .map((m) => ({ id: m._id, name: m.name, role: String(m.role ?? "") })),
+    [apiMembers],
   );
+
+  const { data: trainings = [], isLoading } = useQuery({
+    queryKey: ["grc-trainings"],
+    queryFn: fetchTrainings,
+  });
+
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState(empty());
+  const [form, setForm] = useState(emptyForm());
   const [filter, setFilter] = useState<string>("all");
 
-  const assignees = (t: Training) =>
-    t.assignedTo.length ? members.filter((m) => t.assignedTo.includes(m.id)) : members;
-  const isDone = (tId: string, mId: string) =>
-    completions.find((c) => c.trainingId === tId && c.memberId === mId);
-  const toggle = (tId: string, mId: string) =>
-    setCompletions((prev) =>
-      isDone(tId, mId)
-        ? prev.filter((c) => !(c.trainingId === tId && c.memberId === mId))
-        : [...prev, { trainingId: tId, memberId: mId, completedAt: new Date().toISOString() }],
-    );
+  const createMut = useMutation({
+    mutationFn: () =>
+      createTraining({
+        title: form.title.trim(),
+        description: form.description.trim() || undefined,
+        category: form.category,
+        provider: form.provider.trim() || undefined,
+        format: form.format,
+        cpdHours: form.cpdHours,
+        dueDate: form.dueDate || undefined,
+        mandatory: form.mandatory,
+        assignedTo: form.assignedTo,
+        file: form.file,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["grc-trainings"] });
+      setOpen(false);
+      setForm(emptyForm());
+      toast({
+        title: "Training created",
+        description:
+          "Assigned board members can now access it from their portal.",
+      });
+    },
+    onError: (err: any) =>
+      toast({
+        title: "Failed to create training",
+        description: err?.response?.data?.message,
+        variant: "destructive",
+      }),
+  });
 
-  const stats = (t: Training) => {
+  const deleteMut = useMutation({
+    mutationFn: (id: string) => deleteTraining(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["grc-trainings"] });
+      toast({ title: "Training deleted" });
+    },
+    onError: () =>
+      toast({ title: "Failed to delete training", variant: "destructive" }),
+  });
+
+  const assignees = (t: GovernanceTraining) =>
+    t.assignedTo.length
+      ? members.filter((m) => t.assignedTo.includes(m.id))
+      : members;
+  const completionFor = (t: GovernanceTraining, mId: string) =>
+    t.completions.find((c) => c.boardMemberId === mId);
+
+  const stats = (t: GovernanceTraining) => {
     const a = assignees(t);
-    const done = a.filter((m) => isDone(t.id, m.id)).length;
-    return { total: a.length, done, pct: a.length ? Math.round((done / a.length) * 100) : 0 };
+    const done = a.filter((m) => completionFor(t, m.id)).length;
+    return {
+      total: a.length,
+      done,
+      pct: a.length ? Math.round((done / a.length) * 100) : 0,
+    };
   };
-  const overdue = (t: Training) => new Date(t.dueDate) < new Date() && stats(t).pct < 100;
+  const overdue = (t: GovernanceTraining) =>
+    !!t.dueDate && new Date(t.dueDate) < new Date() && stats(t).pct < 100;
 
   const totalAssign = trainings.reduce((s, t) => s + stats(t).total, 0);
   const totalDone = trainings.reduce((s, t) => s + stats(t).done, 0);
   const cpdEarned = (mId: string) =>
-    trainings.filter((t) => isDone(t.id, mId)).reduce((s, t) => s + t.cpdHours, 0);
+    trainings
+      .filter((t) => completionFor(t, mId))
+      .reduce((s, t) => s + t.cpdHours, 0);
 
   const save = () => {
-    if (!form.title.trim()) return;
-    setTrainings((p) => [{ ...form, id: uid("trn"), createdAt: new Date().toISOString() }, ...p]);
-    setOpen(false);
-    setForm(empty());
-    toast({ title: "Training created", description: "Assigned members can now be tracked." });
+    if (!form.title.trim())
+      return toast({ title: "Title required", variant: "destructive" });
+    createMut.mutate();
   };
 
   const exportCsv = () => {
-    const rows = [["Member", "Role", ...trainings.map((t) => t.title), "CPD hours"]];
+    const rows = [
+      ["Member", "Role", ...trainings.map((t) => t.title), "CPD hours"],
+    ];
     members.forEach((m) =>
       rows.push([
         m.name,
         m.role,
-        ...trainings.map((t) =>
-          !assignees(t).some((a) => a.id === m.id)
-            ? "N/A"
-            : isDone(t.id, m.id)
-              ? `Completed ${fmtDate(isDone(t.id, m.id)!.completedAt)}`
-              : "Not completed",
-        ),
+        ...trainings.map((t) => {
+          if (!assignees(t).some((a) => a.id === m.id)) return "N/A";
+          const c = completionFor(t, m.id);
+          return c
+            ? `Completed ${fmtDate(c.completedAt)} (${c.method})`
+            : "Not completed";
+        }),
         String(cpdEarned(m.id)),
       ]),
     );
-    const csv = rows.map((r) => r.map((c) => `"${c.replace(/"/g, '""')}"`).join(",")).join("\n");
+    const csv = rows
+      .map((r) => r.map((c) => `"${c.replace(/"/g, '""')}"`).join(","))
+      .join("\n");
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
     a.download = "board-training-tracker.csv";
     a.click();
   };
 
-  const visible = trainings.filter((t) => filter === "all" || t.category === filter);
+  const visible = trainings.filter(
+    (t) => filter === "all" || t.category === filter,
+  );
 
   return (
     <div className="space-y-6">
@@ -219,7 +213,8 @@ export default function BoardTraining() {
             <GraduationCap className="h-6 w-6 text-primary" /> Board Training
           </h1>
           <p className="text-sm text-muted-foreground">
-            Create training for directors, track completion and CPD hours, and manage onboarding modules.
+            Create training for directors, track completion and CPD hours, and
+            manage onboarding modules.
           </p>
         </div>
         <Button onClick={() => setOpen(true)}>
@@ -227,18 +222,20 @@ export default function BoardTraining() {
         </Button>
       </div>
 
-      {usingDemo && (
-        <p className="text-xs text-muted-foreground border rounded-md px-3 py-2 bg-muted/30">
-          No board members were found, so sample directors are shown. Training records are saved on this device only.
-        </p>
-      )}
-
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
           { label: "Trainings", value: trainings.length, icon: GraduationCap },
-          { label: "Completion rate", value: `${totalAssign ? Math.round((totalDone / totalAssign) * 100) : 0}%`, icon: CheckCircle2 },
+          {
+            label: "Completion rate",
+            value: `${totalAssign ? Math.round((totalDone / totalAssign) * 100) : 0}%`,
+            icon: CheckCircle2,
+          },
           { label: "Outstanding", value: totalAssign - totalDone, icon: Clock },
-          { label: "Overdue trainings", value: trainings.filter(overdue).length, icon: AlertTriangle },
+          {
+            label: "Overdue trainings",
+            value: trainings.filter(overdue).length,
+            icon: AlertTriangle,
+          },
         ].map((k) => (
           <Card key={k.label}>
             <CardContent className="p-4 flex items-center gap-3">
@@ -267,23 +264,32 @@ export default function BoardTraining() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All categories</SelectItem>
-                {CATEGORIES.map((c) => (
-                  <SelectItem key={c} value={c}>{c}</SelectItem>
+                {TRAINING_CATEGORIES.map((c) => (
+                  <SelectItem key={c} value={c}>
+                    {c}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
+          {isLoading && (
+            <p className="text-sm text-muted-foreground text-center py-10">
+              Loading trainings…
+            </p>
+          )}
           <div className="grid md:grid-cols-2 gap-4">
             {visible.map((t) => {
               const s = stats(t);
               return (
-                <Card key={t.id}>
+                <Card key={t._id}>
                   <CardHeader className="pb-2 flex-row items-start justify-between space-y-0 gap-2">
                     <div>
                       <div className="flex gap-1.5 mb-1 flex-wrap">
                         <Badge variant="secondary">{t.category}</Badge>
                         {t.mandatory && <Badge>Mandatory</Badge>}
-                        {overdue(t) && <Badge variant="destructive">Overdue</Badge>}
+                        {overdue(t) && (
+                          <Badge variant="destructive">Overdue</Badge>
+                        )}
                       </div>
                       <CardTitle className="text-base">{t.title}</CardTitle>
                     </div>
@@ -291,53 +297,102 @@ export default function BoardTraining() {
                       size="icon"
                       variant="ghost"
                       aria-label="Delete training"
-                      onClick={() => {
-                        setTrainings((p) => p.filter((x) => x.id !== t.id));
-                        setCompletions((p) => p.filter((c) => c.trainingId !== t.id));
-                      }}
+                      disabled={deleteMut.isPending}
+                      onClick={() => deleteMut.mutate(t._id)}
                     >
                       <Trash2 className="h-4 w-4 text-muted-foreground" />
                     </Button>
                   </CardHeader>
                   <CardContent className="space-y-3">
-                    {t.description && <p className="text-sm text-muted-foreground">{t.description}</p>}
+                    {t.description && (
+                      <p className="text-sm text-muted-foreground">
+                        {t.description}
+                      </p>
+                    )}
                     <div className="text-xs text-muted-foreground flex flex-wrap gap-x-4 gap-y-1">
                       <span>{t.format}</span>
                       {t.provider && <span>{t.provider}</span>}
                       <span>{t.cpdHours} CPD hrs</span>
-                      <span>Due {fmtDate(t.dueDate)}</span>
+                      <span>
+                        {t.dueDate
+                          ? `Due ${fmtDate(t.dueDate)}`
+                          : "No due date"}
+                      </span>
                     </div>
+                    {t.resourceUrl ? (
+                      <a
+                        href={resolveGrcFileUrl(t.resourceUrl)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
+                      >
+                        <Paperclip className="h-3 w-3" />
+                        {t.resourceName || "Training material"}
+                      </a>
+                    ) : (
+                      <p className="text-xs text-muted-foreground italic">
+                        No material attached — members complete this by
+                        uploading proof.
+                      </p>
+                    )}
                     <div>
                       <div className="flex justify-between text-xs mb-1">
-                        <span>{s.done} of {s.total} completed</span>
+                        <span>
+                          {s.done} of {s.total} completed
+                        </span>
                         <span className="font-medium">{s.pct}%</span>
                       </div>
                       <Progress value={s.pct} />
                     </div>
                     <div className="space-y-1">
                       {assignees(t).map((m) => {
-                        const d = isDone(t.id, m.id);
+                        const c = completionFor(t, m.id);
                         return (
-                          <label key={m.id} className="flex items-center justify-between text-sm border rounded px-2 py-1.5 cursor-pointer">
-                            <span className="flex items-center gap-2">
-                              <Checkbox checked={!!d} onCheckedChange={() => toggle(t.id, m.id)} />
-                              {m.name}
-                            </span>
-                            {d ? (
-                              <span className="text-xs text-success">Completed {fmtDate(d.completedAt)}</span>
+                          <div
+                            key={m.id}
+                            className="flex items-center justify-between text-sm border rounded px-2 py-1.5"
+                          >
+                            <span>{m.name}</span>
+                            {c ? (
+                              <span className="flex items-center gap-2 text-xs">
+                                <span className="text-success">
+                                  Completed {fmtDate(c.completedAt)}
+                                </span>
+                                {c.method === "Proof of completion uploaded" &&
+                                  c.proofFileUrl && (
+                                    <a
+                                      href={resolveGrcFileUrl(c.proofFileUrl)}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="text-primary hover:underline flex items-center gap-1"
+                                    >
+                                      <FileText className="h-3 w-3" />
+                                      Proof
+                                    </a>
+                                  )}
+                              </span>
                             ) : (
-                              <span className="text-xs text-muted-foreground">Not completed</span>
+                              <span className="text-xs text-muted-foreground">
+                                Not completed
+                              </span>
                             )}
-                          </label>
+                          </div>
                         );
                       })}
+                      {assignees(t).length === 0 && (
+                        <p className="text-xs text-muted-foreground">
+                          No board members assigned yet.
+                        </p>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
               );
             })}
-            {visible.length === 0 && (
-              <p className="text-sm text-muted-foreground col-span-2 text-center py-10">No trainings yet.</p>
+            {!isLoading && visible.length === 0 && (
+              <p className="text-sm text-muted-foreground col-span-2 text-center py-10">
+                No trainings yet.
+              </p>
             )}
           </div>
         </TabsContent>
@@ -345,7 +400,9 @@ export default function BoardTraining() {
         <TabsContent value="tracker" className="mt-4">
           <Card>
             <CardHeader className="flex-row items-center justify-between space-y-0">
-              <CardTitle className="text-base">Who has completed what</CardTitle>
+              <CardTitle className="text-base">
+                Who has completed what
+              </CardTitle>
               <Button size="sm" variant="outline" onClick={exportCsv}>
                 <Download className="h-4 w-4 mr-1" /> Export CSV
               </Button>
@@ -356,7 +413,9 @@ export default function BoardTraining() {
                   <TableRow>
                     <TableHead>Board member</TableHead>
                     {trainings.map((t) => (
-                      <TableHead key={t.id} className="min-w-[140px] text-xs">{t.title}</TableHead>
+                      <TableHead key={t._id} className="min-w-[140px] text-xs">
+                        {t.title}
+                      </TableHead>
                     ))}
                     <TableHead>Progress</TableHead>
                     <TableHead>CPD hrs</TableHead>
@@ -364,47 +423,92 @@ export default function BoardTraining() {
                 </TableHeader>
                 <TableBody>
                   {members.map((m) => {
-                    const mine = trainings.filter((t) => assignees(t).some((a) => a.id === m.id));
-                    const done = mine.filter((t) => isDone(t.id, m.id)).length;
+                    const mine = trainings.filter((t) =>
+                      assignees(t).some((a) => a.id === m.id),
+                    );
+                    const done = mine.filter((t) =>
+                      completionFor(t, m.id),
+                    ).length;
                     return (
                       <TableRow key={m.id}>
                         <TableCell>
                           <div className="font-medium">{m.name}</div>
-                          <div className="text-xs text-muted-foreground">{m.role}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {m.role}
+                          </div>
                         </TableCell>
                         {trainings.map((t) => {
                           if (!assignees(t).some((a) => a.id === m.id))
-                            return <TableCell key={t.id} className="text-xs text-muted-foreground">N/A</TableCell>;
-                          const d = isDone(t.id, m.id);
+                            return (
+                              <TableCell
+                                key={t._id}
+                                className="text-xs text-muted-foreground"
+                              >
+                                N/A
+                              </TableCell>
+                            );
+                          const c = completionFor(t, m.id);
                           return (
-                            <TableCell key={t.id}>
-                              <button onClick={() => toggle(t.id, m.id)}>
-                                {d ? (
-                                  <Badge className="gap-1"><CheckCircle2 className="h-3 w-3" /> {fmtDate(d.completedAt)}</Badge>
-                                ) : new Date(t.dueDate) < new Date() ? (
-                                  <Badge variant="destructive">Overdue</Badge>
-                                ) : (
-                                  <Badge variant="outline">Pending</Badge>
-                                )}
-                              </button>
+                            <TableCell key={t._id}>
+                              {c ? (
+                                <a
+                                  href={
+                                    c.proofFileUrl
+                                      ? resolveGrcFileUrl(c.proofFileUrl)
+                                      : undefined
+                                  }
+                                  target={c.proofFileUrl ? "_blank" : undefined}
+                                  rel="noreferrer"
+                                  className="inline-block"
+                                >
+                                  <Badge className="gap-1">
+                                    <CheckCircle2 className="h-3 w-3" />{" "}
+                                    {fmtDate(c.completedAt)}
+                                  </Badge>
+                                </a>
+                              ) : t.dueDate &&
+                                new Date(t.dueDate) < new Date() ? (
+                                <Badge variant="destructive">Overdue</Badge>
+                              ) : (
+                                <Badge variant="outline">Pending</Badge>
+                              )}
                             </TableCell>
                           );
                         })}
-                        <TableCell className="text-sm">{done}/{mine.length}</TableCell>
-                        <TableCell className="font-medium">{cpdEarned(m.id)}</TableCell>
+                        <TableCell className="text-sm">
+                          {done}/{mine.length}
+                        </TableCell>
+                        <TableCell className="font-medium">
+                          {cpdEarned(m.id)}
+                        </TableCell>
                       </TableRow>
                     );
                   })}
+                  {members.length === 0 && (
+                    <TableRow>
+                      <TableCell
+                        colSpan={2 + trainings.length}
+                        className="text-center text-muted-foreground py-6"
+                      >
+                        No board members yet.
+                      </TableCell>
+                    </TableRow>
+                  )}
                 </TableBody>
               </Table>
-              <p className="text-xs text-muted-foreground mt-3">Click a status to mark it complete or undo.</p>
+              <p className="text-xs text-muted-foreground mt-3">
+                Completion is recorded by each director from their own board
+                portal. Click a completed status with a proof upload to view the
+                certificate/evidence.
+              </p>
             </CardContent>
           </Card>
         </TabsContent>
 
         <TabsContent value="onboarding" className="mt-4">
           <p className="text-sm text-muted-foreground mb-3">
-            Mandatory modules every new director completes during Board Onboarding.
+            Mandatory modules every new director completes during Board
+            Onboarding.
           </p>
           <TrainingModulesTab />
         </TabsContent>
@@ -418,47 +522,115 @@ export default function BoardTraining() {
           <div className="space-y-3">
             <div>
               <Label>Title</Label>
-              <Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
+              <Input
+                value={form.title}
+                onChange={(e) => setForm({ ...form, title: e.target.value })}
+              />
             </div>
             <div>
               <Label>Description</Label>
-              <Textarea rows={2} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+              <Textarea
+                rows={2}
+                value={form.description}
+                onChange={(e) =>
+                  setForm({ ...form, description: e.target.value })
+                }
+              />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label>Category</Label>
-                <Select value={form.category} onValueChange={(v: Category) => setForm({ ...form, category: v })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                <Select
+                  value={form.category}
+                  onValueChange={(v: TrainingCategory) =>
+                    setForm({ ...form, category: v })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
-                    {CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                    {TRAINING_CATEGORIES.map((c) => (
+                      <SelectItem key={c} value={c}>
+                        {c}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
               <div>
                 <Label>Format</Label>
-                <Select value={form.format} onValueChange={(v: Training["format"]) => setForm({ ...form, format: v })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                <Select
+                  value={form.format}
+                  onValueChange={(v: TrainingFormat) =>
+                    setForm({ ...form, format: v })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
-                    {["In-person", "Online", "Self-paced"].map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                    {(
+                      ["In-person", "Online", "Self-paced"] as TrainingFormat[]
+                    ).map((c) => (
+                      <SelectItem key={c} value={c}>
+                        {c}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
               <div>
                 <Label>Provider</Label>
-                <Input value={form.provider} onChange={(e) => setForm({ ...form, provider: e.target.value })} />
+                <Input
+                  value={form.provider}
+                  onChange={(e) =>
+                    setForm({ ...form, provider: e.target.value })
+                  }
+                />
               </div>
               <div>
                 <Label>CPD hours</Label>
-                <Input type="number" step="0.5" value={form.cpdHours} onChange={(e) => setForm({ ...form, cpdHours: Number(e.target.value) })} />
+                <Input
+                  type="number"
+                  step="0.5"
+                  value={form.cpdHours}
+                  onChange={(e) =>
+                    setForm({ ...form, cpdHours: Number(e.target.value) })
+                  }
+                />
               </div>
               <div>
-                <Label>Due date</Label>
-                <Input type="date" value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} />
+                <Label>Due date (optional)</Label>
+                <Input
+                  type="date"
+                  value={form.dueDate}
+                  onChange={(e) =>
+                    setForm({ ...form, dueDate: e.target.value })
+                  }
+                />
               </div>
               <label className="flex items-center gap-2 text-sm mt-6">
-                <Checkbox checked={form.mandatory} onCheckedChange={(v) => setForm({ ...form, mandatory: !!v })} />
+                <Checkbox
+                  checked={form.mandatory}
+                  onCheckedChange={(v) => setForm({ ...form, mandatory: !!v })}
+                />
                 Mandatory
               </label>
+            </div>
+            <div>
+              <Label>Training material (optional)</Label>
+              <Input
+                type="file"
+                accept=".pdf,.doc,.docx,.ppt,.pptx,.mp4,.mov,image/*"
+                onChange={(e) =>
+                  setForm({ ...form, file: e.target.files?.[0] })
+                }
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                If no material is attached, board members complete this training
+                by uploading their own proof of completion instead.
+              </p>
             </div>
             <div>
               <Label>Assign to (leave empty for the whole board)</Label>
@@ -470,19 +642,36 @@ export default function BoardTraining() {
                       onCheckedChange={(v) =>
                         setForm({
                           ...form,
-                          assignedTo: v ? [...form.assignedTo, m.id] : form.assignedTo.filter((x) => x !== m.id),
+                          assignedTo: v
+                            ? [...form.assignedTo, m.id]
+                            : form.assignedTo.filter((x) => x !== m.id),
                         })
                       }
                     />
                     {m.name}
                   </label>
                 ))}
+                {members.length === 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    No board members yet.
+                  </p>
+                )}
               </div>
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-            <Button onClick={save} disabled={!form.title.trim()}>Create training</Button>
+            <Button variant="outline" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={save}
+              disabled={!form.title.trim() || createMut.isPending}
+            >
+              {createMut.isPending ? (
+                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+              ) : null}
+              Create training
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -335,6 +335,66 @@ export interface MeetingAttendee {
   email: string;
   role: string;
 }
+
+// In person / by proxy / apology / absent — per PO feedback (2026-09):
+// "it is meant to be captured if the attendee is attending the
+// meeting in person or by proxy."
+export type MeetingAttendanceStatus =
+  | "Present"
+  | "Proxy"
+  | "Apology"
+  | "Absent";
+
+export interface AttendanceEntry {
+  index: number;
+  status: MeetingAttendanceStatus;
+  proxyHolderName: string | null;
+  note: string | null;
+}
+
+// Four values (not a declared/resolved lifecycle) — matches the PO's
+// reference Conflict-of-Interest dialog. "Standing declaration" also
+// gets linked into the director's own standing conflict register on
+// the backend (see MeetingService#linkToStandingRegister).
+export type MeetingConflictStatus =
+  | "No conflict declared"
+  | "Conflict declared — recusal required"
+  | "Conflict declared — noted, no recusal"
+  | "Standing declaration — ongoing";
+
+export const MEETING_CONFLICT_STATUSES: MeetingConflictStatus[] = [
+  "No conflict declared",
+  "Conflict declared — recusal required",
+  "Conflict declared — noted, no recusal",
+  "Standing declaration — ongoing",
+];
+
+export type MeetingConflictAction =
+  | "Director to recuse from discussion and vote"
+  | "Director to recuse from vote only (may participate in discussion)"
+  | "Conflict noted in minutes, no recusal required"
+  | "Referred to Nominations Committee for guidance";
+
+export const MEETING_CONFLICT_ACTIONS: MeetingConflictAction[] = [
+  "Director to recuse from discussion and vote",
+  "Director to recuse from vote only (may participate in discussion)",
+  "Conflict noted in minutes, no recusal required",
+  "Referred to Nominations Committee for guidance",
+];
+
+export interface MeetingConflictDeclaration {
+  _id: string;
+  declaredByName: string;
+  declaredByEmail: string;
+  declaredByBoardMemberId: string | null;
+  status: MeetingConflictStatus;
+  agendaItems: string[];
+  natureOfConflict: string;
+  actionTaken: MeetingConflictAction;
+  recordedBy: string;
+  recordedAt: string;
+  source: "tenant" | "board-member";
+}
 export interface MeetingAgendaItem {
   title: string;
   presenter: string;
@@ -525,6 +585,7 @@ export interface Meeting {
   title: string;
   type: MeetingAudienceType;
   date: string;
+  timezone: string;
   mode: MeetingMode;
   venue: string | null;
   meetingLink: string | null;
@@ -542,9 +603,17 @@ export interface Meeting {
   minutesSentAt: string | null;
   postponementReason: string | null;
   postponedAt: string | null;
+  postponementHistory: {
+    fromDate: string;
+    toDate: string | null;
+    reason: string;
+    postponedAt: string;
+  }[];
   attendanceAllPresent: boolean | null;
   attendancePresentIndices: number[];
   attendanceRecordedAt: string | null;
+  attendanceEntries: AttendanceEntry[];
+  conflictDeclarations: MeetingConflictDeclaration[];
   acknowledgments: {
     attendeeName: string;
     attendeeEmail: string;
@@ -1117,6 +1186,105 @@ export const deleteBoardTrainingModule = async (id: string): Promise<void> => {
   await api.delete(`/grc/governance/board-training-modules/${id}`);
 };
 
+// ══════════════════════════════════════════════════════════════
+// Trainings — general, ongoing board training (distinct from the
+// onboarding-only modules above). The tenant creates a training,
+// optionally with attached material; a director completes it from
+// their portal, either by reviewing the material or, when none was
+// attached, by uploading their own proof of completion.
+// ══════════════════════════════════════════════════════════════
+
+export type TrainingCategory =
+  | "Governance"
+  | "Regulatory"
+  | "Risk"
+  | "ESG"
+  | "Cyber"
+  | "Finance"
+  | "Ethics"
+  | "Other";
+export const TRAINING_CATEGORIES: TrainingCategory[] = [
+  "Governance",
+  "Regulatory",
+  "Risk",
+  "ESG",
+  "Cyber",
+  "Finance",
+  "Ethics",
+  "Other",
+];
+export type TrainingFormat = "In-person" | "Online" | "Self-paced";
+export type TrainingCompletionMethod =
+  | "Material reviewed"
+  | "Proof of completion uploaded";
+
+export interface TrainingCompletion {
+  boardMemberId: string | null;
+  name: string;
+  email: string;
+  completedAt: string;
+  method: TrainingCompletionMethod;
+  proofFileUrl: string | null;
+  proofMimeType: string | null;
+  proofName: string | null;
+}
+
+export interface GovernanceTraining {
+  _id: string;
+  title: string;
+  description: string;
+  category: TrainingCategory;
+  provider: string;
+  format: TrainingFormat;
+  cpdHours: number;
+  dueDate: string | null;
+  mandatory: boolean;
+  assignedTo: string[];
+  resourceUrl: string | null;
+  resourceMimeType: string | null;
+  resourceName: string | null;
+  completions: TrainingCompletion[];
+  createdAt: string;
+}
+
+export const fetchTrainings = async (): Promise<GovernanceTraining[]> => {
+  const res = await api.get("/grc/governance/trainings");
+  const d = res.data?.data ?? res.data;
+  return Array.isArray(d) ? d : [];
+};
+
+export const createTraining = async (dto: {
+  title: string;
+  description?: string;
+  category?: TrainingCategory;
+  provider?: string;
+  format?: TrainingFormat;
+  cpdHours?: number;
+  dueDate?: string;
+  mandatory?: boolean;
+  assignedTo?: string[];
+  file?: File;
+}): Promise<GovernanceTraining> => {
+  const form = new FormData();
+  form.append("title", dto.title);
+  if (dto.description) form.append("description", dto.description);
+  if (dto.category) form.append("category", dto.category);
+  if (dto.provider) form.append("provider", dto.provider);
+  if (dto.format) form.append("format", dto.format);
+  if (dto.cpdHours !== undefined) form.append("cpdHours", String(dto.cpdHours));
+  if (dto.dueDate) form.append("dueDate", dto.dueDate);
+  if (dto.mandatory !== undefined)
+    form.append("mandatory", String(dto.mandatory));
+  if (dto.assignedTo) form.append("assignedTo", JSON.stringify(dto.assignedTo));
+  if (dto.file) form.append("file", dto.file);
+  const res = await api.post("/grc/governance/trainings", form);
+  return res.data?.data ?? res.data;
+};
+
+export const deleteTraining = async (id: string): Promise<void> => {
+  await api.delete(`/grc/governance/trainings/${id}`);
+};
+
 export const toggleOnboardingItem = async (
   id: string,
   index: number,
@@ -1345,6 +1513,7 @@ export const createMeeting = async (dto: {
   title: string;
   type: MeetingAudienceType;
   date: string;
+  timezone: string;
   committeeId?: string;
   mode: MeetingMode;
   venue?: string;
@@ -1558,9 +1727,11 @@ export const sendMeetingMinutes = async (id: string): Promise<Meeting> => {
 export const postponeMeeting = async (
   id: string,
   reason: string,
+  newDate?: string,
 ): Promise<Meeting> => {
   const res = await api.post(`/grc/governance/meetings/${id}/postpone`, {
     reason,
+    newDate,
   });
   return res.data?.data ?? res.data;
 };
@@ -1733,15 +1904,60 @@ export const removeSkill = async (
 
 export const recordAttendance = async (
   id: string,
-  allAttended: boolean,
-  presentIndices?: number[],
-  absenceNotes?: { index: number; note: string }[],
+  entries: {
+    index: number;
+    status: MeetingAttendanceStatus;
+    proxyHolderName?: string;
+    note?: string;
+  }[],
 ): Promise<Meeting> => {
   const res = await api.patch(`/grc/governance/meetings/${id}/attendance`, {
-    allAttended,
-    presentIndices,
-    absenceNotes,
+    entries,
   });
+  return res.data?.data ?? res.data;
+};
+
+export const resendNotice = async (
+  id: string,
+): Promise<{ success: boolean; resentTo: number }> => {
+  const res = await api.post(
+    `/grc/governance/meetings/${id}/notice/resend`,
+    {},
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const downloadNoticePdf = async (
+  id: string,
+  meetingTitle: string,
+): Promise<void> => {
+  const res = await api.get(`/grc/governance/meetings/${id}/notice/pdf`, {
+    responseType: "blob",
+  });
+  const url = window.URL.createObjectURL(
+    new Blob([res.data], { type: "application/pdf" }),
+  );
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `${meetingTitle.replace(/[^a-z0-9]+/gi, "-")}-notice.pdf`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
+};
+
+// ── Meeting-specific conflict of interest ──────────────────────────
+export const recordMeetingConflict = async (
+  id: string,
+  dto: {
+    declaredByEmail: string;
+    status?: MeetingConflictStatus;
+    agendaItems?: string[];
+    natureOfConflict: string;
+    actionTaken?: MeetingConflictAction;
+  },
+): Promise<Meeting> => {
+  const res = await api.post(`/grc/governance/meetings/${id}/conflicts`, dto);
   return res.data?.data ?? res.data;
 };
 

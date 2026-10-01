@@ -380,6 +380,37 @@ export default function GrcMeetings() {
   );
 }
 
+// Common IANA timezones for meeting scheduling — the detected browser
+// timezone is always included (and defaulted to) even if not in this list.
+const COMMON_TIMEZONES = [
+  "UTC",
+  "Africa/Lagos",
+  "Africa/Johannesburg",
+  "Africa/Nairobi",
+  "Africa/Cairo",
+  "Europe/London",
+  "Europe/Paris",
+  "Europe/Berlin",
+  "America/New_York",
+  "America/Chicago",
+  "America/Denver",
+  "America/Los_Angeles",
+  "Asia/Dubai",
+  "Asia/Kolkata",
+  "Asia/Singapore",
+  "Asia/Shanghai",
+  "Asia/Tokyo",
+  "Australia/Sydney",
+];
+
+function detectTimezone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  } catch {
+    return "UTC";
+  }
+}
+
 function NewMeetingDialog({ open, onOpenChange }: any) {
   const queryClient = useQueryClient();
   const { data: boardMembers = [] } = useQuery({
@@ -398,6 +429,7 @@ function NewMeetingDialog({ open, onOpenChange }: any) {
     title: "",
     type: "Board" as MeetingAudienceType,
     date: new Date().toISOString().slice(0, 16),
+    timezone: detectTimezone(),
     mode: "Physical" as MeetingMode,
     venue: "",
     meetingLink: "",
@@ -486,6 +518,26 @@ function NewMeetingDialog({ open, onOpenChange }: any) {
                 onChange={(e) => setF({ ...f, date: e.target.value })}
               />
             </div>
+          </div>
+          <div>
+            <Label>Timezone</Label>
+            <Select
+              value={f.timezone}
+              onValueChange={(v) => setF({ ...f, timezone: v })}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select timezone" />
+              </SelectTrigger>
+              <SelectContent>
+                {Array.from(new Set([f.timezone, ...COMMON_TIMEZONES])).map(
+                  (tz) => (
+                    <SelectItem key={tz} value={tz}>
+                      {tz.replace(/_/g, " ")}
+                    </SelectItem>
+                  ),
+                )}
+              </SelectContent>
+            </Select>
           </div>
           {f.type === "Committee" && (
             <div>
@@ -595,4 +647,3 @@ function NewMeetingDialog({ open, onOpenChange }: any) {
     </Dialog>
   );
 }
-
