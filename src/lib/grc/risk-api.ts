@@ -210,57 +210,49 @@ export interface Incident {
   closedAt: string | null;
 }
 
-export type VendorStatus = "Active" | "Terminated";
-export type TriRating = "Strong" | "Adequate" | "Weak";
-export type BcpRating = "Documented" | "Partial" | "None";
-export type ComplianceRating = "Compliant" | "Issues" | "Unknown";
-export type ReputationRating = "Good" | "Neutral" | "Concerns";
-
-export interface DueDiligence {
-  financialStability: TriRating;
-  cybersecurityPosture: TriRating;
-  bcp: BcpRating;
-  complianceStatus: ComplianceRating;
-  reputation: ReputationRating;
-}
-
-export interface RatingHistoryEntry {
-  at: string;
-  rating: RiskBand;
-  note: string;
-}
-
-export interface Vendor {
-  _id: string;
-  name: string;
-  category: string;
-  services: string;
-  contractStart: string;
-  contractEnd: string;
-  riskRating: RiskBand;
-  dueDiligence: DueDiligence;
-  nextReviewDate: string;
-  status: VendorStatus;
-  ratingHistory: RatingHistoryEntry[];
-  terminationReason: string | null;
-  terminatedAt: string | null;
-}
-
 export type BcpTestOutcome = "Pass" | "Partial" | "Fail";
 export type SystemCriticality = "Tier 1" | "Tier 2" | "Tier 3";
+export type BcpTestType =
+  | "Tabletop"
+  | "Walkthrough"
+  | "Component"
+  | "Full DR"
+  | "Logged test";
+export type BcpPlanStatus = "Draft" | "Under review" | "Approved";
+export type AttestationStatus =
+  | "Not yet requested"
+  | "Requested - pending"
+  | "Received";
+export type AlternateVendorStatus =
+  | "No - single point of failure"
+  | "Yes - evaluated but not contracted"
+  | "Yes - contracted and ready"
+  | "Not applicable";
+export type BcpIncidentSeverity = "L1" | "L2" | "L3" | "L4";
+export type BcpIncidentStatus = "Active" | "Resolved";
+export type BcpFindingStatus = "Open" | "Resolved";
 
 export interface BcpPlan {
   _id: string;
   title: string;
   version: number;
   content: string;
+  scope: string;
+  owner: string;
+  status: BcpPlanStatus;
+  phase: number;
+  nextReviewDate: string | null;
   updatedAt: string;
 }
 export interface BcpTestRecord {
   _id: string;
-  planId: string;
-  testedAt: string;
-  outcome: BcpTestOutcome;
+  planId: string | null;
+  scenario: string;
+  testType: BcpTestType;
+  scheduledFor: string | null;
+  testedAt: string | null;
+  outcome: BcpTestOutcome | null;
+  score: number | null;
   notes: string;
 }
 export interface RtoRpoEntry {
@@ -269,6 +261,9 @@ export interface RtoRpoEntry {
   rtoHours: number;
   rpoHours: number;
   criticality: SystemCriticality;
+  strategy: string;
+  rtoActualHours: number | null;
+  rpoActualHours: number | null;
 }
 export interface CrisisContact {
   _id: string;
@@ -276,6 +271,61 @@ export interface CrisisContact {
   role: string;
   phone: string;
   escalationOrder: number;
+}
+export interface BiaProcess {
+  _id: string;
+  name: string;
+  departmentId: string | null;
+  dept: string;
+  owner: string;
+  criticality: Severity;
+  mtd: string;
+  impactPerDay: number;
+  nonFinancialImpact: string;
+  dependencies: string[];
+  linkedPlanId: string | null;
+}
+export interface VendorResilience {
+  _id: string;
+  crmVendorId: string;
+  name: string;
+  criticality: Severity;
+  sla: string;
+  attestation: AttestationStatus;
+  alternate: AlternateVendorStatus;
+  dependentProcessIds: string[];
+  escalationContact: string;
+  lastReviewDate: string;
+  nextReviewDate: string | null;
+}
+export interface BcpIncident {
+  _id: string;
+  code: string;
+  description: string;
+  severity: BcpIncidentSeverity;
+  status: BcpIncidentStatus;
+  declaredAt: string;
+  resolvedAt: string | null;
+}
+export interface BcpReport {
+  _id: string;
+  name: string;
+  type: string;
+  period: string;
+  recipients: string;
+  sections: string[];
+  schedule: string;
+  format: string;
+  generatedAt: string;
+}
+export interface BcpTestFinding {
+  _id: string;
+  testId: string;
+  severity: Severity;
+  title: string;
+  owner: string;
+  dueDate: string | null;
+  status: BcpFindingStatus;
 }
 
 export type EmergingRiskSource =
@@ -776,46 +826,6 @@ export const closeIncident = async (id: string): Promise<Incident> => {
   return res.data?.data ?? res.data;
 };
 
-export const fetchVendors = async (): Promise<Vendor[]> => {
-  const res = await api.get("/grc/risk/vendors");
-  const d = res.data?.data ?? res.data;
-  return Array.isArray(d) ? d : [];
-};
-
-export const createVendor = async (dto: {
-  name: string;
-  category: string;
-  services: string;
-  contractStart: string;
-  contractEnd: string;
-  riskRating: RiskBand;
-  dueDiligence: DueDiligence;
-  nextReviewDate: string;
-}): Promise<Vendor> => {
-  const res = await api.post("/grc/risk/vendors", dto);
-  return res.data?.data ?? res.data;
-};
-
-export const updateVendorRating = async (
-  id: string,
-  rating: RiskBand,
-  note: string,
-): Promise<Vendor> => {
-  const res = await api.patch(`/grc/risk/vendors/${id}/rating`, {
-    rating,
-    note,
-  });
-  return res.data?.data ?? res.data;
-};
-
-export const terminateVendor = async (
-  id: string,
-  reason: string,
-): Promise<Vendor> => {
-  const res = await api.post(`/grc/risk/vendors/${id}/terminate`, { reason });
-  return res.data?.data ?? res.data;
-};
-
 export const fetchBcpPlans = async (): Promise<BcpPlan[]> => {
   const res = await api.get("/grc/risk/bcp/plans");
   const d = res.data?.data ?? res.data;
@@ -826,6 +836,11 @@ export const createBcpPlan = async (dto: {
   title: string;
   version: number;
   content: string;
+  scope?: string;
+  owner?: string;
+  status?: BcpPlanStatus;
+  phase?: number;
+  nextReviewDate?: string;
 }): Promise<BcpPlan> => {
   const res = await api.post("/grc/risk/bcp/plans", dto);
   return res.data?.data ?? res.data;
@@ -837,12 +852,26 @@ export const fetchBcpTests = async (): Promise<BcpTestRecord[]> => {
   return Array.isArray(d) ? d : [];
 };
 
+// Create either a scheduled test (pass scheduledFor, omit outcome) or a
+// logged/completed one (pass outcome up front).
 export const logBcpTest = async (dto: {
-  planId: string;
-  outcome: BcpTestOutcome;
-  notes: string;
+  scenario: string;
+  planId?: string;
+  testType?: BcpTestType;
+  scheduledFor?: string;
+  outcome?: BcpTestOutcome;
+  score?: number;
+  notes?: string;
 }): Promise<BcpTestRecord> => {
   const res = await api.post("/grc/risk/bcp/tests", dto);
+  return res.data?.data ?? res.data;
+};
+
+export const completeBcpTest = async (
+  id: string,
+  dto: { outcome: BcpTestOutcome; score?: number; notes?: string },
+): Promise<BcpTestRecord> => {
+  const res = await api.patch(`/grc/risk/bcp/tests/${id}/complete`, dto);
   return res.data?.data ?? res.data;
 };
 
@@ -857,8 +886,17 @@ export const createRtoRpo = async (dto: {
   rtoHours: number;
   rpoHours: number;
   criticality: SystemCriticality;
+  strategy?: string;
 }): Promise<RtoRpoEntry> => {
   const res = await api.post("/grc/risk/bcp/rto-rpo", dto);
+  return res.data?.data ?? res.data;
+};
+
+export const recordRtoRpoActual = async (
+  id: string,
+  dto: { rtoActualHours?: number; rpoActualHours?: number },
+): Promise<RtoRpoEntry> => {
+  const res = await api.patch(`/grc/risk/bcp/rto-rpo/${id}/actual`, dto);
   return res.data?.data ?? res.data;
 };
 
@@ -875,6 +913,120 @@ export const createCrisisContact = async (dto: {
   escalationOrder: number;
 }): Promise<CrisisContact> => {
   const res = await api.post("/grc/risk/bcp/crisis-contacts", dto);
+  return res.data?.data ?? res.data;
+};
+
+export const fetchBiaProcesses = async (): Promise<BiaProcess[]> => {
+  const res = await api.get("/grc/risk/bcp/processes");
+  const d = res.data?.data ?? res.data;
+  return Array.isArray(d) ? d : [];
+};
+
+export const createBiaProcess = async (dto: {
+  name: string;
+  departmentId?: string;
+  dept?: string;
+  owner?: string;
+  criticality: Severity;
+  mtd?: string;
+  impactPerDay?: number;
+  nonFinancialImpact?: string;
+  dependencies?: string[];
+  linkedPlanId?: string;
+}): Promise<BiaProcess> => {
+  const res = await api.post("/grc/risk/bcp/processes", dto);
+  return res.data?.data ?? res.data;
+};
+
+export const fetchVendorResilience = async (): Promise<VendorResilience[]> => {
+  const res = await api.get("/grc/risk/bcp/vendor-resilience");
+  const d = res.data?.data ?? res.data;
+  return Array.isArray(d) ? d : [];
+};
+
+export const createVendorResilience = async (dto: {
+  crmVendorId: string;
+  criticality: Severity;
+  sla?: string;
+  attestation?: AttestationStatus;
+  alternate?: AlternateVendorStatus;
+  dependentProcessIds?: string[];
+  escalationContact?: string;
+  nextReviewDate?: string;
+}): Promise<VendorResilience> => {
+  const res = await api.post("/grc/risk/bcp/vendor-resilience", dto);
+  return res.data?.data ?? res.data;
+};
+
+export const markVendorResilienceAttested = async (
+  id: string,
+): Promise<VendorResilience> => {
+  const res = await api.patch(
+    `/grc/risk/bcp/vendor-resilience/${id}/attest`,
+    {},
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const fetchBcpFindings = async (): Promise<BcpTestFinding[]> => {
+  const res = await api.get("/grc/risk/bcp/findings");
+  const d = res.data?.data ?? res.data;
+  return Array.isArray(d) ? d : [];
+};
+
+export const createBcpFinding = async (dto: {
+  testId: string;
+  severity: Severity;
+  title: string;
+  owner?: string;
+  dueDate?: string;
+}): Promise<BcpTestFinding> => {
+  const res = await api.post("/grc/risk/bcp/findings", dto);
+  return res.data?.data ?? res.data;
+};
+
+export const resolveBcpFinding = async (
+  id: string,
+): Promise<BcpTestFinding> => {
+  const res = await api.patch(`/grc/risk/bcp/findings/${id}/resolve`, {});
+  return res.data?.data ?? res.data;
+};
+
+export const fetchBcpIncidents = async (): Promise<BcpIncident[]> => {
+  const res = await api.get("/grc/risk/bcp/incidents");
+  const d = res.data?.data ?? res.data;
+  return Array.isArray(d) ? d : [];
+};
+
+export const declareBcpIncident = async (dto: {
+  description: string;
+  severity: BcpIncidentSeverity;
+}): Promise<BcpIncident> => {
+  const res = await api.post("/grc/risk/bcp/incidents", dto);
+  return res.data?.data ?? res.data;
+};
+
+export const resolveBcpIncident = async (id: string): Promise<BcpIncident> => {
+  const res = await api.patch(`/grc/risk/bcp/incidents/${id}/resolve`, {});
+  return res.data?.data ?? res.data;
+};
+
+export const fetchBcpReports = async (): Promise<BcpReport[]> => {
+  const res = await api.get("/grc/risk/bcp/reports");
+  const d = res.data?.data ?? res.data;
+  return Array.isArray(d) ? d : [];
+};
+
+export const createBcpReport = async (dto: {
+  name: string;
+  type: string;
+  period?: string;
+  recipients?: string;
+  sections?: string[];
+  schedule?: string;
+  format?: string;
+}): Promise<BcpReport> => {
+  const res = await api.post("/grc/risk/bcp/reports", dto);
   return res.data?.data ?? res.data;
 };
 

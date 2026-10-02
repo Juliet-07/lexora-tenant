@@ -531,49 +531,27 @@ export default function GrcReporting() {
       },
     });
 
-    // ── Third-party & BCP ─────────────────────────────────────
+    // ── Business Continuity & DR ───────────────────────────────
     entries.push({
-      domain: "Third-Party & BCP",
+      domain: "Business Continuity & DR",
       description:
-        "Vendor risk exposure, continuity plans, RTO/RPO and crisis contacts.",
+        "Continuity plans, RTO/RPO targets, continuity tests and crisis contacts.",
       icon: LifeBuoy,
       tone: "from-cyan-500 to-blue-500",
       def: {
         id: "third-party-bcp",
-        title: "Third-Party & Continuity Report",
-        subtitle: "Vendor risk, business continuity and disaster recovery",
+        title: "Business Continuity & Disaster Recovery Report",
+        subtitle: "Business continuity and disaster recovery readiness",
         summary: [
-          { label: "Vendors", value: tp.vendors.length },
-          {
-            label: "High / Extreme risk",
-            value: tp.vendors.filter((v) =>
-              ["High", "Extreme"].includes(v.riskRating),
-            ).length,
-          },
           { label: "BCP plans", value: tp.bcpPlans.length },
           {
             label: "Tier-1 systems",
             value: tp.rtoRpo.filter((r) => r.criticality === "Tier 1").length,
           },
+          { label: "Continuity tests", value: tp.bcpTests.length },
+          { label: "Crisis contacts", value: tp.crisisContacts.length },
         ],
         sections: [
-          {
-            heading: "Vendor register",
-            columns: [
-              "Vendor",
-              "Category",
-              "Risk rating",
-              "Status",
-              "Next review",
-            ],
-            rows: tp.vendors.map((v) => [
-              v.name,
-              v.category,
-              v.riskRating,
-              v.status,
-              v.nextReviewDate?.slice(0, 10) ?? "—",
-            ]),
-          },
           {
             heading: "Continuity plans",
             columns: ["Plan", "Version"],
@@ -1061,16 +1039,6 @@ export default function GrcReporting() {
                     domain: "Operations",
                     owner: "—",
                     due: f.remediationDueDate!.slice(0, 10),
-                  })),
-                ...(overview?.thirdPartyBcp.vendors ?? [])
-                  .filter(
-                    (v) => v.status === "Active" && v.nextReviewDate < today,
-                  )
-                  .map((v) => ({
-                    item: `${v.name} — vendor review`,
-                    domain: "Third-party",
-                    owner: "Procurement",
-                    due: v.nextReviewDate.slice(0, 10),
                   })),
               ]
                 .sort((a, b) => (a.due < b.due ? -1 : 1))

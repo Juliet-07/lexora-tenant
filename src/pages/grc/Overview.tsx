@@ -7,13 +7,11 @@ import {
   FileWarning,
   ClipboardCheck,
   Activity,
-  Briefcase,
   Users,
   CalendarClock,
   BookOpen,
   Gavel,
   FileText,
-  Building2,
   ServerCog,
   LifeBuoy,
   Handshake,
@@ -103,15 +101,6 @@ export default function GrcOverview() {
     .flatMap((a) => a.findings)
     .filter((f) => f.status !== "Remediated" && f.status !== "Closed").length;
   const activeAudits = ops.audits.filter((a) => a.status !== "Closed").length;
-
-  // ── Third-Party
-  const activeVendors = tp.vendors.filter((v) => v.status === "Active").length;
-  const vendorsHigh = tp.vendors.filter(
-    (v) => v.status === "Active" && ["High", "Extreme"].includes(v.riskRating),
-  ).length;
-  const vendorsDueReview = tp.vendors.filter(
-    (v) => v.status === "Active" && v.nextReviewDate < today,
-  ).length;
 
   // ── BCP/DR
   const bcpPlans = tp.bcpPlans.length;
@@ -598,66 +587,6 @@ export default function GrcOverview() {
             ))}
             {ops.incidents.length === 0 && (
               <div className="text-sm text-muted-foreground">No incidents.</div>
-            )}
-          </CardContent>
-        </Card>
-      </Section>
-
-      {/* ── THIRD-PARTY ────────────────────────────────────────── */}
-      <Section
-        title="Third-Party"
-        icon={Briefcase}
-        accent="from-cyan-500 to-blue-500"
-      >
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
-          <Kpi
-            to="/grc/risk/vendors"
-            label="Active vendors"
-            value={activeVendors}
-            icon={Building2}
-            tone="from-cyan-500 to-blue-500"
-          />
-          <Kpi
-            to="/grc/risk/vendors"
-            label="High / Extreme risk"
-            value={vendorsHigh}
-            icon={AlertTriangle}
-            tone="from-rose-500 to-orange-500"
-          />
-          <Kpi
-            to="/grc/risk/vendors"
-            label="Due for review"
-            value={vendorsDueReview}
-            icon={CalendarClock}
-            tone="from-amber-500 to-yellow-500"
-          />
-        </div>
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Vendor exposure</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {tp.vendors.slice(0, 5).map((v) => (
-              <NavLink
-                key={v._id}
-                to="/grc/risk/vendors"
-                className="flex items-center justify-between border rounded px-3 py-2 text-sm hover:bg-muted/50"
-              >
-                <div>
-                  <div className="font-medium">{v.name}</div>
-                  <div className="text-xs text-muted-foreground">
-                    {v.category}
-                  </div>
-                </div>
-                <Badge variant="outline" className={bandTone(v.riskRating)}>
-                  {v.riskRating}
-                </Badge>
-              </NavLink>
-            ))}
-            {tp.vendors.length === 0 && (
-              <div className="text-sm text-muted-foreground">
-                No vendors registered.
-              </div>
             )}
           </CardContent>
         </Card>

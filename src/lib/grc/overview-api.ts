@@ -178,15 +178,7 @@ export interface OperationsData {
   audits: AuditEngagement[];
 }
 
-// ── Third-party & BCP ────────────────────────────────────────
-export interface Vendor {
-  _id: string;
-  name: string;
-  category: string;
-  riskRating: "Low" | "Medium" | "High" | "Extreme";
-  status: "Active" | "Terminated";
-  nextReviewDate: string;
-}
+// ── BCP ──────────────────────────────────────────────────────
 export interface BcpPlan {
   _id: string;
   title: string;
@@ -213,7 +205,6 @@ export interface CrisisContact {
   escalationOrder: number;
 }
 export interface ThirdPartyBcpData {
-  vendors: Vendor[];
   bcpPlans: BcpPlan[];
   bcpTests: BcpTest[];
   rtoRpo: RtoRpo[];
