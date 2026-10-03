@@ -395,11 +395,18 @@ export interface MeetingConflictDeclaration {
   recordedAt: string;
   source: "tenant" | "board-member";
 }
-export type AgendaItemType = "Procedural" | "Noting" | "Resolution";
+export type AgendaItemType =
+  | "Procedural"
+  | "Noting"
+  | "Resolution"
+  | "Discussion"
+  | "Informational";
 export const AGENDA_ITEM_TYPES: AgendaItemType[] = [
   "Procedural",
   "Noting",
   "Resolution",
+  "Discussion",
+  "Informational",
 ];
 
 export interface MeetingAgendaItem {
@@ -622,6 +629,10 @@ export interface Meeting {
   attendees: MeetingAttendee[];
   agenda: MeetingAgendaItem[];
   boardPack: BoardPackDoc[];
+  // Board pack cover page — rich text HTML, same convention as
+  // notice.body/minutes. Never dispatch-locked, unlike the notice.
+  executiveSummary: string;
+  executiveSummaryUpdatedAt: string | null;
   // Tenant-set override of when the board pack must be complete by.
   // Not currently surfaced in the UI (pulled 2026-10 — see
   // MeetingControls.tsx) but kept on the type/backend for a possible
@@ -2054,6 +2065,38 @@ export const downloadNoticePdf = async (
   const link = document.createElement("a");
   link.href = url;
   link.download = `${meetingTitle.replace(/[^a-z0-9]+/gi, "-")}-notice.pdf`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
+};
+
+// ── Board pack cover page / executive summary ──────────────────────
+export const updateExecutiveSummary = async (
+  id: string,
+  executiveSummary: string,
+): Promise<Meeting> => {
+  const res = await api.patch(
+    `/grc/governance/meetings/${id}/executive-summary`,
+    { executiveSummary },
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const downloadExecutiveSummaryPdf = async (
+  id: string,
+  meetingTitle: string,
+): Promise<void> => {
+  const res = await api.get(
+    `/grc/governance/meetings/${id}/executive-summary/pdf`,
+    { responseType: "blob" },
+  );
+  const url = window.URL.createObjectURL(
+    new Blob([res.data], { type: "application/pdf" }),
+  );
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `${meetingTitle.replace(/[^a-z0-9]+/gi, "-")}-executive-summary.pdf`;
   document.body.appendChild(link);
   link.click();
   link.remove();

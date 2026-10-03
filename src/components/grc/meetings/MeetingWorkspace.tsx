@@ -21,11 +21,18 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   ArrowLeft,
   Check,
   Package,
   FileText,
   Download,
+  Eye,
   Plus,
   Settings2,
   Circle,
@@ -34,6 +41,7 @@ import {
   ListChecks,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { RichTextEditor } from "@/components/RichTextEditor";
 import {
   MeetingChecklist,
   MeetingNotice,
@@ -60,6 +68,8 @@ import {
   removeMeetingActionItem,
   setMeetingActionItemStatus,
   resolveGrcFileUrl,
+  updateExecutiveSummary,
+  downloadExecutiveSummaryPdf,
   type Meeting,
   type MeetingActionItemStatus,
   type AgendaItemType,
@@ -72,6 +82,62 @@ const fmt = (d: Date) =>
     month: "short",
     year: "numeric",
   });
+
+// Board pack documents are served from a public, unauthenticated
+// static path (the existing "View" link already opened them with a
+// plain <a href target=_blank>, no auth header) — so a real download
+// is a client-side fetch-to-blob rather than relying on the <a
+// download> attribute, which browsers ignore for a cross-origin href
+// (the API usually runs on a different origin than the app).
+async function downloadBoardPackDoc(url: string, filename: string) {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(String(res.status));
+    const blob = await res.blob();
+    const objUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = objUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(objUrl);
+  } catch {
+    toast({ title: "Failed to download document", variant: "destructive" });
+  }
+}
+
+/** Eye-icon "View" action for a board pack document — opens an in-app
+ * popup (an iframe pointed at the file) instead of a new browser tab,
+ * paired with a separate Download icon alongside it in BoardPackSection. */
+function DocPreviewButton({ name, url }: { name: string; url: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Button
+        size="icon"
+        variant="ghost"
+        aria-label="View"
+        title="View"
+        onClick={() => setOpen(true)}
+      >
+        <Eye className="h-4 w-4" />
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-3xl p-0 gap-0 overflow-hidden">
+          <DialogHeader className="px-4 pt-4 pb-3 border-b">
+            <DialogTitle className="truncate">{name}</DialogTitle>
+          </DialogHeader>
+          <iframe
+            title={name}
+            src={url}
+            className="w-full h-[75vh] border-0 bg-muted/30"
+          />
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
 
 function Stepper({
   steps,
@@ -112,7 +178,11 @@ function AgendaTypeBadge({ type }: { type: AgendaItemType }) {
       ? "border-sky-400 text-sky-700 bg-sky-50"
       : type === "Procedural"
         ? "border-muted-foreground/30 text-muted-foreground bg-muted/40"
-        : "border-violet-400 text-violet-700 bg-violet-50";
+        : type === "Discussion"
+          ? "border-amber-400 text-amber-700 bg-amber-50"
+          : type === "Informational"
+            ? "border-emerald-400 text-emerald-700 bg-emerald-50"
+            : "border-violet-400 text-violet-700 bg-violet-50";
   return (
     <Badge variant="outline" className={cls}>
       {type}
@@ -195,16 +265,26 @@ function BoardPackSection({
               </div>
               <div className="flex items-center gap-1">
                 {d.fileUrl ? (
-                  <Button size="sm" variant="ghost" asChild>
-                    <a
-                      href={resolveGrcFileUrl(d.fileUrl)}
-                      target="_blank"
-                      rel="noreferrer"
+                  <>
+                    <DocPreviewButton
+                      name={d.name}
+                      url={resolveGrcFileUrl(d.fileUrl)}
+                    />
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      aria-label="Download"
+                      title="Download"
+                      onClick={() =>
+                        downloadBoardPackDoc(
+                          resolveGrcFileUrl(d.fileUrl!),
+                          d.name,
+                        )
+                      }
                     >
-                      <Download className="h-4 w-4 mr-1" />
-                      View
-                    </a>
-                  </Button>
+                      <Download className="h-4 w-4" />
+                    </Button>
+                  </>
                 ) : (
                   <FulfillBoardPackDocButton meeting={meeting} index={i} />
                 )}
@@ -222,6 +302,134 @@ function BoardPackSection({
         </div>
       )}
     </div>
+  );
+}
+
+/** Board pack cover page — rich text the tenant ("Company Secretary")
+ * drafts to frame the pack for directors (matters for decision/noting,
+ * outstanding action items, reading guidance — PO reference mockup,
+ * Oct 2026). Unlike the notice, it's never dispatch-locked, so there's
+ * just Save draft plus an in-app Preview popup and a PDF export. */
+function BoardPackExecutiveSummary({ meeting }: { meeting: Meeting }) {
+  const queryClient = useQueryClient();
+  const [body, setBody] = useState(meeting.executiveSummary ?? "");
+  const [preview, setPreview] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const dirty = body !== (meeting.executiveSummary ?? "");
+
+  const saveMut = useMutation({
+    mutationFn: () => updateExecutiveSummary(meeting._id, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["grc-meetings"] });
+      toast({ title: "Executive summary saved" });
+    },
+    onError: (err: any) =>
+      toast({
+        title: "Failed to save executive summary",
+        description: err?.response?.data?.message,
+        variant: "destructive",
+      }),
+  });
+
+  const downloadPdf = async () => {
+    setDownloading(true);
+    try {
+      if (dirty) {
+        await updateExecutiveSummary(meeting._id, body);
+        queryClient.invalidateQueries({ queryKey: ["grc-meetings"] });
+      }
+      await downloadExecutiveSummaryPdf(meeting._id, meeting.title);
+    } catch {
+      toast({
+        title: "Failed to export the executive summary",
+        variant: "destructive",
+      });
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader className="flex-row items-center justify-between space-y-0 flex-wrap gap-2">
+        <div>
+          <CardTitle className="text-base">
+            Cover page &amp; executive summary
+          </CardTitle>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Frames the pack for directors — matters for decision, matters for
+            noting, outstanding items, reading guidance.
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={!body.trim()}
+            onClick={() => setPreview(true)}
+          >
+            <Eye className="h-3.5 w-3.5 mr-1" />
+            Preview
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={!body.trim() || downloading}
+            onClick={downloadPdf}
+          >
+            {downloading ? (
+              <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+            ) : (
+              <Download className="h-3.5 w-3.5 mr-1" />
+            )}
+            Export as PDF
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <RichTextEditor
+          value={body}
+          onChange={setBody}
+          minHeight={180}
+          placeholder="Dear Directors, please find enclosed the board pack for…"
+        />
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <p className="text-xs text-muted-foreground">
+            {meeting.executiveSummaryUpdatedAt
+              ? `Last saved ${new Date(meeting.executiveSummaryUpdatedAt).toLocaleString()}`
+              : "Not written yet."}
+          </p>
+          <Button
+            size="sm"
+            disabled={!dirty || saveMut.isPending}
+            onClick={() => saveMut.mutate()}
+          >
+            {saveMut.isPending ? (
+              <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+            ) : null}
+            Save draft
+          </Button>
+        </div>
+      </CardContent>
+
+      <Dialog open={preview} onOpenChange={setPreview}>
+        <DialogContent className="max-w-2xl p-0 gap-0 overflow-hidden">
+          <DialogHeader className="px-4 pt-4 pb-3 border-b">
+            <DialogTitle>
+              Cover page &amp; executive summary — preview
+            </DialogTitle>
+          </DialogHeader>
+          <div
+            className="p-6 max-h-[75vh] overflow-y-auto prose prose-sm max-w-none [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5"
+            dangerouslySetInnerHTML={{
+              __html:
+                body ||
+                "<p class='text-muted-foreground'>Nothing written yet.</p>",
+            }}
+          />
+        </DialogContent>
+      </Dialog>
+    </Card>
   );
 }
 
@@ -523,6 +731,7 @@ export function MeetingWorkspace({
 
         {/* BOARD PACK */}
         <TabsContent value="pack" className="space-y-4">
+          <BoardPackExecutiveSummary meeting={meeting} />
           <Card>
             <CardHeader className="flex-row items-center justify-between space-y-0 flex-wrap gap-2">
               <CardTitle className="text-base">Board pack documents</CardTitle>
