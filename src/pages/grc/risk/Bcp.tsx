@@ -42,12 +42,10 @@ import {
   ArrowRight,
   CalendarClock,
   CheckCircle2,
-  Cloud,
   Download,
   FileText,
   Info,
   Plus,
-  Server,
   Siren,
   XCircle,
 } from "lucide-react";
@@ -63,6 +61,8 @@ import {
   recordRtoRpoActual,
   fetchCrisisContacts,
   createCrisisContact,
+  updateCrisisContact,
+  deleteCrisisContact,
   fetchBiaProcesses,
   createBiaProcess,
   fetchVendorResilience,
@@ -80,6 +80,7 @@ import {
   type SystemCriticality,
   type BcpTestType,
   type BcpPlanStatus,
+  type ReviewCycle,
   type AttestationStatus,
   type AlternateVendorStatus,
   type BcpIncidentSeverity,
@@ -89,21 +90,28 @@ import {
   type BcpIncident as ApiBcpIncident,
   type BcpReport as ApiBcpReport,
   type BcpTestFinding as ApiBcpTestFinding,
+  type CrisisContact,
 } from "@/lib/grc/risk-api";
-import { fetchTeams, type HrTeam } from "@/lib/hr/hr-api";
+import {
+  fetchTeams,
+  fetchEmployees,
+  type HrTeam,
+  type Employee,
+} from "@/lib/hr/hr-api";
 import {
   fetchVendors as fetchCrmVendors,
   type Vendor as CrmVendor,
 } from "@/lib/crm/vendor-api";
 import { fetchCommittees, type Committee } from "@/lib/grc/governance-api";
+import { useAuth } from "@/contexts/AuthContext";
 
-// ─── Types (BIA, Plans, DR systems, Tests, Vendor resilience, Incidents
-// and Reports are all real, tenant-scoped backend records now — see
-// AGENTS.md. Escalation matrix, CMT roster, notification order,
-// communication templates, response playbooks, report-type catalog and
-// the scheduled-reports card below remain static reference content:
-// there's no create/edit affordance for them in this design, same as
-// before this round.) ───
+// ─── Types (BIA, Plans, DR systems, Tests, Vendor resilience, Incidents,
+// Reports and the Crisis Management Team roster are all real,
+// tenant-scoped backend records now — see AGENTS.md. Escalation
+// matrix, notification order, communication templates, response
+// playbooks, report-type catalog and the scheduled-reports card below
+// remain static reference content: there's no create/edit affordance
+// for them in this design.) ───
 type Crit = Severity;
 interface Process {
   id: string;
@@ -124,8 +132,7 @@ interface Plan {
   title: string;
   scope: string;
   version: string;
-  owner: string;
-  review: string;
+  reviewCycle: string;
   status: BcpPlanStatus;
   phase: number; // 0..6 of lifecycle
 }
@@ -203,6 +210,16 @@ const LIFECYCLE = [
   "Test & validate",
   "Annual review",
 ];
+const PLAN_SCOPES = [
+  "Client Onboarding (KYC)",
+  "Client Reporting",
+  "Fund Administration",
+  "Payment Processing",
+  "Regulatory Reporting",
+  "HR & Payroll",
+  "Other",
+];
+const REVIEW_CYCLES = ["Quarterly", "Annual", "Biennial"];
 // Tabs a generated report can pull from — keys match the Tabs `value`s below.
 const SECTION_LABELS: Record<string, string> = {
   overview: "Overview KPIs",
@@ -245,13 +262,18 @@ const ESCALATION = [
     time: "30 min",
   },
 ];
-const CMT = [
-  ["Crisis Commander", "—", "—"],
-  ["IT Recovery Lead", "—", "—"],
-  ["Compliance Lead", "—", "—"],
-  ["Comms & Media", "—", "—"],
-  ["Operations Lead", "—", "—"],
-  ["Legal Counsel", "—", "—"],
+// Suggested CMT roles for the Add/Edit contact dialog's Role dropdown —
+// "Other" lets the tenant type a role of their own, which is then
+// saved as-is. The CMT table itself is real data now (CrisisContact
+// records), not a fixed skeleton.
+const CMT_ROLES = [
+  "Crisis Commander",
+  "IT Recovery Lead",
+  "Compliance Lead",
+  "Comms & Media",
+  "Operations Lead",
+  "Legal Counsel",
+  "Other",
 ];
 const NOTIFY = [
   ["Internal Crisis Team", "Within 15 min · WhatsApp group + phone tree"],
@@ -441,6 +463,7 @@ function Kpi({
 // ─── Page ───
 export default function GrcBcp() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   const [tab, setTab] = useState("overview");
   const [detail, setDetail] = useState<Detail | null>(null);
   const [dialog, setDialog] = useState<
@@ -458,6 +481,9 @@ export default function GrcBcp() {
   >(null);
   const [actualFor, setActualFor] = useState<DrSystem | null>(null);
   const [completeFor, setCompleteFor] = useState<TestRec | null>(null);
+  const [editingContact, setEditingContact] = useState<CrisisContact | null>(
+    null,
+  );
 
   const { data: apiProcesses = [] } = useQuery({
     queryKey: ["grc-bcp-processes"],
@@ -531,8 +557,7 @@ export default function GrcBcp() {
         title: p.title,
         scope: p.scope || p.content.slice(0, 90),
         version: `v${p.version}`,
-        owner: p.owner || "—",
-        review: p.nextReviewDate ? fmtD(p.nextReviewDate) : "Not set",
+        reviewCycle: p.reviewCycle || "Not set",
         status: p.status,
         phase: Math.min(Math.max(p.phase, 0), LIFECYCLE.length - 1),
       })),
@@ -751,34 +776,73 @@ export default function GrcBcp() {
     if (!w) return;
     const want =
       sections && sections.length ? new Set(sections) : new Set(SECTION_KEYS);
+    const businessName = user?.businessName || "Your organisation";
+    const generatedAt = new Date().toLocaleString("en-GB");
+    const kv = (rows: [string, string][]) =>
+      `<table>${rows.map(([k, v]) => `<tr><td class="k">${k}</td><td>${v}</td></tr>`).join("")}</table>`;
     const blocks: Record<string, string> = {
-      overview: `<h2>Overview KPIs</h2><ul><li>Active plans: ${plans.length}</li><li>RTO compliance: ${tested.length - breaches.length}/${tested.length}</li><li>Average test score: ${avgScore}%</li><li>Vendor attestations: ${received}/${vendors.length}</li><li>Daily exposure: ${money(exposure)}</li></ul><h3>Needs attention</h3><ul>${attention.map((a) => `<li>${a.title} — ${a.sub}</li>`).join("") || "<li>Nothing needs attention.</li>"}</ul>`,
-      bia: `<h2>Business Impact Analysis</h2><table><tr><th>Process</th><th>Department</th><th>Owner</th><th>Criticality</th><th>MTD</th><th>Impact/day</th></tr>${processes.map((p) => `<tr><td>${p.name}</td><td>${p.dept}</td><td>${p.owner}</td><td>${p.criticality}</td><td>${p.mtd}</td><td>${money(p.impactPerDay)}</td></tr>`).join("")}</table>`,
-      plans: `<h2>Continuity Plans status</h2><table><tr><th>Plan</th><th>Status</th><th>Owner</th><th>Next review</th></tr>${plans.map((p) => `<tr><td>${p.code}: ${p.title}</td><td>${p.status}</td><td>${p.owner}</td><td>${p.review}</td></tr>`).join("")}</table>`,
-      dr: `<h2>DR &amp; Recovery Targets</h2><table><tr><th>System</th><th>Tier</th><th>RTO</th><th>RPO</th><th>Status</th></tr>${systems.map((s) => `<tr><td>${s.name}</td><td>${s.tier}</td><td>${mins(s.rtoT)} / ${mins(s.rtoA)}</td><td>${mins(s.rpoT)} / ${mins(s.rpoA)}</td><td>${sysStatus(s)}</td></tr>`).join("")}</table>`,
-      testing: `<h2>Testing &amp; Exercises results</h2><table><tr><th>Test</th><th>Scenario</th><th>Date</th><th>Result</th></tr>${tests.map((t) => `<tr><td>${t.code}</td><td>${t.scenario}</td><td>${fmtD(t.date)}</td><td>${t.result}</td></tr>`).join("")}</table>${openFindings.length ? `<h3>Open findings</h3><ul>${openFindings.map((f) => `<li>[${f.severity}] ${f.title} — Owner: ${f.owner || "—"}${f.dueDate ? `, due ${fmtD(f.dueDate)}` : ""}</li>`).join("")}</ul>` : ""}`,
-      vendors: `<h2>Vendor &amp; Third-Party Resilience</h2><table><tr><th>Vendor</th><th>Criticality</th><th>SLA</th><th>Attestation</th><th>Alternate</th><th>Last review</th></tr>${vendors.map((v) => `<tr><td>${v.name}</td><td>${v.criticality}</td><td>${v.sla}</td><td>${v.attestation}</td><td>${v.alternate}</td><td>${v.lastReview}</td></tr>`).join("")}</table>`,
-      crisis: `<h2>Crisis Management readiness</h2><p>Active incidents: ${active.length} · Last drill: ${lastDrill ? fmtD(lastDrill.date) : "None yet"}</p><ul>${
-        apiContacts.length
-          ? [...apiContacts]
-              .sort((a, b) => a.escalationOrder - b.escalationOrder)
-              .map(
-                (c) =>
-                  `<li>${c.escalationOrder}. ${c.name} (${c.role}) — ${c.phone}</li>`,
-              )
-              .join("")
-          : "<li>No crisis contacts recorded yet.</li>"
-      }</ul>`,
-      incidents: `<h2>Incident Response log</h2><table><tr><th>ID</th><th>Date</th><th>Description</th><th>Severity</th><th>Status</th><th>MTTR</th></tr>${incidents.map((i) => `<tr><td>${i.code}</td><td>${fmtD(i.date)}</td><td>${i.description}</td><td>${i.severity}</td><td>${i.status}</td><td>${i.mttr}</td></tr>`).join("")}</table>`,
+      overview: `
+        <h2>Overview KPIs</h2>
+        ${kv([
+          ["Active plans", String(plans.length)],
+          [
+            "RTO compliance",
+            `${tested.length - breaches.length}/${tested.length}`,
+          ],
+          ["Average test score", `${avgScore}%`],
+          ["Vendor attestations", `${received}/${vendors.length}`],
+          ["Daily exposure", money(exposure)],
+        ])}
+        <h2>Needs attention</h2>
+        ${attention.length ? kv(attention.map((a) => [a.title, a.sub])) : `<table><tr><td class="empty">Nothing needs attention.</td></tr></table>`}
+      `,
+      bia: `<h2>Business Impact Analysis</h2><table><tr><th>Process</th><th>Department</th><th>Owner</th><th>Criticality</th><th>MTD</th><th>Impact/day</th></tr>${processes.length ? processes.map((p) => `<tr><td>${p.name}</td><td>${p.dept}</td><td>${p.owner}</td><td>${p.criticality}</td><td>${p.mtd}</td><td>${money(p.impactPerDay)}</td></tr>`).join("") : `<tr><td colspan="6" class="empty">No business processes recorded yet.</td></tr>`}</table>`,
+      plans: `<h2>Continuity Plans status</h2><table><tr><th>Plan</th><th>Status</th><th>Review cycle</th></tr>${plans.length ? plans.map((p) => `<tr><td>${p.code}: ${p.title}</td><td>${p.status}</td><td>${p.reviewCycle}</td></tr>`).join("") : `<tr><td colspan="3" class="empty">No continuity plans recorded yet.</td></tr>`}</table>`,
+      dr: `<h2>DR &amp; Recovery Targets</h2><table><tr><th>System</th><th>Tier</th><th>RTO</th><th>RPO</th><th>Status</th></tr>${systems.length ? systems.map((s) => `<tr><td>${s.name}</td><td>${s.tier}</td><td>${mins(s.rtoT)} / ${mins(s.rtoA)}</td><td>${mins(s.rpoT)} / ${mins(s.rpoA)}</td><td>${sysStatus(s)}</td></tr>`).join("") : `<tr><td colspan="5" class="empty">No systems recorded yet.</td></tr>`}</table>`,
+      testing: `<h2>Testing &amp; Exercises results</h2><table><tr><th>Test</th><th>Scenario</th><th>Date</th><th>Result</th></tr>${tests.length ? tests.map((t) => `<tr><td>${t.code}</td><td>${t.scenario}</td><td>${fmtD(t.date)}</td><td>${t.result}</td></tr>`).join("") : `<tr><td colspan="4" class="empty">No tests logged or scheduled yet.</td></tr>`}</table>${openFindings.length ? `<h2>Open findings</h2><table><tr><th>Severity</th><th>Finding</th><th>Owner</th><th>Due</th></tr>${openFindings.map((f) => `<tr><td>${f.severity}</td><td>${f.title}</td><td>${f.owner || "—"}</td><td>${f.dueDate ? fmtD(f.dueDate) : "—"}</td></tr>`).join("")}</table>` : ""}`,
+      vendors: `<h2>Vendor &amp; Third-Party Resilience</h2><table><tr><th>Vendor</th><th>Criticality</th><th>SLA</th><th>Attestation</th><th>Alternate</th><th>Last review</th></tr>${vendors.length ? vendors.map((v) => `<tr><td>${v.name}</td><td>${v.criticality}</td><td>${v.sla}</td><td>${v.attestation}</td><td>${v.alternate}</td><td>${v.lastReview}</td></tr>`).join("") : `<tr><td colspan="6" class="empty">No vendors assessed yet.</td></tr>`}</table>`,
+      crisis: `<h2>Crisis Management readiness</h2>${kv([
+        ["Active incidents", String(active.length)],
+        ["Last drill", lastDrill ? fmtD(lastDrill.date) : "None yet"],
+      ])}<table><tr><th>Role</th><th>Primary</th><th>Backup</th></tr>${apiContacts.length ? apiContacts.map((c) => `<tr><td>${c.role}</td><td>${c.primaryName || "—"}</td><td>${c.backupName || "—"}</td></tr>`).join("") : `<tr><td colspan="3" class="empty">No crisis management roles recorded yet.</td></tr>`}</table>`,
+      incidents: `<h2>Incident Response log</h2><table><tr><th>ID</th><th>Date</th><th>Description</th><th>Severity</th><th>Status</th><th>MTTR</th></tr>${incidents.length ? incidents.map((i) => `<tr><td>${i.code}</td><td>${fmtD(i.date)}</td><td>${i.description}</td><td>${i.severity}</td><td>${i.status}</td><td>${i.mttr}</td></tr>`).join("") : `<tr><td colspan="6" class="empty">No incidents declared yet.</td></tr>`}</table>`,
     };
     const body = SECTION_KEYS.filter((k) => want.has(k))
       .map((k) => blocks[k])
       .join("");
-    w.document
-      .write(`<html><head><title>${title}</title><style>body{font-family:Georgia,serif;max-width:760px;margin:40px auto;line-height:1.5}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ccc;padding:4px 6px;font-size:12px;text-align:left}</style></head><body>
-      <h1>${title}</h1><p>Generated ${new Date().toLocaleString()}</p>
-      ${body}
-      </body></html>`);
+    w.document.write(`<!doctype html><html><head><title>${title}</title><style>
+*{box-sizing:border-box}
+body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#0f172a;margin:0;padding:40px;background:#f8fafc}
+.doc{max-width:860px;margin:0 auto;background:#fff;border-radius:12px;padding:0;box-shadow:0 4px 24px rgba(0,0,0,.06);overflow:hidden}
+.brandbar{background:linear-gradient(135deg,#6366f1,#8b5cf6);padding:28px 40px;color:#fff}
+.brandbar .logo{font-size:13px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;opacity:.85;margin-bottom:10px}
+.brandbar h1{font-size:22px;margin:0 0 4px;color:#fff}
+.brandbar .meta{color:rgba(255,255,255,.75);font-size:12px;margin:2px 0 0}
+.content{padding:32px 40px 40px}
+h2{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:#475569;margin:28px 0 10px;border-bottom:1px solid #e2e8f0;padding-bottom:6px}
+h2:first-child{margin-top:0}
+table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:4px}
+th{text-align:left;padding:6px 8px 6px 0;border-bottom:1px solid #e2e8f0;color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:.04em}
+td{padding:7px 8px 7px 0;vertical-align:top;border-bottom:1px solid #f1f5f9}
+td.k{color:#64748b;width:38%}
+td.empty{color:#94a3b8;font-style:italic;border-bottom:none}
+.footer{margin-top:36px;padding-top:16px;border-top:1px solid #e2e8f0;font-size:11px;color:#94a3b8;text-align:center}
+.footer .brand{font-weight:700;color:#6366f1}
+@media print{body{background:#fff;padding:0}.doc{box-shadow:none;border-radius:0}}
+</style></head><body>
+<div class="doc">
+  <div class="brandbar">
+    <div class="logo">Lexora</div>
+    <h1>${title}</h1>
+    <p class="meta">${businessName}</p>
+    <p class="meta">Generated ${generatedAt} · Business Continuity &amp; Disaster Recovery</p>
+  </div>
+  <div class="content">
+    ${body}
+    <div class="footer">Powered by <span class="brand">Lexora</span></div>
+  </div>
+</div>
+</body></html>`);
     w.document.close();
     w.print();
   };
@@ -860,6 +924,19 @@ export default function GrcBcp() {
     onError: (e: any) =>
       toast({
         title: "Couldn't save",
+        description: e?.response?.data?.message,
+        variant: "destructive",
+      }),
+  });
+  const deleteContactMut = useMutation({
+    mutationFn: (id: string) => deleteCrisisContact(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["grc-bcp-contacts"] });
+      toast({ title: "Removed from crisis management team" });
+    },
+    onError: (e: any) =>
+      toast({
+        title: "Couldn't remove",
         description: e?.response?.data?.message,
         variant: "destructive",
       }),
@@ -1286,8 +1363,7 @@ export default function GrcBcp() {
                       <>
                         <Row k="Scope" v={p.scope} />
                         <Row k="Version" v={p.version} />
-                        <Row k="Owner" v={p.owner} />
-                        <Row k="Next review" v={p.review} />
+                        <Row k="Review cycle" v={p.reviewCycle} />
                         <Row k="Lifecycle stage" v={LIFECYCLE[p.phase]} />
                       </>
                     ),
@@ -1305,7 +1381,7 @@ export default function GrcBcp() {
                     {p.scope}
                   </div>
                   <div className="text-xs text-muted-foreground mt-2">
-                    {p.version} · {p.owner} · Next review {p.review}
+                    {p.version} · Review cycle: {p.reviewCycle}
                   </div>
                 </CardContent>
               </Card>
@@ -1379,36 +1455,6 @@ export default function GrcBcp() {
               </Button>
             </div>
           </div>
-          <Card>
-            <CardContent className="p-5 grid md:grid-cols-[1fr_auto_1fr] items-center gap-4">
-              <div className="border rounded-lg p-4">
-                <div className="flex items-center gap-2 font-semibold">
-                  <Server className="h-4 w-4" /> Primary site
-                </div>
-                <div className="text-sm text-muted-foreground">
-                  Kigali Data Centre
-                </div>
-                <Row k="Servers" v="6 production" />
-                <Row k="Uptime SLA" v="99.95%" />
-              </div>
-              <div className="text-center text-xs text-muted-foreground">
-                ⟺<br />
-                Synchronous replication
-                <br />
-                <span className="text-success">● Active</span>
-              </div>
-              <div className="border rounded-lg p-4">
-                <div className="flex items-center gap-2 font-semibold">
-                  <Cloud className="h-4 w-4" /> DR site
-                </div>
-                <div className="text-sm text-muted-foreground">
-                  Cape Town cloud region
-                </div>
-                <Row k="Configuration" v="Warm standby" />
-                <Row k="Replication lag" v="< 15 min" />
-              </div>
-            </CardContent>
-          </Card>
           <Card>
             <CardContent className="pt-5">
               <Table>
@@ -1507,33 +1553,6 @@ export default function GrcBcp() {
                   )}
                 </TableBody>
               </Table>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">
-                Backup strategy (3-2-1 rule)
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid md:grid-cols-3 gap-3">
-                {[
-                  ["3", "Copies of data", "Production + 2 backups"],
-                  ["2", "Storage media types", "SSD + cloud object storage"],
-                  ["1", "Off-site copy", "Cape Town, encrypted, immutable"],
-                ].map(([n, l, s]) => (
-                  <div key={l} className="border rounded-lg p-4 text-center">
-                    <div className="text-3xl font-bold text-primary">{n}</div>
-                    <div className="font-medium text-sm">{l}</div>
-                    <div className="text-xs text-muted-foreground">{s}</div>
-                  </div>
-                ))}
-              </div>
-              <p className="text-xs text-muted-foreground mt-3">
-                <b>Schedule:</b> full backup weekly · incremental daily ·
-                transaction logs every 15 min · retention 90 days standard, 7
-                years regulatory.
-              </p>
             </CardContent>
           </Card>
         </TabsContent>
@@ -1890,7 +1909,10 @@ export default function GrcBcp() {
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => setDialog("contact")}
+                onClick={() => {
+                  setEditingContact(null);
+                  setDialog("contact");
+                }}
               >
                 <Plus className="h-4 w-4 mr-1" /> Add contact
               </Button>
@@ -1951,45 +1973,51 @@ export default function GrcBcp() {
                       <TableHead>Role</TableHead>
                       <TableHead>Primary</TableHead>
                       <TableHead>Backup</TableHead>
+                      <TableHead />
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {CMT.map(([r, p, b]) => (
-                      <TableRow key={r}>
-                        <TableCell className="font-medium">{r}</TableCell>
-                        <TableCell>{p}</TableCell>
-                        <TableCell>{b}</TableCell>
+                    {apiContacts.map((c) => (
+                      <TableRow key={c._id}>
+                        <TableCell className="font-medium">{c.role}</TableCell>
+                        <TableCell>{c.primaryName || "—"}</TableCell>
+                        <TableCell>{c.backupName || "—"}</TableCell>
+                        <TableCell className="text-right whitespace-nowrap">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 px-2"
+                            onClick={() => {
+                              setEditingContact(c);
+                              setDialog("contact");
+                            }}
+                          >
+                            Edit
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 px-2 text-destructive"
+                            disabled={deleteContactMut.isPending}
+                            onClick={() => deleteContactMut.mutate(c._id)}
+                          >
+                            Delete
+                          </Button>
+                        </TableCell>
                       </TableRow>
                     ))}
+                    {apiContacts.length === 0 && (
+                      <TableRow>
+                        <TableCell
+                          colSpan={4}
+                          className="text-center text-sm text-muted-foreground py-8"
+                        >
+                          No crisis management roles added yet.
+                        </TableCell>
+                      </TableRow>
+                    )}
                   </TableBody>
                 </Table>
-                <p className="text-xs text-muted-foreground mt-2">
-                  Role assignments aren't captured yet — use Crisis Contacts
-                  below for real, reachable people.
-                </p>
-                {apiContacts.length > 0 && (
-                  <div className="mt-4">
-                    <div className="text-sm font-medium mb-2">
-                      Emergency contacts
-                    </div>
-                    {[...apiContacts]
-                      .sort((a, b) => a.escalationOrder - b.escalationOrder)
-                      .map((c) => (
-                        <div
-                          key={c._id}
-                          className="flex justify-between text-sm border-b py-1.5"
-                        >
-                          <span>
-                            {c.escalationOrder}. {c.name}{" "}
-                            <span className="text-muted-foreground">
-                              · {c.role}
-                            </span>
-                          </span>
-                          <span>{c.phone}</span>
-                        </div>
-                      ))}
-                  </div>
-                )}
               </CardContent>
             </Card>
             <Card>
@@ -2401,10 +2429,14 @@ export default function GrcBcp() {
 
       <BcpDialogs
         kind={dialog}
-        onClose={() => setDialog(null)}
+        onClose={() => {
+          setDialog(null);
+          setEditingContact(null);
+        }}
         plans={plans}
         processes={processes}
         tests={tests}
+        editingContact={editingContact}
         invalidate={(k) => qc.invalidateQueries({ queryKey: [k] })}
         printReport={printReport}
         goToIncidents={() => setTab("incidents")}
@@ -2605,6 +2637,7 @@ function BcpDialogs({
   plans,
   processes,
   tests,
+  editingContact,
   invalidate,
   printReport,
   goToIncidents,
@@ -2614,6 +2647,7 @@ function BcpDialogs({
   plans: Plan[];
   processes: Process[];
   tests: TestRec[];
+  editingContact: CrisisContact | null;
   invalidate: (k: string) => void;
   printReport: (title: string, sections?: string[]) => void;
   goToIncidents: () => void;
@@ -2658,6 +2692,32 @@ function BcpDialogs({
     enabled: kind === "report",
     retry: 1,
   });
+  const { data: employeesPage } = useQuery({
+    queryKey: ["employees-for-bcp-contacts"],
+    queryFn: () => fetchEmployees({ limit: 500 }),
+    enabled: kind === "contact",
+    retry: 1,
+  });
+  const employees: Employee[] = employeesPage?.items ?? [];
+
+  // Pre-fill the contact dialog's form when editing an existing CMT
+  // role — a fresh "Add contact" open (editingContact null) leaves
+  // whatever the tenant is mid-typing alone.
+  useEffect(() => {
+    if (kind === "contact" && editingContact) {
+      setF((p) => ({
+        ...p,
+        contactRole: CMT_ROLES.includes(editingContact.role)
+          ? editingContact.role
+          : "Other",
+        contactRoleOther: CMT_ROLES.includes(editingContact.role)
+          ? ""
+          : editingContact.role,
+        contactPrimary: editingContact.primaryEmployeeId ?? "none",
+        contactBackup: editingContact.backupEmployeeId ?? "none",
+      }));
+    }
+  }, [kind, editingContact]);
 
   // Comma-separated-string multi-select helpers, reused for vendor
   // dependent-processes, report recipients, report committees and
@@ -2712,17 +2772,14 @@ function BcpDialogs({
     mutationFn: () =>
       createBcpPlan({
         title: f.title,
-        version: Number(f.version || 1),
         content: f.content || "",
-        scope: f.scope || "",
-        owner: f.owner || "",
-        status: (f.status || "Draft") as BcpPlanStatus,
+        scope: f.scope === "Other" ? f.scopeOther || "" : f.scope || "",
         phase: f.phase ? LIFECYCLE.indexOf(f.phase) : 0,
-        nextReviewDate: f.review || undefined,
+        reviewCycle: (f.reviewCycle as ReviewCycle) || undefined,
       }),
     onSuccess: () => {
       invalidate("grc-bcp-plans");
-      toast({ title: "Plan created" });
+      toast({ title: "Plan created — status starts as Draft" });
       close();
     },
     onError: err,
@@ -2766,17 +2823,42 @@ function BcpDialogs({
     },
     onError: err,
   });
+  const contactRoleValue = () =>
+    f.contactRole === "Other" ? f.contactRoleOther || "" : f.contactRole || "";
   const contactMut = useMutation({
     mutationFn: () =>
       createCrisisContact({
-        name: f.name,
-        role: f.role || "",
-        phone: f.phone || "",
-        escalationOrder: Number(f.order || 1),
+        role: contactRoleValue(),
+        primaryEmployeeId:
+          f.contactPrimary && f.contactPrimary !== "none"
+            ? f.contactPrimary
+            : undefined,
+        backupEmployeeId:
+          f.contactBackup && f.contactBackup !== "none"
+            ? f.contactBackup
+            : undefined,
       }),
     onSuccess: () => {
       invalidate("grc-bcp-contacts");
-      toast({ title: "Contact added" });
+      toast({ title: "Added to crisis management team" });
+      close();
+    },
+    onError: err,
+  });
+  const updateContactMut = useMutation({
+    mutationFn: () =>
+      updateCrisisContact(editingContact!._id, {
+        role: contactRoleValue(),
+        primaryEmployeeId:
+          f.contactPrimary && f.contactPrimary !== "none"
+            ? f.contactPrimary
+            : "",
+        backupEmployeeId:
+          f.contactBackup && f.contactBackup !== "none" ? f.contactBackup : "",
+      }),
+    onSuccess: () => {
+      invalidate("grc-bcp-contacts");
+      toast({ title: "Crisis management role updated" });
       close();
     },
     onError: err,
@@ -3038,22 +3120,34 @@ function BcpDialogs({
     },
     plan: {
       title: "New continuity plan",
-      can: !!f.title,
+      can:
+        !!f.title &&
+        !!f.content &&
+        !!f.scope &&
+        (f.scope !== "Other" || !!f.scopeOther),
       ok: () => planMut.mutate(),
       body: (
         <>
           {Field({ k: "title", label: "Plan title" })}
-          <div className="grid grid-cols-2 gap-3">
-            {Field({ k: "version", label: "Version", type: "number" })}
-            {Field({ k: "owner", label: "Owner" })}
-          </div>
-          {Field({
-            k: "scope",
-            label: "Scope",
-            placeholder: "e.g. Client onboarding, payment processing",
-          })}
           <div>
-            <Label>Content</Label>
+            <Label>Scope</Label>
+            <Select value={f.scope ?? ""} onValueChange={sel("scope")}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select a scope" />
+              </SelectTrigger>
+              <SelectContent>
+                {PLAN_SCOPES.map((s) => (
+                  <SelectItem key={s} value={s}>
+                    {s}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          {f.scope === "Other" &&
+            Field({ k: "scopeOther", label: "Custom scope" })}
+          <div>
+            <Label>Key procedures</Label>
             <Textarea
               rows={4}
               value={f.content ?? ""}
@@ -3061,14 +3155,30 @@ function BcpDialogs({
             />
           </div>
           <div className="grid grid-cols-2 gap-3">
-            {Pick({
-              k: "status",
-              label: "Status",
-              opts: ["Draft", "Under review", "Approved"],
-            })}
             {Pick({ k: "phase", label: "Lifecycle stage", opts: LIFECYCLE })}
+            <div>
+              <Label>Review cycle</Label>
+              <Select
+                value={f.reviewCycle ?? ""}
+                onValueChange={sel("reviewCycle")}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a cycle" />
+                </SelectTrigger>
+                <SelectContent>
+                  {REVIEW_CYCLES.map((c) => (
+                    <SelectItem key={c} value={c}>
+                      {c}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
-          {Field({ k: "review", label: "Next review date", type: "date" })}
+          <p className="text-xs text-muted-foreground">
+            New plans start as <b>Draft</b> — status is system-managed from
+            here.
+          </p>
         </>
       ),
     },
@@ -3288,16 +3398,75 @@ function BcpDialogs({
       ),
     },
     contact: {
-      title: "Add crisis contact",
-      can: !!f.name,
-      ok: () => contactMut.mutate(),
+      title: editingContact
+        ? "Edit crisis management role"
+        : "Add crisis management role",
+      can: !!contactRoleValue(),
+      ok: () =>
+        editingContact ? updateContactMut.mutate() : contactMut.mutate(),
       body: (
         <>
-          {Field({ k: "name", label: "Name" })}
-          {Field({ k: "role", label: "Role" })}
+          <div>
+            <Label>Role</Label>
+            <Select
+              value={f.contactRole ?? ""}
+              onValueChange={sel("contactRole")}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select a role" />
+              </SelectTrigger>
+              <SelectContent>
+                {CMT_ROLES.map((r) => (
+                  <SelectItem key={r} value={r}>
+                    {r}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          {f.contactRole === "Other" &&
+            Field({ k: "contactRoleOther", label: "Custom role name" })}
           <div className="grid grid-cols-2 gap-3">
-            {Field({ k: "phone", label: "Phone" })}
-            {Field({ k: "order", label: "Escalation order", type: "number" })}
+            <div>
+              <Label>Primary</Label>
+              <Select
+                value={f.contactPrimary ?? "none"}
+                onValueChange={sel("contactPrimary")}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select an employee" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">— None —</SelectItem>
+                  {employees.map((e) => (
+                    <SelectItem key={e._id} value={e._id}>
+                      {e.firstName} {e.lastName}
+                      {e.jobTitle ? ` — ${e.jobTitle}` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Backup</Label>
+              <Select
+                value={f.contactBackup ?? "none"}
+                onValueChange={sel("contactBackup")}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select an employee" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">— None —</SelectItem>
+                  {employees.map((e) => (
+                    <SelectItem key={e._id} value={e._id}>
+                      {e.firstName} {e.lastName}
+                      {e.jobTitle ? ` — ${e.jobTitle}` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </>
       ),
@@ -3435,6 +3604,7 @@ function BcpDialogs({
     testMut.isPending ||
     sysMut.isPending ||
     contactMut.isPending ||
+    updateContactMut.isPending ||
     processMut.isPending ||
     vendorMut.isPending ||
     findingMut.isPending ||

@@ -219,6 +219,7 @@ export type BcpTestType =
   | "Full DR"
   | "Logged test";
 export type BcpPlanStatus = "Draft" | "Under review" | "Approved";
+export type ReviewCycle = "Quarterly" | "Annual" | "Biennial";
 export type AttestationStatus =
   | "Not yet requested"
   | "Requested - pending"
@@ -241,6 +242,7 @@ export interface BcpPlan {
   owner: string;
   status: BcpPlanStatus;
   phase: number;
+  reviewCycle: ReviewCycle | null;
   nextReviewDate: string | null;
   updatedAt: string;
 }
@@ -267,10 +269,11 @@ export interface RtoRpoEntry {
 }
 export interface CrisisContact {
   _id: string;
-  name: string;
   role: string;
-  phone: string;
-  escalationOrder: number;
+  primaryEmployeeId: string | null;
+  primaryName: string;
+  backupEmployeeId: string | null;
+  backupName: string;
 }
 export interface BiaProcess {
   _id: string;
@@ -834,13 +837,10 @@ export const fetchBcpPlans = async (): Promise<BcpPlan[]> => {
 
 export const createBcpPlan = async (dto: {
   title: string;
-  version: number;
   content: string;
   scope?: string;
-  owner?: string;
-  status?: BcpPlanStatus;
   phase?: number;
-  nextReviewDate?: string;
+  reviewCycle?: ReviewCycle;
 }): Promise<BcpPlan> => {
   const res = await api.post("/grc/risk/bcp/plans", dto);
   return res.data?.data ?? res.data;
@@ -907,13 +907,24 @@ export const fetchCrisisContacts = async (): Promise<CrisisContact[]> => {
 };
 
 export const createCrisisContact = async (dto: {
-  name: string;
   role: string;
-  phone: string;
-  escalationOrder: number;
+  primaryEmployeeId?: string;
+  backupEmployeeId?: string;
 }): Promise<CrisisContact> => {
   const res = await api.post("/grc/risk/bcp/crisis-contacts", dto);
   return res.data?.data ?? res.data;
+};
+
+export const updateCrisisContact = async (
+  id: string,
+  dto: { role?: string; primaryEmployeeId?: string; backupEmployeeId?: string },
+): Promise<CrisisContact> => {
+  const res = await api.patch(`/grc/risk/bcp/crisis-contacts/${id}`, dto);
+  return res.data?.data ?? res.data;
+};
+
+export const deleteCrisisContact = async (id: string): Promise<void> => {
+  await api.delete(`/grc/risk/bcp/crisis-contacts/${id}`);
 };
 
 export const fetchBiaProcesses = async (): Promise<BiaProcess[]> => {
