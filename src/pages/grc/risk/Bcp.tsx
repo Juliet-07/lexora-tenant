@@ -43,6 +43,7 @@ import {
   CalendarClock,
   CheckCircle2,
   Download,
+  Eye,
   FileText,
   Info,
   Plus,
@@ -484,6 +485,11 @@ export default function GrcBcp() {
   const [editingContact, setEditingContact] = useState<CrisisContact | null>(
     null,
   );
+  const [reportPreview, setReportPreview] = useState<{
+    title: string;
+    sections?: string[];
+    html: string;
+  } | null>(null);
 
   const { data: apiProcesses = [] } = useQuery({
     queryKey: ["grc-bcp-processes"],
@@ -771,9 +777,7 @@ export default function GrcBcp() {
       });
   }, [doneTests]);
 
-  const printReport = (title: string, sections?: string[]) => {
-    const w = window.open("", "_blank");
-    if (!w) return;
+  const buildReportHtml = (title: string, sections?: string[]) => {
     const want =
       sections && sections.length ? new Set(sections) : new Set(SECTION_KEYS);
     const businessName = user?.businessName || "Your organisation";
@@ -810,13 +814,13 @@ export default function GrcBcp() {
     const body = SECTION_KEYS.filter((k) => want.has(k))
       .map((k) => blocks[k])
       .join("");
-    w.document.write(`<!doctype html><html><head><title>${title}</title><style>
+    return `<!doctype html><html><head><meta charset="utf-8" /><title>${title}</title><style>
 *{box-sizing:border-box}
 body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#0f172a;margin:0;padding:40px;background:#f8fafc}
 .doc{max-width:860px;margin:0 auto;background:#fff;border-radius:12px;padding:0;box-shadow:0 4px 24px rgba(0,0,0,.06);overflow:hidden}
 .brandbar{background:linear-gradient(135deg,#6366f1,#8b5cf6);padding:28px 40px;color:#fff}
-.brandbar .logo{font-size:13px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;opacity:.85;margin-bottom:10px}
-.brandbar h1{font-size:22px;margin:0 0 4px;color:#fff}
+.brandbar .org{font-size:21px;font-weight:700;letter-spacing:-.01em;margin:0 0 8px;color:#fff}
+.brandbar h1{font-size:13px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;margin:0 0 4px;color:rgba(255,255,255,.9)}
 .brandbar .meta{color:rgba(255,255,255,.75);font-size:12px;margin:2px 0 0}
 .content{padding:32px 40px 40px}
 h2{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:#475569;margin:28px 0 10px;border-bottom:1px solid #e2e8f0;padding-bottom:6px}
@@ -832,9 +836,8 @@ td.empty{color:#94a3b8;font-style:italic;border-bottom:none}
 </style></head><body>
 <div class="doc">
   <div class="brandbar">
-    <div class="logo">Lexora</div>
+    <div class="org">${businessName}</div>
     <h1>${title}</h1>
-    <p class="meta">${businessName}</p>
     <p class="meta">Generated ${generatedAt} · Business Continuity &amp; Disaster Recovery</p>
   </div>
   <div class="content">
@@ -842,9 +845,33 @@ td.empty{color:#94a3b8;font-style:italic;border-bottom:none}
     <div class="footer">Powered by <span class="brand">Lexora</span></div>
   </div>
 </div>
-</body></html>`);
-    w.document.close();
-    w.print();
+</body></html>`;
+  };
+
+  const previewReport = (title: string, sections?: string[]) => {
+    setReportPreview({
+      title,
+      sections,
+      html: buildReportHtml(title, sections),
+    });
+  };
+
+  const downloadReportFile = (title: string, sections?: string[]) => {
+    const html = buildReportHtml(title, sections);
+    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${
+      title
+        .replace(/[^a-z0-9]+/gi, "-")
+        .replace(/^-+|-+$/g, "")
+        .toLowerCase() || "report"
+    }.html`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
   };
 
   const exportBia = () => {
@@ -2307,7 +2334,7 @@ td.empty{color:#94a3b8;font-style:italic;border-bottom:none}
             {REPORT_TYPES.map(([t, d]) => (
               <button
                 key={t}
-                onClick={() => printReport(t)}
+                onClick={() => previewReport(t)}
                 className="text-left border rounded-lg p-3 hover:border-primary"
               >
                 <div className="font-medium text-sm">{t}</div>
@@ -2341,13 +2368,24 @@ td.empty{color:#94a3b8;font-style:italic;border-bottom:none}
                         {fmtD(r.generatedAt)}
                       </TableCell>
                       <TableCell className="text-xs">{r.recipients}</TableCell>
-                      <TableCell>
+                      <TableCell className="text-right whitespace-nowrap">
                         <Button
-                          size="sm"
+                          size="icon"
                           variant="ghost"
-                          onClick={() => printReport(r.name, r.sections)}
+                          className="h-8 w-8"
+                          title="View"
+                          onClick={() => previewReport(r.name, r.sections)}
                         >
-                          View
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8"
+                          title="Download"
+                          onClick={() => downloadReportFile(r.name, r.sections)}
+                        >
+                          <Download className="h-4 w-4" />
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -2427,6 +2465,43 @@ td.empty{color:#94a3b8;font-style:italic;border-bottom:none}
         </SheetContent>
       </Sheet>
 
+      {/* Report preview */}
+      <Dialog
+        open={!!reportPreview}
+        onOpenChange={(o) => !o && setReportPreview(null)}
+      >
+        <DialogContent className="max-w-3xl p-0 gap-0 overflow-hidden">
+          <DialogHeader className="px-4 pt-4 pb-3 border-b">
+            <div className="flex items-center justify-between gap-3">
+              <DialogTitle className="truncate">
+                {reportPreview?.title}
+              </DialogTitle>
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-1.5 shrink-0"
+                onClick={() =>
+                  reportPreview &&
+                  downloadReportFile(
+                    reportPreview.title,
+                    reportPreview.sections,
+                  )
+                }
+              >
+                <Download className="h-3.5 w-3.5" /> Download
+              </Button>
+            </div>
+          </DialogHeader>
+          {reportPreview && (
+            <iframe
+              title={reportPreview.title}
+              srcDoc={reportPreview.html}
+              className="w-full h-[75vh] border-0 bg-muted/30"
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
       <BcpDialogs
         kind={dialog}
         onClose={() => {
@@ -2438,7 +2513,7 @@ td.empty{color:#94a3b8;font-style:italic;border-bottom:none}
         tests={tests}
         editingContact={editingContact}
         invalidate={(k) => qc.invalidateQueries({ queryKey: [k] })}
-        printReport={printReport}
+        previewReport={previewReport}
         goToIncidents={() => setTab("incidents")}
       />
       <RecordActualDialog
@@ -2639,7 +2714,7 @@ function BcpDialogs({
   tests,
   editingContact,
   invalidate,
-  printReport,
+  previewReport,
   goToIncidents,
 }: {
   kind: string | null;
@@ -2649,7 +2724,7 @@ function BcpDialogs({
   tests: TestRec[];
   editingContact: CrisisContact | null;
   invalidate: (k: string) => void;
-  printReport: (title: string, sections?: string[]) => void;
+  previewReport: (title: string, sections?: string[]) => void;
   goToIncidents: () => void;
 }) {
   const [f, setF] = useState<Record<string, string>>({});
@@ -2977,7 +3052,7 @@ function BcpDialogs({
     },
     onSuccess: (data) => {
       invalidate("grc-bcp-reports");
-      printReport(data.name, data.sections);
+      previewReport(data.name, data.sections);
       close();
     },
     onError: err,
