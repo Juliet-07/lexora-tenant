@@ -208,7 +208,7 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
         { title: "Emerging Risks", url: "/grc/risk/emerging" },
         { title: "Controls & Testing", url: "/grc/risk/controls" },
         { title: "Treatment Plans", url: "/grc/risk/treatment" },
-        { title: "Incidents", url: "/grc/risk/incidents" },
+        // { title: "Incidents", url: "/grc/risk/incidents" },
         { title: "BCP / DR", url: "/grc/risk/bcp" },
       ],
     },

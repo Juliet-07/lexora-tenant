@@ -6,7 +6,7 @@ import GrcAppetite from "@/pages/grc/risk/Appetite";
 import GrcRisks from "@/pages/grc/risk/Risks";
 import GrcControls from "@/pages/grc/risk/Controls";
 import GrcTreatment from "@/pages/grc/risk/Treatment";
-import GrcIncidents from "@/pages/grc/risk/Incidents";
+// import GrcIncidents from "@/pages/grc/risk/Incidents";
 import GrcHeatmap from "@/pages/grc/risk/Heatmap";
 import GrcEmergingRisks from "@/pages/grc/risk/EmergingRisks";
 import GrcPolicies from "@/pages/grc/compliance/Policies";
@@ -214,11 +214,11 @@ export const grcRoutes = ({ isAdmin, accessibleModules }: RouteContext) => {
         path="/grc/risk/appetite"
         element={layout(<GrcAppetite />)}
       />,
-      <Route
-        key="grc-risk-incidents"
-        path="/grc/risk/incidents"
-        element={layout(<GrcIncidents />)}
-      />,
+      // <Route
+      //   key="grc-risk-incidents"
+      //   path="/grc/risk/incidents"
+      //   element={layout(<GrcIncidents />)}
+      // />,
       <Route key="grc-bcp" path="/grc/risk/bcp" element={layout(<GrcBcp />)} />,
       <Route
         key="grc-risk-treatment"
@@ -294,11 +294,11 @@ export const grcRoutes = ({ isAdmin, accessibleModules }: RouteContext) => {
         path="/grc/treatment"
         element={layout(<GrcTreatment />)}
       />,
-      <Route
-        key="grc-incidents-legacy"
-        path="/grc/incidents"
-        element={layout(<GrcIncidents />)}
-      />,
+      // <Route
+      //   key="grc-incidents-legacy"
+      //   path="/grc/incidents"
+      //   element={layout(<GrcIncidents />)}
+      // />,
       <Route
         key="grc-policies-legacy"
         path="/grc/policies"
