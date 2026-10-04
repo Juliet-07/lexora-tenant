@@ -44,6 +44,19 @@ import {
   ReportDefinition,
 } from "@/lib/grc/reportExport";
 
+// Mirrors the 7-stage lifecycle rendered on the BCP/DR page itself
+// (Bcp.tsx's own LIFECYCLE) — kept in sync by hand since it's a fixed,
+// rarely-changed display label set, not real backend data.
+const LIFECYCLE = [
+  "BIA",
+  "Draft plan",
+  "Stakeholder review",
+  "Board approval",
+  "Implementation & training",
+  "Test & validate",
+  "Annual review",
+];
+
 interface CatalogueEntry {
   def: ReportDefinition;
   domain: string;
@@ -77,11 +90,24 @@ export default function GrcReporting() {
       governance: gov,
       risk,
       operations: ops,
-      thirdPartyBcp: tp,
+      thirdPartyBcp: tpRaw,
       compliance,
       deals,
       dealIntelligence: intel,
     } = overview;
+    // Tolerate an older /grc/overview response (backend not yet
+    // redeployed with the newer BCP datasets) so this page degrades to
+    // "section empty" instead of crashing the whole Reporting tab.
+    const tp = {
+      bcpPlans: tpRaw.bcpPlans ?? [],
+      bcpTests: tpRaw.bcpTests ?? [],
+      testFindings: tpRaw.testFindings ?? [],
+      rtoRpo: tpRaw.rtoRpo ?? [],
+      crisisContacts: tpRaw.crisisContacts ?? [],
+      biaProcesses: tpRaw.biaProcesses ?? [],
+      vendorResilience: tpRaw.vendorResilience ?? [],
+      bcpIncidents: tpRaw.bcpIncidents ?? [],
+    };
 
     const openRisks = risk.risks.filter((r) => r.status !== "Closed");
     const openIncidents = ops.incidents.filter((i) => i.status !== "Closed");
@@ -532,10 +558,17 @@ export default function GrcReporting() {
     });
 
     // ── Business Continuity & DR ───────────────────────────────
+    const planTitleById = new Map(tp.bcpPlans.map((p) => [p._id, p.title]));
+    const openBcpIncidents = tp.bcpIncidents.filter(
+      (i) => i.status !== "Resolved",
+    );
+    const openTestFindings = tp.testFindings.filter(
+      (f) => f.status !== "Resolved",
+    );
     entries.push({
       domain: "Business Continuity & DR",
       description:
-        "Continuity plans, RTO/RPO targets, continuity tests and crisis contacts.",
+        "BIA, continuity plans, RTO/RPO targets, tests & findings, vendor resilience, incidents and crisis contacts.",
       icon: LifeBuoy,
       tone: "from-cyan-500 to-blue-500",
       def: {
@@ -548,42 +581,121 @@ export default function GrcReporting() {
             label: "Tier-1 systems",
             value: tp.rtoRpo.filter((r) => r.criticality === "Tier 1").length,
           },
-          { label: "Continuity tests", value: tp.bcpTests.length },
-          { label: "Crisis contacts", value: tp.crisisContacts.length },
+          { label: "Open test findings", value: openTestFindings.length },
+          { label: "Open BCP incidents", value: openBcpIncidents.length },
         ],
         sections: [
           {
+            heading: "Business Impact Analysis",
+            columns: [
+              "Process",
+              "Department",
+              "Owner",
+              "Criticality",
+              "MTD",
+              "Impact/day",
+              "Linked plan",
+            ],
+            rows: tp.biaProcesses.map((p) => [
+              p.name,
+              p.dept || "—",
+              p.owner || "—",
+              p.criticality,
+              p.mtd || "—",
+              p.impactPerDay,
+              (p.linkedPlanId && planTitleById.get(p.linkedPlanId)) || "None",
+            ]),
+          },
+          {
             heading: "Continuity plans",
-            columns: ["Plan", "Version"],
-            rows: tp.bcpPlans.map((p) => [p.title, p.version]),
+            columns: ["Plan", "Status", "Lifecycle stage", "Review cycle"],
+            rows: tp.bcpPlans.map((p) => [
+              p.title,
+              p.status,
+              LIFECYCLE[p.phase] ?? `Stage ${p.phase}`,
+              p.reviewCycle ?? "—",
+            ]),
           },
           {
             heading: "RTO / RPO",
-            columns: ["System", "Criticality", "RTO (hrs)", "RPO (hrs)"],
+            columns: [
+              "System",
+              "Criticality",
+              "RTO target / actual (hrs)",
+              "RPO target / actual (hrs)",
+            ],
             rows: tp.rtoRpo.map((r) => [
               r.system,
               r.criticality,
-              r.rtoHours,
-              r.rpoHours,
+              `${r.rtoHours} / ${r.rtoActualHours ?? "—"}`,
+              `${r.rpoHours} / ${r.rpoActualHours ?? "—"}`,
             ]),
           },
           {
             heading: "Continuity tests",
-            columns: ["Tested", "Outcome", "Notes"],
+            columns: ["Scenario", "Type", "Date", "Outcome", "Score"],
             rows: tp.bcpTests.map((t) => [
-              t.testedAt?.slice(0, 10) ?? "—",
-              t.outcome,
-              t.notes,
+              t.scenario,
+              t.testType,
+              (t.testedAt ?? t.scheduledFor)?.slice(0, 10) ?? "—",
+              t.outcome ?? "Scheduled",
+              t.score === null ? "—" : `${t.score}%`,
+            ]),
+          },
+          {
+            heading: "Test findings",
+            columns: ["Severity", "Finding", "Owner", "Due", "Status"],
+            rows: tp.testFindings.map((f) => [
+              f.severity,
+              f.title,
+              f.owner || "—",
+              f.dueDate?.slice(0, 10) ?? "—",
+              f.status,
+            ]),
+          },
+          {
+            heading: "Vendor & third-party resilience",
+            columns: [
+              "Vendor",
+              "Criticality",
+              "SLA",
+              "Attestation",
+              "Alternate",
+              "Next review",
+            ],
+            rows: tp.vendorResilience.map((v) => [
+              v.name,
+              v.criticality,
+              v.sla || "—",
+              v.attestation,
+              v.alternate,
+              v.nextReviewDate?.slice(0, 10) ?? "—",
+            ]),
+          },
+          {
+            heading: "BCP incidents",
+            columns: [
+              "Incident",
+              "Description",
+              "Severity",
+              "Declared",
+              "Status",
+            ],
+            rows: tp.bcpIncidents.map((i) => [
+              i.code,
+              i.description,
+              i.severity,
+              i.declaredAt?.slice(0, 10) ?? "—",
+              i.status,
             ]),
           },
           {
             heading: "Crisis contacts",
-            columns: ["Name", "Role", "Phone", "Escalation order"],
+            columns: ["Role", "Primary", "Backup"],
             rows: tp.crisisContacts.map((c) => [
-              c.name,
               c.role,
-              c.phone,
-              c.escalationOrder,
+              c.primaryName || "—",
+              c.backupName || "—",
             ]),
           },
         ],

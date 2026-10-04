@@ -179,16 +179,39 @@ export interface OperationsData {
 }
 
 // ── BCP ──────────────────────────────────────────────────────
+// Field names below are verified against bcp.schema.ts (lexora-engine)
+// as of Oct 2026 — the module has grown considerably (BIA processes,
+// vendor resilience, incidents, test findings, plan status/phase) and
+// this section previously lagged behind, carrying field names
+// (CrisisContact.name/phone/escalationOrder) that no longer exist on
+// the real documents.
 export interface BcpPlan {
   _id: string;
   title: string;
   version: number;
+  status: string;
+  phase: number;
+  reviewCycle: string | null;
 }
 export interface BcpTest {
   _id: string;
-  testedAt: string;
-  outcome: string;
+  planId: string | null;
+  scenario: string;
+  testType: string;
+  scheduledFor: string | null;
+  testedAt: string | null;
+  outcome: string | null;
+  score: number | null;
   notes: string;
+}
+export interface BcpTestFinding {
+  _id: string;
+  testId: string;
+  severity: string;
+  title: string;
+  owner: string;
+  dueDate: string | null;
+  status: string;
 }
 export interface RtoRpo {
   _id: string;
@@ -196,19 +219,57 @@ export interface RtoRpo {
   rtoHours: number;
   rpoHours: number;
   criticality: string;
+  strategy: string;
+  rtoActualHours: number | null;
+  rpoActualHours: number | null;
 }
 export interface CrisisContact {
   _id: string;
-  name: string;
   role: string;
-  phone: string;
-  escalationOrder: number;
+  primaryName: string;
+  backupName: string;
+}
+export interface BiaProcess {
+  _id: string;
+  name: string;
+  dept: string;
+  owner: string;
+  criticality: string;
+  mtd: string;
+  impactPerDay: number;
+  nonFinancialImpact: string;
+  dependencies: string[];
+  linkedPlanId: string | null;
+}
+export interface VendorResilience {
+  _id: string;
+  name: string;
+  criticality: string;
+  sla: string;
+  attestation: string;
+  alternate: string;
+  escalationContact: string;
+  lastReviewDate: string;
+  nextReviewDate: string | null;
+}
+export interface BcpIncident {
+  _id: string;
+  code: string;
+  description: string;
+  severity: string;
+  status: string;
+  declaredAt: string;
+  resolvedAt: string | null;
 }
 export interface ThirdPartyBcpData {
   bcpPlans: BcpPlan[];
   bcpTests: BcpTest[];
+  testFindings: BcpTestFinding[];
   rtoRpo: RtoRpo[];
   crisisContacts: CrisisContact[];
+  biaProcesses: BiaProcess[];
+  vendorResilience: VendorResilience[];
+  bcpIncidents: BcpIncident[];
 }
 
 // ── Compliance ───────────────────────────────────────────────

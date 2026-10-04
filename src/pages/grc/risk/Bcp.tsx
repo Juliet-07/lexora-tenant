@@ -57,6 +57,8 @@ import {
   createBcpPlan,
   setBcpPlanStatus,
   advanceBcpPlanPhase,
+  updateBcpPlan,
+  deleteBcpPlan,
   fetchBcpTests,
   logBcpTest,
   completeBcpTest,
@@ -69,6 +71,8 @@ import {
   deleteCrisisContact,
   fetchBiaProcesses,
   createBiaProcess,
+  updateBiaProcess,
+  deleteBiaProcess,
   fetchVendorResilience,
   createVendorResilience,
   markVendorResilienceAttested,
@@ -91,6 +95,7 @@ import {
   type BcpFindingStatus,
   type Severity,
   type BcpPlan as ApiBcpPlan,
+  type BiaProcess as ApiBiaProcess,
   type BcpIncident as ApiBcpIncident,
   type BcpReport as ApiBcpReport,
   type BcpTestFinding as ApiBcpTestFinding,
@@ -488,6 +493,10 @@ export default function GrcBcp() {
   const [editingContact, setEditingContact] = useState<CrisisContact | null>(
     null,
   );
+  const [editingProcess, setEditingProcess] = useState<ApiBiaProcess | null>(
+    null,
+  );
+  const [editingPlan, setEditingPlan] = useState<ApiBcpPlan | null>(null);
   const [reportPreview, setReportPreview] = useState<{
     title: string;
     sections?: string[];
@@ -698,7 +707,6 @@ export default function GrcBcp() {
   const overdueReviews = vendors.filter(
     (v) => v.nextReview && new Date(v.nextReview) < new Date(),
   );
-  const openFindings = findings.filter((f) => f.status === "Open");
   const doneTests = tests.filter((t) => t.result !== "Scheduled");
   const scored = doneTests.filter((t) => t.score !== null);
   const avgScore = scored.length
@@ -803,10 +811,10 @@ export default function GrcBcp() {
         <h2>Needs attention</h2>
         ${attention.length ? kv(attention.map((a) => [a.title, a.sub])) : `<table><tr><td class="empty">Nothing needs attention.</td></tr></table>`}
       `,
-      bia: `<h2>Business Impact Analysis</h2><table><tr><th>Process</th><th>Department</th><th>Owner</th><th>Criticality</th><th>MTD</th><th>Impact/day</th></tr>${processes.length ? processes.map((p) => `<tr><td>${p.name}</td><td>${p.dept}</td><td>${p.owner}</td><td>${p.criticality}</td><td>${p.mtd}</td><td>${money(p.impactPerDay)}</td></tr>`).join("") : `<tr><td colspan="6" class="empty">No business processes recorded yet.</td></tr>`}</table>`,
-      plans: `<h2>Continuity Plans status</h2><table><tr><th>Plan</th><th>Status</th><th>Review cycle</th></tr>${plans.length ? plans.map((p) => `<tr><td>${p.code}: ${p.title}</td><td>${p.status}</td><td>${p.reviewCycle}</td></tr>`).join("") : `<tr><td colspan="3" class="empty">No continuity plans recorded yet.</td></tr>`}</table>`,
+      bia: `<h2>Business Impact Analysis</h2><table><tr><th>Process</th><th>Department</th><th>Owner</th><th>Criticality</th><th>MTD</th><th>Impact/day</th><th>Linked plan</th></tr>${processes.length ? processes.map((p) => `<tr><td>${p.name}</td><td>${p.dept}</td><td>${p.owner}</td><td>${p.criticality}</td><td>${p.mtd}</td><td>${money(p.impactPerDay)}</td><td>${plans.find((pl) => pl.id === p.linkedPlanId)?.title ?? "None"}</td></tr>`).join("") : `<tr><td colspan="7" class="empty">No business processes recorded yet.</td></tr>`}</table>`,
+      plans: `<h2>Continuity Plans status</h2><table><tr><th>Plan</th><th>Status</th><th>Lifecycle stage</th><th>Review cycle</th></tr>${plans.length ? plans.map((p) => `<tr><td>${p.code}: ${p.title}</td><td>${p.status}</td><td>${LIFECYCLE[p.phase]}</td><td>${p.reviewCycle}</td></tr>`).join("") : `<tr><td colspan="4" class="empty">No continuity plans recorded yet.</td></tr>`}</table>`,
       dr: `<h2>DR &amp; Recovery Targets</h2><table><tr><th>System</th><th>Tier</th><th>RTO</th><th>RPO</th><th>Status</th></tr>${systems.length ? systems.map((s) => `<tr><td>${s.name}</td><td>${s.tier}</td><td>${mins(s.rtoT)} / ${mins(s.rtoA)}</td><td>${mins(s.rpoT)} / ${mins(s.rpoA)}</td><td>${sysStatus(s)}</td></tr>`).join("") : `<tr><td colspan="5" class="empty">No systems recorded yet.</td></tr>`}</table>`,
-      testing: `<h2>Testing &amp; Exercises results</h2><table><tr><th>Test</th><th>Scenario</th><th>Date</th><th>Result</th></tr>${tests.length ? tests.map((t) => `<tr><td>${t.code}</td><td>${t.scenario}</td><td>${fmtD(t.date)}</td><td>${t.result}</td></tr>`).join("") : `<tr><td colspan="4" class="empty">No tests logged or scheduled yet.</td></tr>`}</table>${openFindings.length ? `<h2>Open findings</h2><table><tr><th>Severity</th><th>Finding</th><th>Owner</th><th>Due</th></tr>${openFindings.map((f) => `<tr><td>${f.severity}</td><td>${f.title}</td><td>${f.owner || "—"}</td><td>${f.dueDate ? fmtD(f.dueDate) : "—"}</td></tr>`).join("")}</table>` : ""}`,
+      testing: `<h2>Testing &amp; Exercises results</h2><table><tr><th>Test</th><th>Scenario</th><th>Date</th><th>Result</th></tr>${tests.length ? tests.map((t) => `<tr><td>${t.code}</td><td>${t.scenario}</td><td>${fmtD(t.date)}</td><td>${t.result}</td></tr>`).join("") : `<tr><td colspan="4" class="empty">No tests logged or scheduled yet.</td></tr>`}</table>${findings.length ? `<h2>Findings</h2><table><tr><th>Severity</th><th>Finding</th><th>Owner</th><th>Due</th><th>Status</th></tr>${findings.map((f) => `<tr><td>${f.severity}</td><td>${f.title}</td><td>${f.owner || "—"}</td><td>${f.dueDate ? fmtD(f.dueDate) : "—"}</td><td>${f.status}</td></tr>`).join("")}</table>` : ""}`,
       vendors: `<h2>Vendor &amp; Third-Party Resilience</h2><table><tr><th>Vendor</th><th>Criticality</th><th>SLA</th><th>Attestation</th><th>Alternate</th><th>Last review</th></tr>${vendors.length ? vendors.map((v) => `<tr><td>${v.name}</td><td>${v.criticality}</td><td>${v.sla}</td><td>${v.attestation}</td><td>${v.alternate}</td><td>${v.lastReview}</td></tr>`).join("") : `<tr><td colspan="6" class="empty">No vendors assessed yet.</td></tr>`}</table>`,
       crisis: `<h2>Crisis Management readiness</h2>${kv([
         ["Active incidents", String(active.length)],
@@ -997,6 +1005,34 @@ td.empty{color:#94a3b8;font-style:italic;border-bottom:none}
     onError: (e: any) =>
       toast({
         title: "Couldn't remove",
+        description: e?.response?.data?.message,
+        variant: "destructive",
+      }),
+  });
+  const deleteProcessMut = useMutation({
+    mutationFn: (id: string) => deleteBiaProcess(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["grc-bcp-processes"] });
+      toast({ title: "Process removed" });
+      setDetail(null);
+    },
+    onError: (e: any) =>
+      toast({
+        title: "Couldn't remove",
+        description: e?.response?.data?.message,
+        variant: "destructive",
+      }),
+  });
+  const deletePlanMut = useMutation({
+    mutationFn: (id: string) => deleteBcpPlan(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["grc-bcp-plans"] });
+      toast({ title: "Plan deleted" });
+      setDetail(null);
+    },
+    onError: (e: any) =>
+      toast({
+        title: "Couldn't delete",
         description: e?.response?.data?.message,
         variant: "destructive",
       }),
@@ -1240,7 +1276,13 @@ td.empty{color:#94a3b8;font-style:italic;border-bottom:none}
                   <Button size="sm" variant="outline" onClick={exportBia}>
                     <Download className="h-4 w-4 mr-1" /> Export
                   </Button>
-                  <Button size="sm" onClick={() => setDialog("process")}>
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      setEditingProcess(null);
+                      setDialog("process");
+                    }}
+                  >
                     <Plus className="h-4 w-4 mr-1" /> Add process
                   </Button>
                 </div>
@@ -1254,6 +1296,7 @@ td.empty{color:#94a3b8;font-style:italic;border-bottom:none}
                       <TableHead>Criticality</TableHead>
                       <TableHead>Max downtime</TableHead>
                       <TableHead>Priority</TableHead>
+                      <TableHead />
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -1310,12 +1353,41 @@ td.empty{color:#94a3b8;font-style:italic;border-bottom:none}
                                 ? "P3"
                                 : "P4"}
                         </TableCell>
+                        <TableCell className="text-right whitespace-nowrap">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 px-2"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const raw = apiProcesses.find(
+                                (ap) => ap._id === p.id,
+                              );
+                              if (raw) setEditingProcess(raw);
+                              setDialog("process");
+                            }}
+                          >
+                            Edit
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 px-2 text-destructive"
+                            disabled={deleteProcessMut.isPending}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deleteProcessMut.mutate(p.id);
+                            }}
+                          >
+                            Delete
+                          </Button>
+                        </TableCell>
                       </TableRow>
                     ))}
                     {processes.length === 0 && (
                       <TableRow>
                         <TableCell
-                          colSpan={5}
+                          colSpan={6}
                           className="text-center text-sm text-muted-foreground py-8"
                         >
                           No processes added yet.
@@ -1405,7 +1477,13 @@ td.empty{color:#94a3b8;font-style:italic;border-bottom:none}
         <TabsContent value="plans" className="space-y-4 mt-4">
           <div className="flex justify-between items-center">
             <h2 className="font-semibold">Business Continuity Plans</h2>
-            <Button size="sm" onClick={() => setDialog("plan")}>
+            <Button
+              size="sm"
+              onClick={() => {
+                setEditingPlan(null);
+                setDialog("plan");
+              }}
+            >
               <Plus className="h-4 w-4 mr-1" /> New plan
             </Button>
           </div>
@@ -1531,6 +1609,31 @@ td.empty{color:#94a3b8;font-style:italic;border-bottom:none}
                             >
                               Advance stage{" "}
                               <ArrowRight className="h-3.5 w-3.5 ml-1" />
+                            </Button>
+                          </div>
+                          <div className="flex gap-2 pt-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                const raw = apiPlans.find(
+                                  (ap) => ap._id === p.id,
+                                );
+                                if (raw) setEditingPlan(raw);
+                                setDetail(null);
+                                setDialog("plan");
+                              }}
+                            >
+                              Edit plan
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-destructive"
+                              disabled={deletePlanMut.isPending}
+                              onClick={() => deletePlanMut.mutate(p.id)}
+                            >
+                              Delete plan
                             </Button>
                           </div>
                         </div>
@@ -1784,6 +1887,40 @@ td.empty{color:#94a3b8;font-style:italic;border-bottom:none}
                                     </Button>
                                   </div>
                                 )}
+                                {(() => {
+                                  const linked = findings.filter(
+                                    (fi) => fi.testId === t.id,
+                                  );
+                                  return linked.length > 0 ? (
+                                    <div className="mt-4">
+                                      <div className="text-sm font-medium mb-2">
+                                        Findings from this test
+                                      </div>
+                                      <div className="space-y-2">
+                                        {linked.map((f) => (
+                                          <div
+                                            key={f.id}
+                                            className="border rounded-lg p-2.5"
+                                          >
+                                            <div className="flex items-center gap-1.5">
+                                              <Pill s={f.severity} />
+                                              <Pill s={f.status} />
+                                            </div>
+                                            <div className="text-sm font-medium mt-1">
+                                              {f.title}
+                                            </div>
+                                            <div className="text-xs text-muted-foreground">
+                                              Owner: {f.owner || "—"}
+                                              {f.dueDate
+                                                ? ` · Due ${fmtD(f.dueDate)}`
+                                                : ""}
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  ) : null;
+                                })()}
                               </>
                             ),
                           })
@@ -1823,7 +1960,7 @@ td.empty{color:#94a3b8;font-style:italic;border-bottom:none}
               <Card>
                 <CardHeader className="pb-2 flex-row items-center justify-between space-y-0">
                   <CardTitle className="text-base">
-                    Open findings from tests
+                    Findings from tests
                   </CardTitle>
                   <Button
                     size="sm"
@@ -1834,19 +1971,24 @@ td.empty{color:#94a3b8;font-style:italic;border-bottom:none}
                   </Button>
                 </CardHeader>
                 <CardContent className="space-y-2">
-                  {openFindings.map((f) => (
+                  {findings.map((f) => (
                     <div key={f.id} className="border rounded-lg p-2.5">
                       <div className="flex items-center justify-between gap-2">
-                        <Pill s={f.severity} />
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-6 px-2 text-xs"
-                          disabled={resolveFindingMut.isPending}
-                          onClick={() => resolveFindingMut.mutate(f.id)}
-                        >
-                          Mark resolved
-                        </Button>
+                        <div className="flex items-center gap-1.5">
+                          <Pill s={f.severity} />
+                          <Pill s={f.status} />
+                        </div>
+                        {f.status === "Open" && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-6 px-2 text-xs"
+                            disabled={resolveFindingMut.isPending}
+                            onClick={() => resolveFindingMut.mutate(f.id)}
+                          >
+                            Mark resolved
+                          </Button>
+                        )}
                       </div>
                       <div className="text-sm font-medium mt-1">{f.title}</div>
                       <div className="text-xs text-muted-foreground">
@@ -1855,9 +1997,9 @@ td.empty{color:#94a3b8;font-style:italic;border-bottom:none}
                       </div>
                     </div>
                   ))}
-                  {openFindings.length === 0 && (
+                  {findings.length === 0 && (
                     <p className="text-sm text-muted-foreground">
-                      No open findings from testing.
+                      No findings from testing yet.
                     </p>
                   )}
                 </CardContent>
@@ -2649,11 +2791,15 @@ td.empty{color:#94a3b8;font-style:italic;border-bottom:none}
         onClose={() => {
           setDialog(null);
           setEditingContact(null);
+          setEditingProcess(null);
+          setEditingPlan(null);
         }}
         plans={plans}
         processes={processes}
         tests={tests}
         editingContact={editingContact}
+        editingProcess={editingProcess}
+        editingPlan={editingPlan}
         invalidate={(k) => qc.invalidateQueries({ queryKey: [k] })}
         previewReport={previewReport}
         goToIncidents={() => setTab("incidents")}
@@ -2855,6 +3001,8 @@ function BcpDialogs({
   processes,
   tests,
   editingContact,
+  editingProcess,
+  editingPlan,
   invalidate,
   previewReport,
   goToIncidents,
@@ -2865,6 +3013,8 @@ function BcpDialogs({
   processes: Process[];
   tests: TestRec[];
   editingContact: CrisisContact | null;
+  editingProcess: ApiBiaProcess | null;
+  editingPlan: ApiBcpPlan | null;
   invalidate: (k: string) => void;
   previewReport: (title: string, sections?: string[]) => void;
   goToIncidents: () => void;
@@ -2936,6 +3086,50 @@ function BcpDialogs({
     }
   }, [kind, editingContact]);
 
+  // Pre-fill the process dialog when editing an existing BIA process —
+  // this is also how a process created before its continuity plan
+  // existed gets retroactively linked (PO feedback, Oct 2026): the
+  // same "Linked continuity plan" dropdown the create dialog already
+  // has, just opened against a process that already has an _id.
+  useEffect(() => {
+    if (kind === "process" && editingProcess) {
+      setF((p) => ({
+        ...p,
+        name: editingProcess.name,
+        departmentId: editingProcess.departmentId ?? "none",
+        owner: editingProcess.owner,
+        crit: editingProcess.criticality,
+        mtd: editingProcess.mtd,
+        impact: String(editingProcess.impactPerDay),
+        nonFinancialImpact: editingProcess.nonFinancialImpact,
+        deps: editingProcess.dependencies.join(", "),
+        linkedPlanId: editingProcess.linkedPlanId ?? "none",
+      }));
+    }
+  }, [kind, editingProcess]);
+
+  // Pre-fill the plan dialog when editing an existing continuity
+  // plan — status/phase are deliberately left out (they have their
+  // own action buttons in the detail drawer, not a freeform edit).
+  useEffect(() => {
+    if (kind === "plan" && editingPlan) {
+      setF((p) => ({
+        ...p,
+        title: editingPlan.title,
+        scope:
+          editingPlan.scope && PLAN_SCOPES.includes(editingPlan.scope)
+            ? editingPlan.scope
+            : "Other",
+        scopeOther:
+          editingPlan.scope && !PLAN_SCOPES.includes(editingPlan.scope)
+            ? editingPlan.scope
+            : "",
+        content: editingPlan.content,
+        reviewCycle: editingPlan.reviewCycle ?? "",
+      }));
+    }
+  }, [kind, editingPlan]);
+
   // Comma-separated-string multi-select helpers, reused for vendor
   // dependent-processes, report recipients, report committees and
   // report sections — all live in the same flat `f` form state.
@@ -2997,6 +3191,21 @@ function BcpDialogs({
     onSuccess: () => {
       invalidate("grc-bcp-plans");
       toast({ title: "Plan created — status starts as Draft" });
+      close();
+    },
+    onError: err,
+  });
+  const updatePlanMut = useMutation({
+    mutationFn: () =>
+      updateBcpPlan(editingPlan!._id, {
+        title: f.title,
+        content: f.content || "",
+        scope: f.scope === "Other" ? f.scopeOther || "" : f.scope || "",
+        reviewCycle: (f.reviewCycle as ReviewCycle) || undefined,
+      }),
+    onSuccess: () => {
+      invalidate("grc-bcp-plans");
+      toast({ title: "Plan updated" });
       close();
     },
     onError: err,
@@ -3105,6 +3314,31 @@ function BcpDialogs({
     onSuccess: () => {
       invalidate("grc-bcp-processes");
       toast({ title: "Process added to BIA" });
+      close();
+    },
+    onError: err,
+  });
+  const updateProcessMut = useMutation({
+    mutationFn: () =>
+      updateBiaProcess(editingProcess!._id, {
+        name: f.name,
+        departmentId:
+          f.departmentId && f.departmentId !== "none" ? f.departmentId : "",
+        owner: f.owner || "",
+        criticality: (f.crit || "High") as Severity,
+        mtd: f.mtd || "24 hours",
+        impactPerDay: Number(f.impact || 0),
+        nonFinancialImpact: f.nonFinancialImpact || "",
+        dependencies: (f.deps || "")
+          .split(",")
+          .map((d) => d.trim())
+          .filter(Boolean),
+        linkedPlanId:
+          f.linkedPlanId && f.linkedPlanId !== "none" ? f.linkedPlanId : "",
+      }),
+    onSuccess: () => {
+      invalidate("grc-bcp-processes");
+      toast({ title: "Process updated" });
       close();
     },
     onError: err,
@@ -3247,9 +3481,10 @@ function BcpDialogs({
     { title: string; body: ReactNode; ok: () => void; can: boolean }
   > = {
     process: {
-      title: "Add business process",
+      title: editingProcess ? "Edit business process" : "Add business process",
       can: !!f.name,
-      ok: () => processMut.mutate(),
+      ok: () =>
+        editingProcess ? updateProcessMut.mutate() : processMut.mutate(),
       body: (
         <>
           {Field({ k: "name", label: "Business process name" })}
@@ -3336,13 +3571,13 @@ function BcpDialogs({
       ),
     },
     plan: {
-      title: "New continuity plan",
+      title: editingPlan ? "Edit continuity plan" : "New continuity plan",
       can:
         !!f.title &&
         !!f.content &&
         !!f.scope &&
         (f.scope !== "Other" || !!f.scopeOther),
-      ok: () => planMut.mutate(),
+      ok: () => (editingPlan ? updatePlanMut.mutate() : planMut.mutate()),
       body: (
         <>
           {Field({ k: "title", label: "Plan title" })}
@@ -3371,8 +3606,7 @@ function BcpDialogs({
               onChange={set("content")}
             />
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            {Pick({ k: "phase", label: "Lifecycle stage", opts: LIFECYCLE })}
+          {editingPlan ? (
             <div>
               <Label>Review cycle</Label>
               <Select
@@ -3390,12 +3624,44 @@ function BcpDialogs({
                   ))}
                 </SelectContent>
               </Select>
+              <p className="text-xs text-muted-foreground mt-2">
+                Status and lifecycle stage are changed from the plan's own
+                detail view, not here.
+              </p>
             </div>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            New plans start as <b>Draft</b> — status is system-managed from
-            here.
-          </p>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                {Pick({
+                  k: "phase",
+                  label: "Lifecycle stage",
+                  opts: LIFECYCLE,
+                })}
+                <div>
+                  <Label>Review cycle</Label>
+                  <Select
+                    value={f.reviewCycle ?? ""}
+                    onValueChange={sel("reviewCycle")}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a cycle" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {REVIEW_CYCLES.map((c) => (
+                        <SelectItem key={c} value={c}>
+                          {c}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                New plans start as <b>Draft</b> — status is system-managed from
+                here.
+              </p>
+            </>
+          )}
         </>
       ),
     },
@@ -3818,11 +4084,13 @@ function BcpDialogs({
   const c = kind ? content[kind] : null;
   const pending =
     planMut.isPending ||
+    updatePlanMut.isPending ||
     testMut.isPending ||
     sysMut.isPending ||
     contactMut.isPending ||
     updateContactMut.isPending ||
     processMut.isPending ||
+    updateProcessMut.isPending ||
     vendorMut.isPending ||
     findingMut.isPending ||
     incidentMut.isPending ||

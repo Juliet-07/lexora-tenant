@@ -869,6 +869,26 @@ export const advanceBcpPlanPhase = async (
   return res.data?.data ?? res.data;
 };
 
+// Editing the plan's own content — title/scope/key procedures/review
+// cycle. Status and phase go through setBcpPlanStatus/
+// advanceBcpPlanPhase above, not this.
+export const updateBcpPlan = async (
+  id: string,
+  dto: {
+    title?: string;
+    content?: string;
+    scope?: string;
+    reviewCycle?: ReviewCycle;
+  },
+): Promise<BcpPlan> => {
+  const res = await api.patch(`/grc/risk/bcp/plans/${id}`, dto);
+  return res.data?.data ?? res.data;
+};
+
+export const deleteBcpPlan = async (id: string): Promise<void> => {
+  await api.delete(`/grc/risk/bcp/plans/${id}`);
+};
+
 export const fetchBcpTests = async (): Promise<BcpTestRecord[]> => {
   const res = await api.get("/grc/risk/bcp/tests");
   const d = res.data?.data ?? res.data;
@@ -970,6 +990,33 @@ export const createBiaProcess = async (dto: {
 }): Promise<BiaProcess> => {
   const res = await api.post("/grc/risk/bcp/processes", dto);
   return res.data?.data ?? res.data;
+};
+
+// Lets the tenant retroactively link (or relink/unlink) a continuity
+// plan onto a process created before that plan existed — pass "" for
+// departmentId/linkedPlanId to clear it, omit the key to leave it
+// unchanged.
+export const updateBiaProcess = async (
+  id: string,
+  dto: {
+    name?: string;
+    departmentId?: string;
+    dept?: string;
+    owner?: string;
+    criticality?: Severity;
+    mtd?: string;
+    impactPerDay?: number;
+    nonFinancialImpact?: string;
+    dependencies?: string[];
+    linkedPlanId?: string;
+  },
+): Promise<BiaProcess> => {
+  const res = await api.patch(`/grc/risk/bcp/processes/${id}`, dto);
+  return res.data?.data ?? res.data;
+};
+
+export const deleteBiaProcess = async (id: string): Promise<void> => {
+  await api.delete(`/grc/risk/bcp/processes/${id}`);
 };
 
 export const fetchVendorResilience = async (): Promise<VendorResilience[]> => {
