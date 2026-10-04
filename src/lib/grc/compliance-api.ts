@@ -180,6 +180,12 @@ export type AuditEngagementStatus =
 export type RequestStatus = "Requested" | "Submitted" | "Disputed" | "Resolved";
 export type FindingSeverity = "Critical" | "High" | "Medium" | "Low";
 export type FindingStatus = "Open" | "In Progress" | "Remediated" | "Closed";
+export type AuditPriority = "Normal" | "High" | "Critical";
+// Same four-point scale as FindingSeverity, kept as its own type since
+// the backend doesn't couple the two enums together either.
+export type InherentRiskLevel = "Critical" | "High" | "Medium" | "Low";
+export type WorkingPaperStatus = "Draft" | "Reviewed";
+export type CommitteeActionStatus = "To be raised" | "Raised" | "Resolved";
 
 export interface RequestFile {
   name: string;
@@ -222,6 +228,53 @@ export interface AuditFinding {
   managementResponse: string;
   remediationDueDate: string | null;
   createdAt: string;
+  // Reporting-tab metadata — server-generated ref ("F-01"), the rest
+  // editable from the Management response tracker.
+  ref: string;
+  owner: string;
+  process: string;
+  evidence: string;
+  verifiedBy: string;
+}
+
+// ── Planning tab ──
+export interface AuditRiskAssessmentItem {
+  area: string;
+  inherent: InherentRiskLevel;
+  controls: string;
+  approach: string;
+}
+
+// ── Fieldwork tab ──
+export interface AuditProgressItem {
+  area: string;
+  pct: number;
+}
+export interface AuditSample {
+  population: string;
+  size: string;
+  method: string;
+  dates: string;
+}
+export interface AuditNote {
+  date: string;
+  title: string;
+  detail: string;
+}
+export interface AuditWorkingPaper {
+  ref: string;
+  desc: string;
+  preparer: string;
+  reviewer: string;
+  status: WorkingPaperStatus;
+}
+
+// ── Committee tab ──
+export interface AuditCommitteeAction {
+  action: string;
+  owner: string;
+  due: string | null;
+  status: CommitteeActionStatus;
 }
 
 export interface AuditEngagement {
@@ -241,6 +294,23 @@ export interface AuditEngagement {
   folders: AuditFolder[];
   requests: AuditRequest[];
   findings: AuditFinding[];
+  // ── Planning ──
+  priority: AuditPriority;
+  riskAreas: string[];
+  objectives: string[];
+  committeeDate: string | null;
+  budget: string;
+  riskAssessment: AuditRiskAssessmentItem[];
+  // ── Fieldwork ──
+  progress: AuditProgressItem[];
+  samples: AuditSample[];
+  notes: AuditNote[];
+  workingPapers: AuditWorkingPaper[];
+  // ── Reporting ──
+  reportStage: number;
+  // ── Committee ──
+  execSummary: string;
+  committeeActions: AuditCommitteeAction[];
 }
 
 // An employee's own view of a request they've been assigned, flattened
@@ -594,11 +664,173 @@ export const updateFinding = async (
     managementResponse: string;
     remediationDueDate: string;
     status: FindingStatus;
+    owner: string;
+    process: string;
+    evidence: string;
+    verifiedBy: string;
   }>,
 ): Promise<AuditEngagement> => {
   const res = await api.patch(
     `/grc/compliance/audits/${id}/findings/${index}`,
     dto,
+  );
+  return res.data?.data ?? res.data;
+};
+
+// ── Planning tab ──────────────────────────────────────────────────
+export const updateAuditPlanning = async (
+  id: string,
+  dto: Partial<{
+    priority: AuditPriority;
+    riskAreas: string[];
+    budget: string;
+    committeeDate: string;
+  }>,
+): Promise<AuditEngagement> => {
+  const res = await api.patch(`/grc/compliance/audits/${id}/planning`, dto);
+  return res.data?.data ?? res.data;
+};
+
+export const addAuditObjective = async (
+  id: string,
+  objective: string,
+): Promise<AuditEngagement> => {
+  const res = await api.post(`/grc/compliance/audits/${id}/objectives`, {
+    objective,
+  });
+  return res.data?.data ?? res.data;
+};
+
+export const addAuditRiskArea = async (
+  id: string,
+  area: string,
+): Promise<AuditEngagement> => {
+  const res = await api.post(`/grc/compliance/audits/${id}/risk-areas`, {
+    area,
+  });
+  return res.data?.data ?? res.data;
+};
+
+export const addAuditRiskAssessment = async (
+  id: string,
+  dto: {
+    area: string;
+    inherent: InherentRiskLevel;
+    controls?: string;
+    approach?: string;
+  },
+): Promise<AuditEngagement> => {
+  const res = await api.post(
+    `/grc/compliance/audits/${id}/risk-assessment`,
+    dto,
+  );
+  return res.data?.data ?? res.data;
+};
+
+// ── Fieldwork tab ──────────────────────────────────────────────────
+export const addAuditProgress = async (
+  id: string,
+  area: string,
+): Promise<AuditEngagement> => {
+  const res = await api.post(`/grc/compliance/audits/${id}/progress`, {
+    area,
+  });
+  return res.data?.data ?? res.data;
+};
+
+export const updateAuditProgress = async (
+  id: string,
+  index: number,
+  pct: number,
+): Promise<AuditEngagement> => {
+  const res = await api.patch(
+    `/grc/compliance/audits/${id}/progress/${index}`,
+    { pct },
+  );
+  return res.data?.data ?? res.data;
+};
+
+// Previously a dead end — there was no way to add a sample row at all.
+export const addAuditSample = async (
+  id: string,
+  dto: { population: string; size?: string; method?: string; dates?: string },
+): Promise<AuditEngagement> => {
+  const res = await api.post(`/grc/compliance/audits/${id}/samples`, dto);
+  return res.data?.data ?? res.data;
+};
+
+export const addAuditNote = async (
+  id: string,
+  dto: { title: string; detail?: string },
+): Promise<AuditEngagement> => {
+  const res = await api.post(`/grc/compliance/audits/${id}/notes`, dto);
+  return res.data?.data ?? res.data;
+};
+
+export const addAuditWorkingPaper = async (
+  id: string,
+  dto: { desc: string; preparer?: string; reviewer?: string },
+): Promise<AuditEngagement> => {
+  const res = await api.post(
+    `/grc/compliance/audits/${id}/working-papers`,
+    dto,
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const updateAuditWorkingPaper = async (
+  id: string,
+  index: number,
+  status: WorkingPaperStatus,
+): Promise<AuditEngagement> => {
+  const res = await api.patch(
+    `/grc/compliance/audits/${id}/working-papers/${index}`,
+    { status },
+  );
+  return res.data?.data ?? res.data;
+};
+
+// ── Reporting tab ──────────────────────────────────────────────────
+export const setAuditReportStage = async (
+  id: string,
+  stage: number,
+): Promise<AuditEngagement> => {
+  const res = await api.patch(`/grc/compliance/audits/${id}/report-stage`, {
+    stage,
+  });
+  return res.data?.data ?? res.data;
+};
+
+// ── Committee tab ──────────────────────────────────────────────────
+export const setAuditExecSummary = async (
+  id: string,
+  execSummary: string,
+): Promise<AuditEngagement> => {
+  const res = await api.patch(`/grc/compliance/audits/${id}/exec-summary`, {
+    execSummary,
+  });
+  return res.data?.data ?? res.data;
+};
+
+export const addAuditCommitteeAction = async (
+  id: string,
+  dto: { action: string; owner?: string; due?: string },
+): Promise<AuditEngagement> => {
+  const res = await api.post(
+    `/grc/compliance/audits/${id}/committee-actions`,
+    dto,
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const updateAuditCommitteeAction = async (
+  id: string,
+  index: number,
+  status: CommitteeActionStatus,
+): Promise<AuditEngagement> => {
+  const res = await api.patch(
+    `/grc/compliance/audits/${id}/committee-actions/${index}`,
+    { status },
   );
   return res.data?.data ?? res.data;
 };

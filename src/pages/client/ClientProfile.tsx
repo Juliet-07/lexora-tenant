@@ -4,6 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { KycUpdatesSection } from "./KycUpdatesSection";
+import { IndividualFormView } from "@/pages/kyc/IndividualFormView";
+import { CorporateFormView } from "@/pages/kyc/CorporateFormView";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -437,6 +439,27 @@ export default function ClientProfile() {
                     ))}
                 </CardContent>
               </Card>
+            )}
+          </div>
+
+          {/* Everything the client submitted during KYC — stays visible here
+              after approval, not just while the client is "in onboarding".
+              Documents are covered separately by the Documents tab. */}
+          <div className="mt-6 space-y-3">
+            <div>
+              <h3 className="text-base font-semibold">
+                KYC Submission Details
+              </h3>
+              <p className="text-sm text-muted-foreground">
+                Everything {client.fullName} submitted on the onboarding form.
+              </p>
+            </div>
+            {isCorporate ? (
+              <CorporateFormView formData={client.onboarding?.formData ?? {}} />
+            ) : (
+              <IndividualFormView
+                formData={client.onboarding?.formData ?? {}}
+              />
             )}
           </div>
         </TabsContent>

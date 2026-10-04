@@ -7,7 +7,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
@@ -47,7 +46,6 @@ import {
   FileText,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
-import { escapeReportText, printGrcReport } from "@/lib/grc/printReport";
 import { fmtDate } from "@/lib/grc/usePersistentState";
 import {
   setAuditStatus,
@@ -58,31 +56,45 @@ import {
   downloadAuditRequestsZip,
   addFinding,
   updateFinding,
+  updateAuditPlanning,
+  addAuditObjective,
+  addAuditRiskArea,
+  addAuditRiskAssessment,
+  addAuditProgress,
+  updateAuditProgress,
+  addAuditSample,
+  addAuditNote,
+  addAuditWorkingPaper,
+  updateAuditWorkingPaper,
+  setAuditReportStage,
+  setAuditExecSummary,
+  addAuditCommitteeAction,
+  updateAuditCommitteeAction,
   type AuditEngagement,
   type AuditEngagementStatus,
   type FindingSeverity,
   type FindingStatus,
   type RequestStatus,
+  type InherentRiskLevel,
+  type WorkingPaperStatus,
+  type CommitteeActionStatus,
 } from "@/lib/grc/compliance-api";
 import { fetchRisks } from "@/lib/grc/risk-api";
 import { fetchEmployees, type Employee } from "@/lib/hr/hr-api";
 import {
-  type Extras,
   LIFECYCLE,
   REM_LABEL,
+  RISK_AREAS,
   phaseOf,
   sevVariant,
   isOverdue,
 } from "./Audits";
 
-// `local` is no longer used (there's no demo/local-only mode to keep in
-// sync) — kept as an optional, ignored param so existing call sites
-// don't all need touching.
-type Mutate = (
-  api: () => Promise<unknown>,
-  local?: (e: AuditEngagement) => AuditEngagement,
-  msg?: string,
-) => Promise<void>;
+// Every field this detail view reads/writes now lives on the real
+// AuditEngagement record server-side (previously a client-only
+// `Extras` localStorage layer, parallel to the backend — see
+// AGENTS.md). `mutate` just runs an API call and refetches.
+type Mutate = (api: () => Promise<unknown>, msg?: string) => Promise<void>;
 
 // Document-request status → badge treatment. "Overdue" isn't a real
 // stored status — it's computed at display time (see isRequestOverdue).
@@ -102,19 +114,40 @@ const engagementTypeLabel = (t: AuditEngagement["type"]) =>
   t === "External" ? "External Audit" : "Internal Audit";
 
 export default function AuditDetail({
-  e,
-  x,
+  e: rawE,
   onBack,
-  setExtras,
   mutate,
 }: {
   e: AuditEngagement;
-  x: Extras;
   onBack: () => void;
-  setExtras: (p: Partial<Extras>) => void;
   mutate: Mutate;
 }) {
-  const ph = phaseOf(e, x);
+  // Defensive, same class of bug hit repeatedly this session (Audit
+  // folders, Board Management, Governance Codes): the backend's
+  // getAll() now normalizes every field added in the Extras-layer
+  // migration for a .lean() read, but this second layer means a stale
+  // cached engagement (or any future backend read path that forgets
+  // to normalize) still renders instead of crashing on a bare .map().
+  const e: AuditEngagement = {
+    ...rawE,
+    objectives: rawE.objectives ?? [],
+    riskAreas: rawE.riskAreas ?? [],
+    riskAssessment: rawE.riskAssessment ?? [],
+    progress: rawE.progress ?? [],
+    samples: rawE.samples ?? [],
+    notes: rawE.notes ?? [],
+    workingPapers: rawE.workingPapers ?? [],
+    committeeActions: rawE.committeeActions ?? [],
+    findings: (rawE.findings ?? []).map((f) => ({
+      ...f,
+      ref: f.ref ?? "",
+      owner: f.owner ?? "",
+      process: f.process ?? "",
+      evidence: f.evidence ?? "",
+      verifiedBy: f.verifiedBy ?? "",
+    })),
+  };
+  const ph = phaseOf(e);
   const [fOpen, setFOpen] = useState(false);
   const [note, setNote] = useState({ title: "", detail: "" });
   const [zipping, setZipping] = useState(false);
@@ -137,19 +170,7 @@ export default function AuditDetail({
         ((remCounts[2] * 0.5 + remCounts[3]) / e.findings.length) * 100,
       )
     : 0;
-  const overdue = e.findings
-    .map((f, i) => ({ f, i }))
-    .filter(({ f }) => isOverdue(f));
-  const fm = (i: number) =>
-    x.findingMeta[i] ?? {
-      ref: `F-${String(i + 1).padStart(2, "0")}`,
-      owner: "",
-      process: "",
-      evidence: "",
-      verifiedBy: "",
-    };
-  const setFm = (i: number, p: Partial<Extras["findingMeta"][number]>) =>
-    setExtras({ findingMeta: { ...x.findingMeta, [i]: { ...fm(i), ...p } } });
+  const overdue = e.findings.filter((f) => isOverdue(f));
 
   const NEXT: Record<AuditEngagementStatus, AuditEngagementStatus | null> = {
     Planned: "In Progress",
@@ -160,11 +181,13 @@ export default function AuditDetail({
   const next = NEXT[e.status];
 
   const exportFile = () => {
-    printGrcReport({
-      title: e.name, category: "Audit engagement file",
-      details: [{ label: "Type", value: engagementTypeLabel(e.type) }, { label: "Status", value: e.status }, { label: "Target completion", value: fmtDate(e.endDate) }],
-      body: `<h2>Scope</h2><p>${escapeReportText(e.scope)}</p><h2>Findings</h2><table><thead><tr><th>Ref</th><th>Finding</th><th>Rating</th><th>Recommendation</th><th>Response</th></tr></thead><tbody>${e.findings.map((f, i) => `<tr><td>${escapeReportText(fm(i).ref)}</td><td>${escapeReportText(f.observation)}</td><td>${escapeReportText(f.severity)}</td><td>${escapeReportText(f.recommendation)}</td><td>${escapeReportText(f.managementResponse)}</td></tr>`).join("")}</tbody></table><h2>Executive summary</h2><p>${escapeReportText(x.execSummary)}</p>`,
-    });
+    const w = window.open("", "_blank");
+    if (!w) return;
+    w.document.write(
+      `<html><head><title>${e.name}</title><style>body{font-family:Georgia,serif;max-width:800px;margin:40px auto;line-height:1.5}td,th{border:1px solid #ccc;padding:4px 6px;font-size:12px}table{border-collapse:collapse;width:100%}</style></head><body><h1>${e.name}</h1><p>${e.scope}</p><h2>Findings</h2><table><tr><th>Ref</th><th>Finding</th><th>Rating</th><th>Recommendation</th><th>Response</th></tr>${e.findings.map((f) => `<tr><td>${f.ref}</td><td>${f.observation}</td><td>${f.severity}</td><td>${f.recommendation}</td><td>${f.managementResponse}</td></tr>`).join("")}</table><h2>Executive summary</h2><p>${e.execSummary}</p></body></html>`,
+    );
+    w.document.close();
+    w.print();
   };
 
   return (
@@ -178,8 +201,8 @@ export default function AuditDetail({
           <div className="flex gap-2 mb-1">
             <Badge variant="secondary">{engagementTypeLabel(e.type)}</Badge>
             <Badge variant="outline">{LIFECYCLE[ph][0]}</Badge>
-            {x.priority !== "Normal" && (
-              <Badge variant="destructive">{x.priority}</Badge>
+            {e.priority !== "Normal" && (
+              <Badge variant="destructive">{e.priority}</Badge>
             )}
           </div>
           <h1 className="text-2xl font-bold">{e.name}</h1>
@@ -187,8 +210,8 @@ export default function AuditDetail({
             {e.type === "Internal" ? "Audit team" : "Auditor"}: {auditorLabel} ·
             Started {fmtDate(e.startDate)} · Target completion{" "}
             {fmtDate(e.endDate)}
-            {x.committeeDate &&
-              ` · Reports to Audit Committee ${fmtDate(x.committeeDate)}`}
+            {e.committeeDate &&
+              ` · Reports to Audit Committee ${fmtDate(e.committeeDate)}`}
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
@@ -225,11 +248,7 @@ export default function AuditDetail({
             <Button
               variant="outline"
               onClick={() =>
-                mutate(
-                  () => setAuditStatus(e._id, next),
-                  (en) => ({ ...en, status: next }),
-                  `Moved to ${next}`,
-                )
+                mutate(() => setAuditStatus(e._id, next), `Moved to ${next}`)
               }
             >
               Move to{" "}
@@ -308,26 +327,63 @@ export default function AuditDetail({
                 <div>
                   <div className="font-semibold mb-1">Objectives</div>
                   <ol className="list-decimal pl-5 space-y-1">
-                    {x.objectives.map((o, i) => (
+                    {e.objectives.map((o, i) => (
                       <li key={i}>{o}</li>
                     ))}
                   </ol>
-                  <ObjectiveAdder
+                  <TextAdder
+                    placeholder="Add objective"
                     onAdd={(o) =>
-                      setExtras({ objectives: [...x.objectives, o] })
+                      mutate(
+                        () => addAuditObjective(e._id, o),
+                        "Objective added",
+                      )
                     }
                   />
                 </div>
                 <div>
                   <div className="font-semibold mb-1">Risk areas covered</div>
                   <div className="flex gap-1.5 flex-wrap">
-                    {x.risks.map((r) => (
+                    {e.riskAreas.map((r) => (
                       <Badge key={r} variant="secondary">
                         {r}
                       </Badge>
                     ))}
-                    {!x.risks.length && "—"}
+                    {!e.riskAreas.length && (
+                      <span className="text-muted-foreground">—</span>
+                    )}
                   </div>
+                  <div className="flex gap-1.5 flex-wrap mt-2">
+                    {RISK_AREAS.filter((r) => !e.riskAreas.includes(r)).map(
+                      (r) => (
+                        <Button
+                          key={r}
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs"
+                          onClick={() =>
+                            mutate(
+                              () => addAuditRiskArea(e._id, r),
+                              `"${r}" added`,
+                            )
+                          }
+                        >
+                          <Plus className="h-3 w-3 mr-1" />
+                          {r}
+                        </Button>
+                      ),
+                    )}
+                  </div>
+                  <TextAdder
+                    placeholder="Add a custom risk area"
+                    onAdd={(r) =>
+                      mutate(
+                        () => addAuditRiskArea(e._id, r),
+                        "Risk area added",
+                      )
+                    }
+                  />
                 </div>
               </CardContent>
             </Card>
@@ -346,7 +402,7 @@ export default function AuditDetail({
                     "Planned start / completion",
                     `${fmtDate(e.startDate)} → ${fmtDate(e.endDate)}`,
                   ],
-                  ["Budget / hours", x.budget || "—"],
+                  ["Budget / hours", e.budget || "—"],
                   [
                     "Linked risks",
                     linkedRisks.map((r) => r.title).join("; ") || "—",
@@ -360,6 +416,24 @@ export default function AuditDetail({
                     <span className="font-medium text-right">{v}</span>
                   </div>
                 ))}
+                <div className="pt-1.5">
+                  <Label className="text-xs">Budget / hours</Label>
+                  <Input
+                    className="h-8"
+                    defaultValue={e.budget}
+                    placeholder="e.g. RWF 4,500,000 / 120 hrs"
+                    onBlur={(ev) =>
+                      ev.target.value !== e.budget &&
+                      mutate(
+                        () =>
+                          updateAuditPlanning(e._id, {
+                            budget: ev.target.value,
+                          }),
+                        "Budget saved",
+                      )
+                    }
+                  />
+                </div>
               </CardContent>
             </Card>
           </div>
@@ -381,7 +455,7 @@ export default function AuditDetail({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {x.riskAssessment.map((r, i) => (
+                  {e.riskAssessment.map((r, i) => (
                     <TableRow key={i}>
                       <TableCell className="font-medium">{r.area}</TableCell>
                       <TableCell>
@@ -393,7 +467,7 @@ export default function AuditDetail({
                       <TableCell className="text-xs">{r.approach}</TableCell>
                     </TableRow>
                   ))}
-                  {!x.riskAssessment.length && (
+                  {!e.riskAssessment.length && (
                     <TableRow>
                       <TableCell
                         colSpan={4}
@@ -405,6 +479,14 @@ export default function AuditDetail({
                   )}
                 </TableBody>
               </Table>
+              <RiskAssessmentAdder
+                onAdd={(dto) =>
+                  mutate(
+                    () => addAuditRiskAssessment(e._id, dto),
+                    "Risk assessment row added",
+                  )
+                }
+              />
             </CardContent>
           </Card>
         </TabsContent>
@@ -419,7 +501,7 @@ export default function AuditDetail({
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                {x.progress.map((p, i) => (
+                {e.progress.map((p, i) => (
                   <div key={i}>
                     <div className="flex justify-between text-sm">
                       <span>{p.area}</span>
@@ -430,24 +512,29 @@ export default function AuditDetail({
                       min={0}
                       max={100}
                       step={5}
-                      value={p.pct}
+                      defaultValue={p.pct}
                       className="w-full accent-primary"
-                      onChange={(ev) =>
-                        setExtras({
-                          progress: x.progress.map((q, j) =>
-                            j === i ? { ...q, pct: +ev.target.value } : q,
+                      onMouseUp={(ev) =>
+                        mutate(() =>
+                          updateAuditProgress(
+                            e._id,
+                            i,
+                            +(ev.target as HTMLInputElement).value,
                           ),
-                        })
+                        )
                       }
                     />
                   </div>
                 ))}
-                {!x.progress.length && (
+                {!e.progress.length && (
                   <Button
                     size="sm"
                     variant="outline"
                     onClick={() =>
-                      setExtras({ progress: [{ area: "Testing", pct: 0 }] })
+                      mutate(
+                        () => addAuditProgress(e._id, "Testing"),
+                        "Workstream added",
+                      )
                     }
                   >
                     Add workstream
@@ -481,7 +568,7 @@ export default function AuditDetail({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {x.samples.map((s, i) => (
+                  {e.samples.map((s, i) => (
                     <TableRow key={i}>
                       <TableCell className="font-medium">
                         {s.population}
@@ -491,7 +578,7 @@ export default function AuditDetail({
                       <TableCell>{s.dates}</TableCell>
                     </TableRow>
                   ))}
-                  {!x.samples.length && (
+                  {!e.samples.length && (
                     <TableRow>
                       <TableCell
                         colSpan={4}
@@ -503,6 +590,11 @@ export default function AuditDetail({
                   )}
                 </TableBody>
               </Table>
+              <SampleAdder
+                onAdd={(dto) =>
+                  mutate(() => addAuditSample(e._id, dto), "Sample added")
+                }
+              />
             </CardContent>
           </Card>
           <Card>
@@ -512,13 +604,13 @@ export default function AuditDetail({
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              {x.notes.map((n, i) => (
+              {e.notes.map((n, i) => (
                 <div
                   key={i}
                   className="flex gap-3 border-l-2 border-primary pl-3"
                 >
-                  <div className="text-xs text-muted-foreground w-14 shrink-0">
-                    {n.date}
+                  <div className="text-xs text-muted-foreground w-20 shrink-0">
+                    {fmtDate(n.date)}
                   </div>
                   <div>
                     <div className="text-sm font-medium">{n.title}</div>
@@ -549,18 +641,7 @@ export default function AuditDetail({
                   className="justify-self-start"
                   onClick={() => {
                     if (!note.title) return;
-                    setExtras({
-                      notes: [
-                        ...x.notes,
-                        {
-                          date: new Date().toLocaleDateString("en-GB", {
-                            day: "numeric",
-                            month: "short",
-                          }),
-                          ...note,
-                        },
-                      ],
-                    });
+                    mutate(() => addAuditNote(e._id, note), "Note added");
                     setNote({ title: "", detail: "" });
                   }}
                 >
@@ -587,7 +668,7 @@ export default function AuditDetail({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {x.workingPapers.map((w, i) => (
+                  {e.workingPapers.map((w, i) => (
                     <TableRow key={w.ref}>
                       <TableCell>{w.ref}</TableCell>
                       <TableCell className="font-medium">{w.desc}</TableCell>
@@ -599,25 +680,15 @@ export default function AuditDetail({
                           variant="ghost"
                           className="h-7"
                           onClick={() =>
-                            setExtras({
-                              workingPapers: x.workingPapers.map((q, j) =>
-                                j === i
-                                  ? {
-                                      ...q,
-                                      status:
-                                        q.status === "Reviewed"
-                                          ? "Draft"
-                                          : "Reviewed",
-                                      reviewer:
-                                        q.status === "Reviewed"
-                                          ? q.reviewer
-                                          : q.reviewer === "Pending"
-                                            ? "Compliance Officer"
-                                            : q.reviewer,
-                                    }
-                                  : q,
+                            mutate(() =>
+                              updateAuditWorkingPaper(
+                                e._id,
+                                i,
+                                (w.status === "Reviewed"
+                                  ? "Draft"
+                                  : "Reviewed") as WorkingPaperStatus,
                               ),
-                            })
+                            )
                           }
                         >
                           <Badge
@@ -631,7 +702,7 @@ export default function AuditDetail({
                       </TableCell>
                     </TableRow>
                   ))}
-                  {!x.workingPapers.length && (
+                  {!e.workingPapers.length && (
                     <TableRow>
                       <TableCell
                         colSpan={5}
@@ -643,31 +714,17 @@ export default function AuditDetail({
                   )}
                 </TableBody>
               </Table>
-              <Button
-                size="sm"
-                variant="outline"
-                className="mt-2"
-                onClick={() =>
-                  setExtras({
-                    workingPapers: [
-                      ...x.workingPapers,
-                      {
-                        ref: `WP-${String(x.workingPapers.length + 1).padStart(2, "0")}`,
-                        desc: "New working paper",
-                        preparer:
-                          e.leadAuditorName ||
-                          e.externalAuditorName ||
-                          "Auditor",
-                        reviewer: "Pending",
-                        status: "Draft",
-                      },
-                    ],
-                  })
+              <WorkingPaperAdder
+                defaultPreparer={
+                  e.leadAuditorName || e.externalAuditorName || "Auditor"
                 }
-              >
-                <Plus className="h-4 w-4 mr-1" />
-                Add working paper
-              </Button>
+                onAdd={(dto) =>
+                  mutate(
+                    () => addAuditWorkingPaper(e._id, dto),
+                    "Working paper added",
+                  )
+                }
+              />
             </CardContent>
           </Card>
         </TabsContent>
@@ -712,7 +769,7 @@ export default function AuditDetail({
                 <TableBody>
                   {e.findings.map((f, i) => (
                     <TableRow key={i}>
-                      <TableCell>{fm(i).ref}</TableCell>
+                      <TableCell>{f.ref}</TableCell>
                       <TableCell className="font-medium min-w-[200px]">
                         {f.observation}
                       </TableCell>
@@ -725,7 +782,7 @@ export default function AuditDetail({
                         {f.cause || "—"}
                       </TableCell>
                       <TableCell className="text-xs">
-                        {fm(i).process || "—"}
+                        {f.process || "—"}
                       </TableCell>
                       <TableCell className="text-xs min-w-[180px]">
                         {f.recommendation || "—"}
@@ -742,17 +799,6 @@ export default function AuditDetail({
                                 updateFinding(e._id, i, {
                                   managementResponse: ev.target.value,
                                 }),
-                              (en) => ({
-                                ...en,
-                                findings: en.findings.map((q, j) =>
-                                  j === i
-                                    ? {
-                                        ...q,
-                                        managementResponse: ev.target.value,
-                                      }
-                                    : q,
-                                ),
-                              }),
                               "Response saved",
                             )
                           }
@@ -761,10 +807,15 @@ export default function AuditDetail({
                       <TableCell>
                         <Input
                           className="h-7 text-xs w-32"
-                          value={fm(i).owner}
+                          defaultValue={f.owner}
                           placeholder="Owner"
-                          onChange={(ev) =>
-                            setFm(i, { owner: ev.target.value })
+                          onBlur={(ev) =>
+                            ev.target.value !== f.owner &&
+                            mutate(() =>
+                              updateFinding(e._id, i, {
+                                owner: ev.target.value,
+                              }),
+                            )
                           }
                         />
                       </TableCell>
@@ -777,21 +828,9 @@ export default function AuditDetail({
                           }
                           onBlur={(ev) =>
                             ev.target.value &&
-                            mutate(
-                              () =>
-                                updateFinding(e._id, i, {
-                                  remediationDueDate: ev.target.value,
-                                }),
-                              (en) => ({
-                                ...en,
-                                findings: en.findings.map((q, j) =>
-                                  j === i
-                                    ? {
-                                        ...q,
-                                        remediationDueDate: ev.target.value,
-                                      }
-                                    : q,
-                                ),
+                            mutate(() =>
+                              updateFinding(e._id, i, {
+                                remediationDueDate: ev.target.value,
                               }),
                             )
                           }
@@ -832,17 +871,17 @@ export default function AuditDetail({
                 ].map((s, i) => (
                   <button
                     key={s}
-                    onClick={() => setExtras({ reportStage: i })}
-                    className={`flex-1 min-w-[120px] rounded-lg border px-3 py-2 text-left text-xs ${i < x.reportStage ? "bg-success/10 border-success/30" : i === x.reportStage ? "bg-primary/10 border-primary" : ""}`}
+                    onClick={() => mutate(() => setAuditReportStage(e._id, i))}
+                    className={`flex-1 min-w-[120px] rounded-lg border px-3 py-2 text-left text-xs ${i < e.reportStage ? "bg-success/10 border-success/30" : i === e.reportStage ? "bg-primary/10 border-primary" : ""}`}
                   >
                     <div className="font-semibold flex items-center gap-1">
-                      {i < x.reportStage && <Check className="h-3 w-3" />}
+                      {i < e.reportStage && <Check className="h-3 w-3" />}
                       {s}
                     </div>
                     <div className="text-muted-foreground">
-                      {i < x.reportStage
+                      {i < e.reportStage
                         ? "Done"
-                        : i === x.reportStage
+                        : i === e.reportStage
                           ? "In progress"
                           : "—"}
                     </div>
@@ -851,119 +890,38 @@ export default function AuditDetail({
               </div>
             </CardContent>
           </Card>
-          <div className="grid md:grid-cols-2 gap-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">
-                  Draft report details
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="text-sm space-y-1.5">
-                {[
-                  [
-                    "Title",
-                    `Internal Audit Report — ${e.name.replace(/^.*— /, "")}`,
-                  ],
-                  [
-                    "Version",
-                    `v${x.reportStage + 1}${x.reportStage < 3 ? " (draft)" : ""}`,
-                  ],
-                  ["Author", e.leadAuditorName || e.externalAuditorName || "—"],
-                  [
-                    "Reviewer",
-                    x.reportStage >= 2
-                      ? "Compliance Officer"
-                      : "Compliance Officer (in progress)",
-                  ],
-                ].map(([k, v]) => (
-                  <div
-                    key={k}
-                    className="flex justify-between gap-4 border-b pb-1.5 last:border-0"
-                  >
-                    <span className="text-muted-foreground">{k}</span>
-                    <span className="font-medium text-right">{v}</span>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">
-                  Report distribution list
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Recipient</TableHead>
-                      <TableHead>Role</TableHead>
-                      <TableHead>Sent</TableHead>
-                      <TableHead>Ack.</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {x.distribution.map((r, i) => (
-                      <TableRow key={i}>
-                        <TableCell className="font-medium">{r.name}</TableCell>
-                        <TableCell className="text-xs">{r.role}</TableCell>
-                        <TableCell>{fmtDate(r.sent)}</TableCell>
-                        <TableCell>
-                          <Checkbox
-                            checked={r.ack}
-                            onCheckedChange={() =>
-                              setExtras({
-                                distribution: x.distribution.map((q, j) =>
-                                  j === i ? { ...q, ack: !q.ack } : q,
-                                ),
-                              })
-                            }
-                          />
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                    {!x.distribution.length && (
-                      <TableRow>
-                        <TableCell
-                          colSpan={4}
-                          className="text-center text-muted-foreground py-4"
-                        >
-                          Not yet distributed.
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-                {!x.distribution.length && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="mt-2"
-                    onClick={() =>
-                      setExtras({
-                        distribution: [
-                          {
-                            name: "Audit Committee Chair",
-                            role: "Audit Committee Chair",
-                            sent: new Date().toISOString(),
-                            ack: false,
-                          },
-                          {
-                            name: "Process owner",
-                            role: "Process owner",
-                            sent: new Date().toISOString(),
-                            ack: false,
-                          },
-                        ],
-                      })
-                    }
-                  >
-                    Distribute draft
-                  </Button>
-                )}
-              </CardContent>
-            </Card>
-          </div>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Draft report details</CardTitle>
+            </CardHeader>
+            <CardContent className="text-sm space-y-1.5">
+              {[
+                [
+                  "Title",
+                  `Internal Audit Report — ${e.name.replace(/^.*— /, "")}`,
+                ],
+                [
+                  "Version",
+                  `v${e.reportStage + 1}${e.reportStage < 3 ? " (draft)" : ""}`,
+                ],
+                ["Author", e.leadAuditorName || e.externalAuditorName || "—"],
+                [
+                  "Reviewer",
+                  e.reportStage >= 2
+                    ? "Compliance Officer"
+                    : "Compliance Officer (in progress)",
+                ],
+              ].map(([k, v]) => (
+                <div
+                  key={k}
+                  className="flex justify-between gap-4 border-b pb-1.5 last:border-0"
+                >
+                  <span className="text-muted-foreground">{k}</span>
+                  <span className="font-medium text-right">{v}</span>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
           <Card>
             <CardHeader>
               <CardTitle className="text-base">
@@ -985,7 +943,7 @@ export default function AuditDetail({
                 <TableBody>
                   {e.findings.map((f, i) => (
                     <TableRow key={i}>
-                      <TableCell>{fm(i).ref}</TableCell>
+                      <TableCell>{f.ref}</TableCell>
                       <TableCell className="text-sm">{f.observation}</TableCell>
                       <TableCell>
                         {f.managementResponse ? (
@@ -997,7 +955,7 @@ export default function AuditDetail({
                       <TableCell className="text-xs">
                         {f.recommendation}
                       </TableCell>
-                      <TableCell>{fm(i).owner || "—"}</TableCell>
+                      <TableCell>{f.owner || "—"}</TableCell>
                       <TableCell>{fmtDate(f.remediationDueDate)}</TableCell>
                     </TableRow>
                   ))}
@@ -1016,8 +974,7 @@ export default function AuditDetail({
                 <b>{overdue.length} remediation action(s) overdue.</b>{" "}
                 {overdue
                   .map(
-                    ({ f, i }) =>
-                      `${fm(i).ref} was due ${fmtDate(f.remediationDueDate)}`,
+                    (f) => `${f.ref} was due ${fmtDate(f.remediationDueDate)}`,
                   )
                   .join("; ")}
                 .
@@ -1062,11 +1019,11 @@ export default function AuditDetail({
                 <TableBody>
                   {e.findings.map((f, i) => (
                     <TableRow key={i}>
-                      <TableCell>{fm(i).ref}</TableCell>
+                      <TableCell>{f.ref}</TableCell>
                       <TableCell className="text-sm min-w-[200px]">
                         {f.recommendation || f.observation}
                       </TableCell>
-                      <TableCell>{fm(i).owner || "—"}</TableCell>
+                      <TableCell>{f.owner || "—"}</TableCell>
                       <TableCell
                         className={isOverdue(f) ? "text-destructive" : ""}
                       >
@@ -1078,12 +1035,6 @@ export default function AuditDetail({
                           onValueChange={(v: FindingStatus) =>
                             mutate(
                               () => updateFinding(e._id, i, { status: v }),
-                              (en) => ({
-                                ...en,
-                                findings: en.findings.map((q, j) =>
-                                  j === i ? { ...q, status: v } : q,
-                                ),
-                              }),
                               `Status: ${REM_LABEL[v]}`,
                             )
                           }
@@ -1105,20 +1056,30 @@ export default function AuditDetail({
                       <TableCell>
                         <Input
                           className="h-7 text-xs w-40"
-                          value={fm(i).evidence}
+                          defaultValue={f.evidence}
                           placeholder="Evidence…"
-                          onChange={(ev) =>
-                            setFm(i, { evidence: ev.target.value })
+                          onBlur={(ev) =>
+                            ev.target.value !== f.evidence &&
+                            mutate(() =>
+                              updateFinding(e._id, i, {
+                                evidence: ev.target.value,
+                              }),
+                            )
                           }
                         />
                       </TableCell>
                       <TableCell>
                         <Input
                           className="h-7 text-xs w-36"
-                          value={fm(i).verifiedBy}
+                          defaultValue={f.verifiedBy}
                           placeholder="—"
-                          onChange={(ev) =>
-                            setFm(i, { verifiedBy: ev.target.value })
+                          onBlur={(ev) =>
+                            ev.target.value !== f.verifiedBy &&
+                            mutate(() =>
+                              updateFinding(e._id, i, {
+                                verifiedBy: ev.target.value,
+                              }),
+                            )
                           }
                         />
                       </TableCell>
@@ -1144,9 +1105,16 @@ export default function AuditDetail({
                   <Label className="text-xs">Meeting date</Label>
                   <Input
                     type="date"
-                    value={x.committeeDate?.slice(0, 10) ?? ""}
-                    onChange={(ev) =>
-                      setExtras({ committeeDate: ev.target.value })
+                    defaultValue={e.committeeDate?.slice(0, 10) ?? ""}
+                    onBlur={(ev) =>
+                      ev.target.value &&
+                      mutate(
+                        () =>
+                          updateAuditPlanning(e._id, {
+                            committeeDate: ev.target.value,
+                          }),
+                        "Committee date saved",
+                      )
                     }
                   />
                 </div>
@@ -1190,7 +1158,7 @@ export default function AuditDetail({
                   ],
                   [
                     "Working papers",
-                    `${x.workingPapers.filter((w) => w.status === "Reviewed").length}/${x.workingPapers.length} reviewed`,
+                    `${e.workingPapers.filter((w) => w.status === "Reviewed").length}/${e.workingPapers.length} reviewed`,
                   ],
                 ].map(([l, v, s]) => (
                   <div key={l} className="border rounded-lg p-2.5">
@@ -1213,9 +1181,15 @@ export default function AuditDetail({
             <CardContent>
               <Textarea
                 rows={5}
-                value={x.execSummary}
+                defaultValue={e.execSummary}
                 placeholder="Summarise scope, findings, overall assessment and remediation status…"
-                onChange={(ev) => setExtras({ execSummary: ev.target.value })}
+                onBlur={(ev) =>
+                  ev.target.value !== e.execSummary &&
+                  mutate(
+                    () => setAuditExecSummary(e._id, ev.target.value),
+                    "Executive summary saved",
+                  )
+                }
               />
             </CardContent>
           </Card>
@@ -1236,7 +1210,7 @@ export default function AuditDetail({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {x.committeeActions.map((a, i) => (
+                  {e.committeeActions.map((a, i) => (
                     <TableRow key={i}>
                       <TableCell className="font-medium">{a.action}</TableCell>
                       <TableCell>{a.owner}</TableCell>
@@ -1244,12 +1218,10 @@ export default function AuditDetail({
                       <TableCell>
                         <Select
                           value={a.status}
-                          onValueChange={(v) =>
-                            setExtras({
-                              committeeActions: x.committeeActions.map(
-                                (q, j) => (j === i ? { ...q, status: v } : q),
-                              ),
-                            })
+                          onValueChange={(v: CommitteeActionStatus) =>
+                            mutate(() =>
+                              updateAuditCommitteeAction(e._id, i, v),
+                            )
                           }
                         >
                           <SelectTrigger className="h-7 w-[130px]">
@@ -1266,7 +1238,7 @@ export default function AuditDetail({
                       </TableCell>
                     </TableRow>
                   ))}
-                  {!x.committeeActions.length && (
+                  {!e.committeeActions.length && (
                     <TableRow>
                       <TableCell
                         colSpan={4}
@@ -1278,27 +1250,15 @@ export default function AuditDetail({
                   )}
                 </TableBody>
               </Table>
-              <Button
-                size="sm"
-                variant="outline"
-                className="mt-2"
-                onClick={() =>
-                  setExtras({
-                    committeeActions: [
-                      ...x.committeeActions,
-                      {
-                        action: "New committee action",
-                        owner: "Audit Committee",
-                        due: x.committeeDate || new Date().toISOString(),
-                        status: "To be raised",
-                      },
-                    ],
-                  })
+              <CommitteeActionAdder
+                defaultDue={e.committeeDate}
+                onAdd={(dto) =>
+                  mutate(
+                    () => addAuditCommitteeAction(e._id, dto),
+                    "Committee action added",
+                  )
                 }
-              >
-                <Plus className="h-4 w-4 mr-1" />
-                Add action
-              </Button>
+              />
             </CardContent>
           </Card>
         </TabsContent>
@@ -1309,29 +1269,15 @@ export default function AuditDetail({
         onOpenChange={setFOpen}
         onSave={(dto, meta) => {
           const idx = e.findings.length;
-          mutate(
-            () => addFinding(e._id, dto),
-            (en) => ({
-              ...en,
-              findings: [
-                ...en.findings,
-                {
-                  condition: "",
-                  criteria: "",
-                  consequence: "",
-                  status: "Open",
-                  managementResponse: "",
-                  remediationDueDate: null,
-                  createdAt: new Date().toISOString(),
-                  cause: "",
-                  recommendation: "",
-                  ...dto,
-                },
-              ],
-            }),
-            "Finding added",
-          );
-          setFm(idx, { ...meta, ref: `F-${String(idx + 1).padStart(2, "0")}` });
+          mutate(async () => {
+            await addFinding(e._id, dto);
+            if (meta.owner || meta.process) {
+              await updateFinding(e._id, idx, {
+                owner: meta.owner,
+                process: meta.process,
+              });
+            }
+          }, "Finding added");
           setFOpen(false);
         }}
       />
@@ -1339,13 +1285,21 @@ export default function AuditDetail({
   );
 }
 
-function ObjectiveAdder({ onAdd }: { onAdd: (o: string) => void }) {
+function TextAdder({
+  placeholder,
+  buttonLabel = "Add",
+  onAdd,
+}: {
+  placeholder: string;
+  buttonLabel?: string;
+  onAdd: (v: string) => void;
+}) {
   const [v, setV] = useState("");
   return (
     <div className="flex gap-2 mt-2">
       <Input
         className="h-8"
-        placeholder="Add objective"
+        placeholder={placeholder}
         value={v}
         onChange={(e) => setV(e.target.value)}
       />
@@ -1359,8 +1313,227 @@ function ObjectiveAdder({ onAdd }: { onAdd: (o: string) => void }) {
           }
         }}
       >
-        Add
+        {buttonLabel}
       </Button>
+    </div>
+  );
+}
+
+// Previously a dead end — "Preliminary risk assessment" had no way to
+// add a row at all (the compliance feedback this migration was
+// prompted by).
+function RiskAssessmentAdder({
+  onAdd,
+}: {
+  onAdd: (dto: {
+    area: string;
+    inherent: InherentRiskLevel;
+    controls?: string;
+    approach?: string;
+  }) => void;
+}) {
+  const [f, setF] = useState({
+    area: "",
+    inherent: "Medium" as InherentRiskLevel,
+    controls: "",
+    approach: "",
+  });
+  return (
+    <div className="grid md:grid-cols-4 gap-2 mt-3 pt-3 border-t">
+      <Input
+        placeholder="Risk area"
+        value={f.area}
+        onChange={(e) => setF({ ...f, area: e.target.value })}
+      />
+      <Select
+        value={f.inherent}
+        onValueChange={(v: InherentRiskLevel) => setF({ ...f, inherent: v })}
+      >
+        <SelectTrigger>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {["Critical", "High", "Medium", "Low"].map((s) => (
+            <SelectItem key={s} value={s}>
+              {s}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Input
+        placeholder="Key controls"
+        value={f.controls}
+        onChange={(e) => setF({ ...f, controls: e.target.value })}
+      />
+      <div className="flex gap-2">
+        <Input
+          placeholder="Testing approach"
+          value={f.approach}
+          onChange={(e) => setF({ ...f, approach: e.target.value })}
+        />
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => {
+            if (!f.area.trim()) return;
+            onAdd(f);
+            setF({ area: "", inherent: "Medium", controls: "", approach: "" });
+          }}
+        >
+          <Plus className="h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// Previously a dead end — there was no way to add a sample row at all.
+function SampleAdder({
+  onAdd,
+}: {
+  onAdd: (dto: {
+    population: string;
+    size?: string;
+    method?: string;
+    dates?: string;
+  }) => void;
+}) {
+  const [f, setF] = useState({
+    population: "",
+    size: "",
+    method: "",
+    dates: "",
+  });
+  return (
+    <div className="grid md:grid-cols-4 gap-2 mt-3 pt-3 border-t">
+      <Input
+        placeholder="Population"
+        value={f.population}
+        onChange={(e) => setF({ ...f, population: e.target.value })}
+      />
+      <Input
+        placeholder="Sample size"
+        value={f.size}
+        onChange={(e) => setF({ ...f, size: e.target.value })}
+      />
+      <Input
+        placeholder="Selection method"
+        value={f.method}
+        onChange={(e) => setF({ ...f, method: e.target.value })}
+      />
+      <div className="flex gap-2">
+        <Input
+          placeholder="Testing dates"
+          value={f.dates}
+          onChange={(e) => setF({ ...f, dates: e.target.value })}
+        />
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => {
+            if (!f.population.trim()) return;
+            onAdd(f);
+            setF({ population: "", size: "", method: "", dates: "" });
+          }}
+        >
+          <Plus className="h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function WorkingPaperAdder({
+  defaultPreparer,
+  onAdd,
+}: {
+  defaultPreparer: string;
+  onAdd: (dto: { desc: string; preparer?: string; reviewer?: string }) => void;
+}) {
+  const [f, setF] = useState({
+    desc: "",
+    preparer: defaultPreparer,
+    reviewer: "",
+  });
+  return (
+    <div className="grid md:grid-cols-3 gap-2 mt-2">
+      <Input
+        placeholder="Description"
+        value={f.desc}
+        onChange={(e) => setF({ ...f, desc: e.target.value })}
+      />
+      <Input
+        placeholder="Preparer"
+        value={f.preparer}
+        onChange={(e) => setF({ ...f, preparer: e.target.value })}
+      />
+      <div className="flex gap-2">
+        <Input
+          placeholder="Reviewer"
+          value={f.reviewer}
+          onChange={(e) => setF({ ...f, reviewer: e.target.value })}
+        />
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => {
+            if (!f.desc.trim()) return;
+            onAdd(f);
+            setF({ desc: "", preparer: defaultPreparer, reviewer: "" });
+          }}
+        >
+          <Plus className="h-4 w-4 mr-1" />
+          Add working paper
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function CommitteeActionAdder({
+  defaultDue,
+  onAdd,
+}: {
+  defaultDue: string | null;
+  onAdd: (dto: { action: string; owner?: string; due?: string }) => void;
+}) {
+  const [f, setF] = useState({
+    action: "",
+    owner: "Audit Committee",
+    due: defaultDue?.slice(0, 10) ?? "",
+  });
+  return (
+    <div className="grid md:grid-cols-4 gap-2 mt-2">
+      <Input
+        className="md:col-span-2"
+        placeholder="Action"
+        value={f.action}
+        onChange={(e) => setF({ ...f, action: e.target.value })}
+      />
+      <Input
+        placeholder="Owner"
+        value={f.owner}
+        onChange={(e) => setF({ ...f, owner: e.target.value })}
+      />
+      <div className="flex gap-2">
+        <Input
+          type="date"
+          value={f.due}
+          onChange={(e) => setF({ ...f, due: e.target.value })}
+        />
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => {
+            if (!f.action.trim()) return;
+            onAdd(f);
+            setF({ action: "", owner: "Audit Committee", due: f.due });
+          }}
+        >
+          <Plus className="h-4 w-4 mr-1" />
+          Add action
+        </Button>
+      </div>
     </div>
   );
 }
@@ -1441,7 +1614,7 @@ function DocumentRequestsCard({
                     onClick={(ev) => {
                       ev.stopPropagation();
                       if (confirm(`Delete the "${f.name}" folder?`))
-                        mutate(() => removeAuditFolder(e._id, f.id), undefined);
+                        mutate(() => removeAuditFolder(e._id, f.id));
                     }}
                   >
                     <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
@@ -1468,7 +1641,6 @@ function DocumentRequestsCard({
                 if (!newFolder.trim()) return;
                 mutate(
                   () => addAuditFolder(e._id, newFolder.trim()),
-                  undefined,
                   "Folder created",
                 );
                 setNewFolder("");
@@ -1573,7 +1745,6 @@ function DocumentRequestsCard({
                       onClick={() =>
                         mutate(
                           () => resolveAuditRequest(e._id, r._id),
-                          undefined,
                           "Marked resolved",
                         )
                       }
@@ -1651,7 +1822,6 @@ function DocumentRequestsCard({
                   mutate(
                     () =>
                       addAuditRequest(e._id, { ...req, folder: openFolder }),
-                    undefined,
                     "Request added",
                   );
                   setReq({
@@ -1678,7 +1848,6 @@ function DocumentRequestsCard({
               onClick={() =>
                 mutate(
                   () => addAuditFolder(e._id, openFolder),
-                  undefined,
                   `"${openFolder}" is now a managed folder`,
                 )
               }
@@ -1757,7 +1926,6 @@ function RequestStatusTable({
                   onClick={() =>
                     mutate(
                       () => resolveAuditRequest(e._id, r._id),
-                      undefined,
                       "Marked resolved",
                     )
                   }
@@ -1800,8 +1968,6 @@ function FindingDialog({
     meta: {
       owner: string;
       process: string;
-      evidence: string;
-      verifiedBy: string;
     },
   ) => void;
 }) {
@@ -1897,8 +2063,6 @@ function FindingDialog({
                 {
                   owner: f.owner,
                   process: f.process,
-                  evidence: "",
-                  verifiedBy: "",
                 },
               );
               setF({

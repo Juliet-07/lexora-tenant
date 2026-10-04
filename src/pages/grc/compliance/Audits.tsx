@@ -32,73 +32,19 @@ import {
 } from "@/components/ui/table";
 import { Plus, Download, Mail, Loader2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
-import { usePersistentState, fmtDate } from "@/lib/grc/usePersistentState";
+import { fmtDate } from "@/lib/grc/usePersistentState";
 import {
   fetchAudits,
   createAudit,
+  updateAuditPlanning,
   type AuditEngagement,
   type AuditType,
+  type AuditPriority,
   type FindingSeverity,
   type FindingStatus,
 } from "@/lib/grc/compliance-api";
 import { fetchRisks } from "@/lib/grc/risk-api";
 import AuditDetail from "./AuditDetail";
-
-// ─── Extras not covered by the API ─────────────────────────────
-// Deliberately scoped down: only the fields the API doesn't yet
-// have a home for stay here, client-side. Auditor/lead/linked-risk
-// fields moved to the real backend engagement record — see
-// AuditEngagement.auditTeamName / leadAuditorName /
-// externalAuditorName / linkedRiskIds in compliance-api.ts.
-// Exported: AuditDetail.tsx (the engagement detail view) needs this
-// shape too, since it's the `x` it's handed for the open engagement.
-export interface Extras {
-  priority: "Normal" | "High" | "Critical";
-  risks: string[];
-  objectives: string[];
-  committeeDate: string;
-  budget: string;
-  riskAssessment: {
-    area: string;
-    inherent: string;
-    controls: string;
-    approach: string;
-  }[];
-  progress: { area: string; pct: number }[];
-  samples: {
-    population: string;
-    size: string;
-    method: string;
-    dates: string;
-  }[];
-  notes: { date: string; title: string; detail: string }[];
-  workingPapers: {
-    ref: string;
-    desc: string;
-    preparer: string;
-    reviewer: string;
-    status: string;
-  }[];
-  findingMeta: Record<
-    number,
-    {
-      ref: string;
-      owner: string;
-      process: string;
-      evidence: string;
-      verifiedBy: string;
-    }
-  >;
-  reportStage: number; // 0 draft .. 4 issued
-  distribution: { name: string; role: string; sent: string; ack: boolean }[];
-  execSummary: string;
-  committeeActions: {
-    action: string;
-    owner: string;
-    due: string;
-    status: string;
-  }[];
-}
 
 // Exported: also drives AuditDetail.tsx's phase bar and header badge.
 export const LIFECYCLE = [
@@ -109,7 +55,7 @@ export const LIFECYCLE = [
   ["Remediation", "Action tracking, follow-up"],
   ["Committee report", "Present to Audit Committee"],
 ];
-const RISK_AREAS = [
+export const RISK_AREAS = [
   "AML/CFT",
   "Financial Controls",
   "IT / Cyber",
@@ -127,34 +73,16 @@ export const REM_LABEL: Record<FindingStatus, string> = {
   Closed: "Verified",
 };
 
-const blankExtras = (): Extras => ({
-  priority: "Normal",
-  risks: [],
-  objectives: [],
-  committeeDate: "",
-  budget: "",
-  riskAssessment: [],
-  progress: [],
-  samples: [],
-  notes: [],
-  workingPapers: [],
-  findingMeta: {},
-  reportStage: 0,
-  distribution: [],
-  execSummary: "",
-  committeeActions: [],
-});
-
 // Exported: AuditDetail.tsx needs the same phase for its header badge
-// and lifecycle bar.
-export const phaseOf = (e: AuditEngagement, x: Extras) => {
+// and lifecycle bar. All inputs now live on the real engagement record
+// (previously `reportStage` came from a client-only `Extras` layer).
+export const phaseOf = (e: AuditEngagement) => {
   if (e.status === "Planned") return 0;
   if (e.status === "In Progress") return e.findings.length ? 2 : 1;
-  if (e.status === "Reporting") return x.reportStage >= 4 ? 4 : 3;
+  if (e.status === "Reporting") return e.reportStage >= 4 ? 4 : 3;
   return 5;
 };
-const pctOf = (e: AuditEngagement, x: Extras) =>
-  [10, 45, 60, 65, 85, 100][phaseOf(e, x)];
+const pctOf = (e: AuditEngagement) => [10, 45, 60, 65, 85, 100][phaseOf(e)];
 // Exported: also used by AuditDetail.tsx's risk/finding severity badges.
 export const sevVariant = (s: string) =>
   (s === "Critical" || s === "High"
@@ -178,27 +106,11 @@ export default function GrcAudits() {
     queryKey: ["grc-audits"],
     queryFn: fetchAudits,
   });
-  const [extrasStore, setExtrasStore] = usePersistentState<
-    Record<string, Extras>
-  >("grc_audits_extras_v1", {});
   const [openId, setOpenId] = useState<string | null>(null);
   const [newOpen, setNewOpen] = useState(false);
 
-  const extrasOf = (e: AuditEngagement): Extras =>
-    extrasStore[e._id] ?? blankExtras();
-  const setExtras = (id: string, patch: Partial<Extras>) => {
-    const e = engagements.find((x) => x._id === id)!;
-    const cur = extrasOf(e);
-    setExtrasStore((s) => ({ ...s, [id]: { ...cur, ...patch } }));
-  };
-
   /** Run an API mutation and refresh the engagement list from the server. */
-  const mutate = async (
-    _id: string,
-    apiCall: () => Promise<unknown>,
-    _local?: unknown,
-    msg?: string,
-  ) => {
+  const mutate = async (apiCall: () => Promise<unknown>, msg?: string) => {
     try {
       await apiCall();
       await qc.invalidateQueries({ queryKey: ["grc-audits"] });
@@ -233,18 +145,16 @@ export default function GrcAudits() {
     return (
       <AuditDetail
         e={open}
-        x={extrasOf(open)}
         onBack={() => setOpenId(null)}
-        setExtras={(p) => setExtras(open._id, p)}
-        mutate={(apiCall, local, msg) => mutate(open._id, apiCall, local, msg)}
+        mutate={(apiCall, msg) => mutate(apiCall, msg)}
       />
     );
   }
 
   const active = engagements.filter((e) => e.status !== "Closed");
   const nextCommittee = engagements
-    .map((e) => extrasOf(e).committeeDate)
-    .filter((x) => x && new Date(x).getTime() >= Date.now())
+    .map((e) => e.committeeDate)
+    .filter((x): x is string => !!x && new Date(x).getTime() >= Date.now())
     .sort()[0];
   const bySev = (s: FindingSeverity) =>
     openFindings.filter(({ f }) => f.severity === s).length;
@@ -253,8 +163,8 @@ export default function GrcAudits() {
     const csv = [
       "Finding,Audit,Rating,Owner,Due,Status",
       ...allFindings.map(
-        ({ e, f, i }) =>
-          `"${f.observation}","${e.name}",${f.severity},"${extrasOf(e).findingMeta[i]?.owner ?? ""}",${f.remediationDueDate ?? ""},${REM_LABEL[f.status]}`,
+        ({ e, f }) =>
+          `"${f.observation}","${e.name}",${f.severity},"${f.owner ?? ""}",${f.remediationDueDate ?? ""},${REM_LABEL[f.status]}`,
       ),
     ].join("\n");
     const a = document.createElement("a");
@@ -338,10 +248,7 @@ export default function GrcAudits() {
               </div>
               <div className="text-[11px] text-muted-foreground">{s}</div>
               <div className="text-xs mt-1 text-primary">
-                {
-                  engagements.filter((e) => phaseOf(e, extrasOf(e)) === i)
-                    .length
-                }{" "}
+                {engagements.filter((e) => phaseOf(e) === i).length}{" "}
                 engagement(s)
               </div>
             </div>
@@ -352,9 +259,8 @@ export default function GrcAudits() {
       <div className="space-y-3">
         <h2 className="font-semibold">Active audit engagements</h2>
         {active.map((e) => {
-          const x = extrasOf(e);
-          const ph = phaseOf(e, x);
-          const pct = pctOf(e, x);
+          const ph = phaseOf(e);
+          const pct = pctOf(e);
           const sevs = (["High", "Medium", "Low"] as const)
             .map(
               (s) =>
@@ -469,9 +375,7 @@ export default function GrcAudits() {
                   <TableCell>
                     <Badge variant={sevVariant(f.severity)}>{f.severity}</Badge>
                   </TableCell>
-                  <TableCell>
-                    {extrasOf(e).findingMeta[i]?.owner || "—"}
-                  </TableCell>
+                  <TableCell>{f.owner || "—"}</TableCell>
                   <TableCell className={isOverdue(f) ? "text-destructive" : ""}>
                     {fmtDate(f.remediationDueDate)}
                     {isOverdue(f) && " (overdue)"}
@@ -501,13 +405,23 @@ export default function GrcAudits() {
       <NewEngagementDialog
         open={newOpen}
         onOpenChange={setNewOpen}
-        onCreate={async (dto, extras) => {
+        onCreate={async (dto, planning) => {
           try {
             const e = await createAudit(dto);
-            setExtrasStore((s) => ({
-              ...s,
-              [e._id]: { ...blankExtras(), ...extras },
-            }));
+            // Priority / risk areas / committee date aren't part of
+            // CreateAuditDto (planning details, set up right after
+            // creation) — only call the follow-up if anything was set.
+            if (
+              planning.priority !== "Normal" ||
+              planning.riskAreas.length ||
+              planning.committeeDate
+            ) {
+              await updateAuditPlanning(e._id, {
+                priority: planning.priority,
+                riskAreas: planning.riskAreas,
+                committeeDate: planning.committeeDate || undefined,
+              });
+            }
             qc.invalidateQueries({ queryKey: ["grc-audits"] });
             toast({ title: "Engagement created" });
             setNewOpen(false);
@@ -541,27 +455,31 @@ function NewEngagementDialog({
       externalAuditorName?: string;
       linkedRiskIds?: string[];
     },
-    extras: Partial<Extras>,
+    planning: {
+      priority: AuditPriority;
+      riskAreas: string[];
+      committeeDate: string;
+    },
   ) => void;
 }) {
   const [f, setF] = useState({
     type: "Internal" as AuditType,
     name: "",
     scope: "",
-    risks: [] as string[],
+    riskAreas: [] as string[],
     externalAuditorName: "",
     startDate: "",
     endDate: "",
     committeeDate: "",
-    priority: "Normal" as Extras["priority"],
+    priority: "Normal" as AuditPriority,
     linkedRiskIds: [] as string[],
   });
   const toggleRiskArea = (v: string) =>
     setF({
       ...f,
-      risks: f.risks.includes(v)
-        ? f.risks.filter((x) => x !== v)
-        : [...f.risks, v],
+      riskAreas: f.riskAreas.includes(v)
+        ? f.riskAreas.filter((x) => x !== v)
+        : [...f.riskAreas, v],
     });
   const toggleLinkedRisk = (v: string) =>
     setF({
@@ -642,7 +560,7 @@ function NewEngagementDialog({
                   key={r}
                   type="button"
                   size="sm"
-                  variant={f.risks.includes(r) ? "default" : "outline"}
+                  variant={f.riskAreas.includes(r) ? "default" : "outline"}
                   onClick={() => toggleRiskArea(r)}
                 >
                   {r}
@@ -748,7 +666,7 @@ function NewEngagementDialog({
                 },
                 {
                   priority: f.priority,
-                  risks: f.risks,
+                  riskAreas: f.riskAreas,
                   committeeDate: f.committeeDate,
                 },
               );
