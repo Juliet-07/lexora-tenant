@@ -111,20 +111,21 @@ export default function Intro() {
         </div>
       </section>
 
-      <section className="border-y border-intro-foreground/10 bg-intro-surface py-20 sm:py-24">
-        <div className="mx-auto max-w-[1320px] px-5 sm:px-8">
-          <p className="text-xs font-semibold uppercase tracking-wide text-intro-accent">The foundation</p>
+      <section className="relative overflow-hidden border-y border-intro-soft-border bg-intro-soft-raised py-20 text-intro-soft-foreground sm:py-24">
+        <FloatingStars className="foundation-stars" count={38} />
+        <div className="relative mx-auto max-w-[1320px] px-5 sm:px-8">
+          <p className="text-xs font-semibold uppercase tracking-wide text-intro-primary">The foundation</p>
           <h2 className="mt-4 font-display text-4xl sm:text-5xl">Four pillars. One platform.</h2>
           <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {pillars.map((pillar, i) => {
               const Icon = pillarIcons[i];
               return (
-                <div key={pillar.title} className="rounded-2xl border border-intro-foreground/10 bg-intro p-6">
-                  <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-intro-primary/15 text-intro-accent">
+                <div key={pillar.title} className="rounded-lg border border-intro-soft-border bg-intro-soft-raised p-6 shadow-sm">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-intro-primary/10 text-intro-primary">
                     <Icon className="h-5 w-5" />
                   </span>
                   <h3 className="mt-5 text-lg font-semibold">{pillar.title}</h3>
-                  <p className="mt-3 text-sm leading-6 text-intro-muted">{pillar.copy}</p>
+                  <p className="mt-3 text-sm leading-6 text-intro-soft-muted">{pillar.copy}</p>
                 </div>
               );
             })}
