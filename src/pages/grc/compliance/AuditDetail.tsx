@@ -47,6 +47,7 @@ import {
   FileText,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { escapeReportText, printGrcReport } from "@/lib/grc/printReport";
 import { fmtDate } from "@/lib/grc/usePersistentState";
 import {
   setAuditStatus,
@@ -159,13 +160,11 @@ export default function AuditDetail({
   const next = NEXT[e.status];
 
   const exportFile = () => {
-    const w = window.open("", "_blank");
-    if (!w) return;
-    w.document.write(
-      `<html><head><title>${e.name}</title><style>body{font-family:Georgia,serif;max-width:800px;margin:40px auto;line-height:1.5}td,th{border:1px solid #ccc;padding:4px 6px;font-size:12px}table{border-collapse:collapse;width:100%}</style></head><body><h1>${e.name}</h1><p>${e.scope}</p><h2>Findings</h2><table><tr><th>Ref</th><th>Finding</th><th>Rating</th><th>Recommendation</th><th>Response</th></tr>${e.findings.map((f, i) => `<tr><td>${fm(i).ref}</td><td>${f.observation}</td><td>${f.severity}</td><td>${f.recommendation}</td><td>${f.managementResponse}</td></tr>`).join("")}</table><h2>Executive summary</h2><p>${x.execSummary}</p></body></html>`,
-    );
-    w.document.close();
-    w.print();
+    printGrcReport({
+      title: e.name, category: "Audit engagement file",
+      details: [{ label: "Type", value: engagementTypeLabel(e.type) }, { label: "Status", value: e.status }, { label: "Target completion", value: fmtDate(e.endDate) }],
+      body: `<h2>Scope</h2><p>${escapeReportText(e.scope)}</p><h2>Findings</h2><table><thead><tr><th>Ref</th><th>Finding</th><th>Rating</th><th>Recommendation</th><th>Response</th></tr></thead><tbody>${e.findings.map((f, i) => `<tr><td>${escapeReportText(fm(i).ref)}</td><td>${escapeReportText(f.observation)}</td><td>${escapeReportText(f.severity)}</td><td>${escapeReportText(f.recommendation)}</td><td>${escapeReportText(f.managementResponse)}</td></tr>`).join("")}</tbody></table><h2>Executive summary</h2><p>${escapeReportText(x.execSummary)}</p>`,
+    });
   };
 
   return (
