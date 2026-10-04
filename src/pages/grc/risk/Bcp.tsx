@@ -47,6 +47,7 @@ import {
   FileText,
   Info,
   Plus,
+  RotateCcw,
   Siren,
   XCircle,
 } from "lucide-react";
@@ -54,6 +55,8 @@ import { toast } from "@/hooks/use-toast";
 import {
   fetchBcpPlans,
   createBcpPlan,
+  setBcpPlanStatus,
+  advanceBcpPlanPhase,
   fetchBcpTests,
   logBcpTest,
   completeBcpTest,
@@ -929,6 +932,36 @@ td.empty{color:#94a3b8;font-style:italic;border-bottom:none}
         variant: "destructive",
       }),
   });
+  const setPlanStatusMut = useMutation({
+    mutationFn: (vars: { id: string; status: BcpPlanStatus }) =>
+      setBcpPlanStatus(vars.id, vars.status),
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ["grc-bcp-plans"] });
+      toast({ title: `Plan moved to ${vars.status}` });
+      setDetail(null);
+    },
+    onError: (e: any) =>
+      toast({
+        title: "Couldn't update status",
+        description: e?.response?.data?.message,
+        variant: "destructive",
+      }),
+  });
+  const advancePlanPhaseMut = useMutation({
+    mutationFn: (vars: { id: string; direction: "next" | "back" }) =>
+      advanceBcpPlanPhase(vars.id, vars.direction),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["grc-bcp-plans"] });
+      toast({ title: "Lifecycle stage updated" });
+      setDetail(null);
+    },
+    onError: (e: any) =>
+      toast({
+        title: "Couldn't update stage",
+        description: e?.response?.data?.message,
+        variant: "destructive",
+      }),
+  });
   const resolveMut = useMutation({
     mutationFn: (id: string) => resolveBcpIncident(id),
     onSuccess: () => {
@@ -1392,6 +1425,115 @@ td.empty{color:#94a3b8;font-style:italic;border-bottom:none}
                         <Row k="Version" v={p.version} />
                         <Row k="Review cycle" v={p.reviewCycle} />
                         <Row k="Lifecycle stage" v={LIFECYCLE[p.phase]} />
+                        <div className="pt-3 mt-3 border-t space-y-2">
+                          <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                            Status
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            {p.status === "Draft" && (
+                              <Button
+                                size="sm"
+                                disabled={setPlanStatusMut.isPending}
+                                onClick={() =>
+                                  setPlanStatusMut.mutate({
+                                    id: p.id,
+                                    status: "Under review",
+                                  })
+                                }
+                              >
+                                <ArrowRight className="h-3.5 w-3.5 mr-1" /> Send
+                                for review
+                              </Button>
+                            )}
+                            {p.status === "Under review" && (
+                              <>
+                                <Button
+                                  size="sm"
+                                  disabled={setPlanStatusMut.isPending}
+                                  onClick={() =>
+                                    setPlanStatusMut.mutate({
+                                      id: p.id,
+                                      status: "Approved",
+                                    })
+                                  }
+                                >
+                                  <CheckCircle2 className="h-3.5 w-3.5 mr-1" />{" "}
+                                  Approve
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={setPlanStatusMut.isPending}
+                                  onClick={() =>
+                                    setPlanStatusMut.mutate({
+                                      id: p.id,
+                                      status: "Draft",
+                                    })
+                                  }
+                                >
+                                  <RotateCcw className="h-3.5 w-3.5 mr-1" />{" "}
+                                  Back to draft
+                                </Button>
+                              </>
+                            )}
+                            {p.status === "Approved" && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={setPlanStatusMut.isPending}
+                                onClick={() =>
+                                  setPlanStatusMut.mutate({
+                                    id: p.id,
+                                    status: "Under review",
+                                  })
+                                }
+                              >
+                                <RotateCcw className="h-3.5 w-3.5 mr-1" />{" "}
+                                Reopen for review
+                              </Button>
+                            )}
+                          </div>
+                          <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide pt-1">
+                            Lifecycle stage
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={
+                                p.phase === 0 || advancePlanPhaseMut.isPending
+                              }
+                              onClick={() =>
+                                advancePlanPhaseMut.mutate({
+                                  id: p.id,
+                                  direction: "back",
+                                })
+                              }
+                            >
+                              Move back
+                            </Button>
+                            <span className="text-xs text-muted-foreground min-w-[8rem] text-center">
+                              {LIFECYCLE[p.phase]}
+                            </span>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={
+                                p.phase === LIFECYCLE.length - 1 ||
+                                advancePlanPhaseMut.isPending
+                              }
+                              onClick={() =>
+                                advancePlanPhaseMut.mutate({
+                                  id: p.id,
+                                  direction: "next",
+                                })
+                              }
+                            >
+                              Advance stage{" "}
+                              <ArrowRight className="h-3.5 w-3.5 ml-1" />
+                            </Button>
+                          </div>
+                        </div>
                       </>
                     ),
                   })

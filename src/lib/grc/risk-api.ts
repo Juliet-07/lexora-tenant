@@ -846,6 +846,29 @@ export const createBcpPlan = async (dto: {
   return res.data?.data ?? res.data;
 };
 
+// One legal step at a time — see BcpService#setPlanStatus's
+// transition whitelist (Draft→Under review→Approved, with Under
+// review able to step back to Draft or forward to Approved, and
+// Approved able to reopen to Under review). An illegal jump (e.g.
+// Draft straight to Approved) is rejected server-side.
+export const setBcpPlanStatus = async (
+  id: string,
+  status: BcpPlanStatus,
+): Promise<BcpPlan> => {
+  const res = await api.patch(`/grc/risk/bcp/plans/${id}/status`, { status });
+  return res.data?.data ?? res.data;
+};
+
+export const advanceBcpPlanPhase = async (
+  id: string,
+  direction: "next" | "back",
+): Promise<BcpPlan> => {
+  const res = await api.patch(`/grc/risk/bcp/plans/${id}/phase`, {
+    direction,
+  });
+  return res.data?.data ?? res.data;
+};
+
 export const fetchBcpTests = async (): Promise<BcpTestRecord[]> => {
   const res = await api.get("/grc/risk/bcp/tests");
   const d = res.data?.data ?? res.data;
