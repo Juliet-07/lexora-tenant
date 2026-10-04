@@ -4,7 +4,7 @@
 - [x] Brand plain meeting, governance, audit and policy exports without replacing existing finished reports
 - [x] Make public website animation more noticeable and add stars to the white four-pillar section
 - [x] Remove unreferenced dummy files and placeholder media while preserving live demo data
-- [ ] Verify the four-pillar section and representative report print output in the preview
+- [x] Verify the four-pillar section and representative report print output in the preview
 
 ## About page reference rebuild
 - [x] Recreate the uploaded About landing page, leadership profiles and partners section
