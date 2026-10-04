@@ -538,11 +538,16 @@ function escapeHtml(s: string): string {
 // wrapper at all.
 async function exportPolicyPdf(policy: Policy): Promise<void> {
   const WIDTH_PX = 700;
+  const primary = `hsl(${getComputedStyle(document.documentElement).getPropertyValue("--primary").trim()})`;
   const container = document.createElement("div");
   container.style.cssText =
     `position:absolute;left:0;top:0;width:${WIDTH_PX}px;z-index:-1000;` +
     "padding:32px;font-family:Georgia,serif;color:#1a1a1a;background:#fff;";
   container.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;border-bottom:4px solid ${primary};padding-bottom:16px;margin-bottom:24px;">
+      <img src="/lexora-logo.png" alt="Lexora" style="max-width:145px;max-height:46px;object-fit:contain;" />
+      <span style="font:700 10px Arial,sans-serif;color:${primary};text-transform:uppercase;">Governance · Policy &amp; Procedure</span>
+    </div>
     <h1 style="font-size:22px;margin:0 0 6px;">${escapeHtml(policy.title)}</h1>
     <p style="font-size:11px;color:#666;margin:0 0 24px;">
       Version ${escapeHtml(policy.version)} · Owner: ${escapeHtml(policy.owner || "—")} · Approval authority: ${escapeHtml(policy.approvalAuthority || "—")}

@@ -52,6 +52,7 @@ import {
   Scale,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { printGrcReport } from "@/lib/grc/printReport";
 import { RichTextEditor } from "@/components/RichTextEditor";
 import { usePersistentState, fmtDate } from "@/lib/grc/usePersistentState";
 import {
@@ -864,13 +865,8 @@ function CodeEditor({
   };
 
   const exportDoc = () => {
-    const w = window.open("", "_blank");
-    if (!w) return;
-    w.document.write(
-      `<html><head><title>${row.title}</title><style>body{font-family:Georgia,serif;max-width:720px;margin:40px auto;line-height:1.6}</style></head><body>${body}</body></html>`,
-    );
-    w.document.close();
-    w.print();
+    printGrcReport({ title: row.title, category: "Governance code", body,
+      details: [{ label: "Version", value: String(row.version) }, { label: "Status", value: row.meta.stage }, { label: "Owner", value: row.meta.owner }] });
   };
 
   return (

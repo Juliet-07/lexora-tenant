@@ -41,6 +41,7 @@ import {
   ListChecks,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { escapeReportText, printGrcReport } from "@/lib/grc/printReport";
 import { RichTextEditor } from "@/components/RichTextEditor";
 import {
   MeetingChecklist,
@@ -548,16 +549,6 @@ export function MeetingWorkspace({
     },
   ];
 
-  const printHtml = (title: string, html: string) => {
-    const w = window.open("", "_blank");
-    if (!w) return;
-    w.document.write(
-      `<html><head><title>${title}</title><style>body{font-family:Georgia,serif;max-width:720px;margin:40px auto;line-height:1.6}</style></head><body>${html}</body></html>`,
-    );
-    w.document.close();
-    w.print();
-  };
-
   const dispatchDisabled =
     dispatchMut.isPending ||
     meeting.attendees.length === 0 ||
@@ -657,10 +648,12 @@ export function MeetingWorkspace({
                   size="sm"
                   variant="outline"
                   onClick={() =>
-                    printHtml(
-                      "Agenda",
-                      `<h2>${meeting.title} — Agenda</h2><ol>${meeting.agenda.map((a) => `<li>${a.title}${a.presenter ? ` — ${a.presenter}` : ""}</li>`).join("")}</ol>`,
-                    )
+                     printGrcReport({
+                       title: `${meeting.title} — Agenda`,
+                       category: "Meeting agenda",
+                       details: [{ label: "Meeting date", value: fmt(date) }, { label: "Chair", value: meeting.chair || "—" }],
+                       body: `<ol>${meeting.agenda.map((a) => `<li><strong>${escapeReportText(a.title)}</strong>${a.presenter ? ` — ${escapeReportText(a.presenter)}` : ""}</li>`).join("")}</ol>`,
+                     })
                   }
                 >
                   Export PDF
@@ -1015,16 +1008,19 @@ export function MeetingWorkspace({
                   No minutes drafted yet.
                 </p>
               )}
-              {meeting.minutesPdfUrl && (
-                <Button size="sm" variant="outline" asChild>
-                  <a
-                    href={resolveGrcFileUrl(meeting.minutesPdfUrl)}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    <Download className="h-4 w-4 mr-1" />
-                    Download minutes PDF
-                  </a>
+              {meeting.minutes && (
+                <Button size="sm" variant="outline" onClick={() => printGrcReport({
+                  title: `${meeting.title} — Minutes`,
+                  category: "Approved meeting minutes",
+                  details: [
+                    { label: "Meeting date", value: fmt(date) },
+                    { label: "Chair", value: meeting.chair || "—" },
+                    { label: "Status", value: meeting.minutesSentAt ? "Distributed" : "Not yet distributed" },
+                  ],
+                  body: meeting.minutes,
+                })}>
+                  <Download className="h-4 w-4 mr-1" />
+                  Export branded PDF
                 </Button>
               )}
               <MinutesDistribution meeting={meeting} />
