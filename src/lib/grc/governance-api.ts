@@ -1321,6 +1321,39 @@ export const createTraining = async (dto: {
   return res.data?.data ?? res.data;
 };
 
+export const updateTraining = async (
+  id: string,
+  dto: {
+    title?: string;
+    description?: string;
+    category?: TrainingCategory;
+    provider?: string;
+    format?: TrainingFormat;
+    cpdHours?: number;
+    dueDate?: string;
+    mandatory?: boolean;
+    assignedTo?: string[];
+    file?: File;
+  },
+): Promise<GovernanceTraining> => {
+  const form = new FormData();
+  if (dto.title !== undefined) form.append("title", dto.title);
+  if (dto.description !== undefined)
+    form.append("description", dto.description);
+  if (dto.category !== undefined) form.append("category", dto.category);
+  if (dto.provider !== undefined) form.append("provider", dto.provider);
+  if (dto.format !== undefined) form.append("format", dto.format);
+  if (dto.cpdHours !== undefined) form.append("cpdHours", String(dto.cpdHours));
+  if (dto.dueDate !== undefined) form.append("dueDate", dto.dueDate);
+  if (dto.mandatory !== undefined)
+    form.append("mandatory", String(dto.mandatory));
+  if (dto.assignedTo !== undefined)
+    form.append("assignedTo", JSON.stringify(dto.assignedTo));
+  if (dto.file) form.append("file", dto.file);
+  const res = await api.patch(`/grc/governance/trainings/${id}`, form);
+  return res.data?.data ?? res.data;
+};
+
 export const deleteTraining = async (id: string): Promise<void> => {
   await api.delete(`/grc/governance/trainings/${id}`);
 };

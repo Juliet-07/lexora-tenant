@@ -34,6 +34,7 @@ import {
 import {
   GraduationCap,
   Plus,
+  Pencil,
   Trash2,
   CheckCircle2,
   Clock,
@@ -48,6 +49,7 @@ import {
   fetchBoardMembers,
   fetchTrainings,
   createTraining,
+  updateTraining,
   deleteTraining,
   resolveGrcFileUrl,
   TRAINING_CATEGORIES,
@@ -99,6 +101,7 @@ export default function BoardTraining() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(emptyForm());
   const [filter, setFilter] = useState<string>("all");
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const createMut = useMutation({
     mutationFn: () =>
@@ -127,6 +130,35 @@ export default function BoardTraining() {
     onError: (err: any) =>
       toast({
         title: "Failed to create training",
+        description: err?.response?.data?.message,
+        variant: "destructive",
+      }),
+  });
+
+  const updateMut = useMutation({
+    mutationFn: () =>
+      updateTraining(editingId!, {
+        title: form.title.trim(),
+        description: form.description.trim(),
+        category: form.category,
+        provider: form.provider.trim(),
+        format: form.format,
+        cpdHours: form.cpdHours,
+        dueDate: form.dueDate || "",
+        mandatory: form.mandatory,
+        assignedTo: form.assignedTo,
+        file: form.file,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["grc-trainings"] });
+      setOpen(false);
+      setEditingId(null);
+      setForm(emptyForm());
+      toast({ title: "Training updated" });
+    },
+    onError: (err: any) =>
+      toast({
+        title: "Failed to update training",
         description: err?.response?.data?.message,
         variant: "destructive",
       }),
@@ -171,7 +203,31 @@ export default function BoardTraining() {
   const save = () => {
     if (!form.title.trim())
       return toast({ title: "Title required", variant: "destructive" });
-    createMut.mutate();
+    if (editingId) updateMut.mutate();
+    else createMut.mutate();
+  };
+
+  const openCreate = () => {
+    setEditingId(null);
+    setForm(emptyForm());
+    setOpen(true);
+  };
+
+  const openEdit = (t: GovernanceTraining) => {
+    setEditingId(t._id);
+    setForm({
+      title: t.title,
+      description: t.description || "",
+      category: t.category,
+      provider: t.provider || "",
+      format: t.format,
+      cpdHours: t.cpdHours,
+      dueDate: t.dueDate ? t.dueDate.slice(0, 10) : "",
+      mandatory: t.mandatory,
+      assignedTo: t.assignedTo,
+      file: undefined,
+    });
+    setOpen(true);
   };
 
   const exportCsv = () => {
@@ -217,7 +273,7 @@ export default function BoardTraining() {
             manage onboarding modules.
           </p>
         </div>
-        <Button onClick={() => setOpen(true)}>
+        <Button onClick={openCreate}>
           <Plus className="h-4 w-4 mr-1" /> New training
         </Button>
       </div>
@@ -293,15 +349,25 @@ export default function BoardTraining() {
                       </div>
                       <CardTitle className="text-base">{t.title}</CardTitle>
                     </div>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      aria-label="Delete training"
-                      disabled={deleteMut.isPending}
-                      onClick={() => deleteMut.mutate(t._id)}
-                    >
-                      <Trash2 className="h-4 w-4 text-muted-foreground" />
-                    </Button>
+                    <div className="flex items-center gap-0.5">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        aria-label="Edit training"
+                        onClick={() => openEdit(t)}
+                      >
+                        <Pencil className="h-4 w-4 text-muted-foreground" />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        aria-label="Delete training"
+                        disabled={deleteMut.isPending}
+                        onClick={() => deleteMut.mutate(t._id)}
+                      >
+                        <Trash2 className="h-4 w-4 text-muted-foreground" />
+                      </Button>
+                    </div>
                   </CardHeader>
                   <CardContent className="space-y-3">
                     {t.description && (
@@ -514,10 +580,21 @@ export default function BoardTraining() {
         </TabsContent>
       </Tabs>
 
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog
+        open={open}
+        onOpenChange={(v) => {
+          setOpen(v);
+          if (!v) {
+            setEditingId(null);
+            setForm(emptyForm());
+          }
+        }}
+      >
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>New board training</DialogTitle>
+            <DialogTitle>
+              {editingId ? "Edit board training" : "New board training"}
+            </DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             <div>
@@ -620,6 +697,25 @@ export default function BoardTraining() {
             </div>
             <div>
               <Label>Training material (optional)</Label>
+              {editingId &&
+                !form.file &&
+                (() => {
+                  const current = trainings.find((t) => t._id === editingId);
+                  return current?.resourceUrl ? (
+                    <p className="text-xs text-muted-foreground mb-1.5">
+                      Current:{" "}
+                      <a
+                        href={resolveGrcFileUrl(current.resourceUrl)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-primary hover:underline"
+                      >
+                        {current.resourceName || "Training material"}
+                      </a>
+                      . Choose a file below to replace it.
+                    </p>
+                  ) : null;
+                })()}
               <Input
                 type="file"
                 accept=".pdf,.doc,.docx,.ppt,.pptx,.mp4,.mov,image/*"
@@ -665,12 +761,14 @@ export default function BoardTraining() {
             </Button>
             <Button
               onClick={save}
-              disabled={!form.title.trim() || createMut.isPending}
+              disabled={
+                !form.title.trim() || createMut.isPending || updateMut.isPending
+              }
             >
-              {createMut.isPending ? (
+              {createMut.isPending || updateMut.isPending ? (
                 <Loader2 className="h-4 w-4 mr-1 animate-spin" />
               ) : null}
-              Create training
+              {editingId ? "Save changes" : "Create training"}
             </Button>
           </DialogFooter>
         </DialogContent>
