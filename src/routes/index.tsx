@@ -18,6 +18,7 @@ import MinutesReviewPage from "@/pages/grc/governance/Meeting/MinutesReview";
 import MeetingNoticeRsvpPage from "@/pages/grc/governance/Meeting/MeetingNoticeRsvp";
 import PolicyAckPage from "@/pages/grc/compliance/PolicyAck";
 import PolicyApprovalPage from "@/pages/grc/compliance/PolicyApproval";
+import EsgChairApprovalPage from "@/pages/grc/esg/EsgChairApproval";
 import DealContractReviewPage from "@/pages/grc/deals/DealContractReview";
 import DealOfferReviewPage from "@/pages/grc/deals/DealOfferReview";
 import SignToolContractPage from "@/pages/public/SignToolContractPage";
@@ -42,6 +43,7 @@ const PUBLIC_ROUTE_PATTERNS = [
   /^\/minutes-review\/[^/]+$/,
   /^\/policy-ack\/[^/]+$/,
   /^\/policy-approval\/[^/]+$/,
+  /^\/esg-approve\/[^/]+$/,
   /^\/deal-review\/contract\/[^/]+$/,
   /^\/deal-review\/offer\/[^/]+$/,
   /^\/forgot-password$/,
@@ -76,6 +78,7 @@ export function AppRoutes() {
           path="/policy-approval/:token"
           element={<PolicyApprovalPage />}
         />
+        <Route path="/esg-approve/:token" element={<EsgChairApprovalPage />} />
         <Route
           path="/deal-review/contract/:token"
           element={<DealContractReviewPage />}

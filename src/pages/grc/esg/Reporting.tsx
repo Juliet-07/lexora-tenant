@@ -8,6 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -61,6 +63,8 @@ import {
   Trash2,
   EyeOff,
   Eye,
+  ShieldCheck,
+  Clock,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import {
@@ -74,17 +78,19 @@ import {
   addIndicator,
   updateIndicatorResponse,
   addIndicatorEvidence,
-  submitIndicatorForSignOff,
-  signOffIndicator,
   fetchReports,
   compileReport,
   publishReport,
   fetchDashboard,
+  updateIndicatorRequirement,
+  updateIndicatorApplicability,
+  sendIndicatorForApproval,
   EsgFramework,
   ReportIndicator,
   EsgReport,
   indicatorTone,
 } from "@/lib/grc/esg-api";
+import { fetchCommittees, Committee } from "@/lib/grc/governance-api";
 import {
   exportReportExcel,
   exportReportPdf,
@@ -172,28 +178,51 @@ export default function EsgReporting() {
         variant: "destructive",
       }),
   });
-  const submitMut = useMutation({
-    mutationFn: (id: string) => submitIndicatorForSignOff(id),
+  const requirementMut = useMutation({
+    mutationFn: ({ id, requirement }: { id: string; requirement: string }) =>
+      updateIndicatorRequirement(id, requirement),
+    onSuccess: (i) => {
+      queryClient.invalidateQueries({ queryKey: ["esgIndicators", tab] });
+      setSelected(i);
+    },
+  });
+  const applicabilityMut = useMutation({
+    mutationFn: ({
+      id,
+      dto,
+    }: {
+      id: string;
+      dto: { isApplicable: boolean; applicabilityNote?: string };
+    }) => updateIndicatorApplicability(id, dto),
     onSuccess: (i) => {
       queryClient.invalidateQueries({ queryKey: ["esgIndicators", tab] });
       invalidateFrameworks();
       setSelected(i);
-      toast({ title: "Submitted for sign-off" });
+    },
+  });
+  const sendForApprovalMut = useMutation({
+    mutationFn: ({ id, committeeId }: { id: string; committeeId: string }) =>
+      sendIndicatorForApproval(id, committeeId),
+    onSuccess: (i) => {
+      queryClient.invalidateQueries({ queryKey: ["esgIndicators", tab] });
+      invalidateFrameworks();
+      setSelected(i);
+      toast({
+        title: "Sent for approval",
+        description:
+          "The ESG Committee Chair and Board Chair have been notified.",
+      });
     },
     onError: (err: any) =>
       toast({
-        title: err?.response?.data?.message ?? "Add a response first",
+        title: "Failed to send for approval",
+        description: err?.response?.data?.message,
         variant: "destructive",
       }),
   });
-  const signOffMut = useMutation({
-    mutationFn: (id: string) => signOffIndicator(id),
-    onSuccess: (i) => {
-      queryClient.invalidateQueries({ queryKey: ["esgIndicators", tab] });
-      invalidateFrameworks();
-      setSelected(i);
-      toast({ title: "Indicator signed off" });
-    },
+  const { data: committees = [] } = useQuery({
+    queryKey: ["committeesForEsg"],
+    queryFn: fetchCommittees,
   });
   const compileMut = useMutation({
     mutationFn: (frameworkId: string) => compileReport(frameworkId),
@@ -433,6 +462,7 @@ export default function EsgReporting() {
       <IndicatorSheet
         indicator={selected}
         framework={currentFramework}
+        committees={committees}
         onClose={() => setSelected(null)}
         onSaveResponse={(response) =>
           selected && responseMut.mutate({ id: selected._id, response })
@@ -440,8 +470,17 @@ export default function EsgReporting() {
         onAttach={(files) =>
           selected && evidenceMut.mutate({ id: selected._id, files })
         }
-        onSubmit={() => selected && submitMut.mutate(selected._id)}
-        onSignOff={() => selected && signOffMut.mutate(selected._id)}
+        onSaveRequirement={(requirement) =>
+          selected && requirementMut.mutate({ id: selected._id, requirement })
+        }
+        onSaveApplicability={(dto) =>
+          selected && applicabilityMut.mutate({ id: selected._id, dto })
+        }
+        onSendForApproval={(committeeId) =>
+          selected &&
+          sendForApprovalMut.mutate({ id: selected._id, committeeId })
+        }
+        sendForApprovalPending={sendForApprovalMut.isPending}
       />
 
       <ManageFrameworksDialog
@@ -634,135 +673,344 @@ function IndicatorDialog({
 
 // ───────────────────────────── Indicator detail sheet ──
 
+function initials(name: string) {
+  return (
+    name
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((p) => p[0]?.toUpperCase())
+      .join("") || "?"
+  );
+}
+
+function fmtDate(d: string | null) {
+  return d ? new Date(d).toLocaleDateString() : "—";
+}
+
 function IndicatorSheet({
   indicator,
   framework,
+  committees,
   onClose,
   onSaveResponse,
   onAttach,
-  onSubmit,
-  onSignOff,
+  onSaveRequirement,
+  onSaveApplicability,
+  onSendForApproval,
+  sendForApprovalPending,
 }: {
   indicator: ReportIndicator | null;
   framework: EsgFramework | undefined;
+  committees: Committee[];
   onClose: () => void;
   onSaveResponse: (response: string) => void;
   onAttach: (files: File[]) => void;
-  onSubmit: () => void;
-  onSignOff: () => void;
+  onSaveRequirement: (requirement: string) => void;
+  onSaveApplicability: (dto: {
+    isApplicable: boolean;
+    applicabilityNote?: string;
+  }) => void;
+  onSendForApproval: (committeeId: string) => void;
+  sendForApprovalPending: boolean;
 }) {
   const [response, setResponse] = useState("");
+  const [requirement, setRequirement] = useState("");
+  const [applicabilityNote, setApplicabilityNote] = useState("");
+  const [committeeId, setCommitteeId] = useState("");
   useEffect(() => {
     setResponse(indicator?.response ?? "");
+    setRequirement(indicator?.requirement ?? "");
+    setApplicabilityNote(indicator?.applicabilityNote ?? "");
+    setCommitteeId("");
   }, [indicator?._id]);
+
+  if (!indicator) {
+    return (
+      <Sheet open={false} onOpenChange={(o) => !o && onClose()}>
+        <SheetContent className="w-full sm:max-w-xl overflow-y-auto" />
+      </Sheet>
+    );
+  }
+
+  const sentForApproval = !!indicator.esgChairApproval.requestedAt;
+  const esgChairApproved = indicator.esgChairApproval.decision === "Approved";
+  const boardChairApproved =
+    indicator.boardChairApproval.decision === "Approved";
 
   return (
     <Sheet open={!!indicator} onOpenChange={(o) => !o && onClose()}>
       <SheetContent className="w-full sm:max-w-xl overflow-y-auto">
-        {indicator && (
-          <>
-            <SheetHeader>
-              <SheetTitle>
-                {indicator.code} — {indicator.title}
-              </SheetTitle>
-            </SheetHeader>
-            <div className="mt-4 space-y-4">
-              <div className="flex gap-2 flex-wrap">
-                <Badge variant="outline">{framework?.label}</Badge>
-                <Badge
-                  variant="outline"
-                  className={indicatorTone(indicator.status)}
-                >
-                  {indicator.status}
-                </Badge>
-                <Badge variant="outline">Owner: {indicator.owner}</Badge>
-              </div>
+        <SheetHeader>
+          <SheetTitle>
+            {indicator.code} — {indicator.title}
+          </SheetTitle>
+        </SheetHeader>
+        <div className="mt-4 space-y-5">
+          <div className="flex gap-2 flex-wrap">
+            <Badge variant="outline">{framework?.label}</Badge>
+            <Badge
+              variant="outline"
+              className={indicatorTone(indicator.status)}
+            >
+              {indicator.status}
+            </Badge>
+            <Badge variant="outline">Owner: {indicator.owner}</Badge>
+          </div>
 
-              <div>
-                <Label>Disclosure response</Label>
-                <Textarea
-                  rows={6}
-                  value={response}
-                  onChange={(e) => setResponse(e.target.value)}
-                  onBlur={() =>
-                    response !== indicator.response && onSaveResponse(response)
+          {/* Applicability */}
+          <div>
+            <Label className="text-xs uppercase text-muted-foreground">
+              Applicability
+            </Label>
+            <div className="flex items-center gap-2 mt-1.5">
+              <Switch
+                checked={indicator.isApplicable}
+                disabled={sentForApproval}
+                onCheckedChange={(v) =>
+                  onSaveApplicability({
+                    isApplicable: v,
+                    applicabilityNote,
+                  })
+                }
+              />
+              <Badge
+                variant="outline"
+                className={
+                  indicator.isApplicable
+                    ? "text-emerald-600 border-emerald-500/30"
+                    : "text-muted-foreground"
+                }
+              >
+                {indicator.isApplicable ? "Applicable" : "Not applicable"}
+              </Badge>
+            </div>
+            <Textarea
+              className="mt-2"
+              rows={2}
+              placeholder="Why does / doesn't this apply to your organisation?"
+              value={applicabilityNote}
+              disabled={sentForApproval}
+              onChange={(e) => setApplicabilityNote(e.target.value)}
+              onBlur={() =>
+                applicabilityNote !== (indicator.applicabilityNote ?? "") &&
+                onSaveApplicability({
+                  isApplicable: indicator.isApplicable,
+                  applicabilityNote,
+                })
+              }
+            />
+          </div>
+
+          {/* Requirement */}
+          <div>
+            <Label className="text-xs uppercase text-muted-foreground">
+              The requirement
+            </Label>
+            <Textarea
+              className="mt-1.5"
+              rows={2}
+              placeholder="Describe what this disclosure requires…"
+              value={requirement}
+              disabled={sentForApproval}
+              onChange={(e) => setRequirement(e.target.value)}
+              onBlur={() =>
+                requirement !== indicator.requirement &&
+                onSaveRequirement(requirement)
+              }
+            />
+          </div>
+
+          <div>
+            <Label>Disclosure response</Label>
+            <Textarea
+              rows={6}
+              value={response}
+              disabled={sentForApproval}
+              onChange={(e) => setResponse(e.target.value)}
+              onBlur={() =>
+                response !== indicator.response && onSaveResponse(response)
+              }
+            />
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <Label>Evidence</Label>
+              {!sentForApproval && (
+                <label className="text-xs text-primary cursor-pointer flex items-center gap-1">
+                  <Paperclip className="h-3.5 w-3.5" />
+                  Attach file
+                  <input
+                    type="file"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => {
+                      const files = Array.from(e.target.files ?? []);
+                      if (!files.length) return;
+                      onAttach(files);
+                      e.target.value = "";
+                    }}
+                  />
+                </label>
+              )}
+            </div>
+            <div className="space-y-1">
+              {indicator.evidence.map((ev, idx) => (
+                <div
+                  key={ev._id ?? idx}
+                  className="flex justify-between border rounded px-2 py-1 text-xs"
+                >
+                  <span>{ev.name}</span>
+                  {ev.fileUrl && (
+                    <a
+                      href={ev.fileUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-primary underline"
+                    >
+                      View
+                    </a>
+                  )}
+                </div>
+              ))}
+              {!indicator.evidence.length && (
+                <div className="text-xs text-muted-foreground">
+                  No evidence attached.
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Approval chain */}
+          <div className="border-t pt-4">
+            <Label className="text-xs uppercase text-muted-foreground">
+              Approval chain
+            </Label>
+
+            {!sentForApproval ? (
+              <div className="mt-2 space-y-2">
+                <p className="text-xs text-muted-foreground">
+                  Add a disclosure response, then send this for approval. The
+                  acting ESG Committee's Chair reviews externally by email; once
+                  they approve, the Board Chair signs in the board portal — one
+                  cannot sign before the other.
+                </p>
+                <Select value={committeeId} onValueChange={setCommitteeId}>
+                  <SelectTrigger className="h-9">
+                    <SelectValue placeholder="Select the acting ESG Committee…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {committees.map((c) => (
+                      <SelectItem key={c._id} value={c._id}>
+                        {c.name}
+                        {c.chair ? ` — Chair: ${c.chair}` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  size="sm"
+                  disabled={sendForApprovalPending}
+                  onClick={() => {
+                    if (!committeeId) {
+                      toast({
+                        title: "Select a committee first",
+                        variant: "destructive",
+                      });
+                      return;
+                    }
+                    onSendForApproval(committeeId);
+                  }}
+                >
+                  <Send className="h-3.5 w-3.5 mr-1" />
+                  {sendForApprovalPending ? "Sending…" : "Send for approval"}
+                </Button>
+              </div>
+            ) : (
+              <div className="mt-2 space-y-2">
+                <ApprovalRow
+                  name={indicator.esgChairApproval.name}
+                  roleLabel="ESG Committee Chair"
+                  decision={indicator.esgChairApproval.decision}
+                  decidedAt={indicator.esgChairApproval.decidedAt}
+                  decidedVerb="Reviewed"
+                />
+                <ApprovalRow
+                  name={indicator.boardChairApproval.name}
+                  roleLabel="Board Chair"
+                  decision={indicator.boardChairApproval.decision}
+                  decidedAt={indicator.boardChairApproval.decidedAt}
+                  decidedVerb="Approved"
+                  waitingOn={
+                    !esgChairApproved
+                      ? "Waiting on the ESG Committee Chair"
+                      : undefined
                   }
                 />
               </div>
+            )}
 
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <Label>Evidence</Label>
-                  <label className="text-xs text-primary cursor-pointer flex items-center gap-1">
-                    <Paperclip className="h-3.5 w-3.5" />
-                    Attach file
-                    <input
-                      type="file"
-                      multiple
-                      className="hidden"
-                      onChange={(e) => {
-                        const files = Array.from(e.target.files ?? []);
-                        if (!files.length) return;
-                        onAttach(files);
-                        e.target.value = "";
-                      }}
-                    />
-                  </label>
-                </div>
-                <div className="space-y-1">
-                  {indicator.evidence.map((ev, idx) => (
-                    <div
-                      key={ev._id ?? idx}
-                      className="flex justify-between border rounded px-2 py-1 text-xs"
-                    >
-                      <span>{ev.name}</span>
-                      {ev.fileUrl && (
-                        <a
-                          href={ev.fileUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-primary underline"
-                        >
-                          View
-                        </a>
-                      )}
-                    </div>
-                  ))}
-                  {!indicator.evidence.length && (
-                    <div className="text-xs text-muted-foreground">
-                      No evidence attached.
-                    </div>
-                  )}
-                </div>
+            {boardChairApproved && (
+              <div className="mt-3 text-xs text-emerald-600 font-medium">
+                Signed off by Board Chair on{" "}
+                {fmtDate(indicator.boardChairApproval.decidedAt)}.
               </div>
-
-              <div className="border-t pt-3 flex flex-wrap gap-2">
-                {indicator.status !== "Awaiting sign-off" &&
-                  indicator.status !== "Signed off" && (
-                    <Button variant="outline" onClick={onSubmit}>
-                      Submit for sign-off
-                    </Button>
-                  )}
-                {indicator.status === "Awaiting sign-off" && (
-                  <Button onClick={onSignOff}>
-                    <CheckCircle2 className="h-4 w-4 mr-1" />
-                    Sign off
-                  </Button>
-                )}
-                {indicator.status === "Signed off" && (
-                  <div className="text-xs text-emerald-600">
-                    Signed off by {indicator.signedOffBy} on{" "}
-                    {indicator.signedOffAt
-                      ? new Date(indicator.signedOffAt).toLocaleDateString()
-                      : "—"}
-                  </div>
-                )}
-              </div>
-            </div>
-          </>
-        )}
+            )}
+          </div>
+        </div>
       </SheetContent>
     </Sheet>
+  );
+}
+
+function ApprovalRow({
+  name,
+  roleLabel,
+  decision,
+  decidedAt,
+  decidedVerb,
+  waitingOn,
+}: {
+  name: string;
+  roleLabel: string;
+  decision: "Pending" | "Approved" | "Declined";
+  decidedAt: string | null;
+  decidedVerb: string;
+  waitingOn?: string;
+}) {
+  const tone =
+    decision === "Approved"
+      ? "text-emerald-600 border-emerald-500/30"
+      : decision === "Declined"
+        ? "text-rose-600 border-rose-500/30"
+        : "text-muted-foreground";
+  return (
+    <div className="flex items-center gap-3 border rounded-md p-2.5">
+      <Avatar className="h-8 w-8">
+        <AvatarFallback className="text-xs">
+          {initials(name || roleLabel)}
+        </AvatarFallback>
+      </Avatar>
+      <div className="min-w-0 flex-1">
+        <div className="text-sm font-medium truncate">
+          {name || "Not yet assigned"}
+        </div>
+        <div className="text-xs text-muted-foreground">{roleLabel}</div>
+      </div>
+      <Badge variant="outline" className={`text-xs ${tone}`}>
+        {decision === "Approved" ? (
+          <ShieldCheck className="h-3 w-3 mr-1" />
+        ) : (
+          <Clock className="h-3 w-3 mr-1" />
+        )}
+        {decision === "Approved"
+          ? `${decidedVerb} ${fmtDate(decidedAt)}`
+          : decision === "Declined"
+            ? `Declined ${fmtDate(decidedAt)}`
+            : waitingOn || "Pending"}
+      </Badge>
+    </div>
   );
 }
 

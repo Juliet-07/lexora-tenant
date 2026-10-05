@@ -385,17 +385,43 @@ export interface IndicatorEvidence {
   size: number;
   createdAt?: string;
 }
+export type EsgApprovalDecision = "Pending" | "Approved" | "Declined";
+export interface EsgChairApproval {
+  committeeId: string | null;
+  boardMemberId: string | null;
+  name: string;
+  email: string;
+  decision: EsgApprovalDecision;
+  notes: string;
+  decidedAt: string | null;
+  requestedAt: string | null;
+  token: string | null;
+}
+export interface BoardChairApproval {
+  boardMemberId: string | null;
+  name: string;
+  email: string;
+  decision: EsgApprovalDecision;
+  notes: string;
+  decidedAt: string | null;
+  requestedAt: string | null;
+}
 export interface ReportIndicator {
   _id: string;
   frameworkId: string;
   code: string;
   title: string;
   owner: string;
+  requirement: string;
+  isApplicable: boolean;
+  applicabilityNote: string;
   response: string;
   evidence: IndicatorEvidence[];
   status: IndicatorStatus;
   signedOffBy: string | null;
   signedOffAt: string | null;
+  esgChairApproval: EsgChairApproval;
+  boardChairApproval: BoardChairApproval;
 }
 export type EsgReportStatus = "Draft" | "Compiled" | "Published";
 export interface EsgReport {
@@ -509,6 +535,66 @@ export const signOffIndicator = async (
   const res = await api.post(`/grc/esg/indicators/${id}/sign-off`, null, {
     params: { signedOffBy },
   });
+  return res.data?.data ?? res.data;
+};
+
+// ── Applicability, requirement & approval chain ─────────────
+
+export const updateIndicatorRequirement = async (
+  id: string,
+  requirement: string,
+): Promise<ReportIndicator> => {
+  const res = await api.patch(`/grc/esg/indicators/${id}/requirement`, {
+    requirement,
+  });
+  return res.data?.data ?? res.data;
+};
+export const updateIndicatorApplicability = async (
+  id: string,
+  dto: { isApplicable: boolean; applicabilityNote?: string },
+): Promise<ReportIndicator> => {
+  const res = await api.patch(`/grc/esg/indicators/${id}/applicability`, dto);
+  return res.data?.data ?? res.data;
+};
+export const sendIndicatorForApproval = async (
+  id: string,
+  committeeId: string,
+): Promise<ReportIndicator> => {
+  const res = await api.post(`/grc/esg/indicators/${id}/send-for-approval`, {
+    committeeId,
+  });
+  return res.data?.data ?? res.data;
+};
+
+// Public — the ESG Committee Chair's own emailed link (no auth).
+export interface EsgChairApprovalSnapshot {
+  id: string;
+  code: string;
+  title: string;
+  requirement: string;
+  isApplicable: boolean;
+  applicabilityNote: string;
+  response: string;
+  evidence: IndicatorEvidence[];
+  frameworkLabel: string;
+  myDecision: EsgApprovalDecision;
+  myNotes: string;
+  myDecidedAt: string | null;
+}
+export const fetchEsgChairApprovalSnapshot = async (
+  token: string,
+): Promise<EsgChairApprovalSnapshot> => {
+  const res = await api.get(`/grc/esg/indicators/esg-chair-approve/${token}`);
+  return res.data?.data ?? res.data;
+};
+export const decideEsgChairApproval = async (
+  token: string,
+  dto: { decision: "Approved" | "Declined"; notes?: string },
+): Promise<ReportIndicator> => {
+  const res = await api.post(
+    `/grc/esg/indicators/esg-chair-approve/${token}`,
+    dto,
+  );
   return res.data?.data ?? res.data;
 };
 
