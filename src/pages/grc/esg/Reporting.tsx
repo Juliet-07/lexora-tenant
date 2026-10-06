@@ -85,6 +85,7 @@ import {
   updateIndicatorRequirement,
   updateIndicatorApplicability,
   sendIndicatorForApproval,
+  resolveGrcFileUrl,
   EsgFramework,
   ReportIndicator,
   EsgReport,
@@ -864,7 +865,7 @@ function IndicatorSheet({
                   <span>{ev.name}</span>
                   {ev.fileUrl && (
                     <a
-                      href={ev.fileUrl}
+                      href={resolveGrcFileUrl(ev.fileUrl)}
                       target="_blank"
                       rel="noreferrer"
                       className="text-primary underline"

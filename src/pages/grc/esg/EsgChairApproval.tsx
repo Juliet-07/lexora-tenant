@@ -11,6 +11,7 @@ import { toast } from "@/hooks/use-toast";
 import {
   fetchEsgChairApprovalSnapshot,
   decideEsgChairApproval,
+  resolveGrcFileUrl,
 } from "@/lib/grc/esg-api";
 
 export default function EsgChairApprovalPage() {
@@ -175,7 +176,7 @@ export default function EsgChairApprovalPage() {
                     <span>{ev.name}</span>
                     {ev.fileUrl && (
                       <a
-                        href={ev.fileUrl}
+                        href={resolveGrcFileUrl(ev.fileUrl)}
                         target="_blank"
                         rel="noreferrer"
                         className="text-primary underline text-xs"

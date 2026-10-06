@@ -28,6 +28,17 @@ export type EnvCategory = (typeof ENV_CATEGORIES)[number];
 export type SocialCategory = (typeof SOCIAL_CATEGORIES)[number];
 export type MetricCategory = EnvCategory | SocialCategory;
 
+// Evidence file URLs come back from the backend as a bare path
+// (`/uploads/esg/indicators/<file>`), meant to be resolved against the
+// API's own origin, not the frontend's — same helper as
+// governance-api.ts/compliance-api.ts/risk-api.ts/policy-api.ts.
+const GRC_API_BASE = (api.defaults as any)?.baseURL ?? "/api";
+export const resolveGrcFileUrl = (url: string): string => {
+  if (!url) return url;
+  if (url.startsWith("http")) return url;
+  return `${new URL(GRC_API_BASE).origin}${url}`;
+};
+
 export type EsgPillar = "Environmental" | "Social" | "Governance";
 export type MetricPillar = "Environmental" | "Social";
 export type Direction = "lower" | "higher";

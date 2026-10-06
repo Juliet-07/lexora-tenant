@@ -51,12 +51,34 @@ const PUBLIC_ROUTE_PATTERNS = [
   /^\/reactivate$/,
 ];
 
+// Every one of the token-in-path public links above is built server-side
+// off TENANT_APP_URL (see lexora-engine's meeting/policy/esg/deal/contract
+// services) — none of them are meant to need a login, and none of this
+// app's own code ever points one at /login/... But a misconfigured
+// TENANT_APP_URL (set to the site's /login URL instead of its bare
+// origin) silently prefixes every one of these emailed links with
+// /login/ before this app ever sees the request, and since no route
+// here matched /login/meeting-ack/:token (or any of its siblings), the
+// visitor got a blank page instead of the page the link promised —
+// react-router renders nothing for a path with no matching <Route> and
+// no catch-all in this public branch. Rather than only patch the two
+// reported links, every token-in-path pattern above also matches with
+// that prefix stripped, and the route list below carries a matching
+// /login/... alias for each one, so an already-sent (or still
+// misconfigured) link keeps working regardless. The real fix is still
+// to correct TENANT_APP_URL in the deployment's environment config so
+// new links are generated right in the first place — this is a safety
+// net under that, not a replacement for it.
+const stripLoginPrefix = (path: string) =>
+  path.startsWith("/login/") ? path.slice("/login".length) : path;
+
 export function AppRoutes() {
   const { user, isAdmin } = useAuth();
 
   const path = window.location.pathname;
-  const isPublicRoute = PUBLIC_ROUTE_PATTERNS.some((pattern) =>
-    pattern.test(path),
+  const canonicalPath = stripLoginPrefix(path);
+  const isPublicRoute = PUBLIC_ROUTE_PATTERNS.some(
+    (pattern) => pattern.test(path) || pattern.test(canonicalPath),
   );
 
   if (isPublicRoute) {
@@ -64,27 +86,61 @@ export function AppRoutes() {
       <Routes>
         <Route path="/sign-contract/:token" element={<SignContractPage />} />
         <Route
+          path="/login/sign-contract/:token"
+          element={<SignContractPage />}
+        />
+        <Route
           path="/sign-tool-contract/:token"
           element={<SignToolContractPage />}
         />
+        <Route
+          path="/login/sign-tool-contract/:token"
+          element={<SignToolContractPage />}
+        />
         <Route path="/meeting-ack/:token" element={<MeetingAckPage />} />
+        <Route path="/login/meeting-ack/:token" element={<MeetingAckPage />} />
         <Route path="/minutes-review/:token" element={<MinutesReviewPage />} />
+        <Route
+          path="/login/minutes-review/:token"
+          element={<MinutesReviewPage />}
+        />
         <Route
           path="/meeting-notice/:token"
           element={<MeetingNoticeRsvpPage />}
         />
+        <Route
+          path="/login/meeting-notice/:token"
+          element={<MeetingNoticeRsvpPage />}
+        />
         <Route path="/policy-ack/:token" element={<PolicyAckPage />} />
+        <Route path="/login/policy-ack/:token" element={<PolicyAckPage />} />
         <Route
           path="/policy-approval/:token"
           element={<PolicyApprovalPage />}
         />
+        <Route
+          path="/login/policy-approval/:token"
+          element={<PolicyApprovalPage />}
+        />
         <Route path="/esg-approve/:token" element={<EsgChairApprovalPage />} />
+        <Route
+          path="/login/esg-approve/:token"
+          element={<EsgChairApprovalPage />}
+        />
         <Route
           path="/deal-review/contract/:token"
           element={<DealContractReviewPage />}
         />
         <Route
+          path="/login/deal-review/contract/:token"
+          element={<DealContractReviewPage />}
+        />
+        <Route
           path="/deal-review/offer/:token"
+          element={<DealOfferReviewPage />}
+        />
+        <Route
+          path="/login/deal-review/offer/:token"
           element={<DealOfferReviewPage />}
         />
         <Route path="/forgot-password" element={<ForgotPassword />} />

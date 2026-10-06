@@ -392,7 +392,7 @@ function BoardPackExecutiveSummary({ meeting }: { meeting: Meeting }) {
           value={body}
           onChange={setBody}
           minHeight={180}
-          placeholder="Dear Directors, please find enclosed the board pack for…"
+          placeholder="Dear Directors, please find enclosed the meeting pack for…"
         />
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <p className="text-xs text-muted-foreground">
@@ -625,7 +625,7 @@ export function MeetingWorkspace({
           <TabsTrigger value="checklist">Preparation checklist</TabsTrigger>
           <TabsTrigger value="notice">Notice</TabsTrigger>
           <TabsTrigger value="agenda">Agenda</TabsTrigger>
-          <TabsTrigger value="pack">Board pack</TabsTrigger>
+          <TabsTrigger value="pack">Meeting pack</TabsTrigger>
           <TabsTrigger value="attendance">Attendance & quorum</TabsTrigger>
           <TabsTrigger value="minutes">Minutes</TabsTrigger>
           <TabsTrigger value="actions">Actions & follow-up</TabsTrigger>
@@ -727,7 +727,7 @@ export function MeetingWorkspace({
           <BoardPackExecutiveSummary meeting={meeting} />
           <Card>
             <CardHeader className="flex-row items-center justify-between space-y-0 flex-wrap gap-2">
-              <CardTitle className="text-base">Board pack documents</CardTitle>
+              <CardTitle className="text-base">Meeting pack documents</CardTitle>
               <div className="flex gap-2">
                 <RequestBoardPackDocDialog meeting={meeting} />
                 <UploadBoardPackDialog meeting={meeting} />
@@ -759,7 +759,7 @@ export function MeetingWorkspace({
             <CardHeader>
               <CardTitle className="text-base">Acknowledgements</CardTitle>
               <p className="text-sm text-muted-foreground">
-                Each attendee confirms receipt of the agenda and board pack —
+                Each attendee confirms receipt of the agenda and meeting pack —
                 via the emailed link, or in-app on their board portal.
               </p>
             </CardHeader>

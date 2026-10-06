@@ -234,7 +234,7 @@ export default function OrgStructure() {
         <TabsContent value="chart" className="mt-4">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Company Organigram</CardTitle>
+              <CardTitle className="text-base">Company Organogram</CardTitle>
               <CardDescription>
                 Visual layout of the real reporting structure. Scroll
                 horizontally for wide structures.
