@@ -376,11 +376,10 @@ function ReadinessWorkspace({
         <TabsContent value="scoring" className="space-y-3 pt-4">
           <div className="flex items-start justify-between gap-2 flex-wrap">
             <p className="text-sm text-muted-foreground max-w-2xl">
-              4 dimensions are auto-scored, for real, from live data in
-              Governance, Compliance and HR. The other 4 have no connected
-              module yet and use a manual baseline — set and documented by you —
-              until one exists. Underlying source data can only be edited in its
-              own module; use a documented override to adjust a score here.
+              All 8 dimensions are auto-scored, for real, from live data across
+              Governance, Compliance, HR, Accounting, CRM, ESG and the Deal
+              pipeline. Underlying source data can only be edited in its own
+              module; use a documented override to adjust a score here.
             </p>
             <Button
               size="sm"

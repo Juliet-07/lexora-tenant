@@ -335,27 +335,30 @@ export const READINESS_DIMENSIONS: ReadinessDimension[] = [
 export const DIMENSION_SOURCE: Record<ReadinessDimension, string> = {
   "Corporate Structure & Governance":
     "GRC → Governance (board, committees, codes, meetings)",
-  "Financial Statements": "Manual — no connected accounting engine yet",
+  "Financial Statements":
+    "CRM → Accounting (chart of accounts, GL activity, period close, balance sheet balance)",
   "Legal & Regulatory Compliance": "GRC → Compliance obligations",
   "Tax Compliance": "GRC → Compliance obligations (RRA)",
-  "Operational & Commercial": "Manual — no connected CRM/PM data yet",
+  "Operational & Commercial":
+    "CRM → Mandates & Invoicing (delivery health, collection rate)",
   "Management Team & HR":
     "HR module (contracts, onboarding, performance reviews)",
-  "ESG & Sustainability": "Manual — no connected ESG register yet",
+  "ESG & Sustainability":
+    "GRC → ESG dashboard (environmental/social/governance composite score)",
   "Data Room Completeness":
-    "Manual — Deals data room is per-transaction, not company-wide",
+    "GRC → Deal pipeline (data room usage & due-diligence progress across deals)",
 };
 
 export type ComputeMode = "auto" | "manual";
 export const DIMENSION_COMPUTE_MODE: Record<ReadinessDimension, ComputeMode> = {
   "Corporate Structure & Governance": "auto",
-  "Financial Statements": "manual",
+  "Financial Statements": "auto",
   "Legal & Regulatory Compliance": "auto",
   "Tax Compliance": "auto",
-  "Operational & Commercial": "manual",
+  "Operational & Commercial": "auto",
   "Management Team & HR": "auto",
-  "ESG & Sustainability": "manual",
-  "Data Room Completeness": "manual",
+  "ESG & Sustainability": "auto",
+  "Data Room Completeness": "auto",
 };
 
 export type GapPriority = "P1" | "P2" | "P3";
