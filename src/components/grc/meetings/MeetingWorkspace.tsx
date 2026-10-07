@@ -644,7 +644,7 @@ export function MeetingWorkspace({
             <CardHeader className="flex-row items-center justify-between space-y-0">
               <CardTitle className="text-base">Meeting agenda</CardTitle>
               <div className="flex gap-2">
-                <Button
+                {/* <Button
                   size="sm"
                   variant="outline"
                   onClick={() =>
@@ -657,7 +657,7 @@ export function MeetingWorkspace({
                   }
                 >
                   Export PDF
-                </Button>
+                </Button> */}
               </div>
             </CardHeader>
             <CardContent>

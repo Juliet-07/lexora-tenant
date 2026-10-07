@@ -2823,9 +2823,9 @@ function DocumentsToSignCard({ member }: { member: BoardMember }) {
     <Card>
       <CardHeader className="pb-2 flex-row items-center justify-between">
         <CardTitle className="text-sm">Documents to sign</CardTitle>
-        <Button size="sm" variant="outline" onClick={openPicker}>
+        {/* <Button size="sm" variant="outline" onClick={openPicker}>
           <FileText className="h-3.5 w-3.5 mr-1.5" /> Set up
-        </Button>
+        </Button> */}
       </CardHeader>
       <CardContent className="space-y-2">
         {member.documentsToSign?.length ? (
@@ -2991,14 +2991,14 @@ function InductionPackCard({ member }: { member: BoardMember }) {
               e.target.value = "";
             }}
           />
-          <span className="inline-flex items-center gap-1.5 text-xs border rounded px-3 py-1.5 cursor-pointer hover:bg-muted/50 shrink-0">
+          {/* <span className="inline-flex items-center gap-1.5 text-xs border rounded px-3 py-1.5 cursor-pointer hover:bg-muted/50 shrink-0">
             {uploadMutation.isPending ? (
               <Loader2 className="h-3 w-3 animate-spin" />
             ) : (
               <Send className="h-3 w-3" />
             )}
             Send document
-          </span>
+          </span> */}
         </label>
       </CardHeader>
       <CardContent className="space-y-2">
