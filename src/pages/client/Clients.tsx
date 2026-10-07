@@ -176,10 +176,10 @@ export default function Clients() {
 
   const handleReactivate = async (clientId: string) => {
     try {
-      await reactivateClient(clientId);
+      const res = await reactivateClient(clientId);
       toast({
         title: "Client reactivated",
-        description: "They can now log in and redo onboarding.",
+        description: res.message,
       });
       loadAll(true);
     } catch (err: any) {

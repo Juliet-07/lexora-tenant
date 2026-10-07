@@ -187,7 +187,7 @@ export default function GrcMeetings() {
       sub: `${overdueActionItems.length} overdue`,
     },
     {
-      label: "Board packs pending",
+      label: "Meeting packs pending",
       value: packsPending,
       sub: "Upcoming meetings",
     },

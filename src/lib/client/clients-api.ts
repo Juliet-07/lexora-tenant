@@ -164,8 +164,17 @@ export async function fetchClientById(id: string): Promise<ApiClientDetail> {
   };
 }
 
-export async function reactivateClient(clientId: string): Promise<void> {
-  await api.patch(`/tenant/${clientId}/reactivate`);
+// The backend branches this on *why* the client went inactive: a
+// client only swept inactive because the tenant's own subscription
+// had lapsed comes back active with their KYC untouched; a genuinely
+// rejected client comes back needing to redo onboarding. The message
+// returned reflects which one actually happened, so callers should
+// show it rather than assuming either outcome.
+export async function reactivateClient(
+  clientId: string,
+): Promise<{ success: boolean; message: string }> {
+  const res = await api.patch(`/tenant/${clientId}/reactivate`);
+  return res.data?.data ?? res.data;
 }
 
 // Real, separate lifecycle from reactivateClient above (which is

@@ -13,10 +13,22 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (res) => res,
   (err) => {
-    if (err.response?.status === 401) {
+    // Only treat a 401 as "your session was invalidated" when there
+    // *was* a session to invalidate — i.e. a token was actually sent
+    // with this request. A failed /auth/login (or any other call made
+    // while logged out) also comes back 401, but that's just "wrong
+    // credentials" or "not logged in", not a session being kicked out.
+    // Wiping storage and hard-redirecting on that case was swallowing
+    // the real error: the redirect fired before the caller's own
+    // catch block ever got to show it, so a bad password silently
+    // bounced back to a blank login page instead of saying so.
+    const hadToken = !!localStorage.getItem("tenantToken");
+    if (err.response?.status === 401 && hadToken) {
       localStorage.removeItem("tenantToken");
       localStorage.removeItem("tenantUser");
-      window.location.href = "/login";
+      if (window.location.pathname !== "/login") {
+        window.location.href = "/login";
+      }
     }
     return Promise.reject(err);
   },
