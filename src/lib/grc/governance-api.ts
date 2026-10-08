@@ -822,6 +822,8 @@ export type SkillCategory =
   | "Other";
 export type SkillLevel = "Basic" | "Intermediate" | "Expert";
 
+export type SkillAddedBy = "Tenant" | "Self";
+
 export interface BoardSkill {
   name: string;
   category: SkillCategory;
@@ -829,6 +831,11 @@ export interface BoardSkill {
   yearsExperience: number;
   qualified: boolean;
   notes: string;
+  // Who put this entry on the matrix — this tenant's own "add
+  // credential" action, or the director self-submitting a skill via
+  // the board portal (Oct 2026). Old entries have no stored value;
+  // treat a missing one as "Tenant" (see SkillsMatrixSection).
+  addedBy?: SkillAddedBy;
 }
 
 export type ResolutionType = "Board" | "Written" | "Shareholder";

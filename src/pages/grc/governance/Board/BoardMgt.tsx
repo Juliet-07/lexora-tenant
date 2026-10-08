@@ -1477,6 +1477,14 @@ function SkillsMatrixSection({
                   <XCircle className="h-3 w-3 text-rose-600 shrink-0" />
                 )}
                 <span className="truncate">{s.name}</span>
+                {s.addedBy === "Self" && (
+                  <Badge
+                    variant="outline"
+                    className="text-[9px] px-1 py-0 h-4 shrink-0"
+                  >
+                    Self-submitted
+                  </Badge>
+                )}
               </div>
               <div className="text-[11px] text-muted-foreground flex gap-2 flex-wrap mt-0.5">
                 <span>{s.category}</span>
