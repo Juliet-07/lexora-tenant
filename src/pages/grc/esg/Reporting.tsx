@@ -893,9 +893,9 @@ function IndicatorSheet({
               <div className="mt-2 space-y-2">
                 <p className="text-xs text-muted-foreground">
                   Add a disclosure response, then send this for approval. The
-                  acting ESG Committee's Chair reviews externally by email; once
-                  they approve, the Board Chair signs in the board portal — one
-                  cannot sign before the other.
+                  acting ESG Committee's Chair reviews first, in their own board
+                  portal; once they approve, the Board Chair signs there too —
+                  one cannot sign before the other.
                 </p>
                 <Select value={committeeId} onValueChange={setCommitteeId}>
                   <SelectTrigger className="h-9">
