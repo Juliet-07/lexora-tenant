@@ -501,7 +501,14 @@ function NewMeetingDialog({ open, onOpenChange }: any) {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {["Board", "Committee", "Executive", "Ad-hoc"].map((c) => (
+                  {[
+                    "Board",
+                    "Committee",
+                    "Executive",
+                    "Ad-hoc",
+                    "AGM",
+                    "EGM",
+                  ].map((c) => (
                     <SelectItem key={c} value={c}>
                       {c}
                     </SelectItem>

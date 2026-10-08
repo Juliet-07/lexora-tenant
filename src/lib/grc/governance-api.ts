@@ -325,7 +325,9 @@ export type MeetingAudienceType =
   | "Board"
   | "Committee"
   | "Executive"
-  | "Ad-hoc";
+  | "Ad-hoc"
+  | "AGM"
+  | "EGM";
 export type MeetingMode = "Physical" | "Online";
 export type MeetingPlatform = "Zoom" | "Google Meet" | "Microsoft Teams";
 export type MeetingStatus = "Draft" | "Sent" | "Held" | "Postponed";
@@ -553,7 +555,8 @@ export type MinuteSectionKind =
   | "Procedural"
   | "Noting"
   | "Discussion"
-  | "Resolution";
+  | "Resolution"
+  | "Informational";
 export type MinutesDraftStatus =
   | "Draft"
   | "Sent for Chair review"
@@ -1627,6 +1630,23 @@ export const addAgendaItem = async (
   },
 ): Promise<Meeting> => {
   const res = await api.post(`/grc/governance/meetings/${id}/agenda`, dto);
+  return res.data?.data ?? res.data;
+};
+
+export const updateAgendaItem = async (
+  id: string,
+  index: number,
+  dto: {
+    title?: string;
+    presenter?: string;
+    durationMinutes?: number;
+    type?: AgendaItemType;
+  },
+): Promise<Meeting> => {
+  const res = await api.patch(
+    `/grc/governance/meetings/${id}/agenda/${index}`,
+    dto,
+  );
   return res.data?.data ?? res.data;
 };
 

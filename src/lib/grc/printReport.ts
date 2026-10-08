@@ -1,23 +1,38 @@
 /** Consistent print / Save as PDF presentation for text-based GRC documents. */
 export const escapeReportText = (value: unknown): string =>
-  String(value ?? "—").replace(/[&<>"']/g, (character) =>
-    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character] ?? character,
+  String(value ?? "—").replace(
+    /[&<>"']/g,
+    (character) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
+        character
+      ] ?? character,
   );
 
-export function printGrcReport({
-  title,
-  category,
-  body,
-  details = [],
-}: {
+export interface GrcReportOptions {
   title: string;
   category: string;
   body: string;
   details?: { label: string; value: string }[];
-}): void {
-  const windowRef = window.open("", "_blank");
-  if (!windowRef) return;
+  // The tenant's own company name, shown in the masthead and footer in
+  // place of a logo — this is the tenant's document, not Lexora's (PO
+  // feedback, Oct 2026: "shouldn't carry Lexora logo … should carry
+  // the company name of the tenant"). Falls back to "Lexora" only for
+  // the rare caller that has no tenant name in hand.
+  brandName?: string;
+}
 
+/** Builds the full, self-contained report HTML (masthead, metadata,
+ * sanitized body, footer) without opening or printing anything — used
+ * both for the in-app Preview dialog (as iframe srcDoc) and as the
+ * input to printGrcReport's print window, so the two always render
+ * identically. */
+export function buildGrcReportHtml({
+  title,
+  category,
+  body,
+  details = [],
+  brandName = "Lexora",
+}: GrcReportOptions): string {
   const theme = getComputedStyle(document.documentElement);
   const primary = `hsl(${theme.getPropertyValue("--primary").trim()})`;
   const foreground = `hsl(${theme.getPropertyValue("--foreground").trim()})`;
@@ -26,24 +41,32 @@ export function printGrcReport({
   const paper = `hsl(${theme.getPropertyValue("--card").trim()})`;
   const onPrimary = `hsl(${theme.getPropertyValue("--primary-foreground").trim()})`;
   const parsed = new DOMParser().parseFromString(body, "text/html");
-  parsed.querySelectorAll("script,iframe,object,embed,link,style,form").forEach((node) => node.remove());
+  parsed
+    .querySelectorAll("script,iframe,object,embed,link,style,form")
+    .forEach((node) => node.remove());
   parsed.querySelectorAll("*").forEach((node) => {
     for (const attribute of Array.from(node.attributes)) {
-      if (attribute.name.startsWith("on") || /^(href|src)$/i.test(attribute.name) && !/^https?:|^\//i.test(attribute.value)) node.removeAttribute(attribute.name);
+      if (
+        attribute.name.startsWith("on") ||
+        (/^(href|src)$/i.test(attribute.name) &&
+          !/^https?:|^\//i.test(attribute.value))
+      )
+        node.removeAttribute(attribute.name);
     }
   });
   const detailsHtml = details.length
     ? `<dl class="metadata">${details.map(({ label, value }) => `<div><dt>${escapeReportText(label)}</dt><dd>${escapeReportText(value)}</dd></div>`).join("")}</dl>`
     : "";
+  const brand = escapeReportText(brandName);
 
-  windowRef.document.write(`<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${escapeReportText(title)} — Lexora</title>
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${escapeReportText(title)} — ${brand}</title>
     <style>
       @page { size: A4; margin: 24mm 18mm 20mm; }
       * { box-sizing: border-box; }
       body { margin: 0; color: ${foreground}; background: ${paper}; font: 12px/1.65 Arial, sans-serif; }
       .page { max-width: 820px; margin: 0 auto; padding: 42px 36px; }
       .masthead { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding-bottom: 18px; border-bottom: 3px solid ${primary}; }
-      .masthead img { display: block; max-width: 145px; max-height: 46px; object-fit: contain; }
+      .masthead .brand { font-size: 18px; font-weight: 700; color: ${primary}; letter-spacing: -0.01em; }
       .category { color: ${primary}; font-size: 10px; font-weight: 700; text-transform: uppercase; }
       h1 { font-size: 25px; line-height: 1.25; margin: 30px 0 15px; overflow-wrap: anywhere; }
       .metadata { display: flex; flex-wrap: wrap; gap: 18px 32px; padding: 16px 0; border-top: 1px solid ${border}; border-bottom: 1px solid ${border}; margin: 0 0 28px; }
@@ -54,9 +77,15 @@ export function printGrcReport({
       .content th { background: ${primary}; color: ${onPrimary}; } .content tr, .content h2, .content h3 { break-inside: avoid; }
       footer { border-top: 1px solid ${border}; color: ${muted}; padding-top: 12px; margin-top: 38px; font-size: 10px; display: flex; justify-content: space-between; }
       @media print { .page { max-width: none; padding: 0; } body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } footer { position: fixed; bottom: -11mm; left: 0; right: 0; } }
-    </style></head><body><div class="page"><header class="masthead"><img src="/lexora-logo.png" alt="Lexora"><span class="category">${escapeReportText(category)}</span></header>
-    <h1>${escapeReportText(title)}</h1>${detailsHtml}<main class="content">${parsed.body.innerHTML}</main><footer><span>Lexora · Governance, Risk & Compliance</span><span>${escapeReportText(new Date().toLocaleDateString("en-GB"))}</span></footer></div></body></html>`);
+    </style></head><body><div class="page"><header class="masthead"><span class="brand">${brand}</span><span class="category">${escapeReportText(category)}</span></header>
+    <h1>${escapeReportText(title)}</h1>${detailsHtml}<main class="content">${parsed.body.innerHTML}</main><footer><span>${brand} · Governance, Risk & Compliance</span><span>${escapeReportText(new Date().toLocaleDateString("en-GB"))}</span></footer></div></body></html>`;
+}
+
+export function printGrcReport(options: GrcReportOptions): void {
+  const windowRef = window.open("", "_blank");
+  if (!windowRef) return;
+  windowRef.document.write(buildGrcReportHtml(options));
   windowRef.document.close();
-  // Allow the logo to paint before opening the print / Save as PDF dialog.
+  // Allow the page to paint before opening the print / Save as PDF dialog.
   windowRef.addEventListener("load", () => windowRef.print(), { once: true });
 }

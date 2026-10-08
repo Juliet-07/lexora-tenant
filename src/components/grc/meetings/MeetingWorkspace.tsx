@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
@@ -37,12 +38,14 @@ import {
   Settings2,
   Circle,
   Trash2,
+  Pencil,
   Loader2,
   ListChecks,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
-import { escapeReportText, printGrcReport } from "@/lib/grc/printReport";
+import { buildGrcReportHtml, printGrcReport } from "@/lib/grc/printReport";
 import { RichTextEditor } from "@/components/RichTextEditor";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   MeetingChecklist,
   MeetingNotice,
@@ -64,6 +67,7 @@ import {
 import { AttendanceSection } from "@/components/grc/meetings/MeetingSections";
 import {
   MEETING_CHECKLIST_ITEMS,
+  AGENDA_ITEM_TYPES,
   dispatchMeeting,
   addMeetingActionItem,
   removeMeetingActionItem,
@@ -71,8 +75,10 @@ import {
   resolveGrcFileUrl,
   updateExecutiveSummary,
   downloadExecutiveSummaryPdf,
+  updateAgendaItem,
   type Meeting,
   type MeetingActionItemStatus,
+  type MeetingAgendaItem,
   type AgendaItemType,
   type BoardPackDoc,
 } from "@/lib/grc/governance-api";
@@ -191,6 +197,141 @@ function AgendaTypeBadge({ type }: { type: AgendaItemType }) {
   );
 }
 
+/** Pencil-triggered dialog for editing an existing agenda item in
+ * place — title, presenter, type and duration — the counterpart to
+ * AgendaAddRow (add) and useRemoveAgenda (delete), which were
+ * previously the only ways to change the agenda. Renaming here also
+ * carries any linked board-pack documents over to the new title
+ * server-side (see MeetingService#updateAgendaItem). */
+function EditAgendaItemDialog({
+  meeting,
+  index,
+  item,
+}: {
+  meeting: Meeting;
+  index: number;
+  item: MeetingAgendaItem;
+}) {
+  const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState(item);
+
+  const mut = useMutation({
+    mutationFn: () => updateAgendaItem(meeting._id, index, draft),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["grc-meetings"] });
+      toast({ title: "Agenda item updated" });
+      setOpen(false);
+    },
+    onError: (err: any) =>
+      toast({
+        title: "Failed to update agenda item",
+        description: err?.response?.data?.message,
+        variant: "destructive",
+      }),
+  });
+
+  return (
+    <>
+      <Button
+        size="icon"
+        variant="ghost"
+        aria-label="Edit agenda item"
+        onClick={() => {
+          setDraft(item);
+          setOpen(true);
+        }}
+      >
+        <Pencil className="h-4 w-4 text-muted-foreground" />
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Edit agenda item</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label className="text-xs">Title</Label>
+              <Input
+                value={draft.title}
+                onChange={(e) => setDraft({ ...draft, title: e.target.value })}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs">Presenter</Label>
+                <Select
+                  value={draft.presenter || undefined}
+                  onValueChange={(v) => setDraft({ ...draft, presenter: v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Presenter" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {meeting.attendees.map((a) => (
+                      <SelectItem key={a.email} value={a.name}>
+                        {a.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs">Type</Label>
+                <Select
+                  value={draft.type}
+                  onValueChange={(v) =>
+                    setDraft({ ...draft, type: v as AgendaItemType })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {AGENDA_ITEM_TYPES.map((t) => (
+                      <SelectItem key={t} value={t}>
+                        {t}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div>
+              <Label className="text-xs">Duration (minutes)</Label>
+              <Input
+                type="number"
+                value={draft.durationMinutes}
+                onChange={(e) =>
+                  setDraft({
+                    ...draft,
+                    durationMinutes: Number(e.target.value),
+                  })
+                }
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" size="sm" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              disabled={!draft.title.trim() || mut.isPending}
+              onClick={() => mut.mutate()}
+            >
+              {mut.isPending ? (
+                <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+              ) : null}
+              Save
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 /** One group of the Board Pack tab — either the "Procedural documents"
  * bucket (agendaItemTitle === "") or the documents linked to one agenda
  * item. Always rendered, even when empty, so the Agenda ↔ Board Pack
@@ -303,6 +444,69 @@ function BoardPackSection({
         </div>
       )}
     </div>
+  );
+}
+
+/** Minutes PDF — preview first, download second (PO feedback, Oct
+ * 2026: "instead of export let it be preview … in the preview popup
+ * there is an option to download as pdf"). Previously the button went
+ * straight from click to the browser's print dialog with no chance to
+ * see the formatted document first; now an in-app dialog renders the
+ * exact same branded HTML in an iframe, and "Download as PDF" inside
+ * it is what opens the print window. The branding itself also no
+ * longer carries Lexora's own logo — the masthead/footer show the
+ * tenant's own company name (buildGrcReportHtml's brandName). */
+function MinutesPdfPreview({
+  meeting,
+  date,
+}: {
+  meeting: Meeting;
+  date: Date;
+}) {
+  const { user } = useAuth();
+  const [open, setOpen] = useState(false);
+  if (!meeting.minutes) return null;
+
+  const reportOptions = {
+    title: `${meeting.title} — Minutes`,
+    category: "Approved meeting minutes",
+    details: [
+      { label: "Meeting date", value: fmt(date) },
+      { label: "Chair", value: meeting.chair || "—" },
+      {
+        label: "Status",
+        value: meeting.minutesSentAt ? "Distributed" : "Not yet distributed",
+      },
+    ],
+    body: meeting.minutes,
+    brandName: user?.businessName || undefined,
+  };
+
+  return (
+    <>
+      <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
+        <Eye className="h-4 w-4 mr-1" />
+        Preview
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-3xl p-0 gap-0 overflow-hidden">
+          <DialogHeader className="px-4 pt-4 pb-3 border-b">
+            <DialogTitle>Minutes — preview</DialogTitle>
+          </DialogHeader>
+          <iframe
+            title="Minutes PDF preview"
+            srcDoc={buildGrcReportHtml(reportOptions)}
+            className="w-full h-[70vh] border-0"
+          />
+          <div className="flex justify-end gap-2 border-t px-4 py-3">
+            <Button size="sm" onClick={() => printGrcReport(reportOptions)}>
+              <Download className="h-4 w-4 mr-1" />
+              Download as PDF
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
@@ -692,7 +896,12 @@ export function MeetingWorkspace({
                             ? papers.map((d) => d.name).join(", ")
                             : "—"}
                         </TableCell>
-                        <TableCell className="text-right">
+                        <TableCell className="text-right whitespace-nowrap">
+                          <EditAgendaItemDialog
+                            meeting={meeting}
+                            index={i}
+                            item={a}
+                          />
                           <Button
                             size="icon"
                             variant="ghost"
@@ -727,7 +936,9 @@ export function MeetingWorkspace({
           <BoardPackExecutiveSummary meeting={meeting} />
           <Card>
             <CardHeader className="flex-row items-center justify-between space-y-0 flex-wrap gap-2">
-              <CardTitle className="text-base">Meeting pack documents</CardTitle>
+              <CardTitle className="text-base">
+                Meeting pack documents
+              </CardTitle>
               <div className="flex gap-2">
                 <RequestBoardPackDocDialog meeting={meeting} />
                 <UploadBoardPackDialog meeting={meeting} />
@@ -1008,21 +1219,7 @@ export function MeetingWorkspace({
                   No minutes drafted yet.
                 </p>
               )}
-              {meeting.minutes && (
-                <Button size="sm" variant="outline" onClick={() => printGrcReport({
-                  title: `${meeting.title} — Minutes`,
-                  category: "Approved meeting minutes",
-                  details: [
-                    { label: "Meeting date", value: fmt(date) },
-                    { label: "Chair", value: meeting.chair || "—" },
-                    { label: "Status", value: meeting.minutesSentAt ? "Distributed" : "Not yet distributed" },
-                  ],
-                  body: meeting.minutes,
-                })}>
-                  <Download className="h-4 w-4 mr-1" />
-                  Export branded PDF
-                </Button>
-              )}
+              <MinutesPdfPreview meeting={meeting} date={date} />
               <MinutesDistribution meeting={meeting} />
             </CardContent>
           </Card>

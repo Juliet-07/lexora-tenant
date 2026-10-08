@@ -55,6 +55,7 @@ import { toast } from "@/hooks/use-toast";
 import { printGrcReport } from "@/lib/grc/printReport";
 import { RichTextEditor } from "@/components/RichTextEditor";
 import { usePersistentState, fmtDate } from "@/lib/grc/usePersistentState";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   fetchGovernanceCodes,
   createGovernanceCode,
@@ -831,6 +832,7 @@ function CodeEditor({
   onSendForReview: () => Promise<GovernanceCode>;
   onSendForBoardApproval: () => Promise<void>;
 }) {
+  const { user } = useAuth();
   const [body, setBody] = useState(row.body);
   const [saving, setSaving] = useState(false);
   const [advancing, setAdvancing] = useState(false);
@@ -865,8 +867,17 @@ function CodeEditor({
   };
 
   const exportDoc = () => {
-    printGrcReport({ title: row.title, category: "Governance code", body,
-      details: [{ label: "Version", value: String(row.version) }, { label: "Status", value: row.meta.stage }, { label: "Owner", value: row.meta.owner }] });
+    printGrcReport({
+      title: row.title,
+      category: "Governance code",
+      body,
+      details: [
+        { label: "Version", value: String(row.version) },
+        { label: "Status", value: row.meta.stage },
+        { label: "Owner", value: row.meta.owner },
+      ],
+      brandName: user?.businessName || undefined,
+    });
   };
 
   return (

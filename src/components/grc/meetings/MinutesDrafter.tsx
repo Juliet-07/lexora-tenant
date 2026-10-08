@@ -63,6 +63,11 @@ const STATUSES: MinutesDraftStatus[] = [
   "Adopted and signed",
 ];
 
+// Fallback for the rare agenda item saved before AgendaItemType existed
+// (so it has no usable `type` of its own) — everything else now seeds
+// its minutes-section kind straight from the agenda item's own type,
+// since MinuteSectionKind and AgendaItemType carry the same five
+// values and the tenant already chose one when building the agenda.
 const inferKind = (title: string): MinuteSectionKind => {
   const t = title.toLowerCase();
   if (/approv|resolut|ratif|declar|adopt/.test(t)) return "Resolution";
@@ -116,7 +121,7 @@ function buildInitial(meeting: Meeting): {
       ? meeting.agenda.map((a) => ({
           _id: tmpId(),
           title: a.title,
-          kind: inferKind(a.title),
+          kind: (a.type as MinuteSectionKind | undefined) ?? inferKind(a.title),
           presenter: a.presenter ?? "",
           time: "",
           body: "",
@@ -432,6 +437,7 @@ export function MinutesDrafter({ meeting }: { meeting: Meeting }) {
                             "Procedural",
                             "Noting",
                             "Discussion",
+                            "Informational",
                             "Resolution",
                           ] as const
                         ).map((k) => (
