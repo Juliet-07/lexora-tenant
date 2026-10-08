@@ -561,8 +561,15 @@ export type MinutesDraftStatus =
   | "Draft"
   | "Sent for Chair review"
   | "Chair approved"
-  | "Tabled for Board adoption"
+  // Renamed from "Tabled for Board adoption" (PO feedback, Oct 2026) —
+  // this stage now covers every meeting type, not only Board.
+  | "Tabled for adoption"
   | "Adopted and signed";
+export type MinutesApprovalDecision =
+  | "Pending"
+  | "Approved"
+  | "Changes requested";
+export type MinutesReviewDecision = "approved" | "changes-requested";
 export type MinuteResolutionOutcome =
   | "Passed"
   | "Not passed"
@@ -595,6 +602,25 @@ export interface MinutesDraftAction {
   due: string;
 }
 
+export interface MinutesReviewEntry {
+  attendeeEmail: string;
+  attendeeName: string;
+  decision: MinutesReviewDecision;
+  comment: string;
+  submittedAt: string;
+}
+
+export interface MinutesChairReview {
+  boardMemberId: string | null;
+  name: string;
+  email: string;
+  token: string | null;
+  decision: MinutesApprovalDecision;
+  notes: string;
+  requestedAt: string | null;
+  decidedAt: string | null;
+}
+
 export interface MinutesDraft {
   chair: string;
   minuteTaker: string;
@@ -605,6 +631,8 @@ export interface MinutesDraft {
   status: MinutesDraftStatus;
   updatedAt: string | null;
   updatedBy: string | null;
+  chairReview: MinutesChairReview | null;
+  boardAdoptions: MinutesReviewEntry[];
 }
 
 const GRC_API_BASE = (api.defaults as any)?.baseURL ?? "/api";
@@ -672,13 +700,7 @@ export interface Meeting {
   }[];
   ackTokens: unknown[];
   minutesPdfUrl: string | null;
-  minutesReviews: {
-    attendeeEmail: string;
-    attendeeName: string;
-    decision: string;
-    comment: string;
-    submittedAt: string;
-  }[];
+  minutesReviews: MinutesReviewEntry[];
   actionItems: MeetingActionItem[];
   checklist: MeetingChecklistRecord[];
   notice: MeetingNotice;
@@ -1889,6 +1911,19 @@ export const setMeetingMinutesDraftStatus = async (
   return res.data?.data ?? res.data;
 };
 
+// Tenant action: send the minutes to the meeting's Chair for review
+// and approval. Only reachable from Draft, or again after the Chair
+// has requested changes.
+export const sendMinutesForChairReview = async (
+  id: string,
+): Promise<Meeting> => {
+  const res = await api.post(
+    `/grc/governance/meetings/${id}/minutes-draft/send-for-chair-review`,
+    {},
+  );
+  return res.data?.data ?? res.data;
+};
+
 export const markMeetingHeld = async (id: string): Promise<Meeting> => {
   const res = await api.post(`/grc/governance/meetings/${id}/mark-held`, {});
   return res.data?.data ?? res.data;
@@ -2188,6 +2223,40 @@ export const submitMinutesReview = async (
 ): Promise<{ success: boolean }> => {
   const res = await api.post(
     `/grc/governance/meetings/minutes-review/${token}`,
+    dto,
+  );
+  return res.data?.data ?? res.data;
+};
+
+// ── Public — minutes CHAIR review (Executive/Ad-hoc/AGM/EGM meetings
+// only; Board/Committee chairs review in-app on the board portal). ──
+
+export interface MinutesChairReviewSnapshot {
+  title: string;
+  type: string;
+  date: string;
+  pdfUrl: string | null;
+  prefillName: string;
+  decision: MinutesApprovalDecision;
+  notes: string;
+  decidedAt: string | null;
+}
+
+export const fetchMinutesChairReviewSnapshot = async (
+  token: string,
+): Promise<MinutesChairReviewSnapshot> => {
+  const res = await api.get(
+    `/grc/governance/meetings/minutes-chair-review/${token}`,
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const submitMinutesChairReview = async (
+  token: string,
+  dto: { decision: "approved" | "changes-requested"; notes?: string },
+): Promise<{ success: boolean }> => {
+  const res = await api.post(
+    `/grc/governance/meetings/minutes-chair-review/${token}`,
     dto,
   );
   return res.data?.data ?? res.data;

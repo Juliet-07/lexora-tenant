@@ -15,6 +15,7 @@ import { employeeRoutes } from "./employee.routes";
 import SignContractPage from "@/pages/public/SigninContractPage";
 import MeetingAckPage from "@/pages/grc/governance/Meeting/MeetingAck";
 import MinutesReviewPage from "@/pages/grc/governance/Meeting/MinutesReview";
+import MinutesChairReviewPage from "@/pages/grc/governance/Meeting/MinutesChairReview";
 import MeetingNoticeRsvpPage from "@/pages/grc/governance/Meeting/MeetingNoticeRsvp";
 import PolicyAckPage from "@/pages/grc/compliance/PolicyAck";
 import PolicyApprovalPage from "@/pages/grc/compliance/PolicyApproval";
@@ -41,6 +42,7 @@ const PUBLIC_ROUTE_PATTERNS = [
   /^\/sign-tool-contract\/[^/]+$/,
   /^\/meeting-ack\/[^/]+$/,
   /^\/minutes-review\/[^/]+$/,
+  /^\/minutes-chair-review\/[^/]+$/,
   /^\/policy-ack\/[^/]+$/,
   /^\/policy-approval\/[^/]+$/,
   /^\/esg-approve\/[^/]+$/,
@@ -103,6 +105,14 @@ export function AppRoutes() {
         <Route
           path="/login/minutes-review/:token"
           element={<MinutesReviewPage />}
+        />
+        <Route
+          path="/minutes-chair-review/:token"
+          element={<MinutesChairReviewPage />}
+        />
+        <Route
+          path="/login/minutes-chair-review/:token"
+          element={<MinutesChairReviewPage />}
         />
         <Route
           path="/meeting-notice/:token"

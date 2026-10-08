@@ -797,8 +797,21 @@ export function AttendanceSection({ meeting }: { meeting: Meeting }) {
   );
 }
 
-export function MinutesReviewsSection({ meeting }: { meeting: Meeting }) {
-  const minutesReviews = meeting.minutesReviews ?? [];
+export function MinutesReviewsSection({
+  meeting,
+  reviews,
+  title = "Minutes review status",
+  emptyLabel = "No attendees to send review links to.",
+}: {
+  meeting: Meeting;
+  // Defaults to the meeting-level public reviews (Executive/Ad-hoc/
+  // AGM/EGM) — pass minutesDraft.boardAdoptions to show Board/
+  // Committee attendees' in-app adoptions with this same component.
+  reviews?: Meeting["minutesReviews"];
+  title?: string;
+  emptyLabel?: string;
+}) {
+  const minutesReviews = reviews ?? meeting.minutesReviews ?? [];
   const byEmail = new Map(
     minutesReviews.map((r) => [r.attendeeEmail.toLowerCase(), r]),
   );
@@ -814,7 +827,7 @@ export function MinutesReviewsSection({ meeting }: { meeting: Meeting }) {
       <div className="flex items-center justify-between gap-2">
         <div className="text-sm font-medium flex items-center gap-2">
           <MessageSquare className="h-4 w-4 text-primary" />
-          Minutes review status
+          {title}
         </div>
         <div className="flex gap-2 text-xs">
           <Badge
@@ -874,9 +887,7 @@ export function MinutesReviewsSection({ meeting }: { meeting: Meeting }) {
           );
         })}
         {meeting.attendees.length === 0 && (
-          <p className="text-xs text-muted-foreground">
-            No attendees to send review links to.
-          </p>
+          <p className="text-xs text-muted-foreground">{emptyLabel}</p>
         )}
       </div>
     </div>

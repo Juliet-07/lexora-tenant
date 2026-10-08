@@ -18,9 +18,13 @@ import {
   ArrowUp,
   Check,
   ChevronRight,
+  Clock,
   Loader2,
+  MessageSquare,
   Plus,
   RefreshCw,
+  RotateCcw,
+  Send,
   Trash2,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
@@ -28,6 +32,7 @@ import {
   updateMeetingMinutesDraft,
   setMeetingMinutesDraftStatus,
   updateMeetingMinutes,
+  sendMinutesForChairReview,
   type Meeting,
   type MinuteSection,
   type MinuteSectionKind,
@@ -59,7 +64,7 @@ const STATUSES: MinutesDraftStatus[] = [
   "Draft",
   "Sent for Chair review",
   "Chair approved",
-  "Tabled for Board adoption",
+  "Tabled for adoption",
   "Adopted and signed",
 ];
 
@@ -190,11 +195,22 @@ export function MinutesDrafter({ meeting }: { meeting: Meeting }) {
     onError: onErr("Failed to save minutes draft"),
   });
 
-  const statusMut = useMutation({
-    mutationFn: (status: MinutesDraftStatus) =>
-      setMeetingMinutesDraftStatus(meeting._id, status),
+  // Resets a draft back to Draft only — every forward transition is
+  // now automatic or its own dedicated action (send for review, the
+  // Chair's decision, send to attendees, every attendee adopting).
+  const resetMut = useMutation({
+    mutationFn: () => setMeetingMinutesDraftStatus(meeting._id, "Draft"),
     onSuccess: invalidate,
-    onError: onErr("Failed to update status"),
+    onError: onErr("Failed to reset status"),
+  });
+
+  const sendForReviewMut = useMutation({
+    mutationFn: () => sendMinutesForChairReview(meeting._id),
+    onSuccess: () => {
+      invalidate();
+      toast({ title: "Sent to the Chair for review" });
+    },
+    onError: onErr("Failed to send for Chair review"),
   });
 
   const generateMut = useMutation({
@@ -278,6 +294,9 @@ export function MinutesDrafter({ meeting }: { meeting: Meeting }) {
 
   const status = draft?.status ?? "Draft";
   const statusIdx = STATUSES.indexOf(status);
+  const chairReview = draft?.chairReview ?? null;
+  const hasFinalMinutes = !!meeting.minutes?.trim();
+  const isAdopted = status === "Adopted and signed";
 
   return (
     <div className="space-y-4">
@@ -285,7 +304,7 @@ export function MinutesDrafter({ meeting }: { meeting: Meeting }) {
         <CardHeader>
           <CardTitle className="text-base">Minutes status</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-3">
           <div className="flex items-center flex-wrap gap-1">
             {STATUSES.map((s, i) => (
               <div key={s} className="flex items-center gap-1">
@@ -302,18 +321,122 @@ export function MinutesDrafter({ meeting }: { meeting: Meeting }) {
               </div>
             ))}
           </div>
-          {statusIdx < STATUSES.length - 1 && (
+
+          {status === "Draft" && (
+            <div className="space-y-2">
+              {!hasFinalMinutes && (
+                <p className="text-xs text-muted-foreground">
+                  Generate the final minutes below before sending them for Chair
+                  review.
+                </p>
+              )}
+              <Button
+                size="sm"
+                disabled={sendForReviewMut.isPending || !hasFinalMinutes}
+                onClick={() => sendForReviewMut.mutate()}
+              >
+                {sendForReviewMut.isPending ? (
+                  <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                ) : (
+                  <Send className="h-3.5 w-3.5 mr-1" />
+                )}
+                Send for Chair review
+              </Button>
+            </div>
+          )}
+
+          {status === "Sent for Chair review" && chairReview && (
+            <div className="space-y-2">
+              {chairReview.decision === "Pending" ? (
+                <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm flex items-start gap-2">
+                  <Clock className="h-4 w-4 text-amber-600 mt-0.5" />
+                  <div>
+                    Awaiting review from the Chair, {chairReview.name} (
+                    {chairReview.email})
+                    {chairReview.requestedAt && (
+                      <>
+                        {" "}
+                        — sent{" "}
+                        {new Date(chairReview.requestedAt).toLocaleString()}.
+                      </>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm flex items-start gap-2">
+                    <MessageSquare className="h-4 w-4 text-amber-600 mt-0.5" />
+                    <div>
+                      <div className="font-medium">
+                        {chairReview.name} requested changes
+                        {chairReview.decidedAt &&
+                          ` on ${new Date(chairReview.decidedAt).toLocaleDateString()}`}
+                        .
+                      </div>
+                      {chairReview.notes && (
+                        <div className="mt-1">{chairReview.notes}</div>
+                      )}
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    disabled={sendForReviewMut.isPending || !hasFinalMinutes}
+                    onClick={() => sendForReviewMut.mutate()}
+                  >
+                    {sendForReviewMut.isPending ? (
+                      <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                    ) : (
+                      <Send className="h-3.5 w-3.5 mr-1" />
+                    )}
+                    Resend for Chair review
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {status === "Chair approved" && chairReview && (
+            <div className="rounded-md border border-emerald-300 bg-emerald-50 p-3 text-sm flex items-start gap-2">
+              <Check className="h-4 w-4 text-emerald-600 mt-0.5" />
+              <div>
+                Approved by {chairReview.name}
+                {chairReview.decidedAt &&
+                  ` on ${new Date(chairReview.decidedAt).toLocaleDateString()}`}
+                . Use "Send minutes to attendees" below to table it for
+                adoption.
+              </div>
+            </div>
+          )}
+
+          {status === "Tabled for adoption" && (
+            <p className="text-xs text-muted-foreground">
+              Sent to attendees for adoption — see the adoption status below.
+              Once everyone has adopted, this closes out automatically.
+            </p>
+          )}
+
+          {isAdopted && (
+            <div className="rounded-md border border-emerald-300 bg-emerald-50 p-3 text-sm flex items-start gap-2">
+              <Check className="h-4 w-4 text-emerald-600 mt-0.5" />
+              Adopted and signed — these minutes are now locked and can no
+              longer be edited.
+            </div>
+          )}
+
+          {!isAdopted && status !== "Draft" && (
             <Button
               size="sm"
-              variant="outline"
-              className="mt-3"
-              disabled={statusMut.isPending}
-              onClick={() => statusMut.mutate(STATUSES[statusIdx + 1])}
+              variant="ghost"
+              className="text-muted-foreground"
+              disabled={resetMut.isPending}
+              onClick={() => resetMut.mutate()}
             >
-              {statusMut.isPending ? (
+              {resetMut.isPending ? (
                 <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
-              ) : null}
-              Advance to "{STATUSES[statusIdx + 1]}"
+              ) : (
+                <RotateCcw className="h-3.5 w-3.5 mr-1" />
+              )}
+              Reset to Draft
             </Button>
           )}
         </CardContent>
@@ -647,31 +770,41 @@ export function MinutesDrafter({ meeting }: { meeting: Meeting }) {
             </Button>
           </div>
 
-          <div className="flex gap-2 justify-end border-t pt-3">
-            <Button
-              variant="outline"
-              disabled={saveMut.isPending}
-              onClick={() => saveMut.mutate()}
-            >
-              {saveMut.isPending ? (
-                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-              ) : null}
-              Save draft
-            </Button>
-            <Button
-              disabled={generateMut.isPending || sections.length === 0}
-              onClick={() => generateMut.mutate()}
-            >
-              {generateMut.isPending ? (
-                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-              ) : null}
-              Generate final minutes
-            </Button>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            "Generate final minutes" renders this draft into the Minutes section
-            below, ready to send to attendees once the meeting is marked held.
-          </p>
+          {isAdopted ? (
+            <p className="text-xs text-muted-foreground border-t pt-3">
+              These minutes have been adopted and signed and can no longer be
+              edited.
+            </p>
+          ) : (
+            <>
+              <div className="flex gap-2 justify-end border-t pt-3">
+                <Button
+                  variant="outline"
+                  disabled={saveMut.isPending}
+                  onClick={() => saveMut.mutate()}
+                >
+                  {saveMut.isPending ? (
+                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                  ) : null}
+                  Save draft
+                </Button>
+                <Button
+                  disabled={generateMut.isPending || sections.length === 0}
+                  onClick={() => generateMut.mutate()}
+                >
+                  {generateMut.isPending ? (
+                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                  ) : null}
+                  Generate final minutes
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                "Generate final minutes" renders this draft into the Minutes
+                section below, ready to send for Chair review once the meeting
+                is marked held.
+              </p>
+            </>
+          )}
         </CardContent>
       </Card>
     </div>

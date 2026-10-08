@@ -398,56 +398,79 @@ export function AttendeesEditor({ meeting }: { meeting: Meeting }) {
   );
 }
 
-/** Distribute the approved minutes and track attendee reviews. */
+/** Distribute the Chair-approved minutes and track attendee adoption.
+ * Board/Committee attendees adopt in-app from their board portal
+ * (tracked in minutesDraft.boardAdoptions); every other meeting
+ * type's attendees use the existing public emailed review link
+ * (tracked in meeting.minutesReviews) — see MeetingService#sendMinutes. */
 export function MinutesDistribution({ meeting }: { meeting: Meeting }) {
   const { invalidate, onError, id } = useActions(meeting);
   const mut = useMutation({
     mutationFn: () => sendMeetingMinutes(id),
     onSuccess: () => {
       invalidate();
-      toast({ title: "Minutes sent to all attendees" });
+      toast({ title: "Minutes sent to all attendees for adoption" });
     },
     onError: onError("Failed to send minutes"),
   });
-  const reviews = meeting.minutesReviews ?? [];
-  const allApproved =
-    meeting.attendees.length > 0 &&
-    meeting.attendees.every((a) =>
-      reviews.some(
-        (r) =>
-          r.attendeeEmail.toLowerCase() === a.email.toLowerCase() &&
-          r.decision === "approved",
-      ),
+
+  const draft = meeting.minutesDraft;
+  const status = draft?.status ?? "Draft";
+  const isBoardPortal =
+    meeting.type === "Board" || meeting.type === "Committee";
+  const adoptions = isBoardPortal
+    ? (draft?.boardAdoptions ?? [])
+    : (meeting.minutesReviews ?? []);
+
+  if (status === "Draft" || status === "Sent for Chair review") {
+    return (
+      <p className="text-xs text-muted-foreground">
+        The Chair must review and approve these minutes (see Minutes status
+        above) before they can be sent to attendees for adoption.
+      </p>
     );
+  }
+
   return (
     <div className="space-y-2">
-      {allApproved ? (
+      {status === "Adopted and signed" ? (
         <div className="rounded-md border border-success/40 bg-success/10 p-3 text-sm flex gap-2">
           <CheckCircle2 className="h-4 w-4 text-success mt-0.5" />
-          All {meeting.attendees.length} attendees have approved these minutes.
+          Adopted and signed — all {meeting.attendees.length} attendees have
+          adopted these minutes.
         </div>
       ) : (
-        meeting.status === "Held" && (
-          <div className="flex items-center gap-3 flex-wrap">
-            <Button
-              onClick={() => mut.mutate()}
-              disabled={mut.isPending || !meeting.minutes?.trim()}
-            >
-              <Send className="h-4 w-4 mr-1" />
-              {meeting.minutesSentAt
-                ? "Resend minutes"
-                : "Send minutes to attendees"}
-            </Button>
-            {meeting.minutesSentAt && (
-              <span className="text-xs text-muted-foreground flex items-center gap-1">
-                <Mail className="h-3 w-3" /> Sent{" "}
-                {new Date(meeting.minutesSentAt).toLocaleString()}
-              </span>
-            )}
-          </div>
-        )
+        <div className="flex items-center gap-3 flex-wrap">
+          <Button
+            onClick={() => mut.mutate()}
+            disabled={mut.isPending || !meeting.minutes?.trim()}
+          >
+            <Send className="h-4 w-4 mr-1" />
+            {meeting.minutesSentAt
+              ? "Resend minutes"
+              : "Send minutes to attendees for adoption"}
+          </Button>
+          {meeting.minutesSentAt && (
+            <span className="text-xs text-muted-foreground flex items-center gap-1">
+              <Mail className="h-3 w-3" /> Sent{" "}
+              {new Date(meeting.minutesSentAt).toLocaleString()}
+              {isBoardPortal
+                ? " — attendees adopt in-app on their board portal."
+                : " — attendees adopt via their emailed link."}
+            </span>
+          )}
+        </div>
       )}
-      {meeting.minutesSentAt && <MinutesReviewsSection meeting={meeting} />}
+      {meeting.minutesSentAt && (
+        <MinutesReviewsSection
+          meeting={meeting}
+          reviews={adoptions}
+          title={
+            isBoardPortal ? "Board portal adoption status" : "Adoption status"
+          }
+          emptyLabel="No attendees to send for adoption."
+        />
+      )}
     </div>
   );
 }
