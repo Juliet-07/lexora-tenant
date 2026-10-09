@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
@@ -41,6 +42,7 @@ import {
   Pencil,
   Loader2,
   ListChecks,
+  MessageSquare,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { buildGrcReportHtml, printGrcReport } from "@/lib/grc/printReport";
@@ -76,6 +78,7 @@ import {
   updateExecutiveSummary,
   downloadExecutiveSummaryPdf,
   updateAgendaItem,
+  addBoardPackNoteAsTenant,
   type Meeting,
   type MeetingActionItemStatus,
   type MeetingAgendaItem,
@@ -332,6 +335,108 @@ function EditAgendaItemDialog({
   );
 }
 
+/** A document's notes/questions thread, collapsed behind a toggle so
+ * the Board Pack tab isn't a wall of text when nobody's asked anything
+ * yet. Mirrors the board portal's own document-detail thread
+ * (lexora-board BoardPacks.tsx) — directors' notes land here via the
+ * existing boardPackNotes field, and this is the tenant's reply box,
+ * flagged fromTenant so the board portal can tell replies apart from a
+ * director's original note. */
+function BoardPackNoteThread({
+  meeting,
+  fileUrl,
+}: {
+  meeting: Meeting;
+  fileUrl: string;
+}) {
+  const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState("");
+  const notes = (meeting.boardPackNotes ?? []).filter(
+    (n) => n.fileUrl === fileUrl,
+  );
+
+  const replyMut = useMutation({
+    mutationFn: (text: string) =>
+      addBoardPackNoteAsTenant(meeting._id, fileUrl, text),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["grc-meetings"] });
+      setDraft("");
+      toast({ title: "Reply sent" });
+    },
+    onError: (err: any) =>
+      toast({
+        title: "Failed to send reply",
+        description: err?.response?.data?.message,
+        variant: "destructive",
+      }),
+  });
+
+  return (
+    <div className="mt-2">
+      <button
+        type="button"
+        className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+        onClick={() => setOpen((o) => !o)}
+      >
+        <MessageSquare className="h-3.5 w-3.5" />
+        {notes.length > 0
+          ? `${notes.length} note${notes.length === 1 ? "" : "s"} & question${
+              notes.length === 1 ? "" : "s"
+            }`
+          : "Notes & questions"}
+      </button>
+      {open && (
+        <div className="mt-2 space-y-2 rounded-lg border bg-muted/30 p-3">
+          {notes.length > 0 ? (
+            <div className="space-y-2">
+              {notes.map((n, ni) => (
+                <div key={ni} className="rounded-lg border bg-card p-2.5">
+                  <p className="flex items-center gap-1.5 text-xs font-semibold">
+                    {n.authorName}
+                    {n.fromTenant && (
+                      <Badge
+                        variant="outline"
+                        className="bg-primary/10 text-primary border-primary/30 text-[10px] px-1.5 py-0"
+                      >
+                        You
+                      </Badge>
+                    )}
+                    <span className="font-normal text-muted-foreground">
+                      · {fmt(new Date(n.createdAt))}
+                    </span>
+                  </p>
+                  <p className="mt-0.5 text-sm">{n.text}</p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground italic">
+              No notes or questions from the board on this document yet.
+            </p>
+          )}
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Textarea
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              placeholder="Reply to the board..."
+              className="min-h-[60px] flex-1"
+            />
+            <Button
+              size="sm"
+              className="self-end"
+              disabled={!draft.trim() || replyMut.isPending}
+              onClick={() => replyMut.mutate(draft.trim())}
+            >
+              Reply
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** One group of the Board Pack tab — either the "Procedural documents"
  * bucket (agendaItemTitle === "") or the documents linked to one agenda
  * item. Always rendered, even when empty, so the Agenda ↔ Board Pack
@@ -361,84 +466,89 @@ function BoardPackSection({
           {docs.map(({ d, i }) => (
             <div
               key={i}
-              className={`flex items-center justify-between border rounded-lg p-3 ${
+              className={`border rounded-lg p-3 ${
                 !d.fileUrl ? "border-warning/40 bg-warning/5" : ""
               }`}
             >
-              <div className="flex gap-3 items-center">
-                <FileText
-                  className={`h-5 w-5 ${!d.fileUrl ? "text-warning" : "text-muted-foreground"}`}
-                />
-                <div>
-                  <div className="text-sm font-medium flex items-center gap-2">
-                    {d.name}
+              <div className="flex items-center justify-between">
+                <div className="flex gap-3 items-center">
+                  <FileText
+                    className={`h-5 w-5 ${!d.fileUrl ? "text-warning" : "text-muted-foreground"}`}
+                  />
+                  <div>
+                    <div className="text-sm font-medium flex items-center gap-2">
+                      {d.name}
+                      {d.fileUrl ? (
+                        <Badge
+                          variant="outline"
+                          className="bg-success/15 text-success border-success/30 text-[10px] px-1.5 py-0"
+                        >
+                          Uploaded
+                        </Badge>
+                      ) : (
+                        <Badge
+                          variant="outline"
+                          className="bg-warning/15 text-warning border-warning/30 text-[10px] px-1.5 py-0"
+                        >
+                          Outstanding
+                        </Badge>
+                      )}
+                    </div>
                     {d.fileUrl ? (
-                      <Badge
-                        variant="outline"
-                        className="bg-success/15 text-success border-success/30 text-[10px] px-1.5 py-0"
-                      >
-                        Uploaded
-                      </Badge>
+                      <div className="text-xs text-muted-foreground">
+                        Uploaded{" "}
+                        {d.uploadedAt ? fmt(new Date(d.uploadedAt)) : "—"}
+                        {d.uploadedBy ? ` by ${d.uploadedBy}` : ""}
+                      </div>
                     ) : (
-                      <Badge
-                        variant="outline"
-                        className="bg-warning/15 text-warning border-warning/30 text-[10px] px-1.5 py-0"
-                      >
-                        Outstanding
-                      </Badge>
+                      <div className="text-xs text-warning">
+                        Awaiting upload
+                        {d.assignedToName ? ` from ${d.assignedToName}` : ""}
+                        {d.dueDate
+                          ? ` · Expected by ${fmt(new Date(d.dueDate))}`
+                          : ""}
+                      </div>
                     )}
                   </div>
+                </div>
+                <div className="flex items-center gap-1">
                   {d.fileUrl ? (
-                    <div className="text-xs text-muted-foreground">
-                      Uploaded{" "}
-                      {d.uploadedAt ? fmt(new Date(d.uploadedAt)) : "—"}
-                      {d.uploadedBy ? ` by ${d.uploadedBy}` : ""}
-                    </div>
+                    <>
+                      <DocPreviewButton
+                        name={d.name}
+                        url={resolveGrcFileUrl(d.fileUrl)}
+                      />
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        aria-label="Download"
+                        title="Download"
+                        onClick={() =>
+                          downloadBoardPackDoc(
+                            resolveGrcFileUrl(d.fileUrl!),
+                            d.name,
+                          )
+                        }
+                      >
+                        <Download className="h-4 w-4" />
+                      </Button>
+                    </>
                   ) : (
-                    <div className="text-xs text-warning">
-                      Awaiting upload
-                      {d.assignedToName ? ` from ${d.assignedToName}` : ""}
-                      {d.dueDate
-                        ? ` · Expected by ${fmt(new Date(d.dueDate))}`
-                        : ""}
-                    </div>
+                    <FulfillBoardPackDocButton meeting={meeting} index={i} />
                   )}
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    aria-label="Remove document"
+                    onClick={() => removeDoc.mutate(i)}
+                  >
+                    <Trash2 className="h-4 w-4 text-muted-foreground" />
+                  </Button>
                 </div>
               </div>
-              <div className="flex items-center gap-1">
-                {d.fileUrl ? (
-                  <>
-                    <DocPreviewButton
-                      name={d.name}
-                      url={resolveGrcFileUrl(d.fileUrl)}
-                    />
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      aria-label="Download"
-                      title="Download"
-                      onClick={() =>
-                        downloadBoardPackDoc(
-                          resolveGrcFileUrl(d.fileUrl!),
-                          d.name,
-                        )
-                      }
-                    >
-                      <Download className="h-4 w-4" />
-                    </Button>
-                  </>
-                ) : (
-                  <FulfillBoardPackDocButton meeting={meeting} index={i} />
-                )}
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  aria-label="Remove document"
-                  onClick={() => removeDoc.mutate(i)}
-                >
-                  <Trash2 className="h-4 w-4 text-muted-foreground" />
-                </Button>
-              </div>
+              {d.fileUrl && (
+                <BoardPackNoteThread meeting={meeting} fileUrl={d.fileUrl} />
+              )}
             </div>
           ))}
         </div>

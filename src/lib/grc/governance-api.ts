@@ -442,6 +442,19 @@ export interface BoardPackDoc {
   uploadedBy: string;
 }
 
+// A director's note/question on a board pack document, or the
+// tenant's (Company Secretary's) reply in the same thread — notes are
+// addressed by the document's fileUrl, not an id of their own.
+// fromTenant distinguishes a reply from a director's original note.
+export interface BoardPackNote {
+  fileUrl: string;
+  authorName: string;
+  authorEmail: string;
+  text: string;
+  createdAt: string;
+  fromTenant: boolean;
+}
+
 export type MeetingActionItemStatus = "Open" | "Done";
 
 export interface MeetingActionItem {
@@ -669,6 +682,9 @@ export interface Meeting {
   // MeetingControls.tsx) but kept on the type/backend for a possible
   // return to it later.
   boardPackDueDate: string | null;
+  // Directors' notes/questions on board pack documents, and the
+  // tenant's replies in the same thread — see BoardPackNote.
+  boardPackNotes: BoardPackNote[];
   sentAt: string | null;
   minutes: string | null;
   minutesSentAt: string | null;
@@ -1743,6 +1759,24 @@ export const removeBoardPackDoc = async (
 ): Promise<Meeting> => {
   const res = await api.delete(
     `/grc/governance/meetings/${id}/board-pack/${index}`,
+  );
+  return res.data?.data ?? res.data;
+};
+
+// Reply, as the tenant, to a director's note/question on a board pack
+// document (same thread shown on the board portal's document detail
+// view — the fileUrl ties the reply to the right document).
+export const addBoardPackNoteAsTenant = async (
+  id: string,
+  fileUrl: string,
+  text: string,
+): Promise<Meeting> => {
+  const res = await api.post(
+    `/grc/governance/meetings/${id}/board-pack/notes`,
+    {
+      fileUrl,
+      text,
+    },
   );
   return res.data?.data ?? res.data;
 };
