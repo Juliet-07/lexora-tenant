@@ -544,7 +544,6 @@ export default function HREmployees() {
           <TabsTrigger value="employees">Employees</TabsTrigger>
           <TabsTrigger value="teams">Teams</TabsTrigger>
           <TabsTrigger value="locations">Locations</TabsTrigger>
-          <TabsTrigger value="onboarding">Onboarding</TabsTrigger>
         </TabsList>
 
         {/* ── Employees tab ── */}
@@ -891,11 +890,6 @@ export default function HREmployees() {
               ))}
             </div>
           )}
-        </TabsContent>
-
-        {/* ── Onboarding tab ── */}
-        <TabsContent value="onboarding" className="space-y-4 mt-4">
-          <OnboardingDocumentsTab />
         </TabsContent>
       </Tabs>
 

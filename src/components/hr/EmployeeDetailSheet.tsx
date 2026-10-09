@@ -53,6 +53,9 @@ import {
   Circle,
   UserX,
   Stamp,
+  Users,
+  FolderKanban,
+  ListTodo,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -88,6 +91,13 @@ import {
 } from "@/lib/hr/hr-contracts-api";
 import { DialogDescription } from "@radix-ui/react-dialog";
 import { SignaturePad } from "./SignaturePad";
+import { fetchTasks, Task } from "@/lib/crm/tasks-api";
+import { fetchTimeEntries, TimeEntry } from "@/lib/crm/time-tracking-api";
+import {
+  fetchClientCommercials,
+  ClientCommercial,
+} from "@/lib/crm/client-commercial-api";
+import { fetchClients, ApiClient } from "@/lib/client/clients-api";
 
 interface Props {
   employee: Employee | null;
@@ -304,6 +314,51 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
     staleTime: 10_000,
   });
 
+  // Work tab: tasks, projects and time logged against this employee (CRM
+  // module — the "my-tasks"/"my-time-entries" style endpoints, scoped to an
+  // arbitrary employee id). retry:false so a tenant without CRM enabled
+  // fails fast instead of retrying a 403 three times.
+  const {
+    data: myTasks = [],
+    isLoading: myTasksLoading,
+    isError: myTasksError,
+  } = useQuery({
+    queryKey: ["employee-crm-tasks", employee?._id],
+    queryFn: () => fetchTasks({ assigneeUserId: employee!._id }),
+    enabled: !!employee,
+    staleTime: 30_000,
+    retry: false,
+  });
+
+  const {
+    data: myTimeEntries = [],
+    isLoading: myTimeEntriesLoading,
+    isError: myTimeEntriesError,
+  } = useQuery({
+    queryKey: ["employee-crm-time-entries", employee?._id],
+    queryFn: () => fetchTimeEntries({ memberUserId: employee!._id }),
+    enabled: !!employee,
+    staleTime: 30_000,
+    retry: false,
+  });
+
+  const { data: clientCommercials = {}, isError: clientCommercialsError } =
+    useQuery({
+      queryKey: ["crm-client-commercials"],
+      queryFn: () => fetchClientCommercials(),
+      enabled: !!employee,
+      staleTime: 60_000,
+      retry: false,
+    });
+
+  const { data: allClients = [] } = useQuery({
+    queryKey: ["tenant-my-clients"],
+    queryFn: () => fetchClients(),
+    enabled: !!employee,
+    staleTime: 60_000,
+    retry: false,
+  });
+
   const replacementCandidatesForSameTeam = useMemo(() => {
     if (!employee) return [];
 
@@ -450,6 +505,66 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
   const upcoming = leaveHistory.filter(
     (r) => r.status === "approved" && new Date(r.startDate) > new Date(),
   );
+
+  // Work tab: group this employee's tasks into the projects (mandates)
+  // they belong to. Mandate has no per-employee assignee, but every task
+  // carries a denormalized mandateName, so projects can be derived here
+  // without a dedicated backend lookup.
+  const fullName = `${emp.firstName} ${emp.lastName}`.trim();
+
+  const tasksByMandate = new Map<
+    string,
+    { mandateId: string; mandateName: string; tasks: Task[] }
+  >();
+  for (const t of myTasks) {
+    if (!tasksByMandate.has(t.mandateId)) {
+      tasksByMandate.set(t.mandateId, {
+        mandateId: t.mandateId,
+        mandateName: t.mandateName,
+        tasks: [],
+      });
+    }
+    tasksByMandate.get(t.mandateId)!.tasks.push(t);
+  }
+  const myProjects = Array.from(tasksByMandate.values());
+
+  // Clients: relationshipManager is stored as a free-text display name
+  // (the same "First Last" string the clients page's dropdown writes),
+  // so matching it against this employee's name is how an assigned client
+  // is identified today.
+  const myClients = Object.values(clientCommercials)
+    .filter((c) => c.relationshipManager === fullName)
+    .map((c) => allClients.find((ac) => ac._id === c.clientUserId))
+    .filter((c): c is ApiClient => !!c);
+
+  const completedTasks = myTasks.filter((t) => t.status === "Done");
+
+  // Activity tab: a single chronological feed of clock in/out, logged
+  // time, and completed tasks.
+  const activityFeed = [
+    ...attRecent.map((r) => ({
+      date: r.date,
+      icon: Clock,
+      title: r.clockOut
+        ? `Clocked in ${fmtTime(r.clockIn)} → out ${fmtTime(r.clockOut)}`
+        : `Clocked in ${fmtTime(r.clockIn)}`,
+      meta: `${r.hoursWorked?.toFixed(1) ?? "—"}h logged · ${r.status}`,
+    })),
+    ...myTimeEntries.map((e) => ({
+      date: e.date,
+      icon: Briefcase,
+      title: `Logged ${e.hours}h on ${e.mandateName}${
+        e.taskTitle ? ` — ${e.taskTitle}` : ""
+      }`,
+      meta: `Timesheet ${e.status}`,
+    })),
+    ...completedTasks.map((t) => ({
+      date: t.updatedAt,
+      icon: CheckCircle2,
+      title: `Completed "${t.title}"`,
+      meta: t.mandateName,
+    })),
+  ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   const onboardingStep = emp.onboardingStep ?? 0;
   const onboardingCompleted = emp.onboardingCompleted ?? false;
@@ -744,7 +859,129 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
             </TabsContent>
 
             <TabsContent value="work" className="space-y-3">
-              <DummyNotice />
+              {myTasksLoading ? (
+                <LoadingBlock />
+              ) : (
+                <>
+                  <Card>
+                    <CardContent className="p-4">
+                      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-3 flex items-center gap-1.5">
+                        <Users className="h-3.5 w-3.5" /> Assigned clients
+                      </p>
+                      {clientCommercialsError ? (
+                        <p className="text-sm text-muted-foreground py-2">
+                          Client relationship data isn't available — the CRM
+                          module may not be enabled for this workspace.
+                        </p>
+                      ) : myClients.length === 0 ? (
+                        <p className="text-sm text-muted-foreground py-2">
+                          No clients currently assigned to {emp.firstName}.
+                        </p>
+                      ) : (
+                        <div className="space-y-2">
+                          {myClients.map((c) => (
+                            <div
+                              key={c._id}
+                              className="flex items-center justify-between py-1.5 border-b last:border-b-0 text-sm"
+                            >
+                              <span className="font-medium truncate">
+                                {c.businessName ||
+                                  `${c.firstName ?? ""} ${c.lastName ?? ""}`.trim()}
+                              </span>
+                              <Badge
+                                variant="outline"
+                                className="capitalize text-[10px] shrink-0"
+                              >
+                                {c.status}
+                              </Badge>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardContent className="p-4">
+                      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-3 flex items-center gap-1.5">
+                        <FolderKanban className="h-3.5 w-3.5" /> Projects
+                      </p>
+                      {myTasksError ? (
+                        <p className="text-sm text-muted-foreground py-2">
+                          Project data isn't available — the CRM module may not
+                          be enabled for this workspace.
+                        </p>
+                      ) : myProjects.length === 0 ? (
+                        <p className="text-sm text-muted-foreground py-2">
+                          Not currently assigned to any projects.
+                        </p>
+                      ) : (
+                        <div className="space-y-2">
+                          {myProjects.map((p) => (
+                            <div
+                              key={p.mandateId}
+                              className="flex items-center justify-between py-1.5 border-b last:border-b-0 text-sm gap-2"
+                            >
+                              <span className="font-medium truncate">
+                                {p.mandateName}
+                              </span>
+                              <span className="text-xs text-muted-foreground shrink-0">
+                                {
+                                  p.tasks.filter((t) => t.status === "Done")
+                                    .length
+                                }
+                                /{p.tasks.length} tasks done
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardContent className="p-4">
+                      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-3 flex items-center gap-1.5">
+                        <ListTodo className="h-3.5 w-3.5" /> Tasks
+                      </p>
+                      {myTasksError ? (
+                        <p className="text-sm text-muted-foreground py-2">
+                          Task data isn't available — the CRM module may not be
+                          enabled for this workspace.
+                        </p>
+                      ) : myTasks.length === 0 ? (
+                        <p className="text-sm text-muted-foreground py-2">
+                          No tasks currently assigned to {emp.firstName}.
+                        </p>
+                      ) : (
+                        <div className="space-y-2">
+                          {myTasks.map((t) => (
+                            <div
+                              key={t._id}
+                              className="flex items-center justify-between py-1.5 border-b last:border-b-0 text-sm gap-2"
+                            >
+                              <div className="min-w-0">
+                                <p className="font-medium truncate">
+                                  {t.title}
+                                </p>
+                                <p className="text-xs text-muted-foreground truncate">
+                                  {t.mandateName}
+                                </p>
+                              </div>
+                              <Badge
+                                variant="outline"
+                                className="text-[10px] shrink-0"
+                              >
+                                {t.status}
+                              </Badge>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </>
+              )}
             </TabsContent>
 
             <TabsContent value="time" className="space-y-3">
@@ -1477,7 +1714,38 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
             </TabsContent>
 
             <TabsContent value="activity" className="space-y-2">
-              <DummyNotice />
+              {detailLoading || myTimeEntriesLoading ? (
+                <LoadingBlock />
+              ) : activityFeed.length === 0 ? (
+                <Card>
+                  <CardContent className="p-10 text-center text-sm text-muted-foreground">
+                    No activity recorded yet.
+                  </CardContent>
+                </Card>
+              ) : (
+                <div className="space-y-2">
+                  {activityFeed.map((item, i) => {
+                    const Icon = item.icon;
+                    return (
+                      <div
+                        key={i}
+                        className="flex items-start gap-3 p-3 border rounded-lg text-sm"
+                      >
+                        <Icon className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium">{item.title}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {item.meta}
+                          </p>
+                        </div>
+                        <span className="text-xs text-muted-foreground shrink-0">
+                          {fmtShort(item.date)}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </TabsContent>
           </Tabs>
         </div>
@@ -1961,15 +2229,6 @@ function EmptyStepNote() {
     <p className="text-xs text-muted-foreground italic py-1">
       Employee hasn't reached this step yet.
     </p>
-  );
-}
-
-function DummyNotice() {
-  return (
-    <div className="text-xs text-muted-foreground bg-muted/40 border rounded-lg px-3 py-2">
-      This section uses placeholder data — the underlying module isn't built
-      yet.
-    </div>
   );
 }
 
