@@ -38,15 +38,11 @@ import {
   CalendarDays,
   Clock,
   CheckCircle2,
-  Users,
-  FolderKanban,
   Star,
-  Target,
   Wallet,
   Shield,
   FileText,
   Download,
-  MessageSquare,
   Gavel,
   Plus,
   AlertTriangle,
@@ -97,73 +93,6 @@ interface Props {
   employee: Employee | null;
   onClose: () => void;
 }
-
-const DUMMY = {
-  assignedClients: [
-    { name: "Acme Holdings Ltd", status: "in_review", risk: "medium" },
-    { name: "Jane Smith", status: "pending", risk: "low" },
-    { name: "Bright Futures NGO", status: "active", risk: "low" },
-  ],
-  projects: [
-    { name: "Q2 KYC Refresh", role: "Lead", progress: 72, openTasks: 4 },
-    {
-      name: "AML Investigations",
-      role: "Contributor",
-      progress: 45,
-      openTasks: 2,
-    },
-    {
-      name: "Onboarding — Bright Futures",
-      role: "Contributor",
-      progress: 90,
-      openTasks: 1,
-    },
-  ],
-  performance: {
-    overall: 78,
-    rating: 4.3,
-    goals: [
-      {
-        title: "Reduce KYC turnaround to <48h",
-        progress: 75,
-        status: "On Track",
-      },
-      {
-        title: "Complete CAMS certification",
-        progress: 60,
-        status: "On Track",
-      },
-      { title: "Zero SLA breaches", progress: 40, status: "At Risk" },
-    ],
-  },
-  payroll: {
-    salary: 5500,
-    ytdGross: 22905,
-    nextPayDate: "2026-06-30",
-    pensionPot: 14200,
-    loans: [{ type: "Salary Advance", balance: 750 }],
-    payslips: [
-      { period: "May 2026", net: 4180, date: "2026-05-30" },
-      { period: "Apr 2026", net: 4180, date: "2026-04-30" },
-      { period: "Mar 2026", net: 4180, date: "2026-03-30" },
-    ],
-  },
-  documents: [
-    { name: "Employment Contract", date: "2024-03-12" },
-    { name: "NDA — Confidentiality", date: "2024-03-12" },
-    { name: "ID Verification", date: "2024-03-10" },
-    { name: "Right to Work", date: "2024-03-10" },
-  ],
-  activity: [
-    { t: "2h ago", text: "Clocked in" },
-    {
-      t: "Yesterday",
-      text: "Completed task: Source of funds review — Acme Holdings",
-    },
-    { t: "Yesterday", text: "Submitted timesheet for week 24" },
-    { t: "2 days ago", text: "Logged 6.5h billable on Q2 KYC Refresh" },
-  ],
-};
 
 const ONBOARDING_STEP_LABELS = [
   "Not started",
@@ -508,7 +437,6 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
 
   const initials =
     `${emp.firstName[0] ?? ""}${emp.lastName[0] ?? ""}`.toUpperCase();
-  const d = DUMMY;
   const openCount = disputes.filter((x) => x.status !== "closed").length;
 
   const leaveBalances = detail?.leave.balances ?? [];
@@ -587,9 +515,9 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
               </p>
             </div>
             <div className="bg-white/10 rounded-lg p-3">
-              <p className="text-xs opacity-80">Open Tasks</p>
+              <p className="text-xs opacity-80">Direct Reports</p>
               <p className="font-bold text-lg">
-                {d.projects.reduce((s, p) => s + p.openTasks, 0)}
+                {directReportsLoading ? "—" : directReports.length}
               </p>
             </div>
           </div>
@@ -796,16 +724,11 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
                 </CardContent>
               </Card>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <MiniStat
-                  label="Clients"
-                  value={d.assignedClients.length}
-                  icon={Users}
-                />
-                <MiniStat
-                  label="Projects"
-                  value={d.projects.length}
-                  icon={FolderKanban}
+                  label="Open disputes"
+                  value={disputesLoading ? "…" : openCount}
+                  icon={Gavel}
                 />
                 <MiniStat
                   label="This month"
@@ -818,66 +741,10 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
                   icon={CalendarDays}
                 />
               </div>
-              <div className="flex gap-2">
-                <Button variant="outline" className="flex-1">
-                  <MessageSquare className="h-4 w-4 mr-2" /> Message
-                </Button>
-                <Button variant="outline" className="flex-1">
-                  <Target className="h-4 w-4 mr-2" /> Set Goal
-                </Button>
-              </div>
             </TabsContent>
 
             <TabsContent value="work" className="space-y-3">
               <DummyNotice />
-              <div>
-                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2">
-                  Assigned Clients
-                </p>
-                <div className="space-y-2">
-                  {d.assignedClients.map((c) => (
-                    <Card key={c.name}>
-                      <CardContent className="p-3 flex items-center justify-between">
-                        <div>
-                          <p className="text-sm font-medium">{c.name}</p>
-                          <p className="text-xs text-muted-foreground capitalize">
-                            Risk: {c.risk}
-                          </p>
-                        </div>
-                        <Badge variant="outline" className="capitalize">
-                          {c.status.replace("_", " ")}
-                        </Badge>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2 mt-4">
-                  Projects
-                </p>
-                <div className="space-y-2">
-                  {d.projects.map((p) => (
-                    <Card key={p.name}>
-                      <CardContent className="p-3">
-                        <div className="flex items-center justify-between mb-1.5">
-                          <div>
-                            <p className="text-sm font-medium">{p.name}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {p.role} · {p.openTasks} open task
-                              {p.openTasks !== 1 ? "s" : ""}
-                            </p>
-                          </div>
-                          <span className="text-xs font-medium">
-                            {p.progress}%
-                          </span>
-                        </div>
-                        <Progress value={p.progress} className="h-1.5" />
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              </div>
             </TabsContent>
 
             <TabsContent value="time" className="space-y-3">
@@ -1611,15 +1478,6 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
 
             <TabsContent value="activity" className="space-y-2">
               <DummyNotice />
-              {d.activity.map((act, i) => (
-                <div key={i} className="flex gap-3 p-3 border rounded-lg">
-                  <CheckCircle2 className="h-4 w-4 text-primary mt-0.5 shrink-0" />
-                  <div className="flex-1">
-                    <p className="text-sm">{act.text}</p>
-                    <p className="text-xs text-muted-foreground">{act.t}</p>
-                  </div>
-                </div>
-              ))}
             </TabsContent>
           </Tabs>
         </div>

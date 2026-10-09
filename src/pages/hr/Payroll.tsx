@@ -880,7 +880,25 @@ export default function HRPayroll() {
           {policiesLoading ? (
             <LoadingRow label="Loading policies…" />
           ) : policies.length === 0 ? (
-            <EmptyCard text="No payroll policies configured yet." />
+            <Card>
+              <CardContent className="p-10 text-center space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  No payroll policies configured yet — payroll runs need at
+                  least a tenant-wide default before they can calculate
+                  deductions.
+                </p>
+                <Button
+                  size="sm"
+                  disabled={applyPresetMutation.isPending}
+                  onClick={() =>
+                    applyPresetMutation.mutate({ overwrite: false })
+                  }
+                >
+                  <Sparkles className="h-3.5 w-3.5 mr-1.5" /> Apply Rwanda
+                  preset as default
+                </Button>
+              </CardContent>
+            </Card>
           ) : (
             policies.map((p) => (
               <Card key={p._id}>
@@ -1777,11 +1795,131 @@ function PolicyEditorDialog({
                 )}
               </div>
               {d.kind === "progressive_brackets" && (
-                <p className="text-xs text-muted-foreground italic">
-                  Bracket editing for progressive deductions (like PAYE) isn't
-                  available in this view yet — use the Rwanda preset for
-                  standard PAYE bands, or edit brackets via the API directly.
-                </p>
+                <div className="space-y-2 border-t pt-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs">Tax brackets</Label>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs"
+                      onClick={() =>
+                        updateDeduction(d.key, {
+                          brackets: [
+                            ...d.brackets,
+                            {
+                              minAmount: d.brackets.length
+                                ? (d.brackets[d.brackets.length - 1]
+                                    .maxAmount ?? 0)
+                                : 0,
+                              maxAmount: null,
+                              rate: 0,
+                            },
+                          ],
+                        })
+                      }
+                    >
+                      <Plus className="h-3 w-3 mr-1" /> Add Bracket
+                    </Button>
+                  </div>
+                  {d.brackets.length === 0 && (
+                    <p className="text-xs text-muted-foreground italic">
+                      No brackets defined yet — add at least one, or use "Apply
+                      Rwanda preset" on this tab for the standard Rwanda PAYE
+                      bands.
+                    </p>
+                  )}
+                  {d.brackets.map((b, i) => (
+                    <div
+                      key={i}
+                      className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 items-end"
+                    >
+                      <div className="space-y-1">
+                        <Label className="text-xs">From</Label>
+                        <Input
+                          type="number"
+                          className="h-8"
+                          value={b.minAmount}
+                          onChange={(e) => {
+                            const brackets = d.brackets.map((x, idx) =>
+                              idx === i
+                                ? {
+                                    ...x,
+                                    minAmount: parseFloat(e.target.value) || 0,
+                                  }
+                                : x,
+                            );
+                            updateDeduction(d.key, { brackets });
+                          }}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">To (blank = no limit)</Label>
+                        <Input
+                          type="number"
+                          className="h-8"
+                          placeholder="No limit"
+                          value={b.maxAmount ?? ""}
+                          onChange={(e) => {
+                            const brackets = d.brackets.map((x, idx) =>
+                              idx === i
+                                ? {
+                                    ...x,
+                                    maxAmount:
+                                      e.target.value === ""
+                                        ? null
+                                        : parseFloat(e.target.value) || 0,
+                                  }
+                                : x,
+                            );
+                            updateDeduction(d.key, { brackets });
+                          }}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Rate %</Label>
+                        <Input
+                          type="number"
+                          step="0.1"
+                          className="h-8"
+                          value={b.rate * 100}
+                          onChange={(e) => {
+                            const brackets = d.brackets.map((x, idx) =>
+                              idx === i
+                                ? {
+                                    ...x,
+                                    rate:
+                                      (parseFloat(e.target.value) || 0) / 100,
+                                  }
+                                : x,
+                            );
+                            updateDeduction(d.key, { brackets });
+                          }}
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        className="h-8 w-8"
+                        onClick={() => {
+                          const brackets = d.brackets.filter(
+                            (_, idx) => idx !== i,
+                          );
+                          updateDeduction(d.key, { brackets });
+                        }}
+                      >
+                        <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                      </Button>
+                    </div>
+                  ))}
+                  <p className="text-xs text-muted-foreground">
+                    Each bracket taxes only the slice of income between "From"
+                    and "To" at its own rate (standard progressive, PAYE-style
+                    calculation). Brackets should be contiguous and cover the
+                    full income range for accurate results.
+                  </p>
+                </div>
               )}
               <label className="flex items-center gap-2 text-xs pt-1">
                 <Switch

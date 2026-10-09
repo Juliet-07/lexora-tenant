@@ -57,6 +57,7 @@ import {
   fetchTeams,
   fetchLocations,
   createEmployee,
+  updateEmployee,
   createTeam,
   createLocation,
   deleteTeam,
@@ -76,6 +77,7 @@ import {
   updateEmployeeStaffRoles,
 } from "@/lib/hr/hr-api";
 import { EmployeeDetailSheet } from "@/components/hr/EmployeeDetailSheet";
+import OnboardingDocumentsTab from "./OnboardingDocuments";
 
 // ─── Helpers ──────────────────────────────────────────────────
 
@@ -150,6 +152,14 @@ export default function HREmployees() {
     null,
   );
 
+  // Edit-employee state — when set, the Add Employee dialog switches into
+  // edit mode for this employee instead of creating a new one.
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingOriginal, setEditingOriginal] =
+    useState<CreateEmployeeDto | null>(null);
+  const isEditingOwner =
+    editingId !== null && editingOriginal?.hierarchyRole === "owner";
+
   // Forms
   const EMPTY_EMP: CreateEmployeeDto = {
     firstName: "",
@@ -184,6 +194,58 @@ export default function HREmployees() {
   const [replacingHodForTeam, setReplacingHodForTeam] = useState<HrTeam | null>(
     null,
   );
+
+  // Populate the Add/Edit dialog from an existing employee and switch it
+  // into edit mode. Only fields the admin's "Add Employee" form already
+  // exposes are editable here — anything self-reported by the employee
+  // (DOB, nationality, address, emergency contact, bank details, etc.)
+  // stays off this form, matching the self-service profile endpoint.
+  const openEditDialog = (emp: Employee) => {
+    const teamId: string =
+      typeof emp.teamId === "object" && emp.teamId !== null
+        ? emp.teamId._id
+        : ((emp.teamId as string | null) ?? "");
+    const locationId: string =
+      typeof emp.locationId === "object" && emp.locationId !== null
+        ? emp.locationId._id
+        : ((emp.locationId as string | null) ?? "");
+    const reportsToManagerId: string | undefined =
+      typeof emp.reportsToManagerId === "object" &&
+      emp.reportsToManagerId !== null
+        ? emp.reportsToManagerId._id
+        : ((emp.reportsToManagerId as string | null) ?? undefined);
+
+    const form: CreateEmployeeDto = {
+      firstName: emp.firstName,
+      lastName: emp.lastName,
+      email: emp.email,
+      phone: emp.phone ?? "",
+      jobTitle: emp.jobTitle,
+      teamId,
+      locationId,
+      employmentType: emp.employmentType ?? "full_time",
+      hierarchyRole: emp.hierarchyRole ?? "regular",
+      reportsToManagerId,
+      startDate: emp.startDate
+        ? emp.startDate.slice(0, 10)
+        : new Date().toISOString().slice(0, 10),
+      probationEndDate: emp.probationEndDate
+        ? emp.probationEndDate.slice(0, 10)
+        : undefined,
+      salary: emp.salary ?? undefined,
+      salaryCurrency: emp.salaryCurrency ?? "RWF",
+      taxId: emp.taxId ?? undefined,
+      allowances: emp.allowances ?? [],
+      staffRoles: emp.roles ?? [],
+    };
+
+    setEditingId(emp._id);
+    setEditingOriginal(form);
+    setEmpForm(form);
+    setSalaryEntryMode("basic");
+    setNetTargetInput("");
+    setEmpOpen(true);
+  };
 
   // ── Queries ───────────────────────────────────────────────
 
@@ -256,6 +318,29 @@ export default function HREmployees() {
     },
     onError: (err: any) =>
       toast.error(err?.response?.data?.message ?? "Failed to add employee"),
+  });
+
+  const updateEmpMutation = useMutation({
+    mutationFn: ({
+      id,
+      dto,
+    }: {
+      id: string;
+      dto: Partial<CreateEmployeeDto>;
+    }) => updateEmployee(id, dto),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["hr-employees"] });
+      queryClient.invalidateQueries({ queryKey: ["hr-stats"] });
+      setEmpOpen(false);
+      setEditingId(null);
+      setEditingOriginal(null);
+      setEmpForm(EMPTY_EMP);
+      setSalaryEntryMode("basic");
+      setNetTargetInput("");
+      toast.success("Employee updated.");
+    },
+    onError: (err: any) =>
+      toast.error(err?.response?.data?.message ?? "Failed to update employee"),
   });
 
   const createTeamMutation = useMutation({
@@ -357,6 +442,37 @@ export default function HREmployees() {
       toast.error(err?.response?.data?.message ?? "Failed to promote"),
   });
 
+  // Diff the edit form against the employee's values when the dialog was
+  // opened, so we only PATCH fields that actually changed. This matters
+  // most for hierarchyRole/reportsToManagerId/teamId/locationId — sending
+  // those unchanged can trip up backend reporting-chain validation or
+  // (for an Owner, who has neither) fail casting an empty string.
+  const buildUpdateDto = (): Partial<CreateEmployeeDto> => {
+    if (!editingOriginal) return empForm;
+    const dto: Partial<CreateEmployeeDto> = {};
+    (Object.keys(empForm) as (keyof CreateEmployeeDto)[]).forEach((key) => {
+      const next = empForm[key];
+      const prev = editingOriginal[key];
+      if (JSON.stringify(next) !== JSON.stringify(prev)) {
+        (dto as any)[key] = next;
+      }
+    });
+    // Never send an empty-string id — it fails ObjectId casting.
+    if (!dto.teamId) delete dto.teamId;
+    if (!dto.locationId) delete dto.locationId;
+    if (!dto.reportsToManagerId) delete dto.reportsToManagerId;
+    return dto;
+  };
+
+  const closeEmpDialog = () => {
+    setEmpOpen(false);
+    setEditingId(null);
+    setEditingOriginal(null);
+    setEmpForm(EMPTY_EMP);
+    setSalaryEntryMode("basic");
+    setNetTargetInput("");
+  };
+
   // ── Stats ─────────────────────────────────────────────────
   const headcount = statsData?.total ?? employees.length;
   const teamCount = statsData?.teamCount ?? teams.length;
@@ -428,6 +544,7 @@ export default function HREmployees() {
           <TabsTrigger value="employees">Employees</TabsTrigger>
           <TabsTrigger value="teams">Teams</TabsTrigger>
           <TabsTrigger value="locations">Locations</TabsTrigger>
+          <TabsTrigger value="onboarding">Onboarding</TabsTrigger>
         </TabsList>
 
         {/* ── Employees tab ── */}
@@ -532,17 +649,30 @@ export default function HREmployees() {
                             <p className="text-sm text-muted-foreground truncate">
                               {emp.jobTitle}
                             </p>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-6 px-2 text-xs shrink-0"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setEditAccessTarget(emp);
-                              }}
-                            >
-                              <Pencil className="h-3 w-3 mr-1" /> Access
-                            </Button>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 px-2 text-xs"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openEditDialog(emp);
+                                }}
+                              >
+                                <Pencil className="h-3 w-3 mr-1" /> Edit
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 px-2 text-xs"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setEditAccessTarget(emp);
+                                }}
+                              >
+                                <Pencil className="h-3 w-3 mr-1" /> Access
+                              </Button>
+                            </div>
                           </div>
                           {emp.roles && emp.roles.length > 0 && (
                             <div className="flex flex-wrap gap-1 mt-1.5">
@@ -763,25 +893,31 @@ export default function HREmployees() {
           )}
         </TabsContent>
 
+        {/* ── Onboarding tab ── */}
+        <TabsContent value="onboarding" className="space-y-4 mt-4">
+          <OnboardingDocumentsTab />
+        </TabsContent>
       </Tabs>
 
-      {/* ── Add Employee Dialog ── */}
+      {/* ── Add / Edit Employee Dialog ── */}
       <Dialog
         open={empOpen}
         onOpenChange={(o) => {
-          setEmpOpen(o);
-          if (!o) {
-            setSalaryEntryMode("basic");
-            setNetTargetInput("");
-          }
+          if (!o) closeEmpDialog();
+          else setEmpOpen(o);
         }}
       >
         <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Add Employee</DialogTitle>
+            <DialogTitle>
+              {editingId ? "Edit Employee" : "Add Employee"}
+            </DialogTitle>
             <DialogDescription>
-              Assign the employee to a team and location. Login credentials will
-              be emailed.
+              {editingId
+                ? isEditingOwner
+                  ? "The Owner account has no team or location — you can still update their job details, salary, and access."
+                  : "Update this employee's details."
+                : "Assign the employee to a team and location. Login credentials will be emailed."}
             </DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-2 gap-3 py-2">
@@ -839,48 +975,60 @@ export default function HREmployees() {
                 }
               />
             </div>
-            <div className="space-y-1">
-              <Label>
-                Team <span className="text-destructive">*</span>
-              </Label>
-              <Select
-                value={empForm.teamId ?? ""}
-                onValueChange={(v) => setEmpForm((f) => ({ ...f, teamId: v }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select team" />
-                </SelectTrigger>
-                <SelectContent>
-                  {teams.map((t) => (
-                    <SelectItem key={t._id} value={t._id}>
-                      {t.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <Label>
-                Location <span className="text-destructive">*</span>
-              </Label>
-              <Select
-                value={empForm.locationId ?? ""}
-                onValueChange={(v) =>
-                  setEmpForm((f) => ({ ...f, locationId: v }))
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select location" />
-                </SelectTrigger>
-                <SelectContent>
-                  {locations.map((l) => (
-                    <SelectItem key={l._id} value={l._id}>
-                      {l.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {isEditingOwner && (
+              <div className="col-span-2 text-xs text-muted-foreground bg-muted/40 rounded-md p-2">
+                Owner accounts aren't assigned to a team or location, and their
+                role level can't be changed here.
+              </div>
+            )}
+            {!isEditingOwner && (
+              <>
+                <div className="space-y-1">
+                  <Label>
+                    Team <span className="text-destructive">*</span>
+                  </Label>
+                  <Select
+                    value={empForm.teamId ?? ""}
+                    onValueChange={(v) =>
+                      setEmpForm((f) => ({ ...f, teamId: v }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select team" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {teams.map((t) => (
+                        <SelectItem key={t._id} value={t._id}>
+                          {t.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label>
+                    Location <span className="text-destructive">*</span>
+                  </Label>
+                  <Select
+                    value={empForm.locationId ?? ""}
+                    onValueChange={(v) =>
+                      setEmpForm((f) => ({ ...f, locationId: v }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select location" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {locations.map((l) => (
+                        <SelectItem key={l._id} value={l._id}>
+                          {l.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </>
+            )}
             <div className="space-y-1">
               <Label>Employment Type</Label>
               <Select
@@ -901,7 +1049,7 @@ export default function HREmployees() {
                 </SelectContent>
               </Select>
             </div>
-            {empForm.employmentType === "full_time" && (
+            {empForm.employmentType === "full_time" && !isEditingOwner && (
               <div className="space-y-1">
                 <Label>Role Level</Label>
                 <Select
@@ -929,6 +1077,7 @@ export default function HREmployees() {
               </div>
             )}
             {empForm.employmentType === "full_time" &&
+              !isEditingOwner &&
               (empForm.hierarchyRole === "regular" ||
                 empForm.hierarchyRole === "manager") && (
                 <div className="space-y-1">
@@ -1299,7 +1448,7 @@ export default function HREmployees() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEmpOpen(false)}>
+            <Button variant="outline" onClick={closeEmpDialog}>
               Cancel
             </Button>
             <Button
@@ -1309,19 +1458,31 @@ export default function HREmployees() {
                 !empForm.lastName ||
                 !empForm.email ||
                 !empForm.jobTitle ||
-                !empForm.teamId ||
-                !empForm.locationId ||
-                ((empForm.hierarchyRole === "regular" ||
-                  empForm.hierarchyRole === "manager") &&
+                (!isEditingOwner && !empForm.teamId) ||
+                (!isEditingOwner && !empForm.locationId) ||
+                (!isEditingOwner &&
+                  (empForm.hierarchyRole === "regular" ||
+                    empForm.hierarchyRole === "manager") &&
                   !empForm.reportsToManagerId) ||
-                createEmpMutation.isPending
+                createEmpMutation.isPending ||
+                updateEmpMutation.isPending
               }
-              onClick={() => createEmpMutation.mutate(empForm)}
+              onClick={() =>
+                editingId
+                  ? updateEmpMutation.mutate({
+                      id: editingId,
+                      dto: buildUpdateDto(),
+                    })
+                  : createEmpMutation.mutate(empForm)
+              }
             >
-              {createEmpMutation.isPending ? (
+              {createEmpMutation.isPending || updateEmpMutation.isPending ? (
                 <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Adding…
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />{" "}
+                  {editingId ? "Saving…" : "Adding…"}
                 </>
+              ) : editingId ? (
+                "Save Changes"
               ) : (
                 "Add Employee"
               )}
