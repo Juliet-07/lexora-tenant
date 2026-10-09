@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import OnboardingDocumentsTab from "./OnboardingDocuments";
 import {
   Select,
   SelectContent,
@@ -263,6 +264,7 @@ export default function HRRecruitment() {
       <Tabs defaultValue="pipeline" className="space-y-4">
         <TabsList>
           <TabsTrigger value="pipeline">Candidate Pipeline</TabsTrigger>
+          <TabsTrigger value="onboarding">Onboarding</TabsTrigger>
           <TabsTrigger value="offboarding">Offboarding</TabsTrigger>
           <TabsTrigger value="succession">Succession Planning</TabsTrigger>
           <TabsTrigger value="openings">Job Openings</TabsTrigger>
@@ -293,6 +295,10 @@ export default function HRRecruitment() {
               ))}
             </div>
           )}
+        </TabsContent>
+
+        <TabsContent value="onboarding" className="space-y-4">
+          <OnboardingDocumentsTab />
         </TabsContent>
 
         {/* ── Offboarding — REAL ── */}
