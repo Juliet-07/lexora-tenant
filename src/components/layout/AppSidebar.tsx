@@ -371,18 +371,6 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
       adminOnly: true,
     },
     {
-      title: "Employees",
-      url: "/hr/employees",
-      icon: Users,
-      adminOnly: true,
-    },
-    {
-      title: "Probation",
-      url: "/hr/probation",
-      icon: ClipboardCheck,
-      adminOnly: true,
-    },
-    {
       title: "Recruitment",
       url: "/hr/recruitment",
       icon: ClipboardList,
@@ -395,17 +383,29 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
       adminOnly: true,
     },
     {
+      title: "Employees",
+      url: "/hr/employees",
+      icon: Users,
+      adminOnly: true,
+    },
+    {
       title: "Time & Attendance",
       url: "/hr/attendance",
       icon: CalendarDays,
     },
-    { title: "Leave", url: "/hr/leave", icon: CalendarDays },
+    {
+      title: "Probation",
+      url: "/hr/probation",
+      icon: ClipboardCheck,
+      adminOnly: true,
+    },
     {
       title: "Performance",
       url: "/hr/performance",
       icon: BarChart3,
       adminOnly: true,
     },
+     { title: "Leave", url: "/hr/leave", icon: CalendarDays },
     {
       title: "Payroll",
       url: "/hr/payroll",
