@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -1324,42 +1325,49 @@ export default function HREmployees() {
                 }
               />
             </div>
-            <div className="space-y-1.5">
-              <Label>Platform access (optional)</Label>
-              <p className="text-xs text-muted-foreground">
-                Grant this employee access to specific modules beyond their own
-                self-service dashboard.
-              </p>
-              <div className="space-y-2 border rounded-md p-3">
-                {STAFF_ROLES.map((r) => (
-                  <label
-                    key={r.value}
-                    className="flex items-start gap-2 text-sm"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={empForm.staffRoles?.includes(r.value) ?? false}
-                      onChange={(e) => {
-                        const current = empForm.staffRoles ?? [];
-                        setEmpForm({
-                          ...empForm,
-                          staffRoles: e.target.checked
-                            ? [...current, r.value]
-                            : current.filter((v) => v !== r.value),
-                        });
-                      }}
-                    />
-                    <span>
-                      <span className="font-medium">{r.label}</span>
-                      <span className="text-muted-foreground">
-                        {" "}
-                        — {r.description}
-                      </span>
-                    </span>
-                  </label>
-                ))}
+            <fieldset className="col-span-2 min-w-0 space-y-3 border-t pt-4 mt-1">
+              <legend className="sr-only">Platform access (optional)</legend>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium">Platform access</span>
+                  <span className="text-xs text-muted-foreground">Optional</span>
+                </div>
+                <span className="text-xs text-muted-foreground" aria-live="polite">
+                  {empForm.staffRoles?.length ?? 0} selected
+                </span>
               </div>
-            </div>
+              <div className="grid grid-cols-1 min-[480px]:grid-cols-2 gap-2">
+                {STAFF_ROLES.map((r) => {
+                  const selected = empForm.staffRoles?.includes(r.value) ?? false;
+                  return (
+                    <label
+                      key={r.value}
+                      className={`flex min-w-0 cursor-pointer items-center gap-3 rounded-md border px-3 py-3 transition-colors focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 ${selected ? "border-primary/50 bg-accent" : "border-border bg-background hover:bg-muted/50"}`}
+                    >
+                      <Checkbox
+                        checked={selected}
+                        className="shrink-0"
+                        onCheckedChange={(checked) => {
+                          setEmpForm((f) => {
+                            const current = f.staffRoles ?? [];
+                            return {
+                              ...f,
+                              staffRoles: checked === true
+                                ? [...current, r.value]
+                                : current.filter((v) => v !== r.value),
+                            };
+                          });
+                        }}
+                      />
+                      <span className="min-w-0 space-y-1">
+                        <span className="block text-sm font-medium leading-snug">{r.label}</span>
+                        <span className="block text-xs text-muted-foreground leading-snug">{r.description}</span>
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            </fieldset>
 
             <div className="space-y-1 col-span-2">
               <div className="flex items-center justify-between">
