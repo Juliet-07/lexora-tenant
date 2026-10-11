@@ -228,6 +228,12 @@ export const sendSignedCopy = async (contractId: string): Promise<Contract> => {
   );
   return res.data?.data ?? res.data;
 };
+
+// Only a draft contract can be deleted — the backend rejects
+// anything that has already been sent or issued.
+export const deleteContract = async (contractId: string): Promise<void> => {
+  await api.delete(`/hr/contracts/${contractId}`);
+};
 // ─────────────────────────────────────────────────────────────
 // CONTRACTS — Public signer-facing API (token-based, no auth)
 //

@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -30,6 +30,16 @@ import {
   SheetDescription,
 } from "@/components/ui/sheet";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   FileSignature,
   FileText,
   Send,
@@ -50,6 +60,7 @@ import {
   ChevronsUpDown,
   Check,
   UserSquare2,
+  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -57,6 +68,7 @@ import {
   sendContract,
   respondToContractComment,
   editContractBody,
+  deleteContract,
   fetchHiredCandidatesWithoutContract,
   generateContractFromCandidate,
   fetchContractTemplates,
@@ -155,9 +167,8 @@ export default function HRContracts() {
   const queryClient = useQueryClient();
   const [selected, setSelected] = useState<Contract | null>(null);
   const [responseText, setResponseText] = useState("");
-  const [editingBody, setEditingBody] = useState(false);
-  const [editedBody, setEditedBody] = useState("");
-  const [changeNote, setChangeNote] = useState("");
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [generateOpen, setGenerateOpen] = useState(false);
   const [generateForEmployeeOpen, setGenerateForEmployeeOpen] = useState(false);
   const [countersignOpen, setCountersignOpen] = useState(false);
@@ -198,27 +209,16 @@ export default function HRContracts() {
       toast.error(err?.response?.data?.message ?? "Failed to send response"),
   });
 
-  const editMutation = useMutation({
-    mutationFn: ({
-      id,
-      renderedBody,
-      changeNote,
-    }: {
-      id: string;
-      renderedBody: string;
-      changeNote?: string;
-    }) => editContractBody(id, { renderedBody, changeNote }),
-    onSuccess: (updated) => {
+  const deleteMutation = useMutation({
+    mutationFn: (contractId: string) => deleteContract(contractId),
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["contracts"] });
-      setSelected(updated);
-      setEditingBody(false);
-      setChangeNote("");
-      toast.success(
-        "Contract updated. The signer's existing link will show the new terms.",
-      );
+      setDeleteConfirmOpen(false);
+      setSelected(null);
+      toast.success("Draft deleted.");
     },
     onError: (err: any) =>
-      toast.error(err?.response?.data?.message ?? "Failed to update contract"),
+      toast.error(err?.response?.data?.message ?? "Failed to delete contract"),
   });
 
   const sendSignedCopyMutation = useMutation({
@@ -382,9 +382,8 @@ export default function HRContracts() {
           if (!o) {
             setSelected(null);
             setResponseText("");
-            setEditingBody(false);
-            setEditedBody("");
-            setChangeNote("");
+            setEditDialogOpen(false);
+            setDeleteConfirmOpen(false);
           }
         }}
       >
@@ -495,6 +494,16 @@ export default function HRContracts() {
                         </Button>
                       </>
                     )}
+                    {selected.status === "draft" && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-destructive hover:text-destructive"
+                        onClick={() => setDeleteConfirmOpen(true)}
+                      >
+                        <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Delete
+                      </Button>
+                    )}
                   </div>
                 </div>
 
@@ -576,91 +585,30 @@ export default function HRContracts() {
                       <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                         Document
                       </p>
-                      {canEditBody(selected) && !editingBody && (
+                      {canEditBody(selected) ? (
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => {
-                            setEditedBody(selected.renderedBody);
-                            setEditingBody(true);
-                          }}
+                          onClick={() => setEditDialogOpen(true)}
                         >
                           <Pencil className="h-3.5 w-3.5 mr-1.5" /> Edit
                         </Button>
+                      ) : (
+                        <Badge
+                          variant="outline"
+                          className="text-muted-foreground"
+                        >
+                          Locked
+                        </Badge>
                       )}
-                      {!canEditBody(selected) &&
-                        selected.status !== "draft" && (
-                          <Badge
-                            variant="outline"
-                            className="text-muted-foreground"
-                          >
-                            Locked
-                          </Badge>
-                        )}
                     </div>
 
-                    {editingBody ? (
-                      <div className="space-y-2">
-                        <RichTextEditor
-                          value={editedBody}
-                          onChange={setEditedBody}
-                          minHeight={360}
-                        />
-                        <div className="space-y-1">
-                          <Label className="text-xs">
-                            What changed? (optional, visible in activity log)
-                          </Label>
-                          <Input
-                            value={changeNote}
-                            onChange={(e) => setChangeNote(e.target.value)}
-                            placeholder="e.g. Adjusted notice period to 60 days per their request"
-                          />
-                        </div>
-                        <div className="flex gap-2 justify-end">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              setEditingBody(false);
-                              setChangeNote("");
-                            }}
-                          >
-                            Cancel
-                          </Button>
-                          <Button
-                            size="sm"
-                            disabled={
-                              !editedBody.trim() || editMutation.isPending
-                            }
-                            onClick={() =>
-                              editMutation.mutate({
-                                id: selected._id,
-                                renderedBody: editedBody,
-                                changeNote: changeNote || undefined,
-                              })
-                            }
-                          >
-                            {editMutation.isPending ? (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            ) : (
-                              "Save Changes"
-                            )}
-                          </Button>
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          {selected.status === "draft"
-                            ? "Not sent yet — these changes are private until you send or issue it."
-                            : "The signer's existing link keeps working — they'll see these updated terms next time they open it. No new email is sent automatically."}
-                        </p>
-                      </div>
-                    ) : (
-                      <div
-                        className="prose prose-sm max-w-none text-sm rounded-md border bg-card p-4 leading-relaxed [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5"
-                        dangerouslySetInnerHTML={{
-                          __html: selected.renderedBody,
-                        }}
-                      />
-                    )}
+                    <div
+                      className="prose prose-sm max-w-none text-sm rounded-md border bg-card p-4 leading-relaxed [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5"
+                      dangerouslySetInnerHTML={{
+                        __html: selected.renderedBody,
+                      }}
+                    />
                   </CardContent>
                 </Card>
 
@@ -775,7 +723,166 @@ export default function HRContracts() {
           onIssued={(updated) => setSelected(updated)}
         />
       )}
+
+      {selected && (
+        <EditContractBodyDialog
+          open={editDialogOpen}
+          contract={selected}
+          onClose={() => setEditDialogOpen(false)}
+          onUpdated={(updated) => setSelected(updated)}
+        />
+      )}
+
+      {selected && (
+        <AlertDialog
+          open={deleteConfirmOpen}
+          onOpenChange={setDeleteConfirmOpen}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete this draft?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This will permanently remove "{selected.templateName}" for{" "}
+                {selected.signerName} from your contracts. This can't be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                disabled={deleteMutation.isPending}
+                onClick={() => deleteMutation.mutate(selected._id)}
+              >
+                {deleteMutation.isPending ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  "Delete"
+                )}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
     </div>
+  );
+}
+
+// ─── Edit Document — centered modal with an Edit/Preview toggle and
+// a sticky header + footer, so Save/Cancel stay reachable no matter
+// how long the document is or how far the user has scrolled ──
+
+function EditContractBodyDialog({
+  open,
+  contract,
+  onClose,
+  onUpdated,
+}: {
+  open: boolean;
+  contract: Contract;
+  onClose: () => void;
+  onUpdated: (updated: Contract) => void;
+}) {
+  const queryClient = useQueryClient();
+  const [mode, setMode] = useState<"edit" | "preview">("edit");
+  const [body, setBody] = useState(contract.renderedBody);
+  const [changeNote, setChangeNote] = useState("");
+
+  // The dialog stays mounted across opens, so re-seed from the
+  // current contract each time it's opened rather than once.
+  useEffect(() => {
+    if (open) {
+      setMode("edit");
+      setBody(contract.renderedBody);
+      setChangeNote("");
+    }
+  }, [open, contract._id]);
+
+  const editMutation = useMutation({
+    mutationFn: () =>
+      editContractBody(contract._id, {
+        renderedBody: body,
+        changeNote: changeNote || undefined,
+      }),
+    onSuccess: (updated) => {
+      queryClient.invalidateQueries({ queryKey: ["contracts"] });
+      onUpdated(updated);
+      onClose();
+      toast.success(
+        "Contract updated. The signer's existing link will show the new terms.",
+      );
+    },
+    onError: (err: any) =>
+      toast.error(err?.response?.data?.message ?? "Failed to update contract"),
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="flex max-w-3xl flex-col gap-0 p-0 h-[85vh]">
+        <DialogHeader className="shrink-0 border-b px-6 py-4">
+          <DialogTitle>Edit Document</DialogTitle>
+          <DialogDescription>
+            {contract.status === "draft"
+              ? "Not sent yet — these changes are private until you send or issue it."
+              : "The signer's existing link keeps working — they'll see these updated terms next time they open it. No new email is sent automatically."}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="shrink-0 px-6 pt-3">
+          <Tabs
+            value={mode}
+            onValueChange={(v) => setMode(v as "edit" | "preview")}
+          >
+            <TabsList>
+              <TabsTrigger value="edit">
+                <Pencil className="h-3.5 w-3.5 mr-1.5" /> Edit
+              </TabsTrigger>
+              <TabsTrigger value="preview">
+                <Eye className="h-3.5 w-3.5 mr-1.5" /> Preview
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-6 py-4">
+          {mode === "edit" ? (
+            <RichTextEditor value={body} onChange={setBody} minHeight={420} />
+          ) : (
+            <div
+              className="prose prose-sm max-w-none text-sm rounded-md border bg-card p-4 leading-relaxed [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5"
+              dangerouslySetInnerHTML={{ __html: body }}
+            />
+          )}
+        </div>
+
+        <div className="shrink-0 border-t bg-background px-6 py-4 space-y-3">
+          <div className="space-y-1">
+            <Label className="text-xs">
+              What changed? (optional, visible in activity log)
+            </Label>
+            <Input
+              value={changeNote}
+              onChange={(e) => setChangeNote(e.target.value)}
+              placeholder="e.g. Adjusted notice period to 60 days per their request"
+            />
+          </div>
+          <div className="flex gap-2 justify-end">
+            <Button size="sm" variant="outline" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              disabled={!body.trim() || editMutation.isPending}
+              onClick={() => editMutation.mutate()}
+            >
+              {editMutation.isPending ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                "Save Changes"
+              )}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
