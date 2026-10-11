@@ -88,8 +88,13 @@ const STATUS_ICON: Record<string, React.ElementType> = {
   pending: Clock,
 };
 
-const typeLabel = (type: string) =>
-  LEAVE_TYPES.find((t) => t.value === type)?.label ?? type;
+// Falls back to a balance row's label (which already covers
+// tenant-defined custom leave types) when the type isn't one of the
+// seven built-in ones.
+const typeLabel = (type: string, balances: LeaveBalance[] = []) =>
+  LEAVE_TYPES.find((t) => t.value === type)?.label ??
+  balances.find((b) => b.type === type)?.label ??
+  type;
 
 const fmt = (d: string) =>
   new Date(d).toLocaleDateString("en-GB", {
@@ -231,6 +236,15 @@ export default function MyLeave() {
   const estimatedDays = workingDays(draft.from, draft.to);
   const canSubmit =
     draft.from && draft.to && draft.reason.trim() && !submitMutation.isPending;
+
+  // Options for the "Type" dropdown — driven by the employee's actual
+  // policy (balances), which already includes any tenant-defined custom
+  // leave type that's been given an entitlement. Falls back to the
+  // static built-in list if no policy has been set for them yet.
+  const requestTypeOptions =
+    balances.length > 0
+      ? balances.map((b) => ({ value: b.type, label: b.label }))
+      : LEAVE_TYPES;
 
   // Primary 4 balances shown on top cards — annual, sick, then whichever
   // else has a non-zero entitlement.
@@ -390,7 +404,7 @@ export default function MyLeave() {
                             />
                             <div className="min-w-0 flex-1">
                               <p className="text-sm font-medium">
-                                {typeLabel(r.type)} — {r.days} day
+                                {typeLabel(r.type, balances)} — {r.days} day
                                 {r.days !== 1 ? "s" : ""}
                               </p>
                               <p className="text-xs text-muted-foreground">
@@ -504,7 +518,9 @@ export default function MyLeave() {
                     className="flex items-center justify-between p-3 border rounded-lg"
                   >
                     <div>
-                      <p className="text-sm font-medium">{typeLabel(r.type)}</p>
+                      <p className="text-sm font-medium">
+                        {typeLabel(r.type, balances)}
+                      </p>
                       <p className="text-xs text-muted-foreground">
                         {fmtShort(r.startDate)} – {fmt(r.endDate)}
                       </p>
@@ -604,7 +620,7 @@ export default function MyLeave() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {LEAVE_TYPES.map((t) => (
+                  {requestTypeOptions.map((t) => (
                     <SelectItem key={t.value} value={t.value}>
                       {t.label}
                     </SelectItem>

@@ -1,6 +1,10 @@
-// Generates a downloadable HTML report for a single employee.
-// Opens as a styled, printable document the tenant can save as PDF.
+// Generates a downloadable PDF report for a single employee, branded
+// with the TENANT's own company name (never the platform's) in the
+// header — matches the convention used for contracts/certificates
+// elsewhere in HR (see contract-pdf.service.ts / certificate.ts).
 
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 import type {
   Employee,
   HrTeam,
@@ -37,149 +41,141 @@ const fmtDate = (d?: string | null) =>
       })
     : "—";
 
-export function buildEmployeeReportHtml(
+const HEADER_FILL: [number, number, number] = [67, 56, 202]; // indigo-700
+const ROW_HEAD_FILL: [number, number, number] = [99, 102, 241]; // indigo-500
+
+export function downloadEmployeeReport(
   e: Employee,
-  detail?: EmployeeDetailResponse,
-): string {
-  const generatedAt = new Date().toLocaleString("en-GB");
+  detail: EmployeeDetailResponse | undefined,
+  tenantName: string,
+) {
   const fullName = `${e.firstName} ${e.lastName}`;
+  const generatedAt = new Date().toLocaleString("en-GB");
 
   const balances = detail?.leave.balances ?? [];
   const leaveHistory = detail?.leave.history ?? [];
   const attRecent = detail?.attendance.recent ?? [];
   const attStats = detail?.attendance.stats;
 
-  const balanceRows = balances
-    .filter((b) => b.daysAllowed > 0)
-    .map(
-      (b) =>
-        `<tr><td class="k">${b.label}</td><td>${b.daysLeft} / ${b.daysAllowed} days remaining${b.carryOver ? ' <span class="tag">carries over</span>' : ""}</td></tr>`,
-    )
-    .join("");
+  const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "a4" });
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 40;
 
-  const leaveHistoryRows = leaveHistory.length
-    ? leaveHistory
-        .slice(0, 8)
-        .map(
-          (r) =>
-            `<tr><td class="k">${fmtDate(r.startDate)} – ${fmtDate(r.endDate)}</td><td><span class="badge badge-${r.status}">${r.status}</span> · ${r.days}d ${r.type}</td></tr>`,
-        )
-        .join("")
-    : `<tr><td colspan="2" class="empty">No leave requests on record.</td></tr>`;
+  // ── Header bar ──
+  doc.setFillColor(...HEADER_FILL);
+  doc.rect(0, 0, pageWidth, 86, "F");
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(10);
+  doc.setFont("helvetica", "bold");
+  doc.text(tenantName.toUpperCase(), margin, 28);
+  doc.setFontSize(18);
+  doc.text(`${fullName} — Employee Report`, margin, 52);
+  doc.setFontSize(9);
+  doc.setFont("helvetica", "normal");
+  doc.text(
+    `Generated ${generatedAt} · Confidential, for internal HR use only`,
+    margin,
+    70,
+  );
 
-  const attendanceRows = attRecent.length
-    ? attRecent
-        .map(
-          (r) =>
-            `<tr><td class="k">${fmtDate(r.date)}</td><td>${r.hoursWorked?.toFixed(1) ?? "—"}h · <span class="badge badge-${r.status}">${r.status}</span></td></tr>`,
-        )
-        .join("")
-    : `<tr><td colspan="2" class="empty">No attendance records yet.</td></tr>`;
+  let cursor = 112;
+  doc.setTextColor(15, 23, 42);
 
-  return `<!doctype html>
-<html lang="en"><head>
-<meta charset="utf-8" />
-<title>Employee Report — ${fullName}</title>
-<style>
-  *{box-sizing:border-box}
-  body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#0f172a;margin:0;padding:40px;background:#f8fafc}
-  .doc{max-width:820px;margin:0 auto;background:#fff;border-radius:12px;padding:0;box-shadow:0 4px 24px rgba(0,0,0,.06);overflow:hidden}
-  .brandbar{background:linear-gradient(135deg,#6366f1,#8b5cf6);padding:28px 40px;color:#fff}
-  .brandbar .logo{font-size:13px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;opacity:.85;margin-bottom:10px}
-  .brandbar h1{font-size:24px;margin:0 0 4px;color:#fff}
-  .brandbar .meta{color:rgba(255,255,255,.75);font-size:12px}
-  .content{padding:32px 40px 40px}
-  h2{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:#475569;margin:28px 0 10px;border-bottom:1px solid #e2e8f0;padding-bottom:6px}
-  h2:first-child{margin-top:0}
-  table{width:100%;border-collapse:collapse;font-size:13px}
-  td{padding:8px 0;vertical-align:top}
-  td.k{color:#64748b;width:42%}
-  td.empty{color:#94a3b8;font-style:italic;padding:10px 0}
-  .badge{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:600}
-  .badge-active,.badge-approved,.badge-present{background:#dcfce7;color:#15803d}
-  .badge-pending,.badge-late{background:#fef3c7;color:#b45309}
-  .badge-rejected,.badge-absent,.badge-cancelled{background:#fee2e2;color:#b91c1c}
-  .badge-remote,.badge-on_leave{background:#e0f2fe;color:#0369a1}
-  .badge-probation{background:#e0e7ff;color:#4338ca}
-  .tag{font-size:10px;color:#6366f1;font-weight:600}
-  .placeholder-note{font-size:11px;color:#94a3b8;font-style:italic;margin:-2px 0 8px}
-  .footer{margin-top:36px;padding-top:16px;border-top:1px solid #e2e8f0;font-size:11px;color:#94a3b8;text-align:center}
-  .footer .brand{font-weight:700;color:#6366f1}
-  @media print{body{background:#fff;padding:0}.doc{box-shadow:none;border-radius:0}}
-</style>
-</head><body>
-<div class="doc">
-  <div class="brandbar">
-    <div class="logo">Lexora</div>
-    <h1>${fullName} — Employee Report</h1>
-    <p class="meta">Generated ${generatedAt} · Confidential, for internal HR use only</p>
-  </div>
+  const section = (
+    heading: string,
+    rows: (string | number)[][],
+    columns: [string, string] = ["Field", "Value"],
+  ) => {
+    if (cursor > pageHeight - 140) {
+      doc.addPage();
+      cursor = 50;
+    }
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(15, 23, 42);
+    doc.text(heading, margin, cursor);
+    autoTable(doc, {
+      startY: cursor + 8,
+      head: [columns],
+      body: rows.length
+        ? rows.map((r) => r.map((c) => String(c)))
+        : [["—", "No records"]],
+      theme: "grid",
+      styles: { fontSize: 9, cellPadding: 6 },
+      headStyles: { fillColor: ROW_HEAD_FILL, textColor: 255 },
+      columnStyles: { 0: { cellWidth: 170, fontStyle: "bold" } },
+      margin: { left: margin, right: margin },
+    });
+    cursor = (doc as any).lastAutoTable.finalY + 24;
+  };
 
-  <div class="content">
-    <h2>Identity</h2>
-    <table>
-      <tr><td class="k">Full name</td><td><strong>${fullName}</strong></td></tr>
-      <tr><td class="k">Employee number</td><td>${e.employeeNumber ?? e._id}</td></tr>
-      <tr><td class="k">Email</td><td>${e.email}</td></tr>
-      <tr><td class="k">Phone</td><td>${e.phone ?? "—"}</td></tr>
-    </table>
+  section("Identity", [
+    ["Full name", fullName],
+    ["Employee number", e.employeeNumber ?? e._id],
+    ["Email", e.email],
+    ["Phone", e.phone ?? "—"],
+  ]);
 
-    <h2>Employment</h2>
-    <table>
-      <tr><td class="k">Job title</td><td>${e.jobTitle ?? "—"}</td></tr>
-      <tr><td class="k">Team / Department</td><td>${teamName(e)}</td></tr>
-      <tr><td class="k">Reports to</td><td>${teamLead(e)}</td></tr>
-      <tr><td class="k">Location</td><td>${locName(e)} · ${locCountry(e)}</td></tr>
-      <tr><td class="k">Employment type</td><td style="text-transform:capitalize">${(e.employmentType ?? "").replace("_", " ")}</td></tr>
-      <tr><td class="k">Status</td><td><span class="badge badge-${e.employmentStatus}">${(e.employmentStatus ?? "active").replace("_", " ")}</span></td></tr>
-      <tr><td class="k">Start date</td><td>${fmtDate(e.startDate)}</td></tr>
-    </table>
+  section("Employment", [
+    ["Job title", e.jobTitle ?? "—"],
+    ["Team / Department", teamName(e)],
+    ["Reports to", teamLead(e)],
+    ["Location", `${locName(e)} · ${locCountry(e)}`],
+    ["Employment type", (e.employmentType ?? "").replace(/_/g, " ") || "—"],
+    ["Status", (e.employmentStatus ?? "active").replace(/_/g, " ")],
+    ["Start date", fmtDate(e.startDate)],
+  ]);
 
-    <h2>Leave Balance</h2>
-    <table>
-      ${balanceRows || `<tr><td colspan="2" class="empty">No leave policy configured for this employee's location.</td></tr>`}
-    </table>
+  section(
+    "Leave Balance",
+    balances
+      .filter((b) => b.daysAllowed > 0)
+      .map((b) => [
+        b.label,
+        `${b.daysLeft} / ${b.daysAllowed} days remaining${b.carryOver ? " (carries over)" : ""}`,
+      ]),
+  );
 
-    <h2>Leave History</h2>
-    <table>${leaveHistoryRows}</table>
+  section(
+    "Leave History",
+    leaveHistory
+      .slice(0, 8)
+      .map((r) => [
+        `${fmtDate(r.startDate)} – ${fmtDate(r.endDate)}`,
+        `${r.status} · ${r.days}d ${r.type}`,
+      ]),
+  );
 
-    <h2>Recent Attendance</h2>
-    <table>
-      <tr><td class="k">This month</td><td>${attStats?.monthHours ?? 0}h logged · ${attStats?.daysPresent ?? 0} day(s) present</td></tr>
-    </table>
-    <table>${attendanceRows}</table>
+  section("Attendance Summary", [
+    [
+      "This month",
+      `${attStats?.monthHours ?? 0}h logged · ${attStats?.daysPresent ?? 0} day(s) present`,
+    ],
+  ]);
 
-    <h2>Performance Snapshot</h2>
-    <p class="placeholder-note">Performance module not yet active — figures below are illustrative.</p>
-    <table>
-      <tr><td class="k">Overall score</td><td>78%</td></tr>
-      <tr><td class="k">Last review</td><td>${new Date().toLocaleDateString("en-GB")}</td></tr>
-    </table>
+  section(
+    "Recent Attendance",
+    attRecent.map((r) => [
+      fmtDate(r.date),
+      `${r.hoursWorked?.toFixed(1) ?? "—"}h · ${r.status}`,
+    ]),
+  );
 
-    <h2>Disputes & Disciplinary</h2>
-    <table>
-      <tr><td class="k">Open cases</td><td>0</td></tr>
-      <tr><td class="k">Resolved (last 12m)</td><td>0</td></tr>
-    </table>
+  // Footer with page numbers
+  const totalPages = doc.getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    doc.setFontSize(8);
+    doc.setTextColor(140);
+    doc.setFont("helvetica", "normal");
+    doc.text(
+      `Page ${i} of ${totalPages}`,
+      pageWidth - margin,
+      pageHeight - 20,
+      { align: "right" },
+    );
+  }
 
-    <div class="footer">Powered by <span class="brand">Lexora</span></div>
-  </div>
-</div>
-</body></html>`;
-}
-
-export function downloadEmployeeReport(
-  e: Employee,
-  detail?: EmployeeDetailResponse,
-) {
-  const html = buildEmployeeReportHtml(e, detail);
-  const blob = new Blob([html], { type: "text/html;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `employee-report-${e.firstName}-${e.lastName}.html`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
+  doc.save(`employee-report-${e.firstName}-${e.lastName}.pdf`);
 }

@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useAuth } from "@/contexts/AuthContext";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -239,6 +240,7 @@ const managerName = (e: Employee) =>
 
 export function EmployeeDetailSheet({ employee, onClose }: Props) {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   const [terminateOpen, setTerminateOpen] = useState(false);
   const [suspendOpen, setSuspendOpen] = useState(false);
   const [terminateForm, setTerminateForm] = useState({
@@ -642,7 +644,11 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
               variant="secondary"
               className="bg-white/15 hover:bg-white/25 text-white border-white/20"
               onClick={() => {
-                downloadEmployeeReport(emp, detail);
+                downloadEmployeeReport(
+                  emp,
+                  detail,
+                  user?.businessName || "Your Organization",
+                );
                 toast.success("Employee report downloaded.");
               }}
             >

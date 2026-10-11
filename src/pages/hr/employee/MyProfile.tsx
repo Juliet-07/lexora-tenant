@@ -74,30 +74,12 @@ import {
   fetchMyPayrollSummary,
 } from "@/lib/hr/hr-api";
 import { fetchMyPerformanceSummary } from "@/lib/hr/hr-performance-api";
+import { fetchClients, type ApiClient } from "@/lib/client/clients-api";
+import { fetchMyMandates, type Mandate } from "@/lib/crm/mandates-api";
 
 // ─── Dummy data — for modules with no backend yet ──────────────
 
 const DUMMY = {
-  assignedClients: [
-    { name: "Acme Holdings Ltd", status: "in_review", risk: "medium" },
-    { name: "Jane Smith", status: "pending", risk: "low" },
-    { name: "Bright Futures NGO", status: "active", risk: "low" },
-  ],
-  projects: [
-    { name: "Q2 KYC Refresh", role: "Lead", progress: 72, openTasks: 4 },
-    {
-      name: "AML Investigations",
-      role: "Contributor",
-      progress: 45,
-      openTasks: 2,
-    },
-    {
-      name: "Onboarding — Bright Futures",
-      role: "Contributor",
-      progress: 90,
-      openTasks: 1,
-    },
-  ],
   performance: {
     overall: 78,
     rating: 4.3,
@@ -265,7 +247,6 @@ const fmtAddress = (a: Employee["address"]) => {
 export default function MyProfile() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const d = DUMMY;
 
   const [activePayslip, setActivePayslip] = useState<
     (typeof DUMMY.payroll.payslips)[0] | null
@@ -306,6 +287,17 @@ export default function MyProfile() {
   const { data: performanceData, isLoading: performanceLoading } = useQuery({
     queryKey: ["my-performance-summary"],
     queryFn: fetchMyPerformanceSummary,
+  });
+
+  const { data: assignedClients = [] } = useQuery({
+    queryKey: ["my-assigned-clients"],
+    queryFn: fetchClients,
+    staleTime: 60_000,
+  });
+  const { data: myMandates = [] } = useQuery({
+    queryKey: ["myMandates"],
+    queryFn: fetchMyMandates,
+    staleTime: 60_000,
   });
 
   const leaveBalances = leaveBalanceResp?.balances ?? [];
@@ -420,10 +412,8 @@ export default function MyProfile() {
             <p className="font-bold text-lg">{attStats?.monthHours ?? 0}h</p>
           </div>
           <div className="bg-white/10 rounded-lg p-3">
-            <p className="text-xs opacity-80">Open Tasks</p>
-            <p className="font-bold text-lg">
-              {d.projects.reduce((s, p) => s + p.openTasks, 0)}
-            </p>
+            <p className="text-xs opacity-80">Active Projects</p>
+            <p className="font-bold text-lg">{myMandates.length}</p>
           </div>
           <div className="bg-white/10 rounded-lg p-3">
             <p className="text-xs opacity-80">YTD Gross</p>
@@ -512,12 +502,12 @@ export default function MyProfile() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <MiniStat
               label="Clients"
-              value={d.assignedClients.length}
+              value={assignedClients.length}
               icon={Users}
             />
             <MiniStat
               label="Projects"
-              value={d.projects.length}
+              value={myMandates.length}
               icon={FolderKanban}
             />
             <MiniStat
@@ -803,29 +793,39 @@ export default function MyProfile() {
         </TabsContent>
 
         <TabsContent value="work" className="space-y-4">
-          <DummyNotice />
           <Card>
             <CardContent className="p-4">
               <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-3">
                 Assigned Clients
               </p>
               <div className="space-y-2">
-                {d.assignedClients.map((c) => (
-                  <div
-                    key={c.name}
-                    className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/30 transition-colors"
-                  >
-                    <div>
-                      <p className="text-sm font-medium">{c.name}</p>
-                      <p className="text-xs text-muted-foreground capitalize">
-                        Risk: {c.risk}
-                      </p>
+                {assignedClients.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-2">
+                    No clients assigned to you yet.
+                  </p>
+                ) : (
+                  assignedClients.map((c: ApiClient) => (
+                    <div
+                      key={c._id}
+                      className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/30 transition-colors"
+                    >
+                      <div>
+                        <p className="text-sm font-medium">
+                          {c.businessName ||
+                            `${c.firstName ?? ""} ${c.lastName ?? ""}`.trim()}
+                        </p>
+                        {c.riskLevel && (
+                          <p className="text-xs text-muted-foreground capitalize">
+                            Risk: {c.riskLevel}
+                          </p>
+                        )}
+                      </div>
+                      <Badge variant="outline" className="capitalize">
+                        {c.status.replace(/_/g, " ")}
+                      </Badge>
                     </div>
-                    <Badge variant="outline" className="capitalize">
-                      {c.status.replace("_", " ")}
-                    </Badge>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </CardContent>
           </Card>
@@ -835,20 +835,28 @@ export default function MyProfile() {
                 Active Projects
               </p>
               <div className="space-y-3">
-                {d.projects.map((p) => (
-                  <div key={p.name} className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium">{p.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {p.role} · {p.openTasks} open tasks
-                        </p>
+                {myMandates.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-2">
+                    No projects assigned to you yet.
+                  </p>
+                ) : (
+                  myMandates.map((m: Mandate) => (
+                    <div key={m._id} className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium">{m.name}</p>
+                          <p className="text-xs text-muted-foreground capitalize">
+                            {m.clientName} · {m.stage?.replace(/_/g, " ")}
+                          </p>
+                        </div>
+                        <span className="text-xs font-medium">
+                          {m.progress ?? 0}%
+                        </span>
                       </div>
-                      <span className="text-xs font-medium">{p.progress}%</span>
+                      <Progress value={m.progress ?? 0} className="h-2" />
                     </div>
-                    <Progress value={p.progress} className="h-2" />
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </CardContent>
           </Card>

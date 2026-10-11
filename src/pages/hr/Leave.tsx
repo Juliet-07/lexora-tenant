@@ -47,10 +47,13 @@ import {
   upsertLeavePolicy,
   fetchLocations,
   resolveLeaveFileUrl,
+  fetchCustomLeaveTypes,
+  createCustomLeaveType,
   type LeaveRequest,
   type LeaveStats,
   type LeavePolicy,
   type HrLocation,
+  type CustomLeaveType,
 } from "@/lib/hr/hr-api";
 
 // ─── Constants ────────────────────────────────────────────────
@@ -99,11 +102,21 @@ const DEFAULT_DAYS: Record<string, number> = {
   unpaid: 0,
 };
 
-const typeColor = (t: string) =>
+const typeColor = (
+  t: string,
+  customTypes: Pick<CustomLeaveType, "key" | "label">[] = [],
+) =>
   LEAVE_TYPES.find((x) => x.value === t)?.color ??
-  "bg-muted text-muted-foreground";
-const typeLabel = (t: string) =>
-  LEAVE_TYPES.find((x) => x.value === t)?.label ?? t;
+  (customTypes.some((c) => c.key === t)
+    ? "bg-cyan-500/10 text-cyan-600 border-cyan-500/20"
+    : "bg-muted text-muted-foreground");
+const typeLabel = (
+  t: string,
+  customTypes: Pick<CustomLeaveType, "key" | "label">[] = [],
+) =>
+  LEAVE_TYPES.find((x) => x.value === t)?.label ??
+  customTypes.find((c) => c.key === t)?.label ??
+  t;
 const fmt = (d: string) =>
   new Date(d).toLocaleDateString("en-GB", {
     year: "numeric",
@@ -124,6 +137,17 @@ const EMPTY_POLICY_ENTRIES = LEAVE_TYPES.map((t) => ({
   carryOver: false,
 }));
 
+const buildEmptyPolicyEntries = (
+  customTypes: Pick<CustomLeaveType, "key">[],
+) => [
+  ...EMPTY_POLICY_ENTRIES,
+  ...customTypes.map((c) => ({
+    type: c.key,
+    daysAllowed: 0,
+    carryOver: false,
+  })),
+];
+
 // ─── Component ────────────────────────────────────────────────
 
 export default function HRLeave() {
@@ -140,6 +164,10 @@ export default function HRLeave() {
   const [policyOpen, setPolicyOpen] = useState(false);
   const [policyLocId, setPolicyLocId] = useState<string | null>(null);
   const [policyEntries, setPolicyEntries] = useState(EMPTY_POLICY_ENTRIES);
+
+  // Custom leave type dialog state
+  const [customTypeOpen, setCustomTypeOpen] = useState(false);
+  const [customTypeLabel, setCustomTypeLabel] = useState("");
 
   // Filters
   const [statusFilter, setStatusFilter] = useState("all");
@@ -184,6 +212,12 @@ export default function HRLeave() {
     staleTime: 60_000,
   });
 
+  const { data: customTypes = [] } = useQuery<CustomLeaveType[]>({
+    queryKey: ["hr-custom-leave-types"],
+    queryFn: fetchCustomLeaveTypes,
+    staleTime: 60_000,
+  });
+
   const requests: LeaveRequest[] = requestsData?.items ?? [];
   const pending = requests.filter((r) => r.status === "pending");
   const upcoming = requests.filter(
@@ -192,6 +226,11 @@ export default function HRLeave() {
 
   // ── Open policy dialog pre-filled with existing data ─────
 
+  const allTypeValues = [
+    ...LEAVE_TYPES.map((t) => t.value),
+    ...customTypes.map((c) => c.key),
+  ];
+
   const openPolicyDialog = (
     loc: HrLocation | null,
     existingPolicy?: LeavePolicy,
@@ -199,17 +238,17 @@ export default function HRLeave() {
     setPolicyLocId(loc?._id ?? null);
     if (existingPolicy?.policies?.length) {
       setPolicyEntries(
-        LEAVE_TYPES.map((t) => {
-          const found = existingPolicy.policies.find((p) => p.type === t.value);
+        allTypeValues.map((value) => {
+          const found = existingPolicy.policies.find((p) => p.type === value);
           return {
-            type: t.value,
-            daysAllowed: found?.daysAllowed ?? DEFAULT_DAYS[t.value] ?? 0,
+            type: value,
+            daysAllowed: found?.daysAllowed ?? DEFAULT_DAYS[value] ?? 0,
             carryOver: found?.carryOver ?? false,
           };
         }),
       );
     } else {
-      setPolicyEntries(EMPTY_POLICY_ENTRIES);
+      setPolicyEntries(buildEmptyPolicyEntries(customTypes));
     }
     setPolicyOpen(true);
   };
@@ -255,6 +294,27 @@ export default function HRLeave() {
     },
     onError: (err: any) =>
       toast.error(err?.response?.data?.message ?? "Failed to save policy"),
+  });
+
+  const customTypeMutation = useMutation({
+    mutationFn: () => createCustomLeaveType(customTypeLabel),
+    onSuccess: (created) => {
+      queryClient.invalidateQueries({ queryKey: ["hr-custom-leave-types"] });
+      setCustomTypeOpen(false);
+      setCustomTypeLabel("");
+      // If the policy dialog is open, give the new type a row right away
+      // so it can be assigned days without reopening the dialog.
+      setPolicyEntries((prev) =>
+        prev.some((e) => e.type === created.key)
+          ? prev
+          : [...prev, { type: created.key, daysAllowed: 0, carryOver: false }],
+      );
+      toast.success(`"${created.label}" added as a leave type.`);
+    },
+    onError: (err: any) =>
+      toast.error(
+        err?.response?.data?.message ?? "Failed to create leave type",
+      ),
   });
 
   // ─────────────────────────────────────────────────────────
@@ -330,6 +390,11 @@ export default function HRLeave() {
                 {t.label}
               </SelectItem>
             ))}
+            {customTypes.map((c) => (
+              <SelectItem key={c.key} value={c.key}>
+                {c.label}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>
@@ -375,6 +440,7 @@ export default function HRLeave() {
               <RequestRow
                 key={r._id}
                 r={r}
+                customTypes={customTypes}
                 onApprove={() => {
                   setReviewTarget({ request: r, action: "approved" });
                   setReviewNote("");
@@ -403,6 +469,7 @@ export default function HRLeave() {
               <RequestRow
                 key={r._id}
                 r={r}
+                customTypes={customTypes}
                 onApprove={() => {
                   setReviewTarget({ request: r, action: "approved" });
                   setReviewNote("");
@@ -451,8 +518,11 @@ export default function HRLeave() {
                           </p>
                         </div>
                       </div>
-                      <Badge variant="outline" className={typeColor(r.type)}>
-                        {typeLabel(r.type)}
+                      <Badge
+                        variant="outline"
+                        className={typeColor(r.type, customTypes)}
+                      >
+                        {typeLabel(r.type, customTypes)}
                       </Badge>
                     </div>
                   );
@@ -469,28 +539,51 @@ export default function HRLeave() {
               Leave entitlements are set per location. Employees inherit their
               location's policy.
             </p>
-            {uncoveredLocations.length > 0 && (
-              <Select
-                value=""
-                onValueChange={(locId) => {
-                  const loc = uncoveredLocations.find((l) => l._id === locId);
-                  if (loc) openPolicyDialog(loc);
-                }}
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-9"
+                onClick={() => setCustomTypeOpen(true)}
               >
-                <SelectTrigger className="w-auto gap-2 h-9 px-4 bg-gradient-to-r from-primary to-secondary text-white border-0">
-                  <Plus className="h-4 w-4" />
-                  <SelectValue placeholder="Set policy for…" />
-                </SelectTrigger>
-                <SelectContent>
-                  {uncoveredLocations.map((l) => (
-                    <SelectItem key={l._id} value={l._id}>
-                      {l.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
+                <Plus className="h-3.5 w-3.5 mr-1.5" /> Add leave type
+              </Button>
+              {uncoveredLocations.length > 0 && (
+                <Select
+                  value=""
+                  onValueChange={(locId) => {
+                    const loc = uncoveredLocations.find((l) => l._id === locId);
+                    if (loc) openPolicyDialog(loc);
+                  }}
+                >
+                  <SelectTrigger className="w-auto gap-2 h-9 px-4 bg-gradient-to-r from-primary to-secondary text-white border-0">
+                    <Plus className="h-4 w-4" />
+                    <SelectValue placeholder="Set policy for…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {uncoveredLocations.map((l) => (
+                      <SelectItem key={l._id} value={l._id}>
+                        {l.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
           </div>
+
+          {customTypes.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {customTypes.map((c) => (
+                <span
+                  key={c._id}
+                  className="text-[11px] px-2.5 py-1 rounded-full font-medium bg-cyan-500/10 text-cyan-600 border border-cyan-500/20"
+                >
+                  {c.label}
+                </span>
+              ))}
+            </div>
+          )}
 
           {/* Default policy card */}
           {(() => {
@@ -508,9 +601,9 @@ export default function HRLeave() {
                         {defaultPolicy.policies.slice(0, 4).map((p) => (
                           <span
                             key={p.type}
-                            className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${typeColor(p.type)}`}
+                            className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${typeColor(p.type, customTypes)}`}
                           >
-                            {typeLabel(p.type)}: {p.daysAllowed}d
+                            {typeLabel(p.type, customTypes)}: {p.daysAllowed}d
                           </span>
                         ))}
                       </div>
@@ -561,9 +654,9 @@ export default function HRLeave() {
                             {policy.policies.map((p) => (
                               <div
                                 key={p.type}
-                                className={`inline-flex items-center gap-1 text-[10px] px-2.5 py-1 rounded-full font-medium ${typeColor(p.type)}`}
+                                className={`inline-flex items-center gap-1 text-[10px] px-2.5 py-1 rounded-full font-medium ${typeColor(p.type, customTypes)}`}
                               >
-                                {typeLabel(p.type)}
+                                {typeLabel(p.type, customTypes)}
                                 <span className="font-bold ml-1">
                                   {p.daysAllowed}d
                                 </span>
@@ -631,7 +724,7 @@ export default function HRLeave() {
                   const name = emp
                     ? `${emp.firstName} ${emp.lastName}`
                     : "Employee";
-                  return `${name} — ${typeLabel(reviewTarget.request.type)} leave, ${reviewTarget.request.days} day${reviewTarget.request.days !== 1 ? "s" : ""}`;
+                  return `${name} — ${typeLabel(reviewTarget.request.type, customTypes)} leave, ${reviewTarget.request.days} day${reviewTarget.request.days !== 1 ? "s" : ""}`;
                 })()}
             </DialogDescription>
           </DialogHeader>
@@ -771,9 +864,9 @@ export default function HRLeave() {
                 className="flex items-center gap-3 py-1.5 border-b last:border-b-0"
               >
                 <span
-                  className={`text-[11px] px-2.5 py-1 rounded-full font-medium w-28 text-center shrink-0 ${typeColor(entry.type)}`}
+                  className={`text-[11px] px-2.5 py-1 rounded-full font-medium w-28 text-center shrink-0 truncate ${typeColor(entry.type, customTypes)}`}
                 >
-                  {typeLabel(entry.type)}
+                  {typeLabel(entry.type, customTypes)}
                 </span>
                 <Input
                   type="number"
@@ -829,6 +922,58 @@ export default function HRLeave() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ── Add Custom Leave Type Dialog ── */}
+      <Dialog open={customTypeOpen} onOpenChange={setCustomTypeOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Add Leave Type</DialogTitle>
+            <DialogDescription>
+              Create a leave type beyond the built-in ones (e.g. "Sabbatical" or
+              "Jury Duty"). It becomes available in every location's policy.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2">
+            <Label htmlFor="custom-leave-label">Name</Label>
+            <Input
+              id="custom-leave-label"
+              className="mt-1.5"
+              placeholder="e.g. Sabbatical"
+              value={customTypeLabel}
+              onChange={(e) => setCustomTypeLabel(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && customTypeLabel.trim()) {
+                  customTypeMutation.mutate();
+                }
+              }}
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setCustomTypeOpen(false);
+                setCustomTypeLabel("");
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="bg-gradient-to-r from-primary to-secondary"
+              disabled={!customTypeLabel.trim() || customTypeMutation.isPending}
+              onClick={() => customTypeMutation.mutate()}
+            >
+              {customTypeMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Adding…
+                </>
+              ) : (
+                "Add Leave Type"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -848,10 +993,12 @@ function RequestRow({
   r,
   onApprove,
   onReject,
+  customTypes = [],
 }: {
   r: LeaveRequest;
   onApprove: () => void;
   onReject: () => void;
+  customTypes?: Pick<CustomLeaveType, "key" | "label">[];
 }) {
   const emp = r.employeeId;
   const name = emp ? `${emp.firstName} ${emp.lastName}` : "—";
@@ -869,9 +1016,9 @@ function RequestRow({
               {name}
               <Badge
                 variant="outline"
-                className={`text-[10px] ${typeColor(r.type)}`}
+                className={`text-[10px] ${typeColor(r.type, customTypes)}`}
               >
-                {typeLabel(r.type)}
+                {typeLabel(r.type, customTypes)}
               </Badge>
             </p>
             <p className="text-xs text-muted-foreground mt-0.5">

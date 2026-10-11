@@ -45,6 +45,8 @@ import {
   XCircle,
   Loader2,
   Trash2,
+  Mail,
+  Award,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Pencil } from "lucide-react";
@@ -72,6 +74,7 @@ import {
   deleteCandidate,
   fetchAllOffboarding,
   updateOffboarding,
+  sendOffboardingCertificate,
   fetchAllSuccessionPlans,
   createSuccessionPlan,
   addSuccessor,
@@ -937,6 +940,18 @@ function OffboardingDetailSheet({
       toast.error(err?.response?.data?.message ?? "Failed to save"),
   });
 
+  const certificateMutation = useMutation({
+    mutationFn: () => sendOffboardingCertificate(record!._id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["recruitment-offboarding"] });
+      toast.success(
+        `Certificate of Service emailed to ${record!.employeeName}.`,
+      );
+    },
+    onError: (err: any) =>
+      toast.error(err?.response?.data?.message ?? "Failed to send certificate"),
+  });
+
   if (!record) return null;
 
   return (
@@ -965,6 +980,35 @@ function OffboardingDetailSheet({
               <p className="text-sm mt-1">{record.reason}</p>
             </div>
           )}
+
+          <Card>
+            <CardContent className="p-4 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium flex items-center gap-1.5">
+                  <Award className="h-4 w-4 text-primary" /> Certificate of
+                  Service
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {record.certificateOfServiceSentAt
+                    ? `Last emailed ${fmtDate(record.certificateOfServiceSentAt)}`
+                    : "Not sent yet — emails a PDF confirming role and dates of employment."}
+                </p>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={certificateMutation.isPending}
+                onClick={() => certificateMutation.mutate()}
+              >
+                {certificateMutation.isPending ? (
+                  <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                ) : (
+                  <Mail className="h-3.5 w-3.5 mr-1.5" />
+                )}
+                {record.certificateOfServiceSentAt ? "Re-send" : "Send"}
+              </Button>
+            </CardContent>
+          </Card>
 
           <Card>
             <CardContent className="p-4 space-y-3">

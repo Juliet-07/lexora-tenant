@@ -168,6 +168,7 @@ export default function HREmployees() {
     email: "",
     phone: "",
     jobTitle: "",
+    gender: undefined,
     teamId: "",
     locationId: "",
     employmentType: "full_time",
@@ -222,6 +223,7 @@ export default function HREmployees() {
       email: emp.email,
       phone: emp.phone ?? "",
       jobTitle: emp.jobTitle,
+      gender: emp.gender ?? undefined,
       teamId,
       locationId,
       employmentType: emp.employmentType ?? "full_time",
@@ -970,6 +972,23 @@ export default function HREmployees() {
                 }
               />
             </div>
+            <div className="space-y-1">
+              <Label>Gender</Label>
+              <Select
+                value={empForm.gender ?? ""}
+                onValueChange={(v: any) =>
+                  setEmpForm((f) => ({ ...f, gender: v }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select gender" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="male">Male</SelectItem>
+                  <SelectItem value="female">Female</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             {isEditingOwner && (
               <div className="col-span-2 text-xs text-muted-foreground bg-muted/40 rounded-md p-2">
                 Owner accounts aren't assigned to a team or location, and their
@@ -1330,15 +1349,21 @@ export default function HREmployees() {
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-medium">Platform access</span>
-                  <span className="text-xs text-muted-foreground">Optional</span>
+                  <span className="text-xs text-muted-foreground">
+                    Optional
+                  </span>
                 </div>
-                <span className="text-xs text-muted-foreground" aria-live="polite">
+                <span
+                  className="text-xs text-muted-foreground"
+                  aria-live="polite"
+                >
                   {empForm.staffRoles?.length ?? 0} selected
                 </span>
               </div>
               <div className="grid grid-cols-1 min-[480px]:grid-cols-2 gap-2">
                 {STAFF_ROLES.map((r) => {
-                  const selected = empForm.staffRoles?.includes(r.value) ?? false;
+                  const selected =
+                    empForm.staffRoles?.includes(r.value) ?? false;
                   return (
                     <label
                       key={r.value}
@@ -1352,16 +1377,21 @@ export default function HREmployees() {
                             const current = f.staffRoles ?? [];
                             return {
                               ...f,
-                              staffRoles: checked === true
-                                ? [...current, r.value]
-                                : current.filter((v) => v !== r.value),
+                              staffRoles:
+                                checked === true
+                                  ? [...current, r.value]
+                                  : current.filter((v) => v !== r.value),
                             };
                           });
                         }}
                       />
                       <span className="min-w-0 space-y-1">
-                        <span className="block text-sm font-medium leading-snug">{r.label}</span>
-                        <span className="block text-xs text-muted-foreground leading-snug">{r.description}</span>
+                        <span className="block text-sm font-medium leading-snug">
+                          {r.label}
+                        </span>
+                        <span className="block text-xs text-muted-foreground leading-snug">
+                          {r.description}
+                        </span>
                       </span>
                     </label>
                   );

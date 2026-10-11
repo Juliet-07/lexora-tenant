@@ -175,6 +175,7 @@ export interface OffboardingRecord {
   handoverNotes: string | null;
   assignedTo: string | null;
   completedAt: string | null;
+  certificateOfServiceSentAt: string | null;
   createdAt: string;
 }
 
@@ -192,6 +193,16 @@ export const fetchOffboardingById = async (
   recordId: string,
 ): Promise<OffboardingRecord> => {
   const res = await api.get(`/hr/recruitment/offboarding/${recordId}`);
+  return res.data?.data ?? res.data;
+};
+
+export const sendOffboardingCertificate = async (
+  recordId: string,
+): Promise<OffboardingRecord> => {
+  const res = await api.post(
+    `/hr/recruitment/offboarding/${recordId}/certificate`,
+    {},
+  );
   return res.data?.data ?? res.data;
 };
 

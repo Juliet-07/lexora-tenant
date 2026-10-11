@@ -510,6 +510,11 @@ export const STAFF_ROLES: {
     label: "CRM Manager",
     description: "CRM module access",
   },
+  {
+    value: "finance_manager",
+    label: "Finance Manager",
+    description: "Finance module access",
+  },
 ];
 
 export const terminateEmployee = async (
@@ -578,7 +583,8 @@ export type LeaveType =
   | "unpaid";
 
 export interface LeaveBalance {
-  type: LeaveType;
+  // A built-in LeaveType, or the key of a tenant-defined custom leave type.
+  type: string;
   label: string;
   daysAllowed: number;
   daysUsed: number;
@@ -603,7 +609,8 @@ export interface LeaveRequest {
     jobTitle: string;
   } | null;
   tenantId: string;
-  type: LeaveType;
+  // A built-in LeaveType, or the key of a tenant-defined custom leave type.
+  type: string;
   startDate: string;
   endDate: string;
   days: number;
@@ -702,6 +709,29 @@ export const upsertLeavePolicy = async (dto: {
   policies: { type: string; daysAllowed: number; carryOver?: boolean }[];
 }): Promise<LeavePolicy> => {
   const res = await api.post("/hr/leave/policy", dto);
+  return res.data?.data ?? res.data;
+};
+
+// ── Custom leave types (beyond the built-in static ones) ──────
+
+export interface CustomLeaveType {
+  _id: string;
+  tenantId: string;
+  key: string;
+  label: string;
+  createdAt: string;
+}
+
+export const fetchCustomLeaveTypes = async (): Promise<CustomLeaveType[]> => {
+  const res = await api.get("/hr/leave/custom-types");
+  const d = res.data?.data ?? res.data;
+  return Array.isArray(d) ? d : [];
+};
+
+export const createCustomLeaveType = async (
+  label: string,
+): Promise<CustomLeaveType> => {
+  const res = await api.post("/hr/leave/custom-types", { label });
   return res.data?.data ?? res.data;
 };
 
