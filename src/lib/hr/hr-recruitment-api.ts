@@ -159,6 +159,14 @@ export interface ClearanceItem {
   notes: string | null;
 }
 
+export interface OffboardingCertificateFile {
+  name: string;
+  url: string;
+  mimeType: string;
+  size: number;
+  uploadedAt: string;
+}
+
 export interface OffboardingRecord {
   _id: string;
   tenantId: string;
@@ -176,6 +184,7 @@ export interface OffboardingRecord {
   assignedTo: string | null;
   completedAt: string | null;
   certificateOfServiceSentAt: string | null;
+  certificateOfServiceFile: OffboardingCertificateFile | null;
   createdAt: string;
 }
 
@@ -196,14 +205,36 @@ export const fetchOffboardingById = async (
   return res.data?.data ?? res.data;
 };
 
+export const uploadOffboardingCertificate = async (
+  recordId: string,
+  file: File,
+): Promise<OffboardingRecord> => {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await api.post(
+    `/hr/recruitment/offboarding/${recordId}/certificate/upload`,
+    form,
+    { headers: { "Content-Type": "multipart/form-data" } },
+  );
+  return res.data?.data ?? res.data;
+};
+
 export const sendOffboardingCertificate = async (
   recordId: string,
 ): Promise<OffboardingRecord> => {
   const res = await api.post(
-    `/hr/recruitment/offboarding/${recordId}/certificate`,
+    `/hr/recruitment/offboarding/${recordId}/certificate/send`,
     {},
   );
   return res.data?.data ?? res.data;
+};
+
+const RECRUITMENT_API_BASE = (api.defaults as any)?.baseURL ?? "/api";
+export const resolveOffboardingFileUrl = (url: string): string => {
+  if (!url) return url;
+  if (url.startsWith("http")) return url;
+  const origin = new URL(RECRUITMENT_API_BASE).origin;
+  return `${origin}${url}`;
 };
 
 export const updateOffboarding = async (

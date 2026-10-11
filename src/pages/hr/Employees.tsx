@@ -50,6 +50,7 @@ import {
   ClipboardCheck,
   Calculator,
   ArrowRightLeft,
+  Download,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -77,8 +78,14 @@ import {
   STAFF_ROLES,
   updateEmployeeStaffRoles,
 } from "@/lib/hr/hr-api";
+import {
+  EMPLOYEE_LIST_COLUMNS,
+  DEFAULT_EMPLOYEE_LIST_COLUMN_IDS,
+  downloadEmployeeListReport,
+} from "@/lib/hr/employeeListReport";
 import { EmployeeDetailSheet } from "@/components/hr/EmployeeDetailSheet";
 import OnboardingDocumentsTab from "./OnboardingDocuments";
+import { useAuth } from "@/contexts/AuthContext";
 
 // ─── Helpers ──────────────────────────────────────────────────
 
@@ -130,6 +137,7 @@ const getLocationName = (e: Employee) =>
 
 export default function HREmployees() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
 
   const [tab, setTab] = useState("employees");
   const [search, setSearch] = useState("");
@@ -140,6 +148,10 @@ export default function HREmployees() {
   const [empOpen, setEmpOpen] = useState(false);
   const [teamOpen, setTeamOpen] = useState(false);
   const [locOpen, setLocOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exportColumnIds, setExportColumnIds] = useState<string[]>(
+    DEFAULT_EMPLOYEE_LIST_COLUMN_IDS,
+  );
 
   // Delete confirmation state
   const [deleteTeamTarget, setDeleteTeamTarget] = useState<HrTeam | null>(null);
@@ -589,6 +601,13 @@ export default function HREmployees() {
                 </SelectContent>
               </Select>
               <Button
+                variant="outline"
+                onClick={() => setExportOpen(true)}
+                disabled={employees.length === 0}
+              >
+                <Download className="h-4 w-4 mr-2" /> Download List
+              </Button>
+              <Button
                 className="bg-gradient-to-r from-primary to-secondary"
                 onClick={() => {
                   if (teams.length === 0)
@@ -895,6 +914,65 @@ export default function HREmployees() {
           )}
         </TabsContent>
       </Tabs>
+
+      {/* ── Download Employee List Dialog ── */}
+      <Dialog open={exportOpen} onOpenChange={setExportOpen}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Download Employee List</DialogTitle>
+            <DialogDescription>
+              Choose which details to include. The PDF covers the{" "}
+              {employees.length} employee{employees.length !== 1 ? "s" : ""}{" "}
+              currently shown (respecting your search and filters above).
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid grid-cols-2 gap-2 py-2">
+            {EMPLOYEE_LIST_COLUMNS.map((col) => {
+              const checked = exportColumnIds.includes(col.id);
+              return (
+                <label
+                  key={col.id}
+                  className="flex items-center gap-2 text-sm py-1 cursor-pointer"
+                >
+                  <Checkbox
+                    checked={checked}
+                    onCheckedChange={(v) =>
+                      setExportColumnIds((prev) =>
+                        v === true
+                          ? [...prev, col.id]
+                          : prev.filter((id) => id !== col.id),
+                      )
+                    }
+                  />
+                  {col.label}
+                </label>
+              );
+            })}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setExportOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              className="bg-gradient-to-r from-primary to-secondary"
+              disabled={exportColumnIds.length === 0}
+              onClick={() => {
+                downloadEmployeeListReport(
+                  employees,
+                  exportColumnIds,
+                  user?.businessName || "Your Organization",
+                );
+                setExportOpen(false);
+                toast.success("Employee list downloaded.");
+              }}
+            >
+              <Download className="h-4 w-4 mr-2" /> Download PDF
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ── Add / Edit Employee Dialog ── */}
       <Dialog

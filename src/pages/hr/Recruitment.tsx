@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -47,6 +47,8 @@ import {
   Trash2,
   Mail,
   Award,
+  Paperclip,
+  FileText,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Pencil } from "lucide-react";
@@ -74,7 +76,9 @@ import {
   deleteCandidate,
   fetchAllOffboarding,
   updateOffboarding,
+  uploadOffboardingCertificate,
   sendOffboardingCertificate,
+  resolveOffboardingFileUrl,
   fetchAllSuccessionPlans,
   createSuccessionPlan,
   addSuccessor,
@@ -940,6 +944,20 @@ function OffboardingDetailSheet({
       toast.error(err?.response?.data?.message ?? "Failed to save"),
   });
 
+  const certificateFileInputRef = useRef<HTMLInputElement>(null);
+
+  const uploadCertificateMutation = useMutation({
+    mutationFn: (file: File) => uploadOffboardingCertificate(record!._id, file),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["recruitment-offboarding"] });
+      toast.success("Certificate of Service document uploaded.");
+    },
+    onError: (err: any) =>
+      toast.error(
+        err?.response?.data?.message ?? "Failed to upload the document",
+      ),
+  });
+
   const certificateMutation = useMutation({
     mutationFn: () => sendOffboardingCertificate(record!._id),
     onSuccess: () => {
@@ -982,31 +1000,86 @@ function OffboardingDetailSheet({
           )}
 
           <Card>
-            <CardContent className="p-4 flex items-center justify-between gap-3">
+            <CardContent className="p-4 space-y-3">
               <div>
                 <p className="text-sm font-medium flex items-center gap-1.5">
                   <Award className="h-4 w-4 text-primary" /> Certificate of
                   Service
                 </p>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  {record.certificateOfServiceSentAt
-                    ? `Last emailed ${fmtDate(record.certificateOfServiceSentAt)}`
-                    : "Not sent yet — emails a PDF confirming role and dates of employment."}
+                  Upload the signed document, then send it to{" "}
+                  {record.employeeName} by email.
                 </p>
               </div>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={certificateMutation.isPending}
-                onClick={() => certificateMutation.mutate()}
-              >
-                {certificateMutation.isPending ? (
-                  <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-                ) : (
-                  <Mail className="h-3.5 w-3.5 mr-1.5" />
-                )}
-                {record.certificateOfServiceSentAt ? "Re-send" : "Send"}
-              </Button>
+
+              <input
+                ref={certificateFileInputRef}
+                type="file"
+                accept="application/pdf,image/jpeg,image/jpg,image/png,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) uploadCertificateMutation.mutate(file);
+                  if (certificateFileInputRef.current)
+                    certificateFileInputRef.current.value = "";
+                }}
+              />
+
+              {record.certificateOfServiceFile ? (
+                <a
+                  href={resolveOffboardingFileUrl(
+                    record.certificateOfServiceFile.url,
+                  )}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1.5 text-xs border rounded-md px-2.5 py-1.5 bg-muted/40 hover:bg-muted transition-colors"
+                >
+                  <FileText className="h-3.5 w-3.5" />
+                  {record.certificateOfServiceFile.name}
+                </a>
+              ) : (
+                <p className="text-xs text-muted-foreground italic">
+                  No document uploaded yet.
+                </p>
+              )}
+
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={uploadCertificateMutation.isPending}
+                  onClick={() => certificateFileInputRef.current?.click()}
+                >
+                  {uploadCertificateMutation.isPending ? (
+                    <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                  ) : (
+                    <Paperclip className="h-3.5 w-3.5 mr-1.5" />
+                  )}
+                  {record.certificateOfServiceFile
+                    ? "Replace file"
+                    : "Upload file"}
+                </Button>
+                <Button
+                  size="sm"
+                  disabled={
+                    !record.certificateOfServiceFile ||
+                    certificateMutation.isPending
+                  }
+                  onClick={() => certificateMutation.mutate()}
+                >
+                  {certificateMutation.isPending ? (
+                    <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                  ) : (
+                    <Mail className="h-3.5 w-3.5 mr-1.5" />
+                  )}
+                  {record.certificateOfServiceSentAt ? "Re-send" : "Send"}
+                </Button>
+              </div>
+              {record.certificateOfServiceSentAt && (
+                <p className="text-xs text-muted-foreground">
+                  Last emailed {fmtDate(record.certificateOfServiceSentAt)}
+                </p>
+              )}
             </CardContent>
           </Card>
 
