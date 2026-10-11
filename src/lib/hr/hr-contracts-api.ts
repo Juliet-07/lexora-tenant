@@ -137,6 +137,7 @@ export const fetchContractById = async (
 export const generateContractFromCandidate = async (dto: {
   candidateId: string;
   templateId: string;
+  scopeOfWork?: string;
 }): Promise<Contract> => {
   const res = await api.post("/hr/contracts/generate-from-candidate", dto);
   return res.data?.data ?? res.data;
@@ -148,6 +149,7 @@ export const generateContractForEmployee = async (dto: {
   reason?: string;
   effectiveDate?: string;
   endDate?: string;
+  scopeOfWork?: string;
 }): Promise<Contract> => {
   const res = await api.post("/hr/contracts/generate-for-employee", dto);
   return res.data?.data ?? res.data;

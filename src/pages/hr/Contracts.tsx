@@ -134,6 +134,14 @@ const INTERACTION_LABEL: Record<InteractionType, string> = {
   issued: "Issued by you",
 };
 
+// Editable while Draft or Sent — matches the backend's own guard
+// exactly (ContractService.editBody). Draft is the window between
+// generating a document and sending/issuing it, which matters most
+// for a one-way letter: it never reaches "sent" at all, so Draft is
+// the only chance to review and correct it before it's issued.
+const canEditBody = (c: Contract) =>
+  c.status === "draft" || c.status === "sent";
+
 const fmtDateTime = (d: string) =>
   new Date(d).toLocaleString("en-GB", {
     day: "numeric",
@@ -568,7 +576,7 @@ export default function HRContracts() {
                       <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                         Document
                       </p>
-                      {selected.status === "sent" && !editingBody && (
+                      {canEditBody(selected) && !editingBody && (
                         <Button
                           size="sm"
                           variant="outline"
@@ -580,6 +588,15 @@ export default function HRContracts() {
                           <Pencil className="h-3.5 w-3.5 mr-1.5" /> Edit
                         </Button>
                       )}
+                      {!canEditBody(selected) &&
+                        selected.status !== "draft" && (
+                          <Badge
+                            variant="outline"
+                            className="text-muted-foreground"
+                          >
+                            Locked
+                          </Badge>
+                        )}
                     </div>
 
                     {editingBody ? (
@@ -587,7 +604,7 @@ export default function HRContracts() {
                         <RichTextEditor
                           value={editedBody}
                           onChange={setEditedBody}
-                          minHeight={240}
+                          minHeight={360}
                         />
                         <div className="space-y-1">
                           <Label className="text-xs">
@@ -631,14 +648,14 @@ export default function HRContracts() {
                           </Button>
                         </div>
                         <p className="text-xs text-muted-foreground">
-                          The signer's existing link keeps working — they'll see
-                          these updated terms next time they open it. No new
-                          email is sent automatically.
+                          {selected.status === "draft"
+                            ? "Not sent yet — these changes are private until you send or issue it."
+                            : "The signer's existing link keeps working — they'll see these updated terms next time they open it. No new email is sent automatically."}
                         </p>
                       </div>
                     ) : (
                       <div
-                        className="prose prose-sm max-w-none text-sm bg-muted/30 rounded p-3 max-h-64 overflow-y-auto [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5"
+                        className="prose prose-sm max-w-none text-sm rounded-md border bg-card p-4 leading-relaxed [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5"
                         dangerouslySetInnerHTML={{
                           __html: selected.renderedBody,
                         }}
@@ -781,6 +798,7 @@ function ManualGenerateContractDialog({
   const queryClient = useQueryClient();
   const [candidateId, setCandidateId] = useState("");
   const [templateId, setTemplateId] = useState("");
+  const [scopeOfWork, setScopeOfWork] = useState("");
 
   const selectedCandidate = candidates.find((c) => c._id === candidateId);
 
@@ -792,12 +810,18 @@ function ManualGenerateContractDialog({
 
   const generateMutation = useMutation({
     mutationFn: () =>
-      generateContractFromCandidate({ candidateId, templateId }),
+      generateContractFromCandidate({
+        candidateId,
+        templateId,
+        scopeOfWork: scopeOfWork.trim() || undefined,
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["contracts"] });
       queryClient.invalidateQueries({ queryKey: ["hired-without-contract"] });
       handleClose();
-      toast.success("Contract draft created.");
+      toast.success(
+        "Contract draft created. Review it on the Document tab before sending.",
+      );
     },
     onError: (err: any) =>
       toast.error(
@@ -808,6 +832,7 @@ function ManualGenerateContractDialog({
   const handleClose = () => {
     setCandidateId("");
     setTemplateId("");
+    setScopeOfWork("");
     onClose();
   };
 
@@ -849,6 +874,35 @@ function ManualGenerateContractDialog({
             </Select>
           </div>
           {selectedCandidate && (
+            <div className="rounded-md border bg-muted/30 p-3 text-xs space-y-1">
+              <p className="font-medium text-muted-foreground uppercase tracking-wide text-[11px]">
+                Filled in automatically from this candidate
+              </p>
+              <p>
+                Name:{" "}
+                <span className="font-medium">{selectedCandidate.name}</span>
+              </p>
+              <p>
+                Role:{" "}
+                <span className="font-medium">
+                  {selectedCandidate.roleAppliedFor}
+                </span>
+              </p>
+              <p>
+                Worker category:{" "}
+                <span className="font-medium capitalize">
+                  {selectedCandidate.workerCategory}
+                </span>
+              </p>
+              <p className="text-muted-foreground pt-1">
+                Salary and start date aren't set yet at this stage — add them
+                once the employee record exists, or type them into the document
+                after generating.
+              </p>
+            </div>
+          )}
+
+          {selectedCandidate && (
             <div className="space-y-1">
               <Label>Template</Label>
               {templates.length === 0 ? (
@@ -870,6 +924,24 @@ function ManualGenerateContractDialog({
                   </SelectContent>
                 </Select>
               )}
+            </div>
+          )}
+
+          {selectedCandidate && (
+            <div className="space-y-1">
+              <Label>Scope of work (optional)</Label>
+              <Textarea
+                rows={3}
+                value={scopeOfWork}
+                onChange={(e) => setScopeOfWork(e.target.value)}
+                placeholder={
+                  "One deliverable per line, e.g.\nWeekly progress report\nMonthly stakeholder review"
+                }
+              />
+              <p className="text-xs text-muted-foreground">
+                Only relevant if the template references a scope-of-work clause.
+                Each line becomes one numbered item.
+              </p>
             </div>
           )}
         </div>
@@ -911,6 +983,7 @@ function GenerateForEmployeeDialog({
   const [reason, setReason] = useState("");
   const [effectiveDate, setEffectiveDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [scopeOfWork, setScopeOfWork] = useState("");
 
   const { data: employeesPage } = useQuery({
     queryKey: ["hr-employees-for-contract-picker"],
@@ -937,11 +1010,14 @@ function GenerateForEmployeeDialog({
         reason: reason.trim() || undefined,
         effectiveDate: effectiveDate || undefined,
         endDate: endDate || undefined,
+        scopeOfWork: scopeOfWork.trim() || undefined,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["contracts"] });
       handleClose();
-      toast.success("Document draft created.");
+      toast.success(
+        "Document draft created. Review it on the Document tab before sending.",
+      );
     },
     onError: (err: any) =>
       toast.error(
@@ -955,6 +1031,7 @@ function GenerateForEmployeeDialog({
     setReason("");
     setEffectiveDate("");
     setEndDate("");
+    setScopeOfWork("");
     onClose();
   };
 
@@ -1023,6 +1100,46 @@ function GenerateForEmployeeDialog({
           </div>
 
           {selectedEmployee && (
+            <div className="rounded-md border bg-muted/30 p-3 text-xs space-y-1">
+              <p className="font-medium text-muted-foreground uppercase tracking-wide text-[11px]">
+                Filled in automatically from this employee's record
+              </p>
+              <p>
+                Job title:{" "}
+                <span className="font-medium">
+                  {selectedEmployee.jobTitle || "—"}
+                </span>
+              </p>
+              <p>
+                Salary:{" "}
+                <span className="font-medium">
+                  {selectedEmployee.salary != null
+                    ? `${selectedEmployee.salary.toLocaleString()} ${selectedEmployee.salaryCurrency}`
+                    : "Not set on the employee record"}
+                </span>
+              </p>
+              <p>
+                Start date:{" "}
+                <span className="font-medium">
+                  {selectedEmployee.startDate
+                    ? new Date(selectedEmployee.startDate).toLocaleDateString()
+                    : "—"}
+                </span>
+              </p>
+              <p>
+                Worker category:{" "}
+                <span className="font-medium capitalize">
+                  {selectedEmployee.workerCategory}
+                </span>
+              </p>
+              <p className="text-muted-foreground pt-1">
+                Nothing to re-type here — update the employee's record first if
+                any of this is wrong, then generate the document.
+              </p>
+            </div>
+          )}
+
+          {selectedEmployee && (
             <div className="space-y-1">
               <Label>Template</Label>
               {templates.length === 0 ? (
@@ -1045,6 +1162,25 @@ function GenerateForEmployeeDialog({
                   </SelectContent>
                 </Select>
               )}
+            </div>
+          )}
+
+          {selectedTemplate && (
+            <div className="space-y-1">
+              <Label>Scope of work (optional)</Label>
+              <Textarea
+                rows={3}
+                value={scopeOfWork}
+                onChange={(e) => setScopeOfWork(e.target.value)}
+                placeholder={
+                  "One deliverable per line, e.g.\nWeekly progress report\nMonthly stakeholder review"
+                }
+              />
+              <p className="text-xs text-muted-foreground">
+                Only relevant if the template references a scope-of-work clause
+                (common for consultant agreements). Each line becomes one
+                numbered item.
+              </p>
             </div>
           )}
 

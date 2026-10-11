@@ -608,6 +608,7 @@ function GenerateContractDialog({
 }) {
   const queryClient = useQueryClient();
   const [templateId, setTemplateId] = useState("");
+  const [scopeOfWork, setScopeOfWork] = useState("");
 
   const { data: templates = [], isLoading } = useQuery({
     queryKey: ["contract-templates", candidate?.workerCategory],
@@ -620,11 +621,13 @@ function GenerateContractDialog({
       generateContractFromCandidate({
         candidateId: candidate!._id,
         templateId,
+        scopeOfWork: scopeOfWork.trim() || undefined,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["contracts"] });
       onClose();
       setTemplateId("");
+      setScopeOfWork("");
       toast.success(
         "Contract draft created. Review it in the Contracts module before sending.",
       );
@@ -637,6 +640,7 @@ function GenerateContractDialog({
 
   const handleClose = () => {
     setTemplateId("");
+    setScopeOfWork("");
     onClose();
   };
 
@@ -652,6 +656,25 @@ function GenerateContractDialog({
             before sending it for signature.
           </DialogDescription>
         </DialogHeader>
+        <div className="rounded-md border bg-muted/30 p-3 text-xs space-y-1">
+          <p className="font-medium text-muted-foreground uppercase tracking-wide text-[11px]">
+            Filled in automatically from this candidate
+          </p>
+          <p>
+            Name: <span className="font-medium">{candidate.name}</span>
+          </p>
+          <p>
+            Role:{" "}
+            <span className="font-medium">{candidate.roleAppliedFor}</span>
+          </p>
+          <p>
+            Worker category:{" "}
+            <span className="font-medium capitalize">
+              {candidate.workerCategory}
+            </span>
+          </p>
+        </div>
+
         {isLoading ? (
           <div className="flex justify-center py-6">
             <Loader2 className="h-5 w-5 animate-spin" />
@@ -662,18 +685,37 @@ function GenerateContractDialog({
             your platform admin to publish one.
           </p>
         ) : (
-          <Select value={templateId} onValueChange={setTemplateId}>
-            <SelectTrigger>
-              <SelectValue placeholder="Select a template" />
-            </SelectTrigger>
-            <SelectContent>
-              {templates.map((t) => (
-                <SelectItem key={t._id} value={t._id}>
-                  {t.title}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <>
+            <Select value={templateId} onValueChange={setTemplateId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select a template" />
+              </SelectTrigger>
+              <SelectContent>
+                {templates.map((t) => (
+                  <SelectItem key={t._id} value={t._id}>
+                    {t.title}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {templateId && (
+              <div className="space-y-1">
+                <Label>Scope of work (optional)</Label>
+                <Textarea
+                  rows={3}
+                  value={scopeOfWork}
+                  onChange={(e) => setScopeOfWork(e.target.value)}
+                  placeholder={
+                    "One deliverable per line, e.g.\nWeekly progress report\nMonthly stakeholder review"
+                  }
+                />
+                <p className="text-xs text-muted-foreground">
+                  Only relevant if the template references a scope-of-work
+                  clause. Each line becomes one numbered item.
+                </p>
+              </div>
+            )}
+          </>
         )}
         <DialogFooter>
           <Button variant="outline" onClick={handleClose}>
