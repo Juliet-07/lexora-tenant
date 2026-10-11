@@ -658,8 +658,8 @@ function GenerateContractDialog({
           </div>
         ) : templates.length === 0 ? (
           <p className="text-sm text-muted-foreground py-4">
-            No {candidate.workerCategory} templates exist yet. Create one in the
-            Contracts module first.
+            No {candidate.workerCategory} templates have been published yet. Ask
+            your platform admin to publish one.
           </p>
         ) : (
           <Select value={templateId} onValueChange={setTemplateId}>
@@ -669,7 +669,7 @@ function GenerateContractDialog({
             <SelectContent>
               {templates.map((t) => (
                 <SelectItem key={t._id} value={t._id}>
-                  {t.name}
+                  {t.title}
                 </SelectItem>
               ))}
             </SelectContent>

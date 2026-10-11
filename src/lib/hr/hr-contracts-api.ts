@@ -6,19 +6,19 @@ import { api } from "../api";
 
 export type WorkerCategory = "employee" | "consultant";
 
-export type TemplateCategory = "contract" | "letter";
-
+// A contract template is authored and published by the super admin
+// (Contract Templates, module "hr") — the tenant can only browse and
+// pick from the published list, never create, edit, or delete one.
 export interface ContractTemplate {
   _id: string;
-  tenantId: string;
-  name: string;
-  workerCategory: WorkerCategory;
-  body: string;
-  description: string | null;
-  isActive: boolean;
-  category: TemplateCategory;
-  requiresSignature: boolean;
-  createdAt: string;
+  title: string;
+  description: string;
+  jurisdiction?: string;
+  content: string;
+  // null means this template applies to either worker category.
+  hrWorkerCategory: WorkerCategory | null;
+  hrRequiresSignature: boolean;
+  version: string;
 }
 
 export const fetchContractTemplates = async (
@@ -31,50 +31,11 @@ export const fetchContractTemplates = async (
   return Array.isArray(d) ? d : [];
 };
 
-export const fetchAvailableMergeFields = async (): Promise<string[]> => {
-  const res = await api.get("/hr/contracts/templates/merge-fields");
-  const d = res.data?.data ?? res.data;
-  return d?.fields ?? [];
-};
-
 export const fetchContractTemplateById = async (
   templateId: string,
 ): Promise<ContractTemplate> => {
   const res = await api.get(`/hr/contracts/templates/${templateId}`);
   return res.data?.data ?? res.data;
-};
-
-export const createContractTemplate = async (dto: {
-  name: string;
-  workerCategory: WorkerCategory;
-  body: string;
-  description?: string;
-  category?: TemplateCategory;
-  requiresSignature?: boolean;
-}): Promise<ContractTemplate> => {
-  const res = await api.post("/hr/contracts/templates", dto);
-  return res.data?.data ?? res.data;
-};
-
-export const updateContractTemplate = async (
-  templateId: string,
-  dto: {
-    name?: string;
-    body?: string;
-    description?: string;
-    isActive?: boolean;
-    category?: TemplateCategory;
-    requiresSignature?: boolean;
-  },
-): Promise<ContractTemplate> => {
-  const res = await api.patch(`/hr/contracts/templates/${templateId}`, dto);
-  return res.data?.data ?? res.data;
-};
-
-export const deleteContractTemplate = async (
-  templateId: string,
-): Promise<void> => {
-  await api.delete(`/hr/contracts/templates/${templateId}`);
 };
 
 // ─────────────────────────────────────────────────────────────

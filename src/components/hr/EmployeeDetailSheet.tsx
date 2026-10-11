@@ -2036,7 +2036,7 @@ function SuspendEmployeeDialog({
     enabled: open,
   });
   const letterTemplates = templates.filter(
-    (t) => t.requiresSignature === false && t.isActive,
+    (t) => t.hrRequiresSignature === false,
   );
 
   const reset = () => {
@@ -2106,8 +2106,9 @@ function SuspendEmployeeDialog({
             <Label>Suspension letter template</Label>
             {letterTemplates.length === 0 ? (
               <p className="text-sm text-muted-foreground py-2">
-                No letter-type templates exist yet. Create one in Contracts →
-                Templates first (category: Letter, no signature required).
+                No letter-type employee templates have been published yet. Ask
+                your platform admin to publish one (no signature required) for
+                this.
               </p>
             ) : (
               <Select value={templateId} onValueChange={setTemplateId}>
@@ -2117,7 +2118,7 @@ function SuspendEmployeeDialog({
                 <SelectContent>
                   {letterTemplates.map((t) => (
                     <SelectItem key={t._id} value={t._id}>
-                      {t.name}
+                      {t.title}
                     </SelectItem>
                   ))}
                 </SelectContent>

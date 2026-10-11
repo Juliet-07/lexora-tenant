@@ -158,9 +158,10 @@ export default function SignContractPage() {
 
         <Card>
           <CardContent className="p-6">
-            <div className="whitespace-pre-wrap text-sm leading-relaxed">
-              {contract.renderedBody}
-            </div>
+            <div
+              className="prose prose-sm max-w-none text-sm leading-relaxed [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5"
+              dangerouslySetInnerHTML={{ __html: contract.renderedBody }}
+            />
           </CardContent>
         </Card>
 

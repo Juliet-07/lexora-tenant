@@ -70,7 +70,8 @@ import {
   downloadContractPdf,
   generateContractForEmployee,
 } from "@/lib/hr/hr-contracts-api";
-import { ContractTemplatesPanel } from "@/components/hr/ContractTemplatesPanel";
+import { PublishedTemplatesPanel } from "@/components/hr/PublishedTemplatesPanel";
+import { RichTextEditor } from "@/components/RichTextEditor";
 import { fetchEmployees } from "@/lib/hr/hr-api";
 import {
   Popover,
@@ -362,7 +363,7 @@ export default function HRContracts() {
         </TabsContent>
 
         <TabsContent value="templates">
-          <ContractTemplatesPanel />
+          <PublishedTemplatesPanel />
         </TabsContent>
       </Tabs>
 
@@ -583,11 +584,10 @@ export default function HRContracts() {
 
                     {editingBody ? (
                       <div className="space-y-2">
-                        <Textarea
-                          rows={12}
-                          className="font-mono text-xs"
+                        <RichTextEditor
                           value={editedBody}
-                          onChange={(e) => setEditedBody(e.target.value)}
+                          onChange={setEditedBody}
+                          minHeight={240}
                         />
                         <div className="space-y-1">
                           <Label className="text-xs">
@@ -637,9 +637,12 @@ export default function HRContracts() {
                         </p>
                       </div>
                     ) : (
-                      <div className="text-sm whitespace-pre-wrap bg-muted/30 rounded p-3 max-h-64 overflow-y-auto font-mono text-xs">
-                        {selected.renderedBody}
-                      </div>
+                      <div
+                        className="prose prose-sm max-w-none text-sm bg-muted/30 rounded p-3 max-h-64 overflow-y-auto [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5"
+                        dangerouslySetInnerHTML={{
+                          __html: selected.renderedBody,
+                        }}
+                      />
                     )}
                   </CardContent>
                 </Card>
@@ -861,7 +864,7 @@ function ManualGenerateContractDialog({
                   <SelectContent>
                     {templates.map((t) => (
                       <SelectItem key={t._id} value={t._id}>
-                        {t.name}
+                        {t.title}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -1035,8 +1038,8 @@ function GenerateForEmployeeDialog({
                   <SelectContent>
                     {templates.map((t) => (
                       <SelectItem key={t._id} value={t._id}>
-                        {t.name}
-                        {t.requiresSignature === false ? " (letter)" : ""}
+                        {t.title}
+                        {t.hrRequiresSignature === false ? " (letter)" : ""}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -1045,37 +1048,38 @@ function GenerateForEmployeeDialog({
             </div>
           )}
 
-          {selectedTemplate && selectedTemplate.requiresSignature === false && (
-            <>
-              <div className="space-y-1">
-                <Label>Reason (optional)</Label>
-                <Textarea
-                  rows={2}
-                  value={reason}
-                  onChange={(e) => setReason(e.target.value)}
-                  placeholder="Grounds for this letter…"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
+          {selectedTemplate &&
+            selectedTemplate.hrRequiresSignature === false && (
+              <>
                 <div className="space-y-1">
-                  <Label>Effective date (optional)</Label>
-                  <Input
-                    type="date"
-                    value={effectiveDate}
-                    onChange={(e) => setEffectiveDate(e.target.value)}
+                  <Label>Reason (optional)</Label>
+                  <Textarea
+                    rows={2}
+                    value={reason}
+                    onChange={(e) => setReason(e.target.value)}
+                    placeholder="Grounds for this letter…"
                   />
                 </div>
-                <div className="space-y-1">
-                  <Label>End date (optional)</Label>
-                  <Input
-                    type="date"
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                  />
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label>Effective date (optional)</Label>
+                    <Input
+                      type="date"
+                      value={effectiveDate}
+                      onChange={(e) => setEffectiveDate(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>End date (optional)</Label>
+                    <Input
+                      type="date"
+                      value={endDate}
+                      onChange={(e) => setEndDate(e.target.value)}
+                    />
+                  </div>
                 </div>
-              </div>
-            </>
-          )}
+              </>
+            )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={handleClose}>
