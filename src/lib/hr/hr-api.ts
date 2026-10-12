@@ -493,20 +493,29 @@ export const deleteEmployee = async (id: string): Promise<void> => {
   await api.delete(`/hr/employees/${id}`);
 };
 
+// Risk Officer and GRC Compliance Officer used to be two separate
+// checkboxes even though they grant the exact same access (GRC module —
+// see STAFF_ROLE_MODULE_ACCESS on the backend, lexora-engine). PO, Oct
+// 2026: "instead of having risk officer and compliance officer as 2
+// different things when the access is the same, let that read
+// Risk/Compliance Officer in one check box with the access to GRC
+// module." Collapsed to one entry; `aliases` lets an employee who
+// already has the old `grc_compliance_officer` value stored still show
+// as checked, and un-checking clears both values so stale data doesn't
+// linger. The backend still accepts `grc_compliance_officer` as a valid
+// role (nothing writes it going forward, but nothing breaks if it's
+// still on an existing record).
 export const STAFF_ROLES: {
   value: string;
   label: string;
   description: string;
+  aliases?: string[];
 }[] = [
   {
     value: "risk_officer",
-    label: "Risk Officer",
+    label: "Risk/Compliance Officer",
     description: "GRC module access",
-  },
-  {
-    value: "grc_compliance_officer",
-    label: "GRC Compliance Officer",
-    description: "GRC module access",
+    aliases: ["grc_compliance_officer"],
   },
   {
     value: "aml_compliance_officer",
@@ -525,6 +534,29 @@ export const STAFF_ROLES: {
     description: "Finance module access",
   },
 ];
+
+// Shared helpers so every checkbox UI driven by STAFF_ROLES treats a
+// role's aliases as interchangeable with its canonical value — a role
+// reads as "selected" if either is present, and toggling it off clears
+// both so no stale alias value is left behind.
+export const isStaffRoleSelected = (
+  selected: string[] | undefined,
+  role: (typeof STAFF_ROLES)[number],
+): boolean =>
+  !!selected &&
+  (selected.includes(role.value) ||
+    !!role.aliases?.some((a) => selected.includes(a)));
+
+export const toggleStaffRole = (
+  selected: string[],
+  role: (typeof STAFF_ROLES)[number],
+  checked: boolean,
+): string[] => {
+  const withoutRole = selected.filter(
+    (v) => v !== role.value && !role.aliases?.includes(v),
+  );
+  return checked ? [...withoutRole, role.value] : withoutRole;
+};
 
 export const terminateEmployee = async (
   id: string,
@@ -1567,20 +1599,39 @@ export const downloadPayslipPdf = async (
   window.URL.revokeObjectURL(url);
 };
 
+// Tenant-composed subject/body (PO, Oct 2026: "give the tenant the
+// ability to type the body of the email themselves"). `body` may
+// contain the literal token `{{employeeName}}`, substituted server-side
+// with each recipient's own name — the "space to carry the employee
+// name after the greeting" the PO asked for. Both optional: omitting
+// either keeps the original fixed default for that part.
+export interface PayslipEmailMessage {
+  subject?: string;
+  body?: string;
+}
+
 export const emailPayslip = async (
   payslipId: string,
+  message?: PayslipEmailMessage,
 ): Promise<{ sentTo: string; sentAt: string }> => {
-  const res = await api.post(`/hr/payroll/runs/payslip/${payslipId}/email`, {});
+  const res = await api.post(
+    `/hr/payroll/runs/payslip/${payslipId}/email`,
+    message ?? {},
+  );
   return res.data?.data ?? res.data;
 };
 
 export const emailAllPayslipsInRun = async (
   runId: string,
+  message?: PayslipEmailMessage,
 ): Promise<{
   sent: number;
   failed: { employeeName: string; reason: string }[];
 }> => {
-  const res = await api.post(`/hr/payroll/runs/${runId}/email-all`, {});
+  const res = await api.post(
+    `/hr/payroll/runs/${runId}/email-all`,
+    message ?? {},
+  );
   return res.data?.data ?? res.data;
 };
 

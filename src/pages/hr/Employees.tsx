@@ -77,6 +77,8 @@ import {
   promoteManagerToHeadOfDepartment,
   fetchDirectReportsOf,
   STAFF_ROLES,
+  isStaffRoleSelected,
+  toggleStaffRole,
   updateEmployeeStaffRoles,
 } from "@/lib/hr/hr-api";
 import {
@@ -772,20 +774,32 @@ export default function HREmployees() {
                           </div>
                           {emp.roles && emp.roles.length > 0 && (
                             <div className="flex flex-wrap gap-1 mt-1.5">
-                              {emp.roles.map((roleValue) => {
-                                const role = STAFF_ROLES.find(
-                                  (r) => r.value === roleValue,
-                                );
-                                return (
-                                  <Badge
-                                    key={roleValue}
-                                    variant="outline"
-                                    className="text-[10px] bg-primary/5 text-primary border-primary/20"
-                                  >
-                                    {role?.label ?? roleValue}
-                                  </Badge>
-                                );
-                              })}
+                              {/* Dedupe to one badge per merged role (an
+                                  employee with a legacy grc_compliance_officer
+                                  value — now folded into risk_officer's
+                                  aliases — shows one "Risk/Compliance
+                                  Officer" badge, not two). */}
+                              {Array.from(
+                                new Map(
+                                  emp.roles.map((roleValue) => {
+                                    const role = STAFF_ROLES.find(
+                                      (r) =>
+                                        r.value === roleValue ||
+                                        r.aliases?.includes(roleValue),
+                                    );
+                                    const key = role?.value ?? roleValue;
+                                    return [key, role?.label ?? roleValue];
+                                  }),
+                                ).entries(),
+                              ).map(([key, label]) => (
+                                <Badge
+                                  key={key}
+                                  variant="outline"
+                                  className="text-[10px] bg-primary/5 text-primary border-primary/20"
+                                >
+                                  {label}
+                                </Badge>
+                              ))}
                             </div>
                           )}
                           <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
@@ -1515,8 +1529,7 @@ export default function HREmployees() {
               </div>
               <div className="grid grid-cols-1 min-[480px]:grid-cols-2 gap-2">
                 {STAFF_ROLES.map((r) => {
-                  const selected =
-                    empForm.staffRoles?.includes(r.value) ?? false;
+                  const selected = isStaffRoleSelected(empForm.staffRoles, r);
                   return (
                     <label
                       key={r.value}
@@ -1526,16 +1539,14 @@ export default function HREmployees() {
                         checked={selected}
                         className="shrink-0"
                         onCheckedChange={(checked) => {
-                          setEmpForm((f) => {
-                            const current = f.staffRoles ?? [];
-                            return {
-                              ...f,
-                              staffRoles:
-                                checked === true
-                                  ? [...current, r.value]
-                                  : current.filter((v) => v !== r.value),
-                            };
-                          });
+                          setEmpForm((f) => ({
+                            ...f,
+                            staffRoles: toggleStaffRole(
+                              f.staffRoles ?? [],
+                              r,
+                              checked === true,
+                            ),
+                          }));
                         }}
                       />
                       <span className="min-w-0 space-y-1">
@@ -2117,12 +2128,10 @@ function EditAccessDialog({
             <label key={r.value} className="flex items-start gap-2 text-sm">
               <input
                 type="checkbox"
-                checked={selected.includes(r.value)}
+                checked={isStaffRoleSelected(selected, r)}
                 onChange={(e) =>
                   setSelected((cur) =>
-                    e.target.checked
-                      ? [...cur, r.value]
-                      : cur.filter((v) => v !== r.value),
+                    toggleStaffRole(cur, r, e.target.checked),
                   )
                 }
               />

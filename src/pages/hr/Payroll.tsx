@@ -85,6 +85,7 @@ import {
   downloadPayslipPdf,
   emailPayslip,
   emailAllPayslipsInRun,
+  type PayslipEmailMessage,
   fetchAllEmployeesPeriodStatus,
   fetchLiveFxRate,
   fetchPendingLoans,
@@ -182,6 +183,14 @@ export default function HRPayroll() {
   const [discardRunTarget, setDiscardRunTarget] = useState<PayrollRun | null>(
     null,
   );
+  // Compose-email dialog target — PO, Oct 2026: clicking "Email
+  // Payslip"/"Email All Payslips" opens a dialog to type the message
+  // instead of sending the old hardcoded one straight away.
+  const [emailComposeTarget, setEmailComposeTarget] = useState<
+    | { kind: "single"; payslipId: string }
+    | { kind: "all"; runId: string }
+    | null
+  >(null);
   const [period, setPeriod] = useState(PERIOD_OPTIONS[2].label);
   const [manualRates, setManualRates] = useState<ManualExchangeRate[]>([]);
   const [fetchingRateFor, setFetchingRateFor] = useState<string | null>(null);
@@ -364,16 +373,29 @@ export default function HRPayroll() {
   });
 
   const emailPayslipMutation = useMutation({
-    mutationFn: emailPayslip,
+    mutationFn: ({
+      payslipId,
+      message,
+    }: {
+      payslipId: string;
+      message?: PayslipEmailMessage;
+    }) => emailPayslip(payslipId, message),
     onSuccess: (result) => {
       toast.success(`Payslip emailed to ${result.sentTo}.`);
+      setEmailComposeTarget(null);
     },
     onError: (err: any) =>
       toast.error(err?.response?.data?.message ?? "Failed to email payslip"),
   });
 
   const emailAllMutation = useMutation({
-    mutationFn: emailAllPayslipsInRun,
+    mutationFn: ({
+      runId,
+      message,
+    }: {
+      runId: string;
+      message?: PayslipEmailMessage;
+    }) => emailAllPayslipsInRun(runId, message),
     onSuccess: (result) => {
       if (result.failed.length === 0) {
         toast.success(`Emailed ${result.sent} payslip(s).`);
@@ -382,6 +404,7 @@ export default function HRPayroll() {
           `Emailed ${result.sent}, but ${result.failed.length} failed (${result.failed.map((f) => f.employeeName).join(", ")}).`,
         );
       }
+      setEmailComposeTarget(null);
     },
     onError: (err: any) =>
       toast.error(err?.response?.data?.message ?? "Failed to email payslips"),
@@ -1371,7 +1394,12 @@ export default function HRPayroll() {
                         size="sm"
                         variant="outline"
                         disabled={emailAllMutation.isPending}
-                        onClick={() => emailAllMutation.mutate(openRun._id)}
+                        onClick={() =>
+                          setEmailComposeTarget({
+                            kind: "all",
+                            runId: openRun._id,
+                          })
+                        }
                       >
                         {emailAllMutation.isPending ? (
                           <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
@@ -1463,7 +1491,12 @@ export default function HRPayroll() {
             <PayslipView
               slip={openPayslip}
               onDownload={() => downloadPayslipPdf(openPayslip._id)}
-              onEmail={() => emailPayslipMutation.mutate(openPayslip._id)}
+              onEmail={() =>
+                setEmailComposeTarget({
+                  kind: "single",
+                  payslipId: openPayslip._id,
+                })
+              }
               emailing={emailPayslipMutation.isPending}
               canEmail={
                 openPayslipRunStatus === "processed" ||
@@ -1473,6 +1506,31 @@ export default function HRPayroll() {
           )}
         </SheetContent>
       </Sheet>
+
+      {emailComposeTarget && (
+        <ComposePayslipEmailDialog
+          target={emailComposeTarget}
+          sending={
+            emailComposeTarget.kind === "single"
+              ? emailPayslipMutation.isPending
+              : emailAllMutation.isPending
+          }
+          onClose={() => setEmailComposeTarget(null)}
+          onSend={(message) => {
+            if (emailComposeTarget.kind === "single") {
+              emailPayslipMutation.mutate({
+                payslipId: emailComposeTarget.payslipId,
+                message,
+              });
+            } else {
+              emailAllMutation.mutate({
+                runId: emailComposeTarget.runId,
+                message,
+              });
+            }
+          }}
+        />
+      )}
 
       {editingPolicy && (
         <PolicyEditorDialog
@@ -1524,6 +1582,122 @@ export default function HRPayroll() {
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  );
+}
+
+// Compose-email dialog for "Email Payslip" / "Email All Payslips" (PO,
+// Oct 2026: "give the tenant the ability to type the body of the email
+// themselves. There should be space to carry the employee name after
+// the greeting to make it feel more personalised."). The body starts
+// pre-filled with a greeting that already carries the {{employeeName}}
+// token; "Insert employee name" drops the same token at the cursor
+// anywhere else the tenant wants it. The backend substitutes it with
+// each real recipient's name before sending — for "Email All Payslips"
+// that means one message personalizes every employee's own copy.
+const DEFAULT_PAYSLIP_EMAIL_SUBJECT = "Your Payslip";
+const DEFAULT_PAYSLIP_EMAIL_BODY =
+  "Hi {{employeeName}},\n\nYour payslip is attached. Thank you for all your hard work this period!\n\nBest regards,";
+
+function ComposePayslipEmailDialog({
+  target,
+  sending,
+  onClose,
+  onSend,
+}: {
+  target:
+    | { kind: "single"; payslipId: string }
+    | { kind: "all"; runId: string };
+  sending: boolean;
+  onClose: () => void;
+  onSend: (message: PayslipEmailMessage) => void;
+}) {
+  const [subject, setSubject] = useState(DEFAULT_PAYSLIP_EMAIL_SUBJECT);
+  const [body, setBody] = useState(DEFAULT_PAYSLIP_EMAIL_BODY);
+  const bodyRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const insertEmployeeName = () => {
+    const el = bodyRef.current;
+    if (!el) {
+      setBody((b) => `${b}{{employeeName}}`);
+      return;
+    }
+    const start = el.selectionStart ?? body.length;
+    const end = el.selectionEnd ?? body.length;
+    const next = `${body.slice(0, start)}{{employeeName}}${body.slice(end)}`;
+    setBody(next);
+    // Put the cursor right after the inserted token on the next tick.
+    requestAnimationFrame(() => {
+      el.focus();
+      const pos = start + "{{employeeName}}".length;
+      el.setSelectionRange(pos, pos);
+    });
+  };
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>
+            {target.kind === "single" ? "Email Payslip" : "Email All Payslips"}
+          </DialogTitle>
+          <DialogDescription>
+            {target.kind === "single"
+              ? "Write the message that goes with this payslip."
+              : "Write one message to send with every payslip in this run — each employee's own name is substituted automatically."}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <Label>Subject</Label>
+            <Input
+              value={subject}
+              onChange={(e) => setSubject(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <Label>Message</Label>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs"
+                onClick={insertEmployeeName}
+              >
+                Insert employee name
+              </Button>
+            </div>
+            <Textarea
+              ref={bodyRef}
+              rows={8}
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              {"{{employeeName}}"} is replaced with the employee's own name when
+              the email is sent. The payslip PDF is attached automatically.
+            </p>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            disabled={sending || !body.trim()}
+            onClick={() => onSend({ subject: subject.trim(), body })}
+          >
+            {sending ? (
+              <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+            ) : (
+              <Mail className="h-3.5 w-3.5 mr-1.5" />
+            )}
+            Send
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
