@@ -60,6 +60,7 @@ import {
   fetchLocations,
   createEmployee,
   updateEmployee,
+  deleteEmployee,
   createTeam,
   createLocation,
   deleteTeam,
@@ -171,6 +172,7 @@ export default function HREmployees() {
   const [deleteLocTarget, setDeleteLocTarget] = useState<HrLocation | null>(
     null,
   );
+  const [deleteEmpTarget, setDeleteEmpTarget] = useState<Employee | null>(null);
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(
     null,
   );
@@ -434,6 +436,22 @@ export default function HREmployees() {
     },
     onError: (err: any) =>
       toast.error(err?.response?.data?.message ?? "Failed to remove location"),
+  });
+
+  const deleteEmpMutation = useMutation({
+    mutationFn: (id: string) => deleteEmployee(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["hr-employees"] });
+      queryClient.invalidateQueries({ queryKey: ["hr-stats"] });
+      refetchDashboard(); // deleting frees a seat
+      setDeleteEmpTarget(null);
+      toast.success("Employee record deleted.");
+    },
+    // Surfaces the backend's specific guard message (direct reports,
+    // payroll history, outstanding loan, Owner record) rather than a
+    // generic failure.
+    onError: (err: any) =>
+      toast.error(err?.response?.data?.message ?? "Failed to delete employee"),
   });
 
   const grossUpMutation = useMutation({
@@ -737,6 +755,19 @@ export default function HREmployees() {
                               >
                                 <Pencil className="h-3 w-3 mr-1" /> Access
                               </Button>
+                              {emp.hierarchyRole !== "owner" && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 px-2 text-xs text-destructive hover:text-destructive"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setDeleteEmpTarget(emp);
+                                  }}
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </Button>
+                              )}
                             </div>
                           </div>
                           {emp.roles && emp.roles.length > 0 && (
@@ -1832,6 +1863,44 @@ export default function HREmployees() {
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 "Remove"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* ── Delete Employee confirm ── */}
+      <AlertDialog
+        open={!!deleteEmpTarget}
+        onOpenChange={(v) => !v && setDeleteEmpTarget(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Delete {deleteEmpTarget?.firstName} {deleteEmpTarget?.lastName}
+              's record?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently removes their employee record, login, and
+              uploaded documents — it can't be undone. It's blocked if they have
+              direct reports, payroll history, or an outstanding loan balance;
+              use "Terminate" instead for anyone who's actually worked here and
+              been paid.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive hover:bg-destructive/90"
+              disabled={deleteEmpMutation.isPending}
+              onClick={() =>
+                deleteEmpTarget && deleteEmpMutation.mutate(deleteEmpTarget._id)
+              }
+            >
+              {deleteEmpMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                "Delete"
               )}
             </AlertDialogAction>
           </AlertDialogFooter>

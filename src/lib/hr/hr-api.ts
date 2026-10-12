@@ -484,6 +484,15 @@ export const updateEmployeeStaffRoles = async (
   return res.data?.data ?? res.data;
 };
 
+// Permanent delete — distinct from terminateEmployee below, which is
+// a status change that preserves the record. The backend blocks this
+// outright for the Owner, anyone with direct reports, payroll
+// history, or an outstanding loan balance, and throws a descriptive
+// message for each.
+export const deleteEmployee = async (id: string): Promise<void> => {
+  await api.delete(`/hr/employees/${id}`);
+};
+
 export const STAFF_ROLES: {
   value: string;
   label: string;
