@@ -99,6 +99,7 @@ import {
   ClientCommercial,
 } from "@/lib/crm/client-commercial-api";
 import { fetchClients, ApiClient } from "@/lib/client/clients-api";
+import { useModule } from "@/contexts/ModuleContext";
 
 interface Props {
   employee: Employee | null;
@@ -240,6 +241,7 @@ const managerName = (e: Employee) =>
 
 export function EmployeeDetailSheet({ employee, onClose }: Props) {
   const queryClient = useQueryClient();
+  const { refetchDashboard } = useModule();
   const { user } = useAuth();
   const [terminateOpen, setTerminateOpen] = useState(false);
   const [suspendOpen, setSuspendOpen] = useState(false);
@@ -392,6 +394,7 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
       });
       queryClient.invalidateQueries({ queryKey: ["hr-employees"] });
       queryClient.invalidateQueries({ queryKey: ["recruitment-offboarding"] });
+      refetchDashboard(); // termination frees a seat — reflect it right away
       setTerminateOpen(false);
       toast.success(
         `${employee!.firstName} ${employee!.lastName} marked as ${terminateForm.status}. An offboarding record was created.`,

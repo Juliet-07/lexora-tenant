@@ -36,6 +36,13 @@ export interface SubscriptionInfo {
   activeModules: string[];
   trialEndsAt: string | null;
   currentPeriodEnd: string | null;
+  // Seat usage against the plan's (or a super-admin override's) user
+  // limit — the same number EmployeeService#enforceUserLimit checks
+  // server-side. Optional so older cached dashboard responses don't
+  // break the type.
+  maxUsers?: number;
+  seatsUsed?: number;
+  seatsRemaining?: number;
 }
 
 interface ModuleContextType {
@@ -93,7 +100,8 @@ const MODULE_VISUALS: Record<
     color: "from-emerald-500 to-teal-500",
     shortName: "Lexora HR",
     name: "Lexora HR",
-    scope: "Human Resources & People Management, HRIS, Payroll, Leave, Performance, Recruitment, and Dispute Management",
+    scope:
+      "Human Resources & People Management, HRIS, Payroll, Leave, Performance, Recruitment, and Dispute Management",
   },
   finance: {
     icon: Landmark,

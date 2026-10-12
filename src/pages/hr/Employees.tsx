@@ -86,6 +86,7 @@ import {
 import { EmployeeDetailSheet } from "@/components/hr/EmployeeDetailSheet";
 import OnboardingDocumentsTab from "./OnboardingDocuments";
 import { useAuth } from "@/contexts/AuthContext";
+import { useModule } from "@/contexts/ModuleContext";
 
 // ─── Helpers ──────────────────────────────────────────────────
 
@@ -138,6 +139,18 @@ const getLocationName = (e: Employee) =>
 export default function HREmployees() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const { subscription, refetchDashboard } = useModule();
+
+  // Seat usage against the plan's user limit — mirrors the backend's
+  // own EmployeeService#enforceUserLimit so "Add Employee" can be
+  // disabled before a doomed request round-trips, rather than only
+  // after. `undefined` (dashboard not loaded yet) is treated as "not
+  // full" so the button isn't wrongly disabled on first paint; the
+  // backend still enforces the real limit either way.
+  const seatsUsed = subscription?.seatsUsed;
+  const maxSeats = subscription?.maxUsers;
+  const seatsFull =
+    seatsUsed !== undefined && maxSeats !== undefined && seatsUsed >= maxSeats;
 
   const [tab, setTab] = useState("employees");
   const [search, setSearch] = useState("");
@@ -325,6 +338,7 @@ export default function HREmployees() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["hr-employees"] });
       queryClient.invalidateQueries({ queryKey: ["hr-stats"] });
+      refetchDashboard(); // keep the seat-usage badge current right away
       setEmpOpen(false);
       setEmpForm(EMPTY_EMP);
       setSalaryEntryMode("basic");
@@ -346,6 +360,7 @@ export default function HREmployees() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["hr-employees"] });
       queryClient.invalidateQueries({ queryKey: ["hr-stats"] });
+      refetchDashboard(); // employmentStatus edits can free or occupy a seat
       setEmpOpen(false);
       setEditingId(null);
       setEditingOriginal(null);
@@ -506,7 +521,31 @@ export default function HREmployees() {
             {locationCount !== 1 ? "s" : ""}.
           </p>
         </div>
+        {seatsUsed !== undefined && maxSeats !== undefined && (
+          <Badge
+            variant="outline"
+            className={
+              seatsFull
+                ? "bg-destructive/10 text-destructive border-destructive/20"
+                : seatsUsed >= maxSeats - 1
+                  ? "bg-amber-50 text-amber-700 border-amber-200"
+                  : "bg-muted text-muted-foreground"
+            }
+          >
+            {seatsUsed} / {maxSeats} seats used
+          </Badge>
+        )}
       </div>
+
+      {seatsFull && (
+        <Card className="border-destructive/30 bg-destructive/5">
+          <CardContent className="p-4 text-sm text-destructive">
+            You've used all {maxSeats} seats on your current plan. Upgrade your
+            plan, or offboard someone no longer with the company, to add another
+            team member.
+          </CardContent>
+        </Card>
+      )}
 
       {/* Stat cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -609,7 +648,12 @@ export default function HREmployees() {
               </Button>
               <Button
                 className="bg-gradient-to-r from-primary to-secondary"
+                disabled={seatsFull}
                 onClick={() => {
+                  if (seatsFull)
+                    return toast.error(
+                      `You've used all ${maxSeats} seats on your current plan. Upgrade your plan to add more team members.`,
+                    );
                   if (teams.length === 0)
                     return toast.error("Create a team first.");
                   if (locations.length === 0)
