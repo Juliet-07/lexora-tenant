@@ -542,6 +542,7 @@ function DirectorDetail({
       <Tabs defaultValue="overview">
         <TabsList className="flex-wrap h-auto">
           <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="fee-structure">Fee Structure</TabsTrigger>
           <TabsTrigger value="conflicts">Conflict register</TabsTrigger>
           <TabsTrigger value="documents">Documents</TabsTrigger>
           <TabsTrigger value="succession">Succession</TabsTrigger>
@@ -550,6 +551,9 @@ function DirectorDetail({
 
         <TabsContent value="overview" className="mt-4">
           <OverviewTab member={member} allMembers={allMembers} />
+        </TabsContent>
+        <TabsContent value="fee-structure" className="mt-4">
+          <FeeStructureTab member={member} />
         </TabsContent>
         <TabsContent value="conflicts" className="mt-4">
           <ConflictsTab member={member} />
@@ -748,15 +752,6 @@ function OverviewTab({
           </CardContent>
         </Card>
       </div>
-
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm">Remuneration</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <RemunerationEditor member={member} />
-        </CardContent>
-      </Card>
 
       <Card>
         <CardContent className="pt-4">
@@ -1299,6 +1294,25 @@ function AttendanceEditor({ member }: { member: BoardMember }) {
         Save
       </Button>
     </div>
+  );
+}
+
+// ── Fee Structure tab ───────────────────────────────────────────
+// Its own tab (PO, Oct 2026: "this action should be added as an
+// additional tab in the board details page"), split out of Overview
+// where it used to be a card — this is what the director sees
+// reflected on their own Payments & Fees page in the board portal.
+
+function FeeStructureTab({ member }: { member: BoardMember }) {
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm">Fee Structure</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <RemunerationEditor member={member} />
+      </CardContent>
+    </Card>
   );
 }
 
