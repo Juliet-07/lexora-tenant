@@ -688,9 +688,12 @@ export type BillStatus =
   | "Scheduled"
   | "Paid"
   | "Rejected";
+export type BillPayeeType = "Vendor" | "BoardMember";
 export interface Bill {
   _id: string;
   ref: string;
+  payeeType: BillPayeeType;
+  boardMemberId: string | null;
   vendorId: string | null;
   vendorName: string;
   poId: string | null;
@@ -722,6 +725,8 @@ export const createBill = async (
   dto: {
     vendorId?: string;
     vendorName?: string;
+    payeeType?: BillPayeeType;
+    boardMemberId?: string;
     poId?: string;
     description: string;
     category?: string;
@@ -776,12 +781,21 @@ export const markBillPaid = async (id: string): Promise<Bill> =>
 // ── Purchases: expense claims ────────────────────────────────
 
 export type ClaimStatus = "Submitted" | "Approved" | "Rejected" | "Paid";
+export type ExpenseClaimSubmitterType = "Employee" | "BoardMember";
+export type ExpenseCategory = "Travel" | "Accommodation" | "Meals" | "Other";
 export interface ExpenseClaim {
   _id: string;
   ref: string;
   employeeUserId: string;
   employee: string;
+  // Board portal self-submission (Oct 2026) — a director's own claim
+  // lands in this same list, tagged BoardMember rather than Employee.
+  submitterType: ExpenseClaimSubmitterType;
+  boardMemberId: string | null;
   description: string;
+  category: ExpenseCategory | null;
+  otherCategoryDetail: string;
+  relatedMeetingLabel: string;
   mandateId: string | null;
   mandateName: string | null;
   amount: number;

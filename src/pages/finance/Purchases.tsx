@@ -82,6 +82,7 @@ import {
   type Bill,
   type ExpenseClaim,
 } from "@/lib/crm/finance-api";
+import { fetchBoardMembers } from "@/lib/grc/governance-api";
 
 const purchasesWorkflow = [
   {
@@ -151,6 +152,10 @@ export default function Purchases() {
   const { data: vendors = [] } = useQuery({
     queryKey: ["vendors"],
     queryFn: fetchVendors,
+  });
+  const { data: boardMembers = [] } = useQuery({
+    queryKey: ["grc-board-members"],
+    queryFn: fetchBoardMembers,
   });
   const { data: purchaseOrders = [] } = useQuery({
     queryKey: ["purchaseOrders"],
@@ -276,10 +281,16 @@ export default function Purchases() {
 
   // ── Bills ──────────────────────────────────────────────────
   const [newBillOpen, setNewBillOpen] = useState(false);
-  const [billIsVendorless, setBillIsVendorless] = useState(false);
+  // "vendor" — a real vendor invoice; "general" — a general expense
+  // with no formal payee record; "boardMember" — paying a director
+  // (Capture Bill's board-member flow, Oct 2026).
+  const [billPayeeMode, setBillPayeeMode] = useState<
+    "vendor" | "general" | "boardMember"
+  >("vendor");
   const [billDraft, setBillDraft] = useState({
     vendorId: "",
     vendorName: "",
+    boardMemberId: "",
     poId: "",
     description: "",
     category: "",
@@ -298,19 +309,30 @@ export default function Purchases() {
       createBill(
         {
           ...billDraft,
-          vendorId: billIsVendorless ? undefined : billDraft.vendorId,
-          vendorName: billIsVendorless ? billDraft.vendorName : undefined,
-          poId: billDraft.poId || undefined,
+          vendorId: billPayeeMode === "vendor" ? billDraft.vendorId : undefined,
+          vendorName:
+            billPayeeMode === "general" ? billDraft.vendorName : undefined,
+          payeeType:
+            billPayeeMode === "boardMember" ? "BoardMember" : undefined,
+          boardMemberId:
+            billPayeeMode === "boardMember"
+              ? billDraft.boardMemberId
+              : undefined,
+          poId:
+            billPayeeMode === "vendor"
+              ? billDraft.poId || undefined
+              : undefined,
         },
         billReceiptFile!,
       ),
     onSuccess: () => {
       invalidateBills();
       setNewBillOpen(false);
-      setBillIsVendorless(false);
+      setBillPayeeMode("vendor");
       setBillDraft({
         vendorId: "",
         vendorName: "",
+        boardMemberId: "",
         poId: "",
         description: "",
         category: "",
@@ -529,7 +551,7 @@ export default function Purchases() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Bill</TableHead>
-                    <TableHead>Vendor</TableHead>
+                    <TableHead>Payee</TableHead>
                     <TableHead>Description</TableHead>
                     <TableHead>Category</TableHead>
                     <TableHead>Due</TableHead>
@@ -562,7 +584,16 @@ export default function Purchases() {
                           </Badge>
                         )}
                       </TableCell>
-                      <TableCell className="text-sm">{b.vendorName}</TableCell>
+                      <TableCell className="text-sm">
+                        <div className="flex items-center gap-1.5">
+                          <span>{b.vendorName}</span>
+                          {b.payeeType === "BoardMember" && (
+                            <Badge variant="outline" className="text-[10px]">
+                              Board member
+                            </Badge>
+                          )}
+                        </div>
+                      </TableCell>
                       <TableCell className="text-sm">{b.description}</TableCell>
                       <TableCell className="text-sm">{b.category}</TableCell>
                       <TableCell className="text-sm">
@@ -727,7 +758,7 @@ export default function Purchases() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Claim</TableHead>
-                    <TableHead>Employee</TableHead>
+                    <TableHead>Submitted by</TableHead>
                     <TableHead>Description</TableHead>
                     <TableHead>Mandate</TableHead>
                     <TableHead>Amount</TableHead>
@@ -743,8 +774,27 @@ export default function Purchases() {
                       <TableCell className="font-medium text-sm">
                         {c.ref}
                       </TableCell>
-                      <TableCell className="text-sm">{c.employee}</TableCell>
-                      <TableCell className="text-sm">{c.description}</TableCell>
+                      <TableCell className="text-sm">
+                        <div className="flex items-center gap-1.5">
+                          <span>{c.employee}</span>
+                          {c.submitterType === "BoardMember" && (
+                            <Badge variant="outline" className="text-[10px]">
+                              Board member
+                            </Badge>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {c.description}
+                        {c.category && (
+                          <div className="text-xs text-muted-foreground">
+                            {c.category}
+                            {c.category === "Other" && c.otherCategoryDetail
+                              ? ` — ${c.otherCategoryDetail}`
+                              : ""}
+                          </div>
+                        )}
+                      </TableCell>
                       <TableCell className="text-sm">
                         {c.mandateName ?? "—"}
                       </TableCell>
@@ -1451,26 +1501,50 @@ export default function Purchases() {
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                className={`rounded-full border px-3 py-1 text-xs ${!billIsVendorless ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
+                className={`rounded-full border px-3 py-1 text-xs ${billPayeeMode === "vendor" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
                 onClick={() => {
-                  setBillIsVendorless(false);
-                  setBillDraft((d) => ({ ...d, vendorName: "" }));
+                  setBillPayeeMode("vendor");
+                  setBillDraft((d) => ({
+                    ...d,
+                    vendorName: "",
+                    boardMemberId: "",
+                  }));
                 }}
               >
                 Vendor invoice
               </button>
               <button
                 type="button"
-                className={`rounded-full border px-3 py-1 text-xs ${billIsVendorless ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
+                className={`rounded-full border px-3 py-1 text-xs ${billPayeeMode === "general" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
                 onClick={() => {
-                  setBillIsVendorless(true);
-                  setBillDraft((d) => ({ ...d, vendorId: "", poId: "" }));
+                  setBillPayeeMode("general");
+                  setBillDraft((d) => ({
+                    ...d,
+                    vendorId: "",
+                    poId: "",
+                    boardMemberId: "",
+                  }));
                 }}
               >
                 General expense — no vendor
               </button>
+              <button
+                type="button"
+                className={`rounded-full border px-3 py-1 text-xs ${billPayeeMode === "boardMember" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
+                onClick={() => {
+                  setBillPayeeMode("boardMember");
+                  setBillDraft((d) => ({
+                    ...d,
+                    vendorId: "",
+                    vendorName: "",
+                    poId: "",
+                  }));
+                }}
+              >
+                Board member
+              </button>
             </div>
-            {billIsVendorless ? (
+            {billPayeeMode === "general" && (
               <div>
                 <Label>Payee / description of who this was paid to</Label>
                 <Input
@@ -1481,7 +1555,8 @@ export default function Purchases() {
                   placeholder="e.g. Bank charges, parking, one-off purchase"
                 />
               </div>
-            ) : (
+            )}
+            {billPayeeMode === "vendor" && (
               <div>
                 <Label>Vendor</Label>
                 <Select
@@ -1503,27 +1578,54 @@ export default function Purchases() {
                 </Select>
               </div>
             )}
-            <div>
-              <Label>Linked purchase order (optional)</Label>
-              <Select
-                value={billDraft.poId}
-                onValueChange={(v) => setBillDraft({ ...billDraft, poId: v })}
-                disabled={billIsVendorless}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="No PO" />
-                </SelectTrigger>
-                <SelectContent>
-                  {purchaseOrders
-                    .filter((p) => p.vendorId === billDraft.vendorId)
-                    .map((p) => (
-                      <SelectItem key={p._id} value={p._id}>
-                        {p.ref}
+            {billPayeeMode === "boardMember" && (
+              <div>
+                <Label>Board member</Label>
+                <Select
+                  value={billDraft.boardMemberId}
+                  onValueChange={(v) =>
+                    setBillDraft({ ...billDraft, boardMemberId: v })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select board member..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {boardMembers.map((b) => (
+                      <SelectItem key={b._id} value={b._id}>
+                        {b.name} — {b.role}
                       </SelectItem>
                     ))}
-                </SelectContent>
-              </Select>
-            </div>
+                  </SelectContent>
+                </Select>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  The director sees this on their own Payments & Fees page once
+                  it's marked paid.
+                </p>
+              </div>
+            )}
+            {billPayeeMode === "vendor" && (
+              <div>
+                <Label>Linked purchase order (optional)</Label>
+                <Select
+                  value={billDraft.poId}
+                  onValueChange={(v) => setBillDraft({ ...billDraft, poId: v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="No PO" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {purchaseOrders
+                      .filter((p) => p.vendorId === billDraft.vendorId)
+                      .map((p) => (
+                        <SelectItem key={p._id} value={p._id}>
+                          {p.ref}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div>
               <Label>Description</Label>
               <Input
@@ -1617,9 +1719,11 @@ export default function Purchases() {
           <DialogFooter>
             <Button
               disabled={
-                (billIsVendorless
+                (billPayeeMode === "general"
                   ? !billDraft.vendorName
-                  : !billDraft.vendorId) ||
+                  : billPayeeMode === "boardMember"
+                    ? !billDraft.boardMemberId
+                    : !billDraft.vendorId) ||
                 !billDraft.description ||
                 !billDraft.dueOn ||
                 !billReceiptFile ||

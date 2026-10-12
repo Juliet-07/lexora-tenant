@@ -56,7 +56,7 @@ export interface PolicyAcknowledgment {
   email: string;
   signature: string;
   ackedAt: string;
-  source: "external" | "employee";
+  source: "external" | "employee" | "board";
   version: string;
 }
 

@@ -2485,3 +2485,74 @@ export const fetchOrgChart = async (): Promise<OrgChart> => {
     }
   );
 };
+
+// ══════════════════════════════════════════════════════════════
+// Board Evaluations (Oct 2026) — "make board evaluations functional."
+// The PO's ask is entirely about the board portal's self/peer/chair/
+// committee submissions; this is the minimal tenant-side counterpart
+// — launching a cycle and watching completion/results — since
+// directors need a cycle to submit against.
+// ══════════════════════════════════════════════════════════════
+
+export type EvaluationCycleStatus = "Open" | "Closed";
+
+export interface EvaluationCycle {
+  _id: string;
+  title: string;
+  dueDate: string;
+  status: EvaluationCycleStatus;
+  closedAt: string | null;
+  createdAt: string;
+}
+
+export const fetchEvaluationCycles = async (): Promise<EvaluationCycle[]> => {
+  const res = await api.get("/grc/governance/evaluations");
+  const d = res.data?.data ?? res.data;
+  return Array.isArray(d) ? d : [];
+};
+
+export const createEvaluationCycle = async (dto: {
+  title: string;
+  dueDate: string;
+}): Promise<EvaluationCycle> => {
+  const res = await api.post("/grc/governance/evaluations", dto);
+  return res.data?.data ?? res.data;
+};
+
+export const closeEvaluationCycle = async (
+  id: string,
+): Promise<EvaluationCycle> => {
+  const res = await api.post(`/grc/governance/evaluations/${id}/close`, {});
+  return res.data?.data ?? res.data;
+};
+
+export interface EvaluationDirectorRow {
+  boardMemberId: string;
+  name: string;
+  role: string;
+  expected: number;
+  submitted: number;
+  complete: boolean;
+  self: boolean;
+  peerSubmitted: number;
+  peerExpected: number;
+  committeeSubmitted: number;
+  committeeExpected: number;
+  chairSubmitted: boolean | null;
+}
+
+export interface EvaluationCycleResults {
+  cycle: EvaluationCycle;
+  chairName: string | null;
+  totalDirectors: number;
+  totalSubmissions: number;
+  averageScore: number | null;
+  directors: EvaluationDirectorRow[];
+}
+
+export const fetchEvaluationCycleResults = async (
+  id: string,
+): Promise<EvaluationCycleResults> => {
+  const res = await api.get(`/grc/governance/evaluations/${id}/results`);
+  return res.data?.data ?? res.data;
+};

@@ -185,6 +185,10 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
         { title: "Committees", url: "/grc/governance/committees" },
         { title: "Meetings", url: "/grc/governance/meetings" },
         { title: "Resolutions", url: "/grc/governance/resolutions" },
+        {
+          title: "Board Evaluations",
+          url: "/grc/governance/board-evaluations",
+        },
       ],
     },
     {
@@ -405,7 +409,7 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
       icon: BarChart3,
       adminOnly: true,
     },
-     { title: "Leave", url: "/hr/leave", icon: CalendarDays },
+    { title: "Leave", url: "/hr/leave", icon: CalendarDays },
     {
       title: "Payroll",
       url: "/hr/payroll",

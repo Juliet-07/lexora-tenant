@@ -62,10 +62,8 @@ import {
   fetchResolutions,
   fetchNextReference,
   createResolution,
-  setBoardVote,
   closeBoardVote,
   setWrittenStatus,
-  recordWrittenResponse,
   closeWritten,
   addProxy,
   saveShareholderPoll,
@@ -768,18 +766,6 @@ function BoardVotingPanel({
   const canClose =
     resolution.status !== "Closed" && tally.total > 0 && tally.awaiting === 0;
 
-  const voteMut = useMutation({
-    mutationFn: (v: { rowIndex: number; vote: BoardVoteT }) =>
-      setBoardVote(resolution._id, v.rowIndex, v.vote),
-    onSuccess: invalidate,
-    onError: (err: any) =>
-      toast({
-        title: "Failed to record vote",
-        description: err?.response?.data?.message,
-        variant: "destructive",
-      }),
-  });
-
   const closeMut = useMutation({
     mutationFn: () => closeBoardVote(resolution._id),
     onSuccess: (r) => {
@@ -831,24 +817,25 @@ function BoardVotingPanel({
                     <span className="text-xs text-muted-foreground text-right block">
                       Excluded from tally
                     </span>
-                  ) : (
-                    <div className="flex justify-end gap-1">
-                      {(["Approve", "Oppose", "Abstain"] as BoardVoteT[]).map(
-                        (v) => (
-                          <Button
-                            key={v}
-                            size="sm"
-                            variant={row.vote === v ? "default" : "outline"}
-                            disabled={readOnly || voteMut.isPending}
-                            onClick={() =>
-                              voteMut.mutate({ rowIndex: i, vote: v })
-                            }
-                          >
-                            {v}
-                          </Button>
-                        ),
-                      )}
+                  ) : row.vote ? (
+                    <div className="flex justify-end">
+                      <Badge
+                        variant="outline"
+                        className={
+                          row.vote === "Approve"
+                            ? "bg-emerald-100 text-emerald-700 border-emerald-200"
+                            : row.vote === "Oppose"
+                              ? "bg-rose-100 text-rose-700 border-rose-200"
+                              : "bg-slate-100 text-slate-700 border-slate-200"
+                        }
+                      >
+                        {row.vote}
+                      </Badge>
                     </div>
+                  ) : (
+                    <span className="text-xs text-muted-foreground text-right block">
+                      Awaiting — casts from their own board portal
+                    </span>
                   )}
                 </TableCell>
               </TableRow>
@@ -949,18 +936,6 @@ function WrittenPanel({
     onError: (err: any) =>
       toast({
         title: "Failed to update status",
-        description: err?.response?.data?.message,
-        variant: "destructive",
-      }),
-  });
-
-  const responseMut = useMutation({
-    mutationFn: (v: { rowIndex: number; response: BoardVoteT }) =>
-      recordWrittenResponse(resolution._id, v.rowIndex, v.response),
-    onSuccess: invalidate,
-    onError: (err: any) =>
-      toast({
-        title: "Failed to log response",
         description: err?.response?.data?.message,
         variant: "destructive",
       }),
@@ -1081,16 +1056,11 @@ function WrittenPanel({
                           Remind
                         </Button>
                       )}
-                      <ManualResponseButton
-                        onPick={(v) =>
-                          responseMut.mutate({ rowIndex: i, response: v })
-                        }
-                      />
                     </div>
                   )}
-                  {!row.recused && !readOnly && row.status === "Responded" && (
+                  {!row.recused && row.status === "Responded" && (
                     <span className="text-[10px] text-muted-foreground">
-                      Logged
+                      Responded from their own board portal
                     </span>
                   )}
                 </TableCell>
@@ -1186,42 +1156,6 @@ function StatusPill({ status }: { status: WrittenStatus }) {
     <Badge variant="outline" className={cls[status]}>
       {status}
     </Badge>
-  );
-}
-
-function ManualResponseButton({ onPick }: { onPick: (v: BoardVoteT) => void }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button size="sm" variant="ghost">
-          Log manual
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="max-w-xs">
-        <DialogHeader>
-          <DialogTitle>Log a manual response</DialogTitle>
-        </DialogHeader>
-        <p className="text-xs text-muted-foreground">
-          Use for directors who responded via email or signed PDF.
-        </p>
-        <div className="flex gap-2 mt-2">
-          {(["Approve", "Oppose", "Abstain"] as BoardVoteT[]).map((v) => (
-            <Button
-              key={v}
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                onPick(v);
-                setOpen(false);
-              }}
-            >
-              {v}
-            </Button>
-          ))}
-        </div>
-      </DialogContent>
-    </Dialog>
   );
 }
 
