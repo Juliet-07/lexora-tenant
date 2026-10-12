@@ -104,6 +104,7 @@ import {
   BoardSkill,
 } from "@/lib/grc/governance-api";
 import { SkillLevel } from "@/lib/grcGovernanceLocal";
+import { FINANCE_CURRENCIES } from "@/hooks/use-finance-currency";
 
 const ROLES: BoardMemberRole[] = [
   "Chair",
@@ -1324,6 +1325,7 @@ function RemunerationEditor({ member }: { member: BoardMember }) {
     annualRetainer: 0,
     committeeChairFee: 0,
     meetingAttendanceFee: 0,
+    currency: "RWF",
     lastReviewedAt: null as string | null,
   };
   const queryClient = useQueryClient();
@@ -1331,6 +1333,7 @@ function RemunerationEditor({ member }: { member: BoardMember }) {
     annualRetainer: remuneration.annualRetainer,
     committeeChairFee: remuneration.committeeChairFee,
     meetingAttendanceFee: remuneration.meetingAttendanceFee,
+    currency: remuneration.currency ?? "RWF",
   });
   const mutation = useMutation({
     mutationFn: () => updateRemuneration(member._id, f),
@@ -1341,7 +1344,25 @@ function RemunerationEditor({ member }: { member: BoardMember }) {
   });
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+    <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+      <div>
+        <Label className="text-xs">Currency</Label>
+        <Select
+          value={f.currency}
+          onValueChange={(v) => setF({ ...f, currency: v })}
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {FINANCE_CURRENCIES.map((c) => (
+              <SelectItem key={c} value={c}>
+                {c}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
       <div>
         <Label className="text-xs">Annual retainer</Label>
         <Input
@@ -1372,7 +1393,7 @@ function RemunerationEditor({ member }: { member: BoardMember }) {
           }
         />
       </div>
-      <div className="sm:col-span-3 flex items-center justify-between">
+      <div className="sm:col-span-4 flex items-center justify-between">
         {remuneration.lastReviewedAt && (
           <span className="text-xs text-muted-foreground">
             Last reviewed{" "}

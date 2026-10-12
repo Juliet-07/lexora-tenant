@@ -129,6 +129,7 @@ export interface Remuneration {
   annualRetainer: number;
   committeeChairFee: number;
   meetingAttendanceFee: number;
+  currency: string;
   lastReviewedAt: string | null;
 }
 
