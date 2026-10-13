@@ -1,14 +1,23 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Paperclip, Download } from "lucide-react";
-import { fetchMandateDocumentsForEmployee } from "@/lib/crm/mandates-api";
+import { Paperclip, Eye } from "lucide-react";
+import {
+  fetchMandateDocumentsForEmployee,
+  resolveMandateFileUrl,
+} from "@/lib/crm/mandates-api";
+import {
+  DocumentPreviewDialog,
+  type PreviewDocument,
+} from "@/components/DocumentPreviewDialog";
 
 export function FilesTab({ mandateId }: { mandateId: string }) {
   const { data: files = [], isLoading } = useQuery({
     queryKey: ["mandateDocuments", mandateId, "employee"],
     queryFn: () => fetchMandateDocumentsForEmployee(mandateId),
   });
+  const [previewDoc, setPreviewDoc] = useState<PreviewDocument | null>(null);
 
   if (isLoading)
     return (
@@ -33,10 +42,17 @@ export function FilesTab({ mandateId }: { mandateId: string }) {
                 {f.createdAt?.slice(0, 10)} · {f.folder}
               </p>
             </div>
-            <Button asChild size="sm" variant="ghost">
-              <a href={f.fileUrl} target="_blank" rel="noreferrer">
-                <Download className="h-4 w-4" />
-              </a>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() =>
+                setPreviewDoc({
+                  url: resolveMandateFileUrl(f.fileUrl)!,
+                  name: f.name,
+                })
+              }
+            >
+              <Eye className="h-4 w-4" />
             </Button>
           </div>
         ))}
@@ -46,6 +62,11 @@ export function FilesTab({ mandateId }: { mandateId: string }) {
           </p>
         )}
       </CardContent>
+
+      <DocumentPreviewDialog
+        doc={previewDoc}
+        onOpenChange={(open) => !open && setPreviewDoc(null)}
+      />
     </Card>
   );
 }

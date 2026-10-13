@@ -2,6 +2,20 @@ import { api } from "../api";
 
 const unwrap = (res: any) => res.data?.data ?? res.data;
 
+// Every file URL this module hands back from the backend (receipts,
+// proofs of payment, EBM receipts) is a relative /uploads/... path, same
+// as every other module. Resolve it against the API's own origin before
+// using it in an href/src — a bare relative path resolves against the
+// tenant app's own origin instead and 404s.
+const FINANCE_API_BASE = (api.defaults as any)?.baseURL ?? "/api";
+export const resolveFinanceFileUrl = (
+  url: string | null | undefined,
+): string | null => {
+  if (!url) return null;
+  if (url.startsWith("http")) return url;
+  return `${new URL(FINANCE_API_BASE).origin}${url}`;
+};
+
 // ── WIP ───────────────────────────────────────────────────────
 
 export type WipBillingStatus =

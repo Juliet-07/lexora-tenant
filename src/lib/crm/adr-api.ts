@@ -2,6 +2,18 @@ import { api } from "../api";
 
 const unwrap = (res: any) => res.data?.data ?? res.data;
 
+// Uploaded case documents carry a relative /uploads/... fileUrl, same as
+// every other module — resolve it against the API's own origin before
+// using it in an href/src, same pattern as resolveGrcFileUrl etc.
+const ADR_API_BASE = (api.defaults as any)?.baseURL ?? "/api";
+export const resolveAdrFileUrl = (
+  url: string | null | undefined,
+): string | null => {
+  if (!url) return null;
+  if (url.startsWith("http")) return url;
+  return `${new URL(ADR_API_BASE).origin}${url}`;
+};
+
 export type AdrType =
   | "Mediation"
   | "Arbitration"

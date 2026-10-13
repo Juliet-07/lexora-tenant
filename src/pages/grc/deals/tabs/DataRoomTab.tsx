@@ -27,8 +27,13 @@ import {
   addDataRoomFile,
   removeDataRoomFile,
   sendDataRoomEmail,
+  resolveDealFileUrl,
   type Deal,
 } from "@/lib/grc/deals-api";
+import {
+  DocumentPreviewDialog,
+  type PreviewDocument,
+} from "@/components/DocumentPreviewDialog";
 
 export default function DataRoomTab({ deal }: { deal: Deal }) {
   const queryClient = useQueryClient();
@@ -38,6 +43,7 @@ export default function DataRoomTab({ deal }: { deal: Deal }) {
   const dataRoomFiles = deal.dataRoom?.files ?? [];
   const [file, setFile] = useState<File | null>(null);
   const [newFolder, setNewFolder] = useState("");
+  const [previewDoc, setPreviewDoc] = useState<PreviewDocument | null>(null);
   const [q, setQ] = useState("");
   const [openFolder, setOpenFolder] = useState<string | null>(null);
 
@@ -233,14 +239,18 @@ export default function DataRoomTab({ deal }: { deal: Deal }) {
                 <TableRow key={globalIndex}>
                   <TableCell className="text-sm">
                     {f.fileUrl ? (
-                      <a
-                        href={f.fileUrl}
-                        target="_blank"
-                        rel="noreferrer"
+                      <button
+                        type="button"
                         className="text-primary hover:underline"
+                        onClick={() =>
+                          setPreviewDoc({
+                            url: resolveDealFileUrl(f.fileUrl)!,
+                            name: f.name,
+                          })
+                        }
                       >
                         {f.name}
-                      </a>
+                      </button>
                     ) : (
                       f.name
                     )}
@@ -289,6 +299,10 @@ export default function DataRoomTab({ deal }: { deal: Deal }) {
           </Button>
         </div>
       </CardContent>
+      <DocumentPreviewDialog
+        doc={previewDoc}
+        onOpenChange={(open) => !open && setPreviewDoc(null)}
+      />
     </Card>
   );
 }

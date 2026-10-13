@@ -62,9 +62,14 @@ import {
   bulkDismissAlerts,
   type ComplianceAlert,
   type AlertStats,
+  resolveKycFileUrl,
 } from "@/lib/kyc/kyc-api";
 import { ClientSelect } from "@/components/ClientDropdown";
 import { prettyLabel, toneFor } from "@/lib/client/clients-api";
+import {
+  DocumentPreviewDialog,
+  type PreviewDocument,
+} from "@/components/DocumentPreviewDialog";
 
 // ─────────────────────────────────────────────────────────────
 // HELPERS
@@ -125,6 +130,7 @@ function AlertDetailDialog({
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [note, setNote] = useState("");
+  const [previewDoc, setPreviewDoc] = useState<PreviewDocument | null>(null);
 
   const updateMutation = useMutation({
     mutationFn: (status: string) =>
@@ -236,16 +242,20 @@ function AlertDetailDialog({
                   {clientResponse.note}
                 </p>
                 {clientResponse.documentUrl && (
-                  <a
-                    href={clientResponse.documentUrl}
-                    target="_blank"
-                    rel="noreferrer"
+                  <button
+                    type="button"
                     className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline mt-1"
+                    onClick={() =>
+                      setPreviewDoc({
+                        url: resolveKycFileUrl(clientResponse.documentUrl)!,
+                        name: "Client response document",
+                      })
+                    }
                   >
                     <FileText className="h-3.5 w-3.5" />
                     View attached document
                     <ArrowUpRight className="h-3 w-3" />
-                  </a>
+                  </button>
                 )}
               </div>
             ) : alert.status === "open" && client ? (
@@ -328,6 +338,11 @@ function AlertDetailDialog({
           )}
         </DialogContent>
       </Dialog>
+
+      <DocumentPreviewDialog
+        doc={previewDoc}
+        onOpenChange={(open) => !open && setPreviewDoc(null)}
+      />
     </>
   );
 }
@@ -559,7 +574,6 @@ export default function ComplianceAlerts() {
           value: (stats.summary as any).low ?? 0,
           color: SEVERITY_COLORS.low,
         },
-
       ].filter((d) => d.value > 0)
     : [];
 
@@ -624,10 +638,10 @@ export default function ComplianceAlerts() {
                     {label === "Open" &&
                       ((stats?.summary as any)?.acknowledged ?? 0) > 0 && (
                         <p className="text-[10px] text-primary mt-0.5">
-                          {(stats?.summary as any)?.acknowledged} client responded
+                          {(stats?.summary as any)?.acknowledged} client
+                          responded
                         </p>
                       )}
-
                   </CardContent>
                 </Card>
               ))}

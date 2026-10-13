@@ -70,7 +70,12 @@ import {
   type InvoiceStage,
   type BillingModel,
   type PaymentMethod,
+  resolveFinanceFileUrl,
 } from "@/lib/crm/finance-api";
+import {
+  DocumentPreviewDialog,
+  type PreviewDocument,
+} from "@/components/DocumentPreviewDialog";
 
 const STEPS = [
   "WIP accumulation",
@@ -115,6 +120,7 @@ const stageClass: Record<InvoiceStage, string> = {
 export default function Invoicing() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [previewDoc, setPreviewDoc] = useState<PreviewDocument | null>(null);
 
   const { data: list = [], isLoading } = useQuery({
     queryKey: ["invoices"],
@@ -664,16 +670,24 @@ export default function Invoicing() {
                           </p>
                         )}
                         {selected.proofOfPaymentUrl && (
-                          <a
-                            href={selected.proofOfPaymentUrl}
-                            target="_blank"
-                            rel="noreferrer"
+                          <button
+                            type="button"
                             className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-primary underline"
+                            onClick={() =>
+                              setPreviewDoc({
+                                url: resolveFinanceFileUrl(
+                                  selected.proofOfPaymentUrl,
+                                )!,
+                                name:
+                                  selected.proofOfPaymentFileName ||
+                                  "Proof of payment",
+                              })
+                            }
                           >
                             <FileText className="h-3 w-3" />
                             {selected.proofOfPaymentFileName ||
                               "View proof of payment"}
-                          </a>
+                          </button>
                         )}
                         <p className="text-xs text-muted-foreground">
                           {selected.clientActionAt &&
@@ -942,6 +956,11 @@ export default function Invoicing() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <DocumentPreviewDialog
+        doc={previewDoc}
+        onOpenChange={(open) => !open && setPreviewDoc(null)}
+      />
     </div>
   );
 }

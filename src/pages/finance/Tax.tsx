@@ -75,8 +75,13 @@ import {
   type EbmDocument,
   type TaxObligationType,
   type TaxRecurringFrequency,
+  resolveFinanceFileUrl,
 } from "@/lib/crm/finance-api";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  DocumentPreviewDialog,
+  type PreviewDocument,
+} from "@/components/DocumentPreviewDialog";
 
 // Tolerant of null/undefined/NaN — a single missing field on one
 // record (an older payroll run without totalEmployerContributions,
@@ -157,6 +162,7 @@ const taxWorkflow = [
 export default function Tax() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [previewDoc, setPreviewDoc] = useState<PreviewDocument | null>(null);
 
   const { data: calendar = [] } = useQuery({
     queryKey: ["taxObligations"],
@@ -686,15 +692,19 @@ export default function Tax() {
                         <div className="flex items-center gap-1.5">
                           {e.receipt}
                           {e.receiptFileUrl && (
-                            <a
-                              href={e.receiptFileUrl}
-                              target="_blank"
-                              rel="noreferrer"
+                            <button
+                              type="button"
                               title={e.receiptFileName || "Receipt file"}
                               className="text-muted-foreground hover:text-primary"
+                              onClick={() =>
+                                setPreviewDoc({
+                                  url: resolveFinanceFileUrl(e.receiptFileUrl)!,
+                                  name: e.receiptFileName || "Receipt file",
+                                })
+                              }
                             >
                               <Paperclip className="h-3.5 w-3.5" />
-                            </a>
+                            </button>
                           )}
                         </div>
                       </TableCell>
@@ -989,6 +999,11 @@ export default function Tax() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <DocumentPreviewDialog
+        doc={previewDoc}
+        onOpenChange={(open) => !open && setPreviewDoc(null)}
+      />
     </div>
   );
 }

@@ -812,6 +812,16 @@ export const resolveLeaveFileUrl = (url: string): string => {
   return `${origin}${url}`;
 };
 
+// Same resolution, for employee-record file fields that aren't leave
+// documents (certificates, etc.) — a relative /uploads/... path needs
+// resolving against the API's own origin, same as every other module.
+export const resolveEmployeeFileUrl = (url: string): string => {
+  if (!url) return url;
+  if (url.startsWith("http")) return url;
+  const origin = new URL(HR_API_BASE).origin;
+  return `${origin}${url}`;
+};
+
 export const uploadLeaveDocument = async (
   requestId: string,
   file: File,

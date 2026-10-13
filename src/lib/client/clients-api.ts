@@ -1,5 +1,17 @@
 import { api } from "../api";
 
+// Client documents carry a relative /uploads/... url, same as every
+// other module — resolve it against the API's own origin before using
+// it in an href/src, same pattern as resolveGrcFileUrl etc.
+const CLIENTS_API_BASE = (api.defaults as any)?.baseURL ?? "/api";
+export const resolveClientFileUrl = (
+  url: string | null | undefined,
+): string | null => {
+  if (!url) return null;
+  if (url.startsWith("http")) return url;
+  return `${new URL(CLIENTS_API_BASE).origin}${url}`;
+};
+
 export interface ApiClient {
   _id: string;
   firstName?: string;

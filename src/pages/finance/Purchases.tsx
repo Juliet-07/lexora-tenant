@@ -81,8 +81,13 @@ import {
   type PoLine,
   type Bill,
   type ExpenseClaim,
+  resolveFinanceFileUrl,
 } from "@/lib/crm/finance-api";
 import { fetchBoardMembers } from "@/lib/grc/governance-api";
+import {
+  DocumentPreviewDialog,
+  type PreviewDocument,
+} from "@/components/DocumentPreviewDialog";
 
 const purchasesWorkflow = [
   {
@@ -148,6 +153,7 @@ export default function Purchases() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [markPaidPrompt, setMarkPaidPrompt] = useState<Bill | null>(null);
+  const [previewDoc, setPreviewDoc] = useState<PreviewDocument | null>(null);
 
   const { data: vendors = [] } = useQuery({
     queryKey: ["vendors"],
@@ -567,15 +573,19 @@ export default function Purchases() {
                         <div className="flex items-center gap-1.5">
                           {b.ref}
                           {b.receiptUrl && (
-                            <a
-                              href={b.receiptUrl}
-                              target="_blank"
-                              rel="noreferrer"
+                            <button
+                              type="button"
                               title={b.receiptFileName || "Receipt"}
                               className="text-muted-foreground hover:text-primary"
+                              onClick={() =>
+                                setPreviewDoc({
+                                  url: resolveFinanceFileUrl(b.receiptUrl)!,
+                                  name: b.receiptFileName || "Receipt",
+                                })
+                              }
                             >
                               <Paperclip className="h-3.5 w-3.5" />
-                            </a>
+                            </button>
                           )}
                         </div>
                         {b.recurring && (
@@ -806,15 +816,19 @@ export default function Purchases() {
                       </TableCell>
                       <TableCell className="text-sm">
                         {c.receiptUrl ? (
-                          <a
-                            href={c.receiptUrl}
-                            target="_blank"
-                            rel="noreferrer"
+                          <button
+                            type="button"
                             className="inline-flex items-center gap-1 text-primary hover:underline"
+                            onClick={() =>
+                              setPreviewDoc({
+                                url: resolveFinanceFileUrl(c.receiptUrl)!,
+                                name: c.receiptName ?? "Expense receipt",
+                              })
+                            }
                           >
                             <Paperclip className="h-3.5 w-3.5" />{" "}
                             {c.receiptName ?? "View"}
-                          </a>
+                          </button>
                         ) : (
                           <>
                             <input
@@ -1919,6 +1933,11 @@ export default function Purchases() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <DocumentPreviewDialog
+        doc={previewDoc}
+        onOpenChange={(open) => !open && setPreviewDoc(null)}
+      />
     </div>
   );
 }

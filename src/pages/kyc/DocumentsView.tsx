@@ -4,19 +4,25 @@
  * Each document has: name, category, url, mimeType, size, uploadedAt
  */
 
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { FileText, Download, Image, File } from "lucide-react";
+import { Eye, Image, File, FileText } from "lucide-react";
+import { resolveKycFileUrl } from "@/lib/kyc/kyc-api";
+import {
+  DocumentPreviewDialog,
+  type PreviewDocument,
+} from "@/components/DocumentPreviewDialog";
 
 interface Document {
-  name:        string;
-  category:    string;
-  url:         string;
-  mimeType?:   string;
-  size?:       number;
+  name: string;
+  category: string;
+  url: string;
+  mimeType?: string;
+  size?: number;
   description?: string;
-  uploadedAt:  string;
+  uploadedAt: string;
 }
 
 interface Props {
@@ -24,27 +30,30 @@ interface Props {
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
-  identity:        "Identity",
-  address_proof:   "Address Proof",
-  corporate_doc:   "Corporate Document",
-  financial:       "Financial",
-  beneficial_owner:"Beneficial Owner",
-  other:           "Other",
+  identity: "Identity",
+  address_proof: "Address Proof",
+  corporate_doc: "Corporate Document",
+  financial: "Financial",
+  beneficial_owner: "Beneficial Owner",
+  other: "Other",
 };
 
 function formatBytes(bytes?: number): string {
   if (!bytes) return "";
-  if (bytes < 1024)       return `${bytes} B`;
+  if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function DocIcon({ mimeType }: { mimeType?: string }) {
-  if (mimeType?.startsWith("image/")) return <Image className="h-5 w-5 text-muted-foreground" />;
+  if (mimeType?.startsWith("image/"))
+    return <Image className="h-5 w-5 text-muted-foreground" />;
   return <FileText className="h-5 w-5 text-muted-foreground" />;
 }
 
 export function DocumentsView({ documents }: Props) {
+  const [previewDoc, setPreviewDoc] = useState<PreviewDocument | null>(null);
+
   if (!documents || documents.length === 0) {
     return (
       <Card>
@@ -99,16 +108,29 @@ export function DocumentsView({ documents }: Props) {
                     </p>
                   </div>
                 </div>
-                <Button size="sm" variant="outline" asChild className="shrink-0">
-                  <a href={doc.url} target="_blank" rel="noreferrer">
-                    <Download className="h-4 w-4 mr-1" /> View
-                  </a>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="shrink-0"
+                  onClick={() =>
+                    setPreviewDoc({
+                      url: resolveKycFileUrl(doc.url)!,
+                      name: doc.name,
+                    })
+                  }
+                >
+                  <Eye className="h-4 w-4 mr-1" /> View
                 </Button>
               </div>
             ))}
           </CardContent>
         </Card>
       ))}
+
+      <DocumentPreviewDialog
+        doc={previewDoc}
+        onOpenChange={(open) => !open && setPreviewDoc(null)}
+      />
     </div>
   );
 }

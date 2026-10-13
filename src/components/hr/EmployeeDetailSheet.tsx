@@ -75,7 +75,12 @@ import {
   fetchEmployeeRecords,
   suspendEmployee,
   reinstateEmployee,
+  resolveEmployeeFileUrl,
 } from "@/lib/hr/hr-api";
+import {
+  DocumentPreviewDialog,
+  type PreviewDocument,
+} from "@/components/DocumentPreviewDialog";
 import { downloadEmployeeReport } from "@/lib/hr/employeeReport";
 import { EmployeeDocumentsPanel } from "./EmployeeDocumentsPanel";
 import { fetchEmployeeReviewHistory } from "@/lib/hr/hr-performance-api";
@@ -245,6 +250,7 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
   const { user } = useAuth();
   const [terminateOpen, setTerminateOpen] = useState(false);
   const [suspendOpen, setSuspendOpen] = useState(false);
+  const [previewDoc, setPreviewDoc] = useState<PreviewDocument | null>(null);
   const [terminateForm, setTerminateForm] = useState({
     endDate: new Date().toISOString().slice(0, 10),
     status: "resigned" as "terminated" | "resigned",
@@ -1633,19 +1639,23 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
                             ) : (
                               <div className="space-y-1.5">
                                 {emp.certificates.map((c) => (
-                                  <a
+                                  <button
+                                    type="button"
                                     key={c.fileUrl}
-                                    href={c.fileUrl}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="flex items-center justify-between p-2 border rounded-md hover:bg-muted/40 transition"
+                                    onClick={() =>
+                                      setPreviewDoc({
+                                        url: resolveEmployeeFileUrl(c.fileUrl),
+                                        name: c.name,
+                                      })
+                                    }
+                                    className="flex w-full items-center justify-between p-2 border rounded-md hover:bg-muted/40 transition"
                                   >
                                     <span className="flex items-center gap-2 truncate">
                                       <FileText className="h-3.5 w-3.5 text-primary shrink-0" />
                                       <span className="truncate">{c.name}</span>
                                     </span>
                                     <Download className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                                  </a>
+                                  </button>
                                 ))}
                               </div>
                             )}
@@ -1982,6 +1992,11 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
           </DialogContent>
         </Dialog>
       </SheetContent>
+
+      <DocumentPreviewDialog
+        doc={previewDoc}
+        onOpenChange={(open) => !open && setPreviewDoc(null)}
+      />
     </Sheet>
   );
 }

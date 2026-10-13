@@ -1,5 +1,18 @@
 import { api } from "../api";
 
+// KYC/AML documents (client responses, uploaded evidence, etc.) carry a
+// relative /uploads/... URL, same as every other module — resolve it
+// against the API's own origin before using it in an href/src, same
+// pattern as resolveGrcFileUrl etc.
+const KYC_API_BASE = (api.defaults as any)?.baseURL ?? "/api";
+export const resolveKycFileUrl = (
+  url: string | null | undefined,
+): string | null => {
+  if (!url) return null;
+  if (url.startsWith("http")) return url;
+  return `${new URL(KYC_API_BASE).origin}${url}`;
+};
+
 // ─────────────────────────────────────────────────────────────
 // SHARED TYPES
 // ─────────────────────────────────────────────────────────────

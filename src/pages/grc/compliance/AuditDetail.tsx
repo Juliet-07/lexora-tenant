@@ -78,8 +78,13 @@ import {
   type InherentRiskLevel,
   type WorkingPaperStatus,
   type CommitteeActionStatus,
+  resolveComplianceFileUrl,
 } from "@/lib/grc/compliance-api";
 import { fetchRisks } from "@/lib/grc/risk-api";
+import {
+  DocumentPreviewDialog,
+  type PreviewDocument,
+} from "@/components/DocumentPreviewDialog";
 import { fetchEmployees, type Employee } from "@/lib/hr/hr-api";
 import {
   LIFECYCLE,
@@ -1555,6 +1560,7 @@ function DocumentRequestsCard({
 }) {
   const [openFolder, setOpenFolder] = useState<string | null>(null);
   const [newFolder, setNewFolder] = useState("");
+  const [previewDoc, setPreviewDoc] = useState<PreviewDocument | null>(null);
   const [req, setReq] = useState({
     description: "",
     assignedToEmployeeId: "",
@@ -1715,18 +1721,22 @@ function DocumentRequestsCard({
                   {r.files.length ? (
                     <div className="flex flex-col gap-0.5">
                       {r.files.map((file, i) => (
-                        <a
+                        <button
                           key={i}
-                          href={file.fileUrl}
-                          target="_blank"
-                          rel="noreferrer"
+                          type="button"
                           className="flex items-center gap-1 text-primary hover:underline"
+                          onClick={() =>
+                            setPreviewDoc({
+                              url: resolveComplianceFileUrl(file.fileUrl)!,
+                              name: file.name,
+                            })
+                          }
                         >
                           <FileText className="h-3 w-3 shrink-0" />
                           <span className="truncate max-w-[160px]">
                             {file.name}
                           </span>
-                        </a>
+                        </button>
                       ))}
                     </div>
                   ) : (
@@ -1857,6 +1867,11 @@ function DocumentRequestsCard({
           </div>
         )}
       </CardContent>
+
+      <DocumentPreviewDialog
+        doc={previewDoc}
+        onOpenChange={(open) => !open && setPreviewDoc(null)}
+      />
     </Card>
   );
 }

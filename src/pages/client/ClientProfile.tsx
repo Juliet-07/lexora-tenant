@@ -23,6 +23,7 @@ import {
   Building2,
   Calendar,
   Download,
+  Eye,
   UserCheck,
   Percent,
   Loader2,
@@ -33,8 +34,13 @@ import {
   displayName,
   prettyLabel,
   toneFor,
+  resolveClientFileUrl,
 } from "@/lib/client/clients-api";
 import { api } from "@/lib/api";
+import {
+  DocumentPreviewDialog,
+  type PreviewDocument,
+} from "@/components/DocumentPreviewDialog";
 import {
   ClientDealsPanel,
   ClientProjectsPanel,
@@ -48,6 +54,7 @@ export default function ClientProfile() {
   const { id } = useParams();
   const { toast } = useToast();
   const [client, setClient] = useState<ApiClientDetail | null>(null);
+  const [previewDoc, setPreviewDoc] = useState<PreviewDocument | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
@@ -631,10 +638,17 @@ export default function ClientProfile() {
                           </Badge>
                         )}
                         {doc.url && (
-                          <Button size="sm" variant="ghost" asChild>
-                            <a href={doc.url} target="_blank" rel="noreferrer">
-                              <Download className="h-4 w-4" />
-                            </a>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() =>
+                              setPreviewDoc({
+                                url: resolveClientFileUrl(doc.url)!,
+                                name: doc.name,
+                              })
+                            }
+                          >
+                            <Eye className="h-4 w-4" />
                           </Button>
                         )}
                       </div>
@@ -689,6 +703,11 @@ export default function ClientProfile() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <DocumentPreviewDialog
+        doc={previewDoc}
+        onOpenChange={(open) => !open && setPreviewDoc(null)}
+      />
     </div>
   );
 }

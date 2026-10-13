@@ -68,7 +68,12 @@ import {
   type AdrDeadlineRule,
   type CreateAdrDeadlineRulePayload,
   type DeadlineTriggerSource,
+  resolveAdrFileUrl,
 } from "@/lib/crm/adr-api";
+import {
+  DocumentPreviewDialog,
+  type PreviewDocument,
+} from "@/components/DocumentPreviewDialog";
 import {
   fetchLitigationCase,
   fetchLitigationMessages,
@@ -691,6 +696,7 @@ export function CaseDocumentsTab({
     },
   });
 
+  const [previewDoc, setPreviewDoc] = useState<PreviewDocument | null>(null);
   const [previewing, setPreviewing] = useState<
     AdrDocument | LitigationDocument | null
   >(null);
@@ -807,14 +813,18 @@ export function CaseDocumentsTab({
                       View
                     </Button>
                   ) : (
-                    <a
-                      href={d.fileUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                    <button
+                      type="button"
                       className="text-xs text-primary underline"
+                      onClick={() =>
+                        setPreviewDoc({
+                          url: resolveAdrFileUrl(d.fileUrl)!,
+                          name: d.name,
+                        })
+                      }
                     >
                       Open
-                    </a>
+                    </button>
                   )}
                 </div>
               </div>
@@ -894,6 +904,11 @@ export function CaseDocumentsTab({
           />
         </DialogContent>
       </Dialog>
+
+      <DocumentPreviewDialog
+        doc={previewDoc}
+        onOpenChange={(open) => !open && setPreviewDoc(null)}
+      />
     </div>
   );
 }
