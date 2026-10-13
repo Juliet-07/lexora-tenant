@@ -1,16 +1,17 @@
 import { useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Tree, TreeNode } from "react-organizational-chart";
 import {
   Building2,
-  Users,
   Network,
   ListTree,
-  UserCircle2,
   Download,
   Loader2,
-  ExternalLink,
+  Plus,
+  Pencil,
+  Trash2,
+  ChevronUp,
+  ChevronDown,
 } from "lucide-react";
 import {
   Card,
@@ -21,104 +22,362 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import {
-  fetchOrgChart,
-  type OrgChartNode,
-  type EmployeeHierarchyRole,
+  fetchOrgStructure,
+  createOrgStructureNode,
+  updateOrgStructureNode,
+  moveOrgStructureNode,
+  deleteOrgStructureNode,
+  type OrgStructureNode,
+  type OrgStructureNodeType,
 } from "@/lib/grc/governance-api";
 
 // ─────────────────────────────────────────────────────────────
-// Organisation Structure — the real org chart, derived server-side
-// from HR's own Employee records (reportsToManagerId/jobTitle/teamId),
-// per the PO's explicit choice of HR-derived over a freeform
-// tenant-designed structure. Read-only here: the reporting line, job
-// title and team that shape this chart are managed on HR → Employees.
+// Organisation Structure (Oct 2026 rework) — previously a read-only
+// chart derived from HR's own Employee records, with no direct editing
+// surface ("Manage in HR" sent the tenant away to edit individual
+// employee records, which the PO found unclear). Reworked into a
+// freeform structure the tenant builds and arranges directly: add a
+// node (Shareholder / Board / Department / Role), say what sits under
+// what, edit or remove anything, and download the result as an image.
+// Nothing here is derived from HR or any other module — every node is
+// one the tenant explicitly created.
 // ─────────────────────────────────────────────────────────────
 
-const ROLE_LABEL: Record<EmployeeHierarchyRole, string> = {
-  owner: "Owner",
-  head_of_department: "Head of Department",
-  manager: "Manager",
-  regular: "Employee",
+const TYPE_OPTIONS: OrgStructureNodeType[] = [
+  "Shareholder",
+  "Board",
+  "Department",
+  "Role",
+];
+
+const TYPE_STYLES: Record<OrgStructureNodeType, string> = {
+  Shareholder: "bg-violet-500/10 text-violet-600 border-violet-500/30",
+  Board: "bg-primary/10 text-primary border-primary/30",
+  Department: "bg-emerald-500/10 text-emerald-600 border-emerald-500/30",
+  Role: "bg-amber-500/10 text-amber-600 border-amber-500/30",
 };
-
-const ROLE_STYLES: Record<EmployeeHierarchyRole, string> = {
-  owner: "bg-primary/10 text-primary border-primary/30",
-  head_of_department:
-    "bg-emerald-500/10 text-emerald-600 border-emerald-500/30",
-  manager: "bg-amber-500/10 text-amber-600 border-amber-500/30",
-  regular: "bg-slate-500/10 text-slate-600 border-slate-500/30",
-};
-
-function NodeCard({ node }: { node: OrgChartNode }) {
-  return (
-    <Card
-      className={`inline-block w-56 border ${ROLE_STYLES[node.hierarchyRole]} shadow-sm`}
-    >
-      <CardContent className="p-3 text-center space-y-1">
-        <p className="font-semibold text-sm leading-tight">{node.name}</p>
-        <Badge variant="outline" className="text-[10px]">
-          {ROLE_LABEL[node.hierarchyRole]}
-        </Badge>
-        <p className="text-[11px] text-muted-foreground">{node.jobTitle}</p>
-        {node.teamName && (
-          <div className="flex items-center justify-center gap-1 text-xs text-muted-foreground">
-            <UserCircle2 className="h-3.5 w-3.5" />
-            <span>{node.teamName}</span>
-          </div>
-        )}
-        {node.reportCount > 0 && (
-          <p className="text-[11px] text-muted-foreground">
-            {node.reportCount} report{node.reportCount === 1 ? "" : "s"}
-          </p>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-function ChartNode({ node }: { node: OrgChartNode }) {
-  return (
-    <TreeNode label={<NodeCard node={node} />}>
-      {node.children.map((c) => (
-        <ChartNode key={c.id} node={c} />
-      ))}
-    </TreeNode>
-  );
-}
 
 function flatten(
-  nodes: OrgChartNode[],
+  nodes: OrgStructureNode[],
   depth = 0,
-): { node: OrgChartNode; depth: number }[] {
+): { node: OrgStructureNode; depth: number }[] {
   return nodes.flatMap((n) => [
     { node: n, depth },
     ...flatten(n.children, depth + 1),
   ]);
 }
 
-function countAll(nodes: OrgChartNode[]): number {
+function countAll(nodes: OrgStructureNode[]): number {
   return nodes.reduce((s, n) => s + 1 + countAll(n.children), 0);
+}
+
+function collectIds(node: OrgStructureNode): Set<string> {
+  const ids = new Set<string>([node.id]);
+  for (const c of node.children) {
+    for (const id of collectIds(c)) ids.add(id);
+  }
+  return ids;
+}
+
+interface Handlers {
+  onAddChild: (parent: OrgStructureNode) => void;
+  onEdit: (node: OrgStructureNode) => void;
+  onDelete: (node: OrgStructureNode) => void;
+  onMove: (node: OrgStructureNode, direction: "up" | "down") => void;
+}
+
+function NodeCard({
+  node,
+  isFirst,
+  isLast,
+  handlers,
+}: {
+  node: OrgStructureNode;
+  isFirst: boolean;
+  isLast: boolean;
+  handlers: Handlers;
+}) {
+  return (
+    <Card
+      className={`inline-block w-60 border ${TYPE_STYLES[node.type]} shadow-sm`}
+    >
+      <CardContent className="p-3 space-y-1.5">
+        <div className="flex items-center justify-between gap-1">
+          <Badge variant="outline" className="text-[10px]">
+            {node.type}
+          </Badge>
+          <div className="flex items-center gap-0.5">
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-5 w-5"
+              disabled={isFirst}
+              onClick={() => handlers.onMove(node, "up")}
+              title="Move left"
+            >
+              <ChevronUp className="h-3 w-3" />
+            </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-5 w-5"
+              disabled={isLast}
+              onClick={() => handlers.onMove(node, "down")}
+              title="Move right"
+            >
+              <ChevronDown className="h-3 w-3" />
+            </Button>
+          </div>
+        </div>
+        <p className="font-semibold text-sm leading-tight text-center">
+          {node.name}
+        </p>
+        {node.subtitle && (
+          <p className="text-[11px] text-muted-foreground text-center">
+            {node.subtitle}
+          </p>
+        )}
+        <div className="flex items-center justify-center gap-1 pt-1">
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-6 px-2 text-[11px]"
+            onClick={() => handlers.onAddChild(node)}
+          >
+            <Plus className="h-3 w-3 mr-1" /> Add
+          </Button>
+          <Button
+            size="icon"
+            variant="outline"
+            className="h-6 w-6"
+            onClick={() => handlers.onEdit(node)}
+            title="Edit"
+          >
+            <Pencil className="h-3 w-3" />
+          </Button>
+          <Button
+            size="icon"
+            variant="outline"
+            className="h-6 w-6 text-destructive hover:text-destructive"
+            onClick={() => handlers.onDelete(node)}
+            title="Remove"
+          >
+            <Trash2 className="h-3 w-3" />
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ChartNode({
+  node,
+  index,
+  siblingCount,
+  handlers,
+}: {
+  node: OrgStructureNode;
+  index: number;
+  siblingCount: number;
+  handlers: Handlers;
+}) {
+  return (
+    <TreeNode
+      label={
+        <NodeCard
+          node={node}
+          isFirst={index === 0}
+          isLast={index === siblingCount - 1}
+          handlers={handlers}
+        />
+      }
+    >
+      {node.children.map((c, i) => (
+        <ChartNode
+          key={c.id}
+          node={c}
+          index={i}
+          siblingCount={node.children.length}
+          handlers={handlers}
+        />
+      ))}
+    </TreeNode>
+  );
 }
 
 export default function OrgStructure() {
   const { user } = useAuth();
-  const navigate = useNavigate();
   const { toast } = useToast();
+  const qc = useQueryClient();
   const chartRef = useRef<HTMLDivElement>(null);
   const [downloading, setDownloading] = useState(false);
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ["org-chart"],
-    queryFn: fetchOrgChart,
+    queryKey: ["org-structure"],
+    queryFn: fetchOrgStructure,
   });
 
   const roots = data?.roots ?? [];
   const flat = useMemo(() => flatten(roots), [roots]);
-  const totalInChart = useMemo(() => countAll(roots), [roots]);
+  const totalNodes = useMemo(() => countAll(roots), [roots]);
+
+  // ── Add / Edit dialog ──────────────────────────────────────
+  const [formOpen, setFormOpen] = useState(false);
+  const [formMode, setFormMode] = useState<"create" | "edit">("create");
+  const [formId, setFormId] = useState<string | null>(null);
+  const [formType, setFormType] = useState<OrgStructureNodeType>("Department");
+  const [formName, setFormName] = useState("");
+  const [formSubtitle, setFormSubtitle] = useState("");
+  const [formParentId, setFormParentId] = useState<string>("none");
+  const [excludedParentIds, setExcludedParentIds] = useState<Set<string>>(
+    new Set(),
+  );
+
+  const openCreate = (parent: OrgStructureNode | null) => {
+    setFormMode("create");
+    setFormId(null);
+    setFormType(parent ? "Role" : "Department");
+    setFormName("");
+    setFormSubtitle("");
+    setFormParentId(parent ? parent.id : "none");
+    setExcludedParentIds(new Set());
+    setFormOpen(true);
+  };
+
+  const openEdit = (node: OrgStructureNode) => {
+    setFormMode("edit");
+    setFormId(node.id);
+    setFormType(node.type);
+    setFormName(node.name);
+    setFormSubtitle(node.subtitle ?? "");
+    setFormParentId(node.parentId ?? "none");
+    // A node can't be moved under itself or its own descendants.
+    setExcludedParentIds(collectIds(node));
+    setFormOpen(true);
+  };
+
+  const createMut = useMutation({
+    mutationFn: createOrgStructureNode,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["org-structure"] });
+      toast({ title: "Node added" });
+      setFormOpen(false);
+    },
+    onError: (e: any) =>
+      toast({
+        title: "Couldn't add that node",
+        description: e?.response?.data?.message ?? e.message,
+        variant: "destructive",
+      }),
+  });
+
+  const updateMut = useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: any }) =>
+      updateOrgStructureNode(id, payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["org-structure"] });
+      toast({ title: "Node updated" });
+      setFormOpen(false);
+    },
+    onError: (e: any) =>
+      toast({
+        title: "Couldn't update that node",
+        description: e?.response?.data?.message ?? e.message,
+        variant: "destructive",
+      }),
+  });
+
+  const moveMut = useMutation({
+    mutationFn: ({ id, direction }: { id: string; direction: "up" | "down" }) =>
+      moveOrgStructureNode(id, direction),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["org-structure"] }),
+    onError: (e: any) =>
+      toast({
+        title: "Couldn't move that node",
+        description: e?.response?.data?.message ?? e.message,
+        variant: "destructive",
+      }),
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: ({ id, cascade }: { id: string; cascade: boolean }) =>
+      deleteOrgStructureNode(id, cascade),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["org-structure"] });
+      toast({ title: "Removed" });
+      setDeleteTarget(null);
+    },
+    onError: (e: any) =>
+      toast({
+        title: "Couldn't remove that node",
+        description: e?.response?.data?.message ?? e.message,
+        variant: "destructive",
+      }),
+  });
+
+  const submitForm = () => {
+    if (!formName.trim()) {
+      toast({ title: "Give the node a name first", variant: "destructive" });
+      return;
+    }
+    const payload = {
+      type: formType,
+      name: formName.trim(),
+      subtitle: formSubtitle.trim() || null,
+      parentId: formParentId === "none" ? null : formParentId,
+    };
+    if (formMode === "create") {
+      createMut.mutate(payload as any);
+    } else if (formId) {
+      updateMut.mutate({ id: formId, payload });
+    }
+  };
+
+  // ── Delete confirmation ─────────────────────────────────────
+  const [deleteTarget, setDeleteTarget] = useState<OrgStructureNode | null>(
+    null,
+  );
+  const deleteDescendantCount = deleteTarget
+    ? collectIds(deleteTarget).size - 1
+    : 0;
+
+  const handlers: Handlers = {
+    onAddChild: openCreate,
+    onEdit: openEdit,
+    onDelete: setDeleteTarget,
+    onMove: (node, direction) => moveMut.mutate({ id: node.id, direction }),
+  };
 
   const downloadAsImage = async () => {
     if (!chartRef.current) return;
@@ -178,17 +437,18 @@ export default function OrgStructure() {
             Organisation Structure
           </h1>
           <p className="text-muted-foreground text-sm mt-1">
-            Your real reporting hierarchy, derived from HR's employee records.
+            Build your company's real structure — shareholders, board,
+            departments and roles — and download it as an image.
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => navigate("/hr/employees")}>
-            <ExternalLink className="h-4 w-4 mr-2" />
-            Manage in HR
+          <Button variant="outline" onClick={() => openCreate(null)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Add node
           </Button>
           <Button
             onClick={downloadAsImage}
-            disabled={downloading || totalInChart === 0}
+            disabled={downloading || totalNodes === 0}
           >
             {downloading ? (
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -200,14 +460,14 @@ export default function OrgStructure() {
         </div>
       </div>
 
-      {/* KPI cards */}
+      {/* Type counts */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         {[
-          { label: "Teams", value: stats.teams },
-          { label: "Heads of Department", value: stats.headsOfDepartment },
-          { label: "Managers", value: stats.managers },
-          { label: "Total Employees", value: stats.totalEmployees },
-          { label: "Teams without a Head", value: stats.teamsWithoutHead },
+          { label: "Total nodes", value: stats.totalNodes },
+          { label: "Shareholders", value: stats.Shareholder ?? 0 },
+          { label: "Board", value: stats.Board ?? 0 },
+          { label: "Departments", value: stats.Department ?? 0 },
+          { label: "Roles", value: stats.Role ?? 0 },
         ].map((k) => (
           <Card key={k.label}>
             <CardContent className="p-4">
@@ -223,11 +483,8 @@ export default function OrgStructure() {
           <TabsTrigger value="chart" className="gap-2">
             <Network className="h-4 w-4" /> Org Chart
           </TabsTrigger>
-          <TabsTrigger value="tree" className="gap-2">
-            <ListTree className="h-4 w-4" /> Hierarchy List
-          </TabsTrigger>
-          <TabsTrigger value="directory" className="gap-2">
-            <Users className="h-4 w-4" /> Directory
+          <TabsTrigger value="list" className="gap-2">
+            <ListTree className="h-4 w-4" /> All Nodes
           </TabsTrigger>
         </TabsList>
 
@@ -236,16 +493,22 @@ export default function OrgStructure() {
             <CardHeader>
               <CardTitle className="text-base">Company Organogram</CardTitle>
               <CardDescription>
-                Visual layout of the real reporting structure. Scroll
+                Click Add on any node to nest something under it. Scroll
                 horizontally for wide structures.
               </CardDescription>
             </CardHeader>
             <CardContent className="overflow-x-auto pb-8">
               {roots.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-8 text-center">
-                  No reporting structure yet. Add employees with a job title,
-                  team and reporting line under HR → Employees to see them here.
-                </p>
+                <div className="py-10 text-center space-y-3">
+                  <p className="text-sm text-muted-foreground">
+                    Nothing here yet. Start with your top-level entities —
+                    Shareholders, the Board, or your first department.
+                  </p>
+                  <Button onClick={() => openCreate(null)}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add your first node
+                  </Button>
+                </div>
               ) : (
                 <div
                   ref={chartRef}
@@ -263,15 +526,20 @@ export default function OrgStructure() {
                             {user?.businessName || "Organisation"}
                           </p>
                           <p className="text-[11px] text-muted-foreground">
-                            {stats.totalEmployees} employees · {stats.teams}{" "}
-                            teams
+                            {totalNodes} node{totalNodes === 1 ? "" : "s"}
                           </p>
                         </CardContent>
                       </Card>
                     }
                   >
-                    {roots.map((r) => (
-                      <ChartNode key={r.id} node={r} />
+                    {roots.map((r, i) => (
+                      <ChartNode
+                        key={r.id}
+                        node={r}
+                        index={i}
+                        siblingCount={roots.length}
+                        handlers={handlers}
+                      />
                     ))}
                   </Tree>
                 </div>
@@ -280,12 +548,13 @@ export default function OrgStructure() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="tree" className="mt-4">
+        <TabsContent value="list" className="mt-4">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Hierarchy</CardTitle>
+              <CardTitle className="text-base">All Nodes</CardTitle>
               <CardDescription>
-                Every real reporting line, indented by depth.
+                Every node, indented by depth — a quick way to scan or edit
+                without the diagram.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -305,19 +574,44 @@ export default function OrgStructure() {
                       <span className="font-medium text-sm">{node.name}</span>
                       <Badge
                         variant="outline"
-                        className={`text-[10px] ${ROLE_STYLES[node.hierarchyRole]}`}
+                        className={`text-[10px] ${TYPE_STYLES[node.type]}`}
                       >
-                        {ROLE_LABEL[node.hierarchyRole]}
+                        {node.type}
                       </Badge>
-                      <span className="text-xs text-muted-foreground hidden md:inline">
-                        · {node.jobTitle}
-                        {node.teamName ? ` · ${node.teamName}` : ""}
-                      </span>
-                      <span className="text-xs text-muted-foreground ml-auto">
-                        {node.reportCount > 0
-                          ? `${node.reportCount} reports`
-                          : ""}
-                      </span>
+                      {node.subtitle && (
+                        <span className="text-xs text-muted-foreground hidden md:inline">
+                          · {node.subtitle}
+                        </span>
+                      )}
+                      <div className="ml-auto flex items-center gap-1">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-7 w-7"
+                          onClick={() => openCreate(node)}
+                          title="Add child"
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-7 w-7"
+                          onClick={() => openEdit(node)}
+                          title="Edit"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-7 w-7 text-destructive hover:text-destructive"
+                          onClick={() => setDeleteTarget(node)}
+                          title="Remove"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -325,75 +619,127 @@ export default function OrgStructure() {
             </CardContent>
           </Card>
         </TabsContent>
-
-        <TabsContent value="directory" className="mt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Structure Directory</CardTitle>
-              <CardDescription>
-                Every employee in the chart, with their real team and reporting
-                line.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b text-left text-muted-foreground">
-                      <th className="py-2 pr-4 font-medium">Name</th>
-                      <th className="py-2 pr-4 font-medium">Role</th>
-                      <th className="py-2 pr-4 font-medium">Job Title</th>
-                      <th className="py-2 pr-4 font-medium">Team</th>
-                      <th className="py-2 pr-4 font-medium">Email</th>
-                      <th className="py-2 font-medium">
-                        Direct + indirect reports
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {flat.length === 0 ? (
-                      <tr>
-                        <td
-                          colSpan={6}
-                          className="py-8 text-center text-muted-foreground"
-                        >
-                          No employees in the chart yet.
-                        </td>
-                      </tr>
-                    ) : (
-                      flat.map(({ node }) => (
-                        <tr key={node.id} className="border-b last:border-0">
-                          <td className="py-2.5 pr-4 font-medium">
-                            {node.name}
-                          </td>
-                          <td className="py-2.5 pr-4">
-                            <Badge
-                              variant="outline"
-                              className={`text-[10px] ${ROLE_STYLES[node.hierarchyRole]}`}
-                            >
-                              {ROLE_LABEL[node.hierarchyRole]}
-                            </Badge>
-                          </td>
-                          <td className="py-2.5 pr-4 text-muted-foreground">
-                            {node.jobTitle}
-                          </td>
-                          <td className="py-2.5 pr-4 text-muted-foreground">
-                            {node.teamName ?? "—"}
-                          </td>
-                          <td className="py-2.5 pr-4 text-muted-foreground">
-                            {node.email}
-                          </td>
-                          <td className="py-2.5">{node.reportCount}</td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
       </Tabs>
+
+      {/* Add / Edit dialog */}
+      <Dialog open={formOpen} onOpenChange={setFormOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {formMode === "create" ? "Add node" : "Edit node"}
+            </DialogTitle>
+            <DialogDescription>
+              {formMode === "create"
+                ? "Add a shareholder, the board, a department, or a role."
+                : "Update this node's details or where it sits in the structure."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <Label>Type</Label>
+              <Select
+                value={formType}
+                onValueChange={(v) => setFormType(v as OrgStructureNodeType)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {TYPE_OPTIONS.map((t) => (
+                    <SelectItem key={t} value={t}>
+                      {t}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Name</Label>
+              <Input
+                placeholder="e.g. Jane Doe, or Marketing Department"
+                value={formName}
+                onChange={(e) => setFormName(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Title / detail (optional)</Label>
+              <Input
+                placeholder="e.g. Chief Marketing Officer, or 35% ownership"
+                value={formSubtitle}
+                onChange={(e) => setFormSubtitle(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Reports to / sits under</Label>
+              <Select value={formParentId} onValueChange={setFormParentId}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">— Top level —</SelectItem>
+                  {flat
+                    .filter(({ node }) => !excludedParentIds.has(node.id))
+                    .map(({ node, depth }) => (
+                      <SelectItem key={node.id} value={node.id}>
+                        {"—".repeat(depth)} {node.name} ({node.type})
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setFormOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={submitForm}
+              disabled={createMut.isPending || updateMut.isPending}
+            >
+              {(createMut.isPending || updateMut.isPending) && (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              )}
+              {formMode === "create" ? "Add" : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete confirmation */}
+      <AlertDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove "{deleteTarget?.name}"?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteDescendantCount > 0
+                ? `This will also remove the ${deleteDescendantCount} node${deleteDescendantCount === 1 ? "" : "s"} nested under it. This can't be undone.`
+                : "This can't be undone."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleteMut.isPending}
+              onClick={() =>
+                deleteTarget &&
+                deleteMut.mutate({
+                  id: deleteTarget.id,
+                  cascade: deleteDescendantCount > 0,
+                })
+              }
+            >
+              {deleteMut.isPending && (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              )}
+              Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

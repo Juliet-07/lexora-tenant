@@ -2432,59 +2432,84 @@ export const closeShareholder = async (id: string): Promise<Resolution> => {
 };
 
 // ══════════════════════════════════════════════════════════════
-// Organisation Structure — the real org chart, derived server-side
-// from HR's own Employee records (reportsToManagerId/jobTitle/teamId),
-// per the PO's explicit choice of HR-derived over a freeform
-// tenant-designed structure. Read-only: the hierarchy itself is
-// managed on the HR → Employees pages (reporting line, job title,
-// team), not edited here.
+// Organisation Structure (Oct 2026 rework) — previously a read-only
+// chart derived server-side from HR's own Employee records. The PO
+// found that unclear ("managing from HR doesn't point the user to
+// what to do") and asked for tenant creative autonomy instead: the
+// tenant builds the structure directly — shareholders, board,
+// departments, roles, nested however their real structure works —
+// rather than it being inferred from HR reporting lines. Every node
+// below is one the tenant explicitly created; nothing here is
+// auto-populated from HR or any other module.
 // ══════════════════════════════════════════════════════════════
 
-export type EmployeeHierarchyRole =
-  | "regular"
-  | "manager"
-  | "head_of_department"
-  | "owner";
+export type OrgStructureNodeType =
+  | "Shareholder"
+  | "Board"
+  | "Department"
+  | "Role";
 
-export interface OrgChartNode {
+export interface OrgStructureNode {
   id: string;
+  type: OrgStructureNodeType;
   name: string;
-  jobTitle: string;
-  hierarchyRole: EmployeeHierarchyRole;
-  employeeNumber: string;
-  email: string;
-  teamId: string | null;
-  teamName: string | null;
-  reportCount: number;
-  children: OrgChartNode[];
+  subtitle: string | null;
+  parentId: string | null;
+  order: number;
+  children: OrgStructureNode[];
 }
 
-export interface OrgChart {
+export interface OrgStructureTree {
   stats: {
-    totalEmployees: number;
-    teams: number;
-    headsOfDepartment: number;
-    managers: number;
-    teamsWithoutHead: number;
+    totalNodes: number;
+    [type: string]: number;
   };
-  roots: OrgChartNode[];
+  roots: OrgStructureNode[];
 }
 
-export const fetchOrgChart = async (): Promise<OrgChart> => {
+export const fetchOrgStructure = async (): Promise<OrgStructureTree> => {
   const res = await api.get("/grc/governance/org-structure");
-  return (
-    res.data?.data ??
-    res.data ?? {
-      stats: {
-        totalEmployees: 0,
-        teams: 0,
-        headsOfDepartment: 0,
-        managers: 0,
-        teamsWithoutHead: 0,
-      },
-      roots: [],
-    }
-  );
+  return res.data?.data ?? res.data ?? { stats: { totalNodes: 0 }, roots: [] };
+};
+
+export const createOrgStructureNode = async (payload: {
+  type: OrgStructureNodeType;
+  name: string;
+  subtitle?: string;
+  parentId?: string | null;
+}) => {
+  const res = await api.post("/grc/governance/org-structure", payload);
+  return res.data?.data ?? res.data;
+};
+
+export const updateOrgStructureNode = async (
+  id: string,
+  payload: Partial<{
+    type: OrgStructureNodeType;
+    name: string;
+    subtitle: string | null;
+    parentId: string | null;
+  }>,
+) => {
+  const res = await api.patch(`/grc/governance/org-structure/${id}`, payload);
+  return res.data?.data ?? res.data;
+};
+
+export const moveOrgStructureNode = async (
+  id: string,
+  direction: "up" | "down",
+) => {
+  const res = await api.patch(`/grc/governance/org-structure/${id}/move`, {
+    direction,
+  });
+  return res.data?.data ?? res.data;
+};
+
+export const deleteOrgStructureNode = async (id: string, cascade: boolean) => {
+  const res = await api.delete(`/grc/governance/org-structure/${id}`, {
+    params: cascade ? { cascade: "true" } : undefined,
+  });
+  return res.data?.data ?? res.data;
 };
 
 // ══════════════════════════════════════════════════════════════
