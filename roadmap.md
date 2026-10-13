@@ -1,8 +1,8 @@
 # Roadmap
 
 ## Insights blog
-- [ ] Add full sample articles and clickable links to each insight
-- [ ] Verify article reading, direct links and return navigation
+- [x] Add full sample articles and clickable links to each insight
+- [x] Verify article reading, direct links and return navigation
 
 ## Report presentation and website motion
 - [x] Brand plain meeting, governance, audit and policy exports without replacing existing finished reports
