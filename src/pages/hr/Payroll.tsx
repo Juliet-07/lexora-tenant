@@ -90,9 +90,13 @@ import {
   fetchLiveFxRate,
   fetchPendingLoans,
   decideLoanRequest,
+  fetchAllOvertime,
+  fetchPendingOvertime,
+  decideOvertimeRequest,
   type PayrollPolicy,
   type PayrollDeductionRule,
   type EmployeeLoan,
+  type EmployeeOvertimeLog,
   type PayrollRun,
   type Payslip,
   type HrLocation,
@@ -144,6 +148,13 @@ const loanStatusTone = (s: EmployeeLoan["status"]) =>
         ? "bg-warning/10 text-warning border-warning/20"
         : "bg-muted text-muted-foreground";
 
+const overtimeStatusTone = (s: EmployeeOvertimeLog["status"]) =>
+  s === "approved"
+    ? "bg-success/10 text-success border-success/20"
+    : s === "rejected"
+      ? "bg-destructive/10 text-destructive border-destructive/20"
+      : "bg-warning/10 text-warning border-warning/20";
+
 const locName = (l: PayrollPolicy["locationId"]) => l?.name ?? "Tenant default";
 
 function buildPeriodOptions(): { label: string; start: string; end: string }[] {
@@ -179,6 +190,8 @@ export default function HRPayroll() {
     null,
   );
   const [decidingLoan, setDecidingLoan] = useState<EmployeeLoan | null>(null);
+  const [decidingOvertime, setDecidingOvertime] =
+    useState<EmployeeOvertimeLog | null>(null);
   const [newRunOpen, setNewRunOpen] = useState(false);
   const [discardRunTarget, setDiscardRunTarget] = useState<PayrollRun | null>(
     null,
@@ -218,6 +231,16 @@ export default function HRPayroll() {
   const { data: loans = [], isLoading: loansLoading } = useQuery({
     queryKey: ["payroll-loans"],
     queryFn: () => fetchAllLoans(),
+  });
+
+  const { data: pendingOvertime = [] } = useQuery({
+    queryKey: ["payroll-overtime-pending"],
+    queryFn: fetchPendingOvertime,
+  });
+
+  const { data: overtimeLogs = [], isLoading: overtimeLoading } = useQuery({
+    queryKey: ["payroll-overtime"],
+    queryFn: () => fetchAllOvertime(),
   });
 
   const { data: runs = [], isLoading: runsLoading } = useQuery({
@@ -285,6 +308,23 @@ export default function HRPayroll() {
         variables.dto.decision === "approved"
           ? "Loan approved."
           : "Loan rejected.",
+      );
+    },
+    onError: (err: any) =>
+      toast.error(err?.response?.data?.message ?? "Failed to record decision"),
+  });
+
+  const decideOvertimeMutation = useMutation({
+    mutationFn: ({ id, dto }: { id: string; dto: any }) =>
+      decideOvertimeRequest(id, dto),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["payroll-overtime"] });
+      queryClient.invalidateQueries({ queryKey: ["payroll-overtime-pending"] });
+      setDecidingOvertime(null);
+      toast.success(
+        variables.dto.decision === "approved"
+          ? "Overtime approved."
+          : "Overtime rejected.",
       );
     },
     onError: (err: any) =>
@@ -464,6 +504,9 @@ export default function HRPayroll() {
           </TabsTrigger>
           <TabsTrigger value="loans">
             <Landmark className="h-3.5 w-3.5 mr-1.5" /> Loans
+          </TabsTrigger>
+          <TabsTrigger value="overtime">
+            <Clock className="h-3.5 w-3.5 mr-1.5" /> Overtime
           </TabsTrigger>
           <TabsTrigger value="policy">
             <Settings2 className="h-3.5 w-3.5 mr-1.5" /> Policies
@@ -881,6 +924,113 @@ export default function HRPayroll() {
                       </div>
                     );
                   })
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="overtime" className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Overtime employees log on their payslips page. Approve it before the
+            end of the month so it's included in that month's pay — unapproved
+            or unlogged overtime counts as 0.
+          </p>
+
+          {pendingOvertime.length > 0 && (
+            <Card className="border-warning/30">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Hourglass className="h-4 w-4 text-warning" /> Awaiting Your
+                  Decision
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {pendingOvertime.map((o) => {
+                  const emp =
+                    typeof o.employeeId === "object" ? o.employeeId : null;
+                  return (
+                    <div
+                      key={o._id}
+                      className="flex items-center justify-between border rounded-lg p-3 cursor-pointer hover:bg-muted/30"
+                      onClick={() => setDecidingOvertime(o)}
+                    >
+                      <div>
+                        <p className="text-sm font-medium">
+                          {emp
+                            ? `${emp.firstName} ${emp.lastName}`
+                            : "Employee"}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {o.periodLabel} — {o.hoursLogged} hrs
+                        </p>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="text-sm font-semibold">
+                          {fmt(o.amount, o.currency)}
+                        </p>
+                        <Button
+                          size="sm"
+                          className="mt-1"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDecidingOvertime(o);
+                          }}
+                        >
+                          Review
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </CardContent>
+            </Card>
+          )}
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">All Overtime</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {overtimeLoading ? (
+                <LoadingRow label="Loading overtime…" />
+              ) : overtimeLogs.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-8">
+                  No overtime logged yet.
+                </p>
+              ) : (
+                overtimeLogs.map((o) => {
+                  const emp =
+                    typeof o.employeeId === "object" ? o.employeeId : null;
+                  return (
+                    <div
+                      key={o._id}
+                      className="flex items-center justify-between border-b pb-2 last:border-b-0 px-2"
+                    >
+                      <div>
+                        <p className="text-sm font-medium flex items-center gap-2">
+                          {emp
+                            ? `${emp.firstName} ${emp.lastName}`
+                            : "Employee"}
+                          <Badge
+                            variant="outline"
+                            className={`${overtimeStatusTone(o.status)} text-[10px]`}
+                          >
+                            {o.status}
+                          </Badge>
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {o.periodLabel} — {o.hoursLogged} hrs @{" "}
+                          {fmt(o.hourlyRate, o.currency)}/hr × {o.multiplier}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-semibold">
+                          {fmt(o.amount, o.currency)}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })
               )}
             </CardContent>
           </Card>
@@ -1550,6 +1700,17 @@ export default function HRPayroll() {
             decideLoanMutation.mutate({ id: decidingLoan._id, dto })
           }
           deciding={decideLoanMutation.isPending}
+        />
+      )}
+
+      {decidingOvertime && (
+        <DecideOvertimeDialog
+          log={decidingOvertime}
+          onClose={() => setDecidingOvertime(null)}
+          onDecide={(dto) =>
+            decideOvertimeMutation.mutate({ id: decidingOvertime._id, dto })
+          }
+          deciding={decideOvertimeMutation.isPending}
         />
       )}
 
@@ -2310,6 +2471,91 @@ function DecideLoanDialog({
                 endDate,
               })
             }
+          >
+            {deciding ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <ThumbsUp className="h-3.5 w-3.5 mr-1.5" />
+            )}
+            Approve
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DecideOvertimeDialog({
+  log,
+  onClose,
+  onDecide,
+  deciding,
+}: {
+  log: EmployeeOvertimeLog;
+  onClose: () => void;
+  onDecide: (dto: {
+    decision: "approved" | "rejected";
+    rejectionReason?: string;
+  }) => void;
+  deciding: boolean;
+}) {
+  const [rejectionReason, setRejectionReason] = useState("");
+  const emp = typeof log.employeeId === "object" ? log.employeeId : null;
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Overtime Entry</DialogTitle>
+          <DialogDescription>
+            {emp ? `${emp.firstName} ${emp.lastName}` : "Employee"} logged{" "}
+            {log.hoursLogged} hour{log.hoursLogged !== 1 ? "s" : ""} for{" "}
+            {log.periodLabel}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3 py-2">
+          <div className="border rounded-md p-3 bg-muted/30 text-sm space-y-1">
+            <p>
+              <span className="text-muted-foreground">Hours:</span>{" "}
+              {log.hoursLogged}
+            </p>
+            <p>
+              <span className="text-muted-foreground">Rate:</span>{" "}
+              {fmt(log.hourlyRate, log.currency)}/hr × {log.multiplier}
+            </p>
+            <p>
+              <span className="text-muted-foreground">Amount:</span>{" "}
+              {fmt(log.amount, log.currency)}
+            </p>
+            {log.note && (
+              <p>
+                <span className="text-muted-foreground">Note:</span> {log.note}
+              </p>
+            )}
+          </div>
+
+          <div className="space-y-1">
+            <Label>Rejection reason (required to reject)</Label>
+            <Textarea
+              rows={2}
+              placeholder="Why this entry can't be approved…"
+              value={rejectionReason}
+              onChange={(e) => setRejectionReason(e.target.value)}
+            />
+          </div>
+        </div>
+        <DialogFooter className="gap-2">
+          <Button
+            variant="outline"
+            className="border-destructive/30 text-destructive hover:bg-destructive/10"
+            disabled={deciding || !rejectionReason.trim()}
+            onClick={() => onDecide({ decision: "rejected", rejectionReason })}
+          >
+            <ThumbsDown className="h-3.5 w-3.5 mr-1.5" /> Reject
+          </Button>
+          <Button
+            disabled={deciding}
+            onClick={() => onDecide({ decision: "approved" })}
           >
             {deciding ? (
               <Loader2 className="h-4 w-4 animate-spin" />

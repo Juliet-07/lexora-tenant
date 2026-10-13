@@ -1398,6 +1398,90 @@ export const requestLoan = async (dto: {
   return res.data?.data ?? res.data;
 };
 
+// ── Overtime — Types ─────────────────────────────────────────────
+
+export type OvertimeStatus = "pending" | "approved" | "rejected";
+
+export interface EmployeeOvertimeLog {
+  _id: string;
+  employeeId:
+    | string
+    | {
+        _id: string;
+        firstName: string;
+        lastName: string;
+        employeeNumber?: string;
+      };
+  tenantId: string;
+  periodLabel: string;
+  periodStart: string;
+  periodEnd: string;
+  hoursLogged: number;
+  hourlyRate: number;
+  multiplier: number;
+  amount: number;
+  currency: string;
+  note: string | null;
+  status: OvertimeStatus;
+  decidedBy: string | null;
+  decidedAt: string | null;
+  rejectionReason: string | null;
+  createdAt: string;
+}
+
+// ── Overtime — Employee Side API calls ───────────────────────────
+
+export const fetchMyOvertime = async (): Promise<EmployeeOvertimeLog[]> => {
+  const res = await api.get("/employee/overtime");
+  const d = res.data?.data ?? res.data;
+  return Array.isArray(d) ? d : [];
+};
+
+export const logOvertime = async (dto: {
+  periodDate: string;
+  hoursLogged: number;
+  note?: string;
+}): Promise<EmployeeOvertimeLog> => {
+  const res = await api.post("/employee/overtime", dto);
+  return res.data?.data ?? res.data;
+};
+
+export const deleteMyOvertime = async (logId: string): Promise<void> => {
+  await api.delete(`/employee/overtime/${logId}`);
+};
+
+// ── Overtime — Tenant Side API calls ─────────────────────────────
+
+export const fetchAllOvertime = async (
+  status?: OvertimeStatus,
+): Promise<EmployeeOvertimeLog[]> => {
+  const res = await api.get("/hr/payroll/overtime", {
+    params: status ? { status } : undefined,
+  });
+  const d = res.data?.data ?? res.data;
+  return Array.isArray(d) ? d : [];
+};
+
+export const fetchPendingOvertime = async (): Promise<
+  EmployeeOvertimeLog[]
+> => {
+  const res = await api.get("/hr/payroll/overtime/pending");
+  const d = res.data?.data ?? res.data;
+  return Array.isArray(d) ? d : [];
+};
+
+export const decideOvertimeRequest = async (
+  logId: string,
+  dto: { decision: "approved" | "rejected"; rejectionReason?: string },
+): Promise<EmployeeOvertimeLog> => {
+  const res = await api.patch(`/hr/payroll/overtime/${logId}/decide`, dto);
+  return res.data?.data ?? res.data;
+};
+
+export const deleteOvertimeLog = async (logId: string): Promise<void> => {
+  await api.delete(`/hr/payroll/overtime/${logId}`);
+};
+
 // ── Payroll Runs — Types ────────────────────────────────────────
 
 export type PayrollRunStatus = "draft" | "processed" | "paid";

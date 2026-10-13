@@ -32,6 +32,10 @@ import {
   CreditCard,
   Loader2,
   Hourglass,
+  Clock,
+  Trash2,
+  CheckCircle2,
+  XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -39,8 +43,12 @@ import {
   downloadMyPayslipPdf,
   fetchMyLoans,
   requestLoan,
+  fetchMyOvertime,
+  logOvertime,
+  deleteMyOvertime,
   type MyPayslipSummary,
   type EmployeeLoan,
+  type EmployeeOvertimeLog,
 } from "@/lib/hr/hr-api";
 
 const currency = (n: number, code = "RWF") => {
@@ -71,6 +79,12 @@ const LOAN_STATUS_TONE: Record<string, string> = {
   paused: "bg-muted text-muted-foreground",
 };
 
+const OVERTIME_STATUS_TONE: Record<string, string> = {
+  pending: "bg-warning/10 text-warning border-warning/20",
+  approved: "bg-success/10 text-success border-success/20",
+  rejected: "bg-destructive/10 text-destructive border-destructive/20",
+};
+
 export default function MyPayslips() {
   const queryClient = useQueryClient();
   const [active, setActive] = useState<MyPayslipSummary | null>(null);
@@ -81,6 +95,12 @@ export default function MyPayslips() {
     amountRequested: "",
     reason: "",
   });
+  const [overtimeOpen, setOvertimeOpen] = useState(false);
+  const [overtimeForm, setOvertimeForm] = useState({
+    periodDate: new Date().toISOString().slice(0, 10),
+    hoursLogged: "",
+    note: "",
+  });
 
   const { data: payslips = [], isLoading: payslipsLoading } = useQuery({
     queryKey: ["my-payslips"],
@@ -90,6 +110,11 @@ export default function MyPayslips() {
   const { data: loans = [], isLoading: loansLoading } = useQuery({
     queryKey: ["my-loans"],
     queryFn: fetchMyLoans,
+  });
+
+  const { data: overtimeLogs = [], isLoading: overtimeLoading } = useQuery({
+    queryKey: ["my-overtime"],
+    queryFn: fetchMyOvertime,
   });
 
   const requestLoanMutation = useMutation({
@@ -104,6 +129,34 @@ export default function MyPayslips() {
     },
     onError: (err: any) =>
       toast.error(err?.response?.data?.message ?? "Failed to submit request"),
+  });
+
+  const logOvertimeMutation = useMutation({
+    mutationFn: logOvertime,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["my-overtime"] });
+      setOvertimeOpen(false);
+      setOvertimeForm({
+        periodDate: new Date().toISOString().slice(0, 10),
+        hoursLogged: "",
+        note: "",
+      });
+      toast.success(
+        "Overtime logged. It'll count toward your pay once approved.",
+      );
+    },
+    onError: (err: any) =>
+      toast.error(err?.response?.data?.message ?? "Failed to log overtime"),
+  });
+
+  const deleteOvertimeMutation = useMutation({
+    mutationFn: deleteMyOvertime,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["my-overtime"] });
+      toast.success("Overtime entry removed.");
+    },
+    onError: (err: any) =>
+      toast.error(err?.response?.data?.message ?? "Failed to remove entry"),
   });
 
   const payCurrency = payslips[0]?.payCurrency ?? "RWF";
@@ -168,6 +221,7 @@ export default function MyPayslips() {
       <Tabs defaultValue="payslips" className="space-y-4">
         <TabsList>
           <TabsTrigger value="payslips">Payslips</TabsTrigger>
+          <TabsTrigger value="overtime">Overtime</TabsTrigger>
           <TabsTrigger value="loans">Loans & Advances</TabsTrigger>
         </TabsList>
 
@@ -236,6 +290,104 @@ export default function MyPayslips() {
                         )}
                       </Button>
                     </div>
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="overtime">
+          <Card>
+            <CardHeader className="flex-row items-center justify-between space-y-0">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Clock className="h-4 w-4 text-primary" /> My Overtime
+              </CardTitle>
+              <Button size="sm" onClick={() => setOvertimeOpen(true)}>
+                Log Overtime
+              </Button>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <p className="text-xs text-muted-foreground -mt-1 mb-2">
+                Log hours for a month and your employer will review them. Any
+                month you don't log overtime, or it isn't approved in time,
+                counts as 0 on that month's payslip.
+              </p>
+              {overtimeLoading ? (
+                <div className="flex items-center justify-center py-10 gap-2 text-muted-foreground">
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  <span className="text-sm">Loading…</span>
+                </div>
+              ) : overtimeLogs.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-6 text-center">
+                  No overtime logged yet.
+                </p>
+              ) : (
+                overtimeLogs.map((o) => (
+                  <div key={o._id} className="p-4 border rounded-lg">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="font-medium">{o.periodLabel}</p>
+                      <Badge
+                        variant="outline"
+                        className={OVERTIME_STATUS_TONE[o.status] ?? ""}
+                      >
+                        {o.status === "pending" && (
+                          <Hourglass className="h-3 w-3 mr-1" />
+                        )}
+                        {o.status === "approved" && (
+                          <CheckCircle2 className="h-3 w-3 mr-1" />
+                        )}
+                        {o.status === "rejected" && (
+                          <XCircle className="h-3 w-3 mr-1" />
+                        )}
+                        {o.status}
+                      </Badge>
+                    </div>
+                    <div className="grid grid-cols-3 gap-3 text-xs">
+                      <div>
+                        <p className="text-muted-foreground">Hours</p>
+                        <p className="font-mono text-sm">{o.hoursLogged}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">Rate</p>
+                        <p className="font-mono text-sm">
+                          {currency(o.hourlyRate, o.currency)}/hr ×{" "}
+                          {o.multiplier}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">Amount</p>
+                        <p className="font-mono text-sm font-semibold">
+                          {currency(o.amount, o.currency)}
+                        </p>
+                      </div>
+                    </div>
+                    {o.note && (
+                      <p className="text-xs text-muted-foreground mt-2">
+                        {o.note}
+                      </p>
+                    )}
+                    {o.status === "rejected" && o.rejectionReason && (
+                      <div className="text-xs bg-destructive/5 border border-destructive/20 rounded p-2 mt-2">
+                        <span className="font-medium text-destructive">
+                          Reason:{" "}
+                        </span>
+                        <span className="text-muted-foreground">
+                          {o.rejectionReason}
+                        </span>
+                      </div>
+                    )}
+                    {o.status === "pending" && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="mt-2 text-muted-foreground hover:text-destructive"
+                        disabled={deleteOvertimeMutation.isPending}
+                        onClick={() => deleteOvertimeMutation.mutate(o._id)}
+                      >
+                        <Trash2 className="h-3 w-3 mr-1" /> Remove
+                      </Button>
+                    )}
                   </div>
                 ))
               )}
@@ -531,6 +683,87 @@ export default function MyPayslips() {
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 "Submit Request"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Log overtime dialog */}
+      <Dialog open={overtimeOpen} onOpenChange={setOvertimeOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Log Overtime</DialogTitle>
+            <DialogDescription>
+              Pick any date in the month you worked the hours. Your employer
+              must approve this before it's added to that month's payslip.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="space-y-1">
+              <Label>Month</Label>
+              <Input
+                type="date"
+                value={overtimeForm.periodDate}
+                onChange={(e) =>
+                  setOvertimeForm((f) => ({
+                    ...f,
+                    periodDate: e.target.value,
+                  }))
+                }
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>Overtime hours</Label>
+              <Input
+                type="number"
+                min="0"
+                step="0.5"
+                placeholder="0"
+                value={overtimeForm.hoursLogged}
+                onChange={(e) =>
+                  setOvertimeForm((f) => ({
+                    ...f,
+                    hoursLogged: e.target.value,
+                  }))
+                }
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>Note (optional)</Label>
+              <Textarea
+                rows={3}
+                placeholder="What was the overtime for?"
+                value={overtimeForm.note}
+                onChange={(e) =>
+                  setOvertimeForm((f) => ({ ...f, note: e.target.value }))
+                }
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOvertimeOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={
+                !overtimeForm.periodDate ||
+                !overtimeForm.hoursLogged ||
+                Number(overtimeForm.hoursLogged) <= 0 ||
+                logOvertimeMutation.isPending
+              }
+              onClick={() =>
+                logOvertimeMutation.mutate({
+                  periodDate: overtimeForm.periodDate,
+                  hoursLogged: Number(overtimeForm.hoursLogged),
+                  note: overtimeForm.note || undefined,
+                })
+              }
+            >
+              {logOvertimeMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                "Submit"
               )}
             </Button>
           </DialogFooter>
