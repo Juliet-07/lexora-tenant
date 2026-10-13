@@ -1588,7 +1588,12 @@ export default function HREmployees() {
 
             <div className="space-y-1 col-span-2">
               <div className="flex items-center justify-between">
-                <Label>Allowances (optional)</Label>
+                <Label>
+                  Allowances (optional){" "}
+                  <span className="text-xs font-normal text-muted-foreground">
+                    — paid in {empForm.salaryCurrency || "RWF"}, same as salary
+                  </span>
+                </Label>
                 <Button
                   type="button"
                   size="sm"
@@ -1613,7 +1618,7 @@ export default function HREmployees() {
               {(empForm.allowances ?? []).map((a, i) => (
                 <div
                   key={a.key}
-                  className="grid grid-cols-[1fr_auto_auto] gap-2 items-center"
+                  className="grid grid-cols-[1fr_auto_auto_auto] gap-2 items-center"
                 >
                   <Input
                     placeholder="e.g. Transport Allowance"
@@ -1643,6 +1648,9 @@ export default function HREmployees() {
                       }))
                     }
                   />
+                  <span className="text-xs text-muted-foreground w-10">
+                    {empForm.salaryCurrency || "RWF"}
+                  </span>
                   <Button
                     type="button"
                     size="icon"

@@ -788,6 +788,24 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
                     label="Salary"
                     value={fmtSalary(emp.salary, emp.salaryCurrency)}
                   />
+                  {(emp.allowances ?? []).length > 0 && (
+                    <div className="flex items-start justify-between gap-3 py-1.5">
+                      <span className="text-muted-foreground flex items-center gap-2 text-xs shrink-0">
+                        <Wallet className="h-3.5 w-3.5" /> Allowances
+                      </span>
+                      <div className="text-right space-y-0.5">
+                        {emp.allowances.map((a) => (
+                          <p key={a.key} className="text-sm font-medium">
+                            {a.label}:{" "}
+                            {fmtSalary(
+                              a.amount,
+                              a.currency ?? emp.salaryCurrency,
+                            )}
+                          </p>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   <Row
                     icon={FileText}
                     label="Tax ID"
