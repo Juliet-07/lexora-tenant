@@ -62,6 +62,8 @@ import {
   displayName,
   type ApiClient,
 } from "@/lib/client/clients-api";
+import { fetchContacts, type Contact } from "@/lib/crm/crm-contacts-api";
+import { fetchBoardMembers, type BoardMember } from "@/lib/grc/governance-api";
 import {
   fetchSegments,
   createSegment,
@@ -82,9 +84,17 @@ import {
   markDraftConverted,
   type Segment,
   type SegmentRuleField,
+  type SegmentAudience,
   type Campaign,
   type CampaignType,
 } from "@/lib/crm/tools-api";
+
+const audienceLabels: Record<SegmentAudience, string> = {
+  Client: "Clients",
+  Contact: "CRM contacts",
+  BoardMember: "Board members",
+};
+const audienceOptions: SegmentAudience[] = ["Client", "Contact", "BoardMember"];
 
 const statusClass: Record<Campaign["status"], string> = {
   Draft: "bg-muted text-muted-foreground",
@@ -160,6 +170,14 @@ export default function Newsletter() {
     queryKey: ["clients-for-segments"],
     queryFn: fetchClients,
   });
+  const { data: contacts = [] } = useQuery({
+    queryKey: ["contacts-for-segments"],
+    queryFn: fetchContacts,
+  });
+  const { data: boardMembers = [] } = useQuery({
+    queryKey: ["board-members-for-segments"],
+    queryFn: fetchBoardMembers,
+  });
 
   const invalidateSegments = () =>
     queryClient.invalidateQueries({ queryKey: ["segments"] });
@@ -204,6 +222,7 @@ export default function Newsletter() {
     name: string;
     description: string;
     mode: "manual" | "rule";
+    audience: SegmentAudience;
     ruleField: SegmentRuleField;
     ruleValue: string;
     memberIds: string[];
@@ -211,6 +230,7 @@ export default function Newsletter() {
     name: "",
     description: "",
     mode: "rule",
+    audience: "Client",
     ruleField: "classification",
     ruleValue: "corporate",
     memberIds: [],
@@ -231,6 +251,7 @@ export default function Newsletter() {
       name: "",
       description: "",
       mode: "rule",
+      audience: "Client",
       ruleField: "classification",
       ruleValue: "corporate",
       memberIds: [],
@@ -243,6 +264,7 @@ export default function Newsletter() {
       name: s.name,
       description: s.description,
       mode: s.mode,
+      audience: s.audience ?? "Client",
       ruleField: s.rule?.field ?? "classification",
       ruleValue: s.rule?.value ?? "corporate",
       memberIds: s.memberIds,
@@ -256,6 +278,7 @@ export default function Newsletter() {
         name: segDraft.name,
         description: segDraft.description,
         mode: segDraft.mode,
+        audience: segDraft.audience,
         memberIds: segDraft.mode === "manual" ? segDraft.memberIds : undefined,
         rule:
           segDraft.mode === "rule"
@@ -284,16 +307,26 @@ export default function Newsletter() {
     onError: onErr("Failed to delete segment"),
   });
 
+  // Manual-picker source list depends on the segment's own audience —
+  // Client pulls from the tenant's clients, Contact from CRM contacts,
+  // BoardMember from governance's board members (excluding offboarded,
+  // which can't receive anything anyway).
   const filteredClientList = clients.filter((c) =>
     displayName(c).toLowerCase().includes(segSearch.toLowerCase()),
   );
+  const filteredContactList = contacts.filter((c) =>
+    c.name.toLowerCase().includes(segSearch.toLowerCase()),
+  );
+  const filteredBoardMemberList = boardMembers
+    .filter((m) => m.lifecycleStatus !== "Offboarded")
+    .filter((m) => m.name.toLowerCase().includes(segSearch.toLowerCase()));
 
   // ── Campaign dialog ──────────────────────────────────────
   const [openCampaignDialog, setOpenCampaignDialog] = useState(false);
   const [campaignDraft, setCampaignDraft] = useState({
     name: "",
     type: "Newsletter" as CampaignType,
-    segmentId: "",
+    segmentIds: [] as string[],
     subject: "",
     body: "",
     event: emptyEventDetails,
@@ -318,7 +351,7 @@ export default function Newsletter() {
     setCampaignDraft({
       name: prefill?.title ?? "",
       type: "Newsletter",
-      segmentId: segments[0]?._id ?? "",
+      segmentIds: segments[0] ? [segments[0]._id] : [],
       subject: prefill?.title ?? "",
       body: prefill?.body ?? "",
       event: emptyEventDetails,
@@ -334,7 +367,7 @@ export default function Newsletter() {
     setCampaignDraft({
       name: c.name,
       type: c.type,
-      segmentId: c.segmentId,
+      segmentIds: c.segmentIds,
       subject: c.subject,
       body: c.body,
       event: c.event ?? emptyEventDetails,
@@ -351,7 +384,7 @@ export default function Newsletter() {
       const payload = {
         name: campaignDraft.name,
         type: campaignDraft.type,
-        segmentId: campaignDraft.segmentId,
+        segmentIds: campaignDraft.segmentIds,
         subject: campaignDraft.subject,
         body: campaignDraft.body,
         event:
@@ -399,7 +432,17 @@ export default function Newsletter() {
     onError: onErr("Failed to send test"),
   });
   const scheduleMut = useMutation({
-    mutationFn: () => scheduleCampaign(detailCampaign!._id, scheduleAt),
+    // `scheduleAt` comes straight from a <input type="datetime-local">,
+    // which yields a naive, timezone-less string (e.g. "2026-10-13T14:30").
+    // `new Date(...)` on that string is parsed as *this browser's* local
+    // time (i.e. the tenant's own timezone) per the JS Date spec, so
+    // calling `.toISOString()` on it converts to an unambiguous UTC
+    // instant before it leaves the browser. Sending the naive string
+    // as-is let the backend's `new Date(dto.scheduledAt)` reinterpret it
+    // as the *server's* local time (UTC in production), which silently
+    // shifted Kigali-time (UTC+2) selections 2 hours into the future.
+    mutationFn: () =>
+      scheduleCampaign(detailCampaign!._id, new Date(scheduleAt).toISOString()),
     onSuccess: () => {
       invalidateCampaigns();
       toast({ title: "Campaign scheduled" });
@@ -555,7 +598,7 @@ export default function Newsletter() {
                           </Badge>
                         </TableCell>
                         <TableCell className="text-sm">
-                          {c.segmentName}
+                          {c.segmentNames?.join(", ") || "—"}
                         </TableCell>
                         <TableCell>
                           <Badge
@@ -660,6 +703,7 @@ export default function Newsletter() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Segment</TableHead>
+                    <TableHead>Audience</TableHead>
                     <TableHead>Criteria</TableHead>
                     <TableHead className="text-right">Members</TableHead>
                     <TableHead className="w-56 text-right">Actions</TableHead>
@@ -673,6 +717,11 @@ export default function Newsletter() {
                         <p className="text-xs text-muted-foreground">
                           {s.description}
                         </p>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline">
+                          {audienceLabels[s.audience ?? "Client"]}
+                        </Badge>
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
                         {s.mode === "manual"
@@ -716,7 +765,7 @@ export default function Newsletter() {
                   {!segments.length && (
                     <TableRow>
                       <TableCell
-                        colSpan={4}
+                        colSpan={5}
                         className="py-8 text-center text-sm text-muted-foreground"
                       >
                         No segments yet.
@@ -757,10 +806,43 @@ export default function Newsletter() {
                 }
               />
             </div>
+            <div>
+              <Label>Audience</Label>
+              <Select
+                value={segDraft.audience}
+                onValueChange={(v) =>
+                  setSegDraft({
+                    ...segDraft,
+                    audience: v as SegmentAudience,
+                    // Rule mode only exists for Client — switching to
+                    // Contact/BoardMember falls back to manual.
+                    mode: v === "Client" ? segDraft.mode : "manual",
+                    memberIds: [],
+                  })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {audienceOptions.map((a) => (
+                    <SelectItem key={a} value={a}>
+                      {audienceLabels[a]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Clients, CRM contacts and board members each have their own
+                segments — a campaign can target several at once.
+              </p>
+            </div>
+
             <div className="flex gap-2">
               <Button
                 size="sm"
                 variant={segDraft.mode === "rule" ? "default" : "outline"}
+                disabled={segDraft.audience !== "Client"}
                 onClick={() => setSegDraft({ ...segDraft, mode: "rule" })}
               >
                 Rule-based
@@ -773,6 +855,13 @@ export default function Newsletter() {
                 Manual selection
               </Button>
             </div>
+            {segDraft.audience !== "Client" && (
+              <p className="text-xs text-muted-foreground">
+                Rule-based segments aren't available for{" "}
+                {audienceLabels[segDraft.audience].toLowerCase()} yet — pick
+                members manually below.
+              </p>
+            )}
 
             {segDraft.mode === "rule" ? (
               <div className="grid grid-cols-2 gap-3">
@@ -828,35 +917,96 @@ export default function Newsletter() {
             ) : (
               <div className="space-y-2">
                 <Input
-                  placeholder="Search clients…"
+                  placeholder={`Search ${audienceLabels[segDraft.audience].toLowerCase()}…`}
                   value={segSearch}
                   onChange={(e) => setSegSearch(e.target.value)}
                 />
                 <ScrollArea className="h-48 rounded border p-2">
-                  {filteredClientList.map((c) => (
-                    <label
-                      key={c._id}
-                      className="flex items-center gap-2 py-1 text-sm"
-                    >
-                      <Checkbox
-                        checked={segDraft.memberIds.includes(c._id)}
-                        onCheckedChange={(chk) =>
-                          setSegDraft({
-                            ...segDraft,
-                            memberIds: chk
-                              ? [...segDraft.memberIds, c._id]
-                              : segDraft.memberIds.filter((id) => id !== c._id),
-                          })
-                        }
-                      />
-                      {displayName(c)}
-                    </label>
-                  ))}
-                  {!filteredClientList.length && (
-                    <p className="p-2 text-xs text-muted-foreground">
-                      No clients match.
-                    </p>
-                  )}
+                  {segDraft.audience === "Client" &&
+                    filteredClientList.map((c) => (
+                      <label
+                        key={c._id}
+                        className="flex items-center gap-2 py-1 text-sm"
+                      >
+                        <Checkbox
+                          checked={segDraft.memberIds.includes(c._id)}
+                          onCheckedChange={(chk) =>
+                            setSegDraft({
+                              ...segDraft,
+                              memberIds: chk
+                                ? [...segDraft.memberIds, c._id]
+                                : segDraft.memberIds.filter(
+                                    (id) => id !== c._id,
+                                  ),
+                            })
+                          }
+                        />
+                        {displayName(c)}
+                      </label>
+                    ))}
+                  {segDraft.audience === "Contact" &&
+                    filteredContactList.map((c) => (
+                      <label
+                        key={c._id}
+                        className="flex items-center gap-2 py-1 text-sm"
+                      >
+                        <Checkbox
+                          checked={segDraft.memberIds.includes(c._id)}
+                          onCheckedChange={(chk) =>
+                            setSegDraft({
+                              ...segDraft,
+                              memberIds: chk
+                                ? [...segDraft.memberIds, c._id]
+                                : segDraft.memberIds.filter(
+                                    (id) => id !== c._id,
+                                  ),
+                            })
+                          }
+                        />
+                        {c.name}
+                        {c.email ? "" : " (no email)"}
+                      </label>
+                    ))}
+                  {segDraft.audience === "BoardMember" &&
+                    filteredBoardMemberList.map((m) => (
+                      <label
+                        key={m._id}
+                        className="flex items-center gap-2 py-1 text-sm"
+                      >
+                        <Checkbox
+                          checked={segDraft.memberIds.includes(m._id)}
+                          onCheckedChange={(chk) =>
+                            setSegDraft({
+                              ...segDraft,
+                              memberIds: chk
+                                ? [...segDraft.memberIds, m._id]
+                                : segDraft.memberIds.filter(
+                                    (id) => id !== m._id,
+                                  ),
+                            })
+                          }
+                        />
+                        {m.name}
+                      </label>
+                    ))}
+                  {segDraft.audience === "Client" &&
+                    !filteredClientList.length && (
+                      <p className="p-2 text-xs text-muted-foreground">
+                        No clients match.
+                      </p>
+                    )}
+                  {segDraft.audience === "Contact" &&
+                    !filteredContactList.length && (
+                      <p className="p-2 text-xs text-muted-foreground">
+                        No contacts match.
+                      </p>
+                    )}
+                  {segDraft.audience === "BoardMember" &&
+                    !filteredBoardMemberList.length && (
+                      <p className="p-2 text-xs text-muted-foreground">
+                        No board members match.
+                      </p>
+                    )}
                 </ScrollArea>
               </div>
             )}
@@ -938,27 +1088,48 @@ export default function Newsletter() {
               </div>
             </div>
             <div>
-              <Label>Target segment</Label>
-              <Select
-                value={campaignDraft.segmentId}
-                onValueChange={(v) =>
-                  setCampaignDraft({ ...campaignDraft, segmentId: v })
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
+              <Label>Target segments</Label>
+              <div className="rounded-md border p-2">
+                <ScrollArea className="h-32">
                   {segments.map((s) => (
-                    <SelectItem key={s._id} value={s._id}>
-                      {s.name} ({s.memberCount})
-                    </SelectItem>
+                    <label
+                      key={s._id}
+                      className="flex items-center gap-2 py-1 text-sm"
+                    >
+                      <Checkbox
+                        checked={campaignDraft.segmentIds.includes(s._id)}
+                        onCheckedChange={(chk) =>
+                          setCampaignDraft({
+                            ...campaignDraft,
+                            segmentIds: chk
+                              ? [...campaignDraft.segmentIds, s._id]
+                              : campaignDraft.segmentIds.filter(
+                                  (id) => id !== s._id,
+                                ),
+                          })
+                        }
+                      />
+                      {s.name}
+                      <Badge variant="outline" className="ml-1">
+                        {audienceLabels[s.audience ?? "Client"]}
+                      </Badge>
+                      <span className="text-xs text-muted-foreground">
+                        ({s.memberCount})
+                      </span>
+                    </label>
                   ))}
-                </SelectContent>
-              </Select>
+                  {!segments.length && (
+                    <p className="p-2 text-xs text-muted-foreground">
+                      No segments yet.
+                    </p>
+                  )}
+                </ScrollArea>
+              </div>
               <p className="mt-1 text-xs text-muted-foreground">
-                Recipients are resolved from this segment's real, current
-                members when the campaign is created.
+                A campaign can target several segments at once — recipients are
+                the union of their real, current members (clients, contacts
+                and/or board members), de-duplicated by email, and resolved when
+                the campaign is created.
               </p>
             </div>
             <div>
@@ -1054,7 +1225,7 @@ export default function Newsletter() {
               onClick={() => saveCampaignMut.mutate()}
               disabled={
                 !campaignDraft.name.trim() ||
-                !campaignDraft.segmentId ||
+                !campaignDraft.segmentIds.length ||
                 saveCampaignMut.isPending
               }
             >
@@ -1269,16 +1440,22 @@ export default function Newsletter() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Client</TableHead>
+                        <TableHead>Recipient</TableHead>
+                        <TableHead>Audience</TableHead>
                         <TableHead>Email</TableHead>
                         <TableHead>Delivered</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {detailCampaign.recipients.map((r) => (
-                        <TableRow key={r.clientId}>
+                      {detailCampaign.recipients.map((r, i) => (
+                        <TableRow key={r.sourceId ?? r.clientId ?? i}>
                           <TableCell className="text-sm">
                             {r.clientName}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="text-xs">
+                              {audienceLabels[r.sourceType ?? "Client"]}
+                            </Badge>
                           </TableCell>
                           <TableCell className="text-xs text-muted-foreground">
                             {r.email}

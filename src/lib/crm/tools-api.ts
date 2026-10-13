@@ -400,6 +400,10 @@ export const fetchMentionDirectory = async (): Promise<
 
 export type SegmentMode = "manual" | "rule";
 export type SegmentRuleField = "classification" | "riskLevel" | "status";
+// Which real tenant-side audience a segment draws from. Rule mode
+// only exists for Client today — Contact/BoardMember segments are
+// always manual (see the backend's SegmentService.resolveMembers).
+export type SegmentAudience = "Client" | "Contact" | "BoardMember";
 
 export interface SegmentRule {
   field: SegmentRuleField;
@@ -410,6 +414,7 @@ export interface Segment {
   name: string;
   description: string;
   mode: SegmentMode;
+  audience: SegmentAudience;
   memberIds: string[];
   rule: SegmentRule | null;
   memberCount: number;
@@ -429,6 +434,7 @@ export const createSegment = async (dto: {
   name: string;
   description?: string;
   mode: SegmentMode;
+  audience: SegmentAudience;
   memberIds?: string[];
   rule?: SegmentRule;
 }): Promise<Segment> => unwrap(await api.post("/tools/segments", dto));
@@ -438,6 +444,7 @@ export const updateSegment = async (
     name: string;
     description?: string;
     mode: SegmentMode;
+    audience: SegmentAudience;
     memberIds?: string[];
     rule?: SegmentRule;
   },
@@ -468,7 +475,12 @@ export interface CampaignEventDetails {
   rsvp: boolean;
 }
 export interface CampaignRecipient {
-  clientId: string;
+  // Generalised for Contact/BoardMember audiences — sourceType/
+  // sourceId are the real identity now; clientId stays populated
+  // only when sourceType is "Client".
+  sourceType: SegmentAudience;
+  sourceId: string;
+  clientId: string | null;
   clientName: string;
   email: string;
   delivered: boolean;
@@ -481,8 +493,10 @@ export interface Campaign {
   _id: string;
   name: string;
   type: CampaignType;
-  segmentId: string;
-  segmentName: string;
+  // Plural — a campaign can target several segments (of mixed
+  // audiences) at once.
+  segmentIds: string[];
+  segmentNames: string[];
   subject: string;
   body: string;
   event: CampaignEventDetails | null;
@@ -503,7 +517,7 @@ export const fetchCampaign = async (id: string): Promise<Campaign> =>
 export const createCampaign = async (dto: {
   name: string;
   type: CampaignType;
-  segmentId: string;
+  segmentIds: string[];
   subject?: string;
   body?: string;
   event?: Partial<CampaignEventDetails>;
@@ -513,7 +527,7 @@ export const updateCampaign = async (
   dto: {
     name: string;
     type: CampaignType;
-    segmentId: string;
+    segmentIds: string[];
     subject?: string;
     body?: string;
     event?: Partial<CampaignEventDetails>;

@@ -661,7 +661,7 @@ export default function Reports() {
             rows: campaigns.map((c: Campaign) => [
               c.name,
               c.type,
-              c.segmentName,
+              c.segmentNames?.join(", ") ?? "",
               c.status,
               c.recipients.length,
               c.recipients.filter((r) => r.delivered).length,
