@@ -6,7 +6,6 @@ import {
   Handle,
   Position,
   getNodesBounds,
-  getViewportForBounds,
   type Node,
   type Edge,
   type NodeProps,
@@ -75,6 +74,7 @@ import {
   type OrgStructureNode,
   type OrgStructureNodeType,
 } from "@/lib/grc/governance-api";
+import { getOrganogramImageLayout } from "@/lib/grc/organogramImageLayout";
 
 // ─────────────────────────────────────────────────────────────
 // Organisation Structure (Oct 2026 rework) — previously a read-only
@@ -601,13 +601,9 @@ export default function OrgStructure() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roots, totalNodes, user?.businessName]);
 
-  // Renders the chart's own full extent as a PNG, independent of
-  // whatever's currently panned/zoomed into view — the official
-  // ReactFlow export recipe (getNodesBounds + getViewportForBounds,
-  // then capture the `.react-flow__viewport` element with that exact
-  // transform applied) rather than html2canvas on the outer container,
-  // which mishandles the CSS transform ReactFlow pans/zooms with and
-  // was the direct cause of the previous "scattered" exports.
+  // Export at natural node size with a small pixel margin, independent
+  // of screen zoom. ReactFlow's viewport padding is proportional, not
+  // pixels: passing 48 there shrank the whole chart to its minimum zoom.
   const downloadAsImage = async () => {
     const viewportEl = chartWrapperRef.current?.querySelector<HTMLElement>(
       ".react-flow__viewport",
@@ -616,27 +612,20 @@ export default function OrgStructure() {
     setDownloading(true);
     try {
       const { toPng } = await import("html-to-image");
-      const padding = 48;
       const bounds = getNodesBounds(flowNodes);
-      const imageWidth = Math.ceil(bounds.width + padding * 2);
-      const imageHeight = Math.ceil(bounds.height + padding * 2);
-      const viewport = getViewportForBounds(
-        bounds,
-        imageWidth,
-        imageHeight,
-        0.1,
-        2,
-        padding,
-      );
+      const { width: imageWidth, height: imageHeight, transform } =
+        getOrganogramImageLayout(bounds);
+      await document.fonts.ready;
       const dataUrl = await toPng(viewportEl, {
-        backgroundColor: "#ffffff",
+        backgroundColor: getComputedStyle(chartWrapperRef.current ?? viewportEl).backgroundColor,
         width: imageWidth,
         height: imageHeight,
         pixelRatio: 2,
         style: {
           width: `${imageWidth}px`,
           height: `${imageHeight}px`,
-          transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.zoom})`,
+          transform,
+          transformOrigin: "0 0",
         },
       });
       const link = document.createElement("a");
