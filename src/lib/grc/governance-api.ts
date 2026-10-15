@@ -935,6 +935,58 @@ export const fetchBoardMember = async (id: string): Promise<BoardMember> => {
   return res.data?.data ?? res.data;
 };
 
+// ══════════════════════════════════════════════════════════════
+// Board Messaging — the tenant's own side of a thread with a real
+// board member (see lexora-engine's TenantBoardMessagingController /
+// BoardMessagingService's …ForTenant methods). Mirrors the board
+// portal's own board-api.ts shapes exactly — same underlying
+// collection, just reached from the tenant side. A "thread" is
+// derived server-side, never a separate document to create first.
+// ══════════════════════════════════════════════════════════════
+
+export interface BoardMessageThread {
+  counterpartId: string;
+  name: string;
+  role: string;
+  lastMessage: string;
+  lastAt: string;
+  unreadCount: number;
+}
+
+export interface BoardMessageItem {
+  id: string;
+  body: string;
+  fromMe: boolean;
+  createdAt: string;
+}
+
+export const fetchBoardMessageThreads = async (): Promise<
+  BoardMessageThread[]
+> => {
+  const res = await api.get("/grc/governance/board-messages/threads");
+  const d = res.data?.data ?? res.data;
+  return Array.isArray(d) ? d : [];
+};
+
+export const fetchBoardMessageThread = async (
+  counterpartId: string,
+): Promise<BoardMessageItem[]> => {
+  const res = await api.get(`/grc/governance/board-messages/${counterpartId}`);
+  const d = res.data?.data ?? res.data;
+  return Array.isArray(d) ? d : [];
+};
+
+export const sendBoardMessage = async (
+  counterpartId: string,
+  body: string,
+): Promise<BoardMessageItem> => {
+  const res = await api.post(
+    `/grc/governance/board-messages/${counterpartId}`,
+    { body },
+  );
+  return res.data?.data ?? res.data;
+};
+
 export const createBoardMember = async (dto: {
   name: string;
   role: BoardMemberRole;
@@ -2454,7 +2506,16 @@ export interface OrgStructureNode {
   type: OrgStructureNodeType;
   name: string;
   subtitle: string | null;
-  parentId: string | null;
+  // Every parent this node is connected to (Oct 2026: "make it
+  // possible that in the reports to/sits under field more than 1 can
+  // be selected, to allow that one thing can be connected to 2
+  // things") — empty for a root-level node.
+  parentIds: string[];
+  // Which parent THIS occurrence in the tree is rendered under — a
+  // node with more than one parent appears once per parent, each
+  // with its own contextParentId, so move left/right acts on the
+  // right sibling group. Null at the top level.
+  contextParentId: string | null;
   order: number;
   children: OrgStructureNode[];
 }
@@ -2476,7 +2537,7 @@ export const createOrgStructureNode = async (payload: {
   type: OrgStructureNodeType;
   name: string;
   subtitle?: string;
-  parentId?: string | null;
+  parentIds?: string[];
 }) => {
   const res = await api.post("/grc/governance/org-structure", payload);
   return res.data?.data ?? res.data;
@@ -2488,7 +2549,7 @@ export const updateOrgStructureNode = async (
     type: OrgStructureNodeType;
     name: string;
     subtitle: string | null;
-    parentId: string | null;
+    parentIds: string[];
   }>,
 ) => {
   const res = await api.patch(`/grc/governance/org-structure/${id}`, payload);
@@ -2498,9 +2559,11 @@ export const updateOrgStructureNode = async (
 export const moveOrgStructureNode = async (
   id: string,
   direction: "up" | "down",
+  contextParentId?: string | null,
 ) => {
   const res = await api.patch(`/grc/governance/org-structure/${id}/move`, {
     direction,
+    contextParentId,
   });
   return res.data?.data ?? res.data;
 };

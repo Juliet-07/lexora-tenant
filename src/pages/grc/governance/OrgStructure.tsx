@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
@@ -88,6 +89,9 @@ const TYPE_STYLES: Record<OrgStructureNodeType, string> = {
   Role: "bg-amber-500/10 text-amber-600 border-amber-500/30",
 };
 
+// Walks every occurrence in the chart — a node connected to more than
+// one parent (Oct 2026: "one thing can be connected to 2 things")
+// appears once per parent, each as its own entry here.
 function flatten(
   nodes: OrgStructureNode[],
   depth = 0,
@@ -98,16 +102,35 @@ function flatten(
   ]);
 }
 
-function countAll(nodes: OrgStructureNode[]): number {
-  return nodes.reduce((s, n) => s + 1 + countAll(n.children), 0);
+// One entry per real node, keeping its shallowest occurrence — for
+// anywhere a node should be listed/selectable exactly once regardless
+// of how many parents it's connected to (the "All Nodes" tab, and the
+// "reports to / sits under" picker).
+function dedupeByNode(
+  occurrences: { node: OrgStructureNode; depth: number }[],
+): { node: OrgStructureNode; depth: number }[] {
+  const seen = new Set<string>();
+  const result: { node: OrgStructureNode; depth: number }[] = [];
+  for (const entry of occurrences) {
+    if (seen.has(entry.node.id)) continue;
+    seen.add(entry.node.id);
+    result.push(entry);
+  }
+  return result;
 }
 
-function collectIds(node: OrgStructureNode): Set<string> {
-  const ids = new Set<string>([node.id]);
-  for (const c of node.children) {
-    for (const id of collectIds(c)) ids.add(id);
-  }
-  return ids;
+// Self + every descendant, however many parents each one has — used
+// to stop a node being set to report to itself or to one of its own
+// descendants. Cycle-safe (visited guard) even though the backend
+// never actually creates one.
+function collectIds(
+  node: OrgStructureNode,
+  visited: Set<string> = new Set(),
+): Set<string> {
+  if (visited.has(node.id)) return visited;
+  visited.add(node.id);
+  for (const c of node.children) collectIds(c, visited);
+  return visited;
 }
 
 interface Handlers {
@@ -249,8 +272,12 @@ export default function OrgStructure() {
   });
 
   const roots = data?.roots ?? [];
-  const flat = useMemo(() => flatten(roots), [roots]);
-  const totalNodes = useMemo(() => countAll(roots), [roots]);
+  // All occurrences (for the chart, which intentionally renders a
+  // multi-parent node once per parent) vs. one entry per real node
+  // (for anywhere it should only be listed/selectable once).
+  const flatOccurrences = useMemo(() => flatten(roots), [roots]);
+  const flat = useMemo(() => dedupeByNode(flatOccurrences), [flatOccurrences]);
+  const totalNodes = data?.stats?.totalNodes ?? 0;
 
   // ── Add / Edit dialog ──────────────────────────────────────
   const [formOpen, setFormOpen] = useState(false);
@@ -259,7 +286,10 @@ export default function OrgStructure() {
   const [formType, setFormType] = useState<OrgStructureNodeType>("Department");
   const [formName, setFormName] = useState("");
   const [formSubtitle, setFormSubtitle] = useState("");
-  const [formParentId, setFormParentId] = useState<string>("none");
+  // Oct 2026: "make it possible that in the reports to/sits under
+  // field more than 1 can be selected, to allow that one thing can be
+  // connected to 2 things" — empty means top-level/root.
+  const [formParentIds, setFormParentIds] = useState<string[]>([]);
   const [excludedParentIds, setExcludedParentIds] = useState<Set<string>>(
     new Set(),
   );
@@ -270,7 +300,7 @@ export default function OrgStructure() {
     setFormType(parent ? "Role" : "Department");
     setFormName("");
     setFormSubtitle("");
-    setFormParentId(parent ? parent.id : "none");
+    setFormParentIds(parent ? [parent.id] : []);
     setExcludedParentIds(new Set());
     setFormOpen(true);
   };
@@ -281,8 +311,8 @@ export default function OrgStructure() {
     setFormType(node.type);
     setFormName(node.name);
     setFormSubtitle(node.subtitle ?? "");
-    setFormParentId(node.parentId ?? "none");
-    // A node can't be moved under itself or its own descendants.
+    setFormParentIds(node.parentIds ?? []);
+    // A node can't report to itself or to one of its own descendants.
     setExcludedParentIds(collectIds(node));
     setFormOpen(true);
   };
@@ -319,8 +349,15 @@ export default function OrgStructure() {
   });
 
   const moveMut = useMutation({
-    mutationFn: ({ id, direction }: { id: string; direction: "up" | "down" }) =>
-      moveOrgStructureNode(id, direction),
+    mutationFn: ({
+      id,
+      direction,
+      contextParentId,
+    }: {
+      id: string;
+      direction: "up" | "down";
+      contextParentId: string | null;
+    }) => moveOrgStructureNode(id, direction, contextParentId),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["org-structure"] }),
     onError: (e: any) =>
       toast({
@@ -355,7 +392,7 @@ export default function OrgStructure() {
       type: formType,
       name: formName.trim(),
       subtitle: formSubtitle.trim() || null,
-      parentId: formParentId === "none" ? null : formParentId,
+      parentIds: formParentIds,
     };
     if (formMode === "create") {
       createMut.mutate(payload as any);
@@ -376,7 +413,12 @@ export default function OrgStructure() {
     onAddChild: openCreate,
     onEdit: openEdit,
     onDelete: setDeleteTarget,
-    onMove: (node, direction) => moveMut.mutate({ id: node.id, direction }),
+    onMove: (node, direction) =>
+      moveMut.mutate({
+        id: node.id,
+        direction,
+        contextParentId: node.contextParentId,
+      }),
   };
 
   const downloadAsImage = async () => {
@@ -671,21 +713,43 @@ export default function OrgStructure() {
             </div>
             <div className="space-y-1.5">
               <Label>Reports to / sits under</Label>
-              <Select value={formParentId} onValueChange={setFormParentId}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">— Top level —</SelectItem>
-                  {flat
-                    .filter(({ node }) => !excludedParentIds.has(node.id))
-                    .map(({ node, depth }) => (
-                      <SelectItem key={node.id} value={node.id}>
-                        {"—".repeat(depth)} {node.name} ({node.type})
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
+              <p className="text-xs text-muted-foreground">
+                Select one or more — connecting it to more than one makes it
+                appear in both places on the chart. Leave all unchecked for a
+                top-level node.
+              </p>
+              <div className="max-h-48 space-y-1 overflow-y-auto rounded-md border p-2">
+                {flat.filter(({ node }) => !excludedParentIds.has(node.id))
+                  .length === 0 && (
+                  <p className="py-2 text-center text-xs text-muted-foreground">
+                    No other nodes yet — this will be a top-level node.
+                  </p>
+                )}
+                {flat
+                  .filter(({ node }) => !excludedParentIds.has(node.id))
+                  .map(({ node, depth }) => (
+                    <label
+                      key={node.id}
+                      className="flex items-center gap-2.5 rounded-md p-1.5 text-sm cursor-pointer hover:bg-muted/50"
+                      style={{ paddingLeft: `${depth * 14 + 6}px` }}
+                    >
+                      <Checkbox
+                        checked={formParentIds.includes(node.id)}
+                        onCheckedChange={(v) =>
+                          setFormParentIds((ids) =>
+                            v
+                              ? [...ids, node.id]
+                              : ids.filter((id) => id !== node.id),
+                          )
+                        }
+                      />
+                      <span className="flex-1">{node.name}</span>
+                      <Badge variant="outline" className="text-[10px]">
+                        {node.type}
+                      </Badge>
+                    </label>
+                  ))}
+              </div>
             </div>
           </div>
           <DialogFooter>
@@ -715,7 +779,7 @@ export default function OrgStructure() {
             <AlertDialogTitle>Remove "{deleteTarget?.name}"?</AlertDialogTitle>
             <AlertDialogDescription>
               {deleteDescendantCount > 0
-                ? `This will also remove the ${deleteDescendantCount} node${deleteDescendantCount === 1 ? "" : "s"} nested under it. This can't be undone.`
+                ? `This will also remove every node nested under it that has no other parent — up to ${deleteDescendantCount} node${deleteDescendantCount === 1 ? "" : "s"}. A node connected to another parent too stays on the chart. This can't be undone.`
                 : "This can't be undone."}
             </AlertDialogDescription>
           </AlertDialogHeader>
