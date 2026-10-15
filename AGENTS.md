@@ -4,3 +4,4 @@
 - Keep sample blog articles in the marketing content layer with stable slugs so listing links and directly opened article pages resolve the same content.
 - Keep public marketing photography as directly viewable JPEG files in public/marketing because editors need inspectable images and stable web paths.
 - Use the shared GRC print report layout for client-generated governance documents because agendas, minutes, codes and audit exports need consistent branding.
+- Frame organogram image exports from graph bounds at natural scale with pixel margins, independent of viewport zoom, because proportional fit padding can make downloaded charts unreadably small.
