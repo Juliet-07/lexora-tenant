@@ -24,6 +24,7 @@ import BoardOnboardingDetail from "@/pages/grc/governance/Board/BoardOnboardingD
 import GrcCodes from "@/pages/grc/governance/Codes";
 import GrcResolutions from "@/pages/grc/governance/Resolutions";
 import BoardEvaluations from "@/pages/grc/governance/Board/BoardEvaluation";
+import BoardMessaging from "@/pages/grc/governance/BoardMessaging";
 import GrcReporting from "@/pages/grc/Reporting";
 import DealPipeline from "@/pages/grc/deals/Pipeline";
 import DealDetail from "@/pages/grc/deals/DealDetail";
@@ -187,6 +188,11 @@ export const grcRoutes = ({ isAdmin, accessibleModules }: RouteContext) => {
         key="grc-gov-board-evaluations"
         path="/grc/governance/board-evaluations"
         element={layout(<BoardEvaluations />)}
+      />,
+      <Route
+        key="grc-gov-board-messaging"
+        path="/grc/governance/board-messaging"
+        element={layout(<BoardMessaging />)}
       />,
 
       // Risk
