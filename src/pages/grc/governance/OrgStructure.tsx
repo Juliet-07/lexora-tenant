@@ -1,6 +1,19 @@
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, type CSSProperties } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Tree, TreeNode } from "react-organizational-chart";
+import {
+  ReactFlow,
+  Controls,
+  Handle,
+  Position,
+  getNodesBounds,
+  getViewportForBounds,
+  type Node,
+  type Edge,
+  type NodeProps,
+  type NodeTypes,
+} from "@xyflow/react";
+import "@xyflow/react/dist/style.css";
+import dagre from "@dagrejs/dagre";
 import {
   Building2,
   Network,
@@ -224,46 +237,200 @@ function NodeCard({
   );
 }
 
-function ChartNode({
-  node,
-  index,
-  siblingCount,
-  handlers,
-}: {
+// ── Chart layout (ReactFlow + dagre) ────────────────────────────
+// Previously rendered with react-organizational-chart's Tree/TreeNode,
+// which draws connector lines as CSS pseudo-elements sized off flex-
+// box measurements — it falls apart (off-center, disconnected-looking
+// lines) once branches differ in depth or width, which is exactly
+// what a real org structure does (PO, Oct 2026: "the image is
+// scattered, not properly centered, the lines are all over the place
+// and not properly connected"). dagre computes exact, non-overlapping
+// node positions and ReactFlow draws every edge as a real SVG path
+// anchored to each box's measured edge, so the result stays centered
+// and cleanly connected regardless of how lopsided the tree is.
+const ORG_NODE_WIDTH = 240; // matches NodeCard's `w-60`
+const ORG_NODE_HEIGHT = 150; // generous estimate — a 2-line name + subtitle + both button rows
+const ROOT_NODE_WIDTH = 224; // matches the root card's `w-56`
+const ROOT_NODE_HEIGHT = 104;
+
+// Invisible anchor points — edges still connect at each box's exact
+// top/bottom-center, they just don't render as a visible dot the way
+// an editable flow chart would.
+const HANDLE_STYLE: CSSProperties = {
+  opacity: 0,
+  width: 1,
+  height: 1,
+  minWidth: 1,
+  minHeight: 1,
+  border: "none",
+  background: "transparent",
+};
+
+type OrgFlowNodeData = {
   node: OrgStructureNode;
-  index: number;
-  siblingCount: number;
+  isFirst: boolean;
+  isLast: boolean;
   handlers: Handlers;
-}) {
+};
+
+function OrgFlowNode({ data }: NodeProps) {
+  const { node, isFirst, isLast, handlers } =
+    data as unknown as OrgFlowNodeData;
   return (
-    <TreeNode
-      label={
-        <NodeCard
-          node={node}
-          isFirst={index === 0}
-          isLast={index === siblingCount - 1}
-          handlers={handlers}
-        />
-      }
-    >
-      {node.children.map((c, i) => (
-        <ChartNode
-          key={c.id}
-          node={c}
-          index={i}
-          siblingCount={node.children.length}
-          handlers={handlers}
-        />
-      ))}
-    </TreeNode>
+    <>
+      <Handle
+        type="target"
+        position={Position.Top}
+        style={HANDLE_STYLE}
+        isConnectable={false}
+      />
+      <NodeCard
+        node={node}
+        isFirst={isFirst}
+        isLast={isLast}
+        handlers={handlers}
+      />
+      <Handle
+        type="source"
+        position={Position.Bottom}
+        style={HANDLE_STYLE}
+        isConnectable={false}
+      />
+    </>
   );
+}
+
+function OrgRootFlowNode({ data }: NodeProps) {
+  const { label, totalNodes } = data as unknown as {
+    label: string;
+    totalNodes: number;
+  };
+  return (
+    <>
+      <Card className="inline-block w-56 border-primary/40 bg-primary/5 shadow-sm">
+        <CardContent className="p-3 text-center space-y-1">
+          <Building2 className="h-4 w-4 mx-auto text-primary" />
+          <p className="font-semibold text-sm leading-tight">{label}</p>
+          <p className="text-[11px] text-muted-foreground">
+            {totalNodes} node{totalNodes === 1 ? "" : "s"}
+          </p>
+        </CardContent>
+      </Card>
+      <Handle
+        type="source"
+        position={Position.Bottom}
+        style={HANDLE_STYLE}
+        isConnectable={false}
+      />
+    </>
+  );
+}
+
+const CHART_NODE_TYPES: NodeTypes = {
+  orgNode: OrgFlowNode,
+  orgRoot: OrgRootFlowNode,
+};
+
+const ROOT_FLOW_ID = "org-root";
+
+// Walks the (already occurrence-flattened) tree and emits a ReactFlow
+// node + edge per occurrence, unpositioned — dagre fills in `position`
+// next. Node ids are `${node.id}__${contextParentId}` so the same real
+// node connected to two parents still gets two distinct boxes/ids,
+// matching how the backend's getTree() renders a multi-parent node
+// once per parent.
+function buildGraph(
+  roots: OrgStructureNode[],
+  orgLabel: string,
+  totalNodes: number,
+  handlers: Handlers,
+): { nodes: Node[]; edges: Edge[] } {
+  const nodes: Node[] = [
+    {
+      id: ROOT_FLOW_ID,
+      type: "orgRoot",
+      position: { x: 0, y: 0 },
+      width: ROOT_NODE_WIDTH,
+      height: ROOT_NODE_HEIGHT,
+      draggable: false,
+      selectable: false,
+      data: { label: orgLabel, totalNodes },
+    },
+  ];
+  const edges: Edge[] = [];
+
+  const walk = (list: OrgStructureNode[], parentFlowId: string) => {
+    list.forEach((node, index) => {
+      const flowId = `${node.id}__${node.contextParentId ?? "root"}`;
+      nodes.push({
+        id: flowId,
+        type: "orgNode",
+        position: { x: 0, y: 0 },
+        width: ORG_NODE_WIDTH,
+        height: ORG_NODE_HEIGHT,
+        draggable: false,
+        selectable: false,
+        data: {
+          node,
+          isFirst: index === 0,
+          isLast: index === list.length - 1,
+          handlers,
+        } satisfies OrgFlowNodeData,
+      });
+      edges.push({
+        id: `${parentFlowId}->${flowId}`,
+        source: parentFlowId,
+        target: flowId,
+        type: "smoothstep",
+        style: { stroke: "hsl(var(--border))", strokeWidth: 2 },
+      });
+      walk(node.children, flowId);
+    });
+  };
+
+  walk(roots, ROOT_FLOW_ID);
+  return { nodes, edges };
+}
+
+// Top-to-bottom hierarchical layout — centers every parent over the
+// horizontal span of its children and keeps a fixed gap between ranks
+// (ranksep) and siblings (nodesep), so nothing overlaps or drifts off
+// to one side regardless of how unbalanced the two branches are.
+function layoutGraph(nodes: Node[], edges: Edge[]): Node[] {
+  const g = new dagre.graphlib.Graph();
+  g.setDefaultEdgeLabel(() => ({}));
+  g.setGraph({
+    rankdir: "TB",
+    nodesep: 36,
+    ranksep: 64,
+    marginx: 24,
+    marginy: 24,
+  });
+  for (const n of nodes) {
+    g.setNode(n.id, {
+      width: (n.width as number) ?? ORG_NODE_WIDTH,
+      height: (n.height as number) ?? ORG_NODE_HEIGHT,
+    });
+  }
+  for (const e of edges) {
+    g.setEdge(e.source, e.target);
+  }
+  dagre.layout(g);
+  return nodes.map((n) => {
+    const pos = g.node(n.id);
+    const w = (n.width as number) ?? ORG_NODE_WIDTH;
+    const h = (n.height as number) ?? ORG_NODE_HEIGHT;
+    return { ...n, position: { x: pos.x - w / 2, y: pos.y - h / 2 } };
+  });
 }
 
 export default function OrgStructure() {
   const { user } = useAuth();
   const { toast } = useToast();
   const qc = useQueryClient();
-  const chartRef = useRef<HTMLDivElement>(null);
+  // Wraps the <ReactFlow> canvas — used only to reach the rendered
+  // `.react-flow__viewport` element for downloadAsImage below.
+  const chartWrapperRef = useRef<HTMLDivElement>(null);
   const [downloading, setDownloading] = useState(false);
 
   const { data, isLoading, isError } = useQuery({
@@ -421,23 +588,60 @@ export default function OrgStructure() {
       }),
   };
 
+  // dagre-positioned nodes/edges for the chart — see buildGraph/
+  // layoutGraph above for why this replaced react-organizational-chart.
+  const { nodes: flowNodes, edges: flowEdges } = useMemo(() => {
+    const graph = buildGraph(
+      roots,
+      user?.businessName || "Organisation",
+      totalNodes,
+      handlers,
+    );
+    return { nodes: layoutGraph(graph.nodes, graph.edges), edges: graph.edges };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roots, totalNodes, user?.businessName]);
+
+  // Renders the chart's own full extent as a PNG, independent of
+  // whatever's currently panned/zoomed into view — the official
+  // ReactFlow export recipe (getNodesBounds + getViewportForBounds,
+  // then capture the `.react-flow__viewport` element with that exact
+  // transform applied) rather than html2canvas on the outer container,
+  // which mishandles the CSS transform ReactFlow pans/zooms with and
+  // was the direct cause of the previous "scattered" exports.
   const downloadAsImage = async () => {
-    if (!chartRef.current) return;
+    const viewportEl = chartWrapperRef.current?.querySelector<HTMLElement>(
+      ".react-flow__viewport",
+    );
+    if (!viewportEl || flowNodes.length === 0) return;
     setDownloading(true);
     try {
-      const html2canvas = (await import("html2canvas")).default;
-      const el = chartRef.current;
-      const canvas = await html2canvas(el, {
+      const { toPng } = await import("html-to-image");
+      const padding = 48;
+      const bounds = getNodesBounds(flowNodes);
+      const imageWidth = Math.ceil(bounds.width + padding * 2);
+      const imageHeight = Math.ceil(bounds.height + padding * 2);
+      const viewport = getViewportForBounds(
+        bounds,
+        imageWidth,
+        imageHeight,
+        0.1,
+        2,
+        padding,
+      );
+      const dataUrl = await toPng(viewportEl, {
         backgroundColor: "#ffffff",
-        scale: 2,
-        width: el.scrollWidth,
-        height: el.scrollHeight,
-        windowWidth: el.scrollWidth,
-        windowHeight: el.scrollHeight,
+        width: imageWidth,
+        height: imageHeight,
+        pixelRatio: 2,
+        style: {
+          width: `${imageWidth}px`,
+          height: `${imageHeight}px`,
+          transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.zoom})`,
+        },
       });
       const link = document.createElement("a");
       link.download = `org-structure-${new Date().toISOString().slice(0, 10)}.png`;
-      link.href = canvas.toDataURL("image/png");
+      link.href = dataUrl;
       link.click();
     } catch {
       toast({
@@ -535,11 +739,12 @@ export default function OrgStructure() {
             <CardHeader>
               <CardTitle className="text-base">Company Organogram</CardTitle>
               <CardDescription>
-                Click Add on any node to nest something under it. Scroll
-                horizontally for wide structures.
+                Click Add on any node to nest something under it. Scroll to
+                zoom, drag the background to pan — it opens centered and fitted
+                to the whole structure.
               </CardDescription>
             </CardHeader>
-            <CardContent className="overflow-x-auto pb-8">
+            <CardContent className="pb-8">
               {roots.length === 0 ? (
                 <div className="py-10 text-center space-y-3">
                   <p className="text-sm text-muted-foreground">
@@ -553,37 +758,25 @@ export default function OrgStructure() {
                 </div>
               ) : (
                 <div
-                  ref={chartRef}
-                  className="inline-block min-w-full p-4 bg-white"
+                  ref={chartWrapperRef}
+                  className="h-[70vh] min-h-[420px] w-full rounded-lg border bg-white"
                 >
-                  <Tree
-                    lineWidth="2px"
-                    lineColor="hsl(var(--border))"
-                    lineBorderRadius="8px"
-                    label={
-                      <Card className="inline-block w-56 border-primary/40 bg-primary/5 shadow-sm">
-                        <CardContent className="p-3 text-center space-y-1">
-                          <Building2 className="h-4 w-4 mx-auto text-primary" />
-                          <p className="font-semibold text-sm leading-tight">
-                            {user?.businessName || "Organisation"}
-                          </p>
-                          <p className="text-[11px] text-muted-foreground">
-                            {totalNodes} node{totalNodes === 1 ? "" : "s"}
-                          </p>
-                        </CardContent>
-                      </Card>
-                    }
+                  <ReactFlow
+                    nodes={flowNodes}
+                    edges={flowEdges}
+                    nodeTypes={CHART_NODE_TYPES}
+                    fitView
+                    fitViewOptions={{ padding: 0.15 }}
+                    minZoom={0.1}
+                    maxZoom={1.5}
+                    nodesDraggable={false}
+                    nodesConnectable={false}
+                    elementsSelectable={false}
+                    panOnScroll
+                    proOptions={{ hideAttribution: true }}
                   >
-                    {roots.map((r, i) => (
-                      <ChartNode
-                        key={r.id}
-                        node={r}
-                        index={i}
-                        siblingCount={roots.length}
-                        handlers={handlers}
-                      />
-                    ))}
-                  </Tree>
+                    <Controls showInteractive={false} />
+                  </ReactFlow>
                 </div>
               )}
             </CardContent>
