@@ -189,6 +189,11 @@ export const grcRoutes = ({ isAdmin, accessibleModules }: RouteContext) => {
         path="/grc/governance/board-evaluations"
         element={layout(<BoardEvaluations />)}
       />,
+      <Route
+        key="grc-gov-board-messaging"
+        path="/grc/governance/board-messaging"
+        element={layout(<BoardMessaging />)}
+      />,
 
       // Risk
       <Route
