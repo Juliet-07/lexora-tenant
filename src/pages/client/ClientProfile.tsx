@@ -201,7 +201,15 @@ export default function ClientProfile() {
           </p>
         </div>
 
-        {/* ── Download Report button ── */}
+        {/* ── View full KYC + Download Report buttons ── */}
+        {canDownloadReport && (
+          <Button variant="outline" size="sm" asChild className="shrink-0">
+            <Link to={`/clients/onboarding/${client._id}`}>
+              <Eye className="h-4 w-4 mr-2" />
+              View Full KYC
+            </Link>
+          </Button>
+        )}
         {canDownloadReport && (
           <Button
             variant="outline"
