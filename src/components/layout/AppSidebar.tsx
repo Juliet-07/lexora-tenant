@@ -182,6 +182,7 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
         },
         { title: "Board Management", url: "/grc/governance/board" },
         { title: "Board Training", url: "/grc/governance/board-training" },
+        { title: "Board Messaging", url: "/grc/governance/board-messaging" },
         { title: "Committees", url: "/grc/governance/committees" },
         { title: "Meetings", url: "/grc/governance/meetings" },
         { title: "Resolutions", url: "/grc/governance/resolutions" },
