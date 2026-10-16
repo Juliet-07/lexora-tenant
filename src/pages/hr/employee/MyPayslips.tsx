@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -46,6 +47,7 @@ import {
   fetchMyOvertime,
   logOvertime,
   deleteMyOvertime,
+  fetchMyOvertimePolicy,
   type MyPayslipSummary,
   type EmployeeLoan,
   type EmployeeOvertimeLog,
@@ -85,6 +87,13 @@ const OVERTIME_STATUS_TONE: Record<string, string> = {
   rejected: "bg-destructive/10 text-destructive border-destructive/20",
 };
 
+const dayTypeLabel = (t: EmployeeOvertimeLog["dayType"]) =>
+  t === "public_holiday"
+    ? "Public holiday"
+    : t === "weekend"
+      ? "Weekend"
+      : "Ordinary";
+
 export default function MyPayslips() {
   const queryClient = useQueryClient();
   const [active, setActive] = useState<MyPayslipSummary | null>(null);
@@ -97,8 +106,9 @@ export default function MyPayslips() {
   });
   const [overtimeOpen, setOvertimeOpen] = useState(false);
   const [overtimeForm, setOvertimeForm] = useState({
-    periodDate: new Date().toISOString().slice(0, 10),
+    workDate: new Date().toISOString().slice(0, 10),
     hoursLogged: "",
+    isPublicHoliday: false,
     note: "",
   });
 
@@ -116,6 +126,18 @@ export default function MyPayslips() {
     queryKey: ["my-overtime"],
     queryFn: fetchMyOvertime,
   });
+
+  // null means my employer hasn't set up an overtime policy for my
+  // location (or a tenant default) — logOvertime would reject it, so
+  // the "Log Overtime" button is disabled instead of letting that fail
+  // on submit.
+  const { data: myOvertimePolicy, isLoading: overtimePolicyLoading } = useQuery(
+    {
+      queryKey: ["my-overtime-policy"],
+      queryFn: fetchMyOvertimePolicy,
+    },
+  );
+  const canLogOvertime = !overtimePolicyLoading && !!myOvertimePolicy;
 
   const requestLoanMutation = useMutation({
     mutationFn: requestLoan,
@@ -137,8 +159,9 @@ export default function MyPayslips() {
       queryClient.invalidateQueries({ queryKey: ["my-overtime"] });
       setOvertimeOpen(false);
       setOvertimeForm({
-        periodDate: new Date().toISOString().slice(0, 10),
+        workDate: new Date().toISOString().slice(0, 10),
         hoursLogged: "",
+        isPublicHoliday: false,
         note: "",
       });
       toast.success(
@@ -303,16 +326,27 @@ export default function MyPayslips() {
               <CardTitle className="text-base flex items-center gap-2">
                 <Clock className="h-4 w-4 text-primary" /> My Overtime
               </CardTitle>
-              <Button size="sm" onClick={() => setOvertimeOpen(true)}>
+              <Button
+                size="sm"
+                disabled={!canLogOvertime}
+                onClick={() => setOvertimeOpen(true)}
+              >
                 Log Overtime
               </Button>
             </CardHeader>
             <CardContent className="space-y-2">
-              <p className="text-xs text-muted-foreground -mt-1 mb-2">
-                Log hours for a month and your employer will review them. Any
-                month you don't log overtime, or it isn't approved in time,
-                counts as 0 on that month's payslip.
-              </p>
+              {!overtimePolicyLoading && !myOvertimePolicy ? (
+                <p className="text-xs text-warning -mt-1 mb-2">
+                  Your employer hasn't set up overtime rules yet, so you can't
+                  log overtime right now.
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground -mt-1 mb-2">
+                  Log the date you worked and your employer will review it. Any
+                  day you don't log overtime, or it isn't approved in time,
+                  counts as 0 on that month's payslip.
+                </p>
+              )}
               {overtimeLoading ? (
                 <div className="flex items-center justify-center py-10 gap-2 text-muted-foreground">
                   <Loader2 className="h-5 w-5 animate-spin" />
@@ -326,7 +360,12 @@ export default function MyPayslips() {
                 overtimeLogs.map((o) => (
                   <div key={o._id} className="p-4 border rounded-lg">
                     <div className="flex items-center justify-between mb-2">
-                      <p className="font-medium">{o.periodLabel}</p>
+                      <div>
+                        <p className="font-medium">{fmtDate(o.workDate)}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {dayTypeLabel(o.dayType)} · {o.periodLabel}
+                        </p>
+                      </div>
                       <Badge
                         variant="outline"
                         className={OVERTIME_STATUS_TONE[o.status] ?? ""}
@@ -695,20 +734,22 @@ export default function MyPayslips() {
           <DialogHeader>
             <DialogTitle>Log Overtime</DialogTitle>
             <DialogDescription>
-              Pick any date in the month you worked the hours. Your employer
-              must approve this before it's added to that month's payslip.
+              Pick the date you actually worked the hours — the rate depends on
+              whether it was an ordinary weekday, a weekend, or a public
+              holiday. Your employer must approve this before it's added to that
+              month's payslip.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-2">
             <div className="space-y-1">
-              <Label>Month</Label>
+              <Label>Date worked</Label>
               <Input
                 type="date"
-                value={overtimeForm.periodDate}
+                value={overtimeForm.workDate}
                 onChange={(e) =>
                   setOvertimeForm((f) => ({
                     ...f,
-                    periodDate: e.target.value,
+                    workDate: e.target.value,
                   }))
                 }
               />
@@ -726,6 +767,20 @@ export default function MyPayslips() {
                     ...f,
                     hoursLogged: e.target.value,
                   }))
+                }
+              />
+            </div>
+            <div className="flex items-center justify-between border rounded-lg p-3">
+              <div>
+                <Label>This was a public holiday</Label>
+                <p className="text-xs text-muted-foreground">
+                  Check this even if the date above also falls on a weekday.
+                </p>
+              </div>
+              <Switch
+                checked={overtimeForm.isPublicHoliday}
+                onCheckedChange={(v) =>
+                  setOvertimeForm((f) => ({ ...f, isPublicHoliday: v }))
                 }
               />
             </div>
@@ -747,15 +802,16 @@ export default function MyPayslips() {
             </Button>
             <Button
               disabled={
-                !overtimeForm.periodDate ||
+                !overtimeForm.workDate ||
                 !overtimeForm.hoursLogged ||
                 Number(overtimeForm.hoursLogged) <= 0 ||
                 logOvertimeMutation.isPending
               }
               onClick={() =>
                 logOvertimeMutation.mutate({
-                  periodDate: overtimeForm.periodDate,
+                  workDate: overtimeForm.workDate,
                   hoursLogged: Number(overtimeForm.hoursLogged),
+                  isPublicHoliday: overtimeForm.isPublicHoliday,
                   note: overtimeForm.note || undefined,
                 })
               }

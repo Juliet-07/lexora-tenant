@@ -101,7 +101,7 @@ import {
   type EmployeeLoan,
   type EmployeeOvertimeLog,
   type OvertimePolicy,
-  type OvertimePolicyTier,
+  type OvertimePolicyRates,
   type PayrollRun,
   type Payslip,
   type HrLocation,
@@ -159,6 +159,20 @@ const overtimeStatusTone = (s: EmployeeOvertimeLog["status"]) =>
     : s === "rejected"
       ? "bg-destructive/10 text-destructive border-destructive/20"
       : "bg-warning/10 text-warning border-warning/20";
+
+const dayTypeLabel = (t: EmployeeOvertimeLog["dayType"]) =>
+  t === "public_holiday"
+    ? "Public holiday"
+    : t === "weekend"
+      ? "Weekend"
+      : "Ordinary";
+
+const fmtDate = (d: string) =>
+  new Date(d).toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
 
 const locName = (l: { name: string } | null | undefined) =>
   l?.name ?? "Tenant default";
@@ -1010,17 +1024,15 @@ export default function HRPayroll() {
                       <Badge variant="outline">
                         {p.standardWeeklyHours}hr week
                       </Badge>
-                      {p.tiers.map((t, i) => (
-                        <Badge
-                          key={i}
-                          variant="outline"
-                          className="text-[10px]"
-                        >
-                          {t.upToHours == null
-                            ? `${t.multiplier}× beyond`
-                            : `${t.multiplier}× up to ${t.upToHours}h`}
-                        </Badge>
-                      ))}
+                      <Badge variant="outline" className="text-[10px]">
+                        Ordinary {p.rates.ordinary}×
+                      </Badge>
+                      <Badge variant="outline" className="text-[10px]">
+                        Weekend {p.rates.weekend}×
+                      </Badge>
+                      <Badge variant="outline" className="text-[10px]">
+                        Holiday {p.rates.publicHoliday}×
+                      </Badge>
                     </div>
                     <div className="flex gap-2">
                       <Button
@@ -1071,7 +1083,8 @@ export default function HRPayroll() {
                             : "Employee"}
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          {o.periodLabel} — {o.hoursLogged} hrs
+                          {fmtDate(o.workDate)} ({dayTypeLabel(o.dayType)}) —{" "}
+                          {o.hoursLogged} hrs
                         </p>
                       </div>
                       <div className="text-right shrink-0">
@@ -1127,9 +1140,12 @@ export default function HRPayroll() {
                           >
                             {o.status}
                           </Badge>
+                          <Badge variant="outline" className="text-[10px]">
+                            {dayTypeLabel(o.dayType)}
+                          </Badge>
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          {o.periodLabel} — {o.hoursLogged} hrs @{" "}
+                          {fmtDate(o.workDate)} — {o.hoursLogged} hrs @{" "}
                           {fmt(o.hourlyRate, o.currency)}/hr × {o.multiplier}
                         </p>
                       </div>
@@ -2436,36 +2452,9 @@ function OvertimePolicyEditorDialog({
   const [standardWeeklyHours, setStandardWeeklyHours] = useState(
     policy.standardWeeklyHours ?? 40,
   );
-  const [tiers, setTiers] = useState<OvertimePolicyTier[]>(
-    policy.tiers?.length
-      ? policy.tiers
-      : [{ upToHours: null, multiplier: 1.5 }],
+  const [rates, setRates] = useState<OvertimePolicyRates>(
+    policy.rates ?? { ordinary: 1.5, weekend: 2, publicHoliday: 2 },
   );
-
-  const addTier = () =>
-    setTiers((prev) => {
-      // The new tier takes over the open end; give the old last tier a
-      // cap so exactly one tier stays open-ended.
-      const next = [...prev];
-      const last = next[next.length - 1];
-      next[next.length - 1] = { ...last, upToHours: last.upToHours ?? 0 };
-      next.push({ upToHours: null, multiplier: last.multiplier });
-      return next;
-    });
-
-  const updateTier = (index: number, patch: Partial<OvertimePolicyTier>) =>
-    setTiers((prev) =>
-      prev.map((t, i) => (i === index ? { ...t, ...patch } : t)),
-    );
-
-  const removeTier = (index: number) =>
-    setTiers((prev) => {
-      if (prev.length <= 1) return prev;
-      const next = prev.filter((_, i) => i !== index);
-      // Make sure the new last tier is open-ended.
-      next[next.length - 1] = { ...next[next.length - 1], upToHours: null };
-      return next;
-    });
 
   return (
     <Dialog open onOpenChange={onClose}>
@@ -2476,8 +2465,8 @@ function OvertimePolicyEditorDialog({
           </DialogTitle>
           <DialogDescription>
             Sets how overtime is calculated for a location, or the tenant-wide
-            default. Overtime rules differ by country, so an employee can't log
-            overtime until a policy covers their location.
+            default. Overtime rates differ by day type and by country, so an
+            employee can't log overtime until a policy covers their location.
           </DialogDescription>
         </DialogHeader>
 
@@ -2516,72 +2505,62 @@ function OvertimePolicyEditorDialog({
             </div>
           </div>
 
-          <div className="flex items-center justify-between pt-2 border-t">
-            <div>
-              <Label>Rate tiers</Label>
-              <p className="text-xs text-muted-foreground">
-                Applied progressively against total overtime hours logged for
-                the month — most countries need just one tier.
-              </p>
-            </div>
-            <Button size="sm" variant="outline" onClick={addTier}>
-              <Plus className="h-3.5 w-3.5 mr-1" /> Add Tier
-            </Button>
+          <div className="pt-2 border-t">
+            <Label>Pay multiplier by day type</Label>
+            <p className="text-xs text-muted-foreground">
+              Applied to overtime hours based on the day they were worked —
+              weekend and public holiday are usually higher than an ordinary
+              weekday.
+            </p>
           </div>
 
-          {tiers.map((t, i) => (
-            <div
-              key={i}
-              className="border rounded-lg p-3 flex items-center gap-3 bg-muted/20"
-            >
-              <div className="flex-1 space-y-1">
-                <Label className="text-xs">
-                  {t.upToHours == null
-                    ? "Hours beyond the tier(s) above"
-                    : "Up to total OT hours"}
-                </Label>
-                <Input
-                  type="number"
-                  min={0}
-                  step="0.5"
-                  disabled={t.upToHours == null}
-                  value={t.upToHours ?? ""}
-                  placeholder="No cap"
-                  onChange={(e) =>
-                    updateTier(i, {
-                      upToHours: e.target.value
-                        ? parseFloat(e.target.value)
-                        : 0,
-                    })
-                  }
-                />
-              </div>
-              <div className="flex-1 space-y-1">
-                <Label className="text-xs">Multiplier</Label>
-                <Input
-                  type="number"
-                  min={0}
-                  step="0.1"
-                  value={t.multiplier}
-                  onChange={(e) =>
-                    updateTier(i, {
-                      multiplier: parseFloat(e.target.value) || 0,
-                    })
-                  }
-                />
-              </div>
-              {tiers.length > 1 && (
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="h-8 w-8 mt-5"
-                  onClick={() => removeTier(i)}
-                >
-                  <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                </Button>
-              )}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs">Ordinary (Mon–Fri)</Label>
+              <Input
+                type="number"
+                min={0}
+                step="0.1"
+                value={rates.ordinary}
+                onChange={(e) =>
+                  setRates((r) => ({
+                    ...r,
+                    ordinary: parseFloat(e.target.value) || 0,
+                  }))
+                }
+              />
             </div>
-          ))}
+            <div className="space-y-1">
+              <Label className="text-xs">Weekend (Sat–Sun)</Label>
+              <Input
+                type="number"
+                min={0}
+                step="0.1"
+                value={rates.weekend}
+                onChange={(e) =>
+                  setRates((r) => ({
+                    ...r,
+                    weekend: parseFloat(e.target.value) || 0,
+                  }))
+                }
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Public holiday</Label>
+              <Input
+                type="number"
+                min={0}
+                step="0.1"
+                value={rates.publicHoliday}
+                onChange={(e) =>
+                  setRates((r) => ({
+                    ...r,
+                    publicHoliday: parseFloat(e.target.value) || 0,
+                  }))
+                }
+              />
+            </div>
+          </div>
         </div>
 
         <DialogFooter>
@@ -2594,7 +2573,7 @@ function OvertimePolicyEditorDialog({
               onSave({
                 locationId: locationId !== "default" ? locationId : undefined,
                 standardWeeklyHours,
-                tiers,
+                rates,
               })
             }
           >
@@ -2822,8 +2801,8 @@ function DecideOvertimeDialog({
           <DialogTitle>Overtime Entry</DialogTitle>
           <DialogDescription>
             {emp ? `${emp.firstName} ${emp.lastName}` : "Employee"} logged{" "}
-            {log.hoursLogged} hour{log.hoursLogged !== 1 ? "s" : ""} for{" "}
-            {log.periodLabel}
+            {log.hoursLogged} hour{log.hoursLogged !== 1 ? "s" : ""} on{" "}
+            {fmtDate(log.workDate)} ({dayTypeLabel(log.dayType)})
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3 py-2">

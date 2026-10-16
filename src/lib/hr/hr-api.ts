@@ -1,5 +1,19 @@
 import { api } from "../api";
 
+// Unwraps the backend's { success, message, data } envelope. Plain
+// `res.data?.data ?? res.data` breaks whenever `data` is legitimately
+// `null` (e.g. "no policy configured for this location") — nullish
+// coalescing treats that null as "nothing to unwrap" and falls through
+// to the whole envelope object, which is truthy and silently wrong.
+// This checks for the envelope shape explicitly instead.
+function unwrapNullable<T>(res: { data: any }): T | null {
+  const body = res.data;
+  if (body && typeof body === "object" && "data" in body) {
+    return (body.data ?? null) as T | null;
+  }
+  return (body ?? null) as T | null;
+}
+
 // ─────────────────────────────────────────────────────────────
 // SHARED TYPES
 // ─────────────────────────────────────────────────────────────
@@ -736,7 +750,7 @@ export const fetchLeavePolicy = async (
   locationId: string | "default",
 ): Promise<LeavePolicy | null> => {
   const res = await api.get(`/hr/leave/policy/${locationId}`);
-  return res.data?.data ?? res.data ?? null;
+  return unwrapNullable(res);
 };
 
 export const fetchUncoveredLocations = async (): Promise<HrLocation[]> => {
@@ -1276,13 +1290,13 @@ export const fetchPayrollPolicyForLocation = async (
   locationId: string,
 ): Promise<PayrollPolicy | null> => {
   const res = await api.get(`/hr/payroll/policy/for-location/${locationId}`);
-  return res.data?.data ?? res.data ?? null;
+  return unwrapNullable(res);
 };
 
 export const fetchDefaultPayrollPolicy =
   async (): Promise<PayrollPolicy | null> => {
     const res = await api.get("/hr/payroll/policy/default");
-    return res.data?.data ?? res.data ?? null;
+    return unwrapNullable(res);
   };
 
 export const upsertPayrollPolicy = async (
@@ -1412,6 +1426,13 @@ export const requestLoan = async (dto: {
 
 export type OvertimeStatus = "pending" | "approved" | "rejected";
 
+// Which kind of day the overtime was worked on — drives the pay rate
+// (Oct 2026 PO note: rules differ for ordinary weekdays vs. weekends
+// vs. public holidays). "public_holiday" is self-reported by the
+// employee at logging time, there's no holiday calendar; "weekend" vs
+// "ordinary" is derived from workDate's day of week.
+export type OvertimeDayType = "ordinary" | "weekend" | "public_holiday";
+
 export interface EmployeeOvertimeLog {
   _id: string;
   employeeId:
@@ -1423,6 +1444,9 @@ export interface EmployeeOvertimeLog {
         employeeNumber?: string;
       };
   tenantId: string;
+  workDate: string;
+  isPublicHoliday: boolean;
+  dayType: OvertimeDayType;
   periodLabel: string;
   periodStart: string;
   periodEnd: string;
@@ -1448,8 +1472,9 @@ export const fetchMyOvertime = async (): Promise<EmployeeOvertimeLog[]> => {
 };
 
 export const logOvertime = async (dto: {
-  periodDate: string;
+  workDate: string;
   hoursLogged: number;
+  isPublicHoliday?: boolean;
   note?: string;
 }): Promise<EmployeeOvertimeLog> => {
   const res = await api.post("/employee/overtime", dto);
@@ -1459,6 +1484,16 @@ export const logOvertime = async (dto: {
 export const deleteMyOvertime = async (logId: string): Promise<void> => {
   await api.delete(`/employee/overtime/${logId}`);
 };
+
+// The overtime policy that applies to me (my location, falling back
+// to the tenant default) — null means my employer hasn't set one up,
+// so the "Log Overtime" button should be disabled rather than letting
+// the submit fail.
+export const fetchMyOvertimePolicy =
+  async (): Promise<OvertimePolicy | null> => {
+    const res = await api.get("/employee/overtime/policy");
+    return unwrapNullable(res);
+  };
 
 // ── Overtime — Tenant Side API calls ─────────────────────────────
 
@@ -1500,9 +1535,10 @@ export const deleteOvertimeLog = async (logId: string): Promise<void> => {
 // location (or the tenant default), overtime is not calculated for
 // them at all. PO's Oct 2026 note.
 
-export interface OvertimePolicyTier {
-  upToHours: number | null;
-  multiplier: number;
+export interface OvertimePolicyRates {
+  ordinary: number; // Monday–Friday
+  weekend: number; // Saturday/Sunday
+  publicHoliday: number; // flagged as a public holiday
 }
 
 export interface OvertimePolicy {
@@ -1516,7 +1552,7 @@ export interface OvertimePolicy {
   } | null;
   name: string;
   standardWeeklyHours: number;
-  tiers: OvertimePolicyTier[];
+  rates: OvertimePolicyRates;
   createdAt: string;
 }
 
@@ -1524,7 +1560,7 @@ export interface UpsertOvertimePolicyDto {
   locationId?: string;
   name?: string;
   standardWeeklyHours: number;
-  tiers: OvertimePolicyTier[];
+  rates: OvertimePolicyRates;
 }
 
 // ── Overtime Policy — API calls ──────────────────────────────────
@@ -1541,13 +1577,13 @@ export const fetchOvertimePolicyForLocation = async (
   const res = await api.get(
     `/hr/payroll/overtime-policy/for-location/${locationId}`,
   );
-  return res.data?.data ?? res.data ?? null;
+  return unwrapNullable(res);
 };
 
 export const fetchDefaultOvertimePolicy =
   async (): Promise<OvertimePolicy | null> => {
     const res = await api.get("/hr/payroll/overtime-policy/default");
-    return res.data?.data ?? res.data ?? null;
+    return unwrapNullable(res);
   };
 
 export const upsertOvertimePolicy = async (
