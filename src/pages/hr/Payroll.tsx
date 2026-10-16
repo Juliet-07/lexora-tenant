@@ -93,10 +93,15 @@ import {
   fetchAllOvertime,
   fetchPendingOvertime,
   decideOvertimeRequest,
+  fetchAllOvertimePolicies,
+  upsertOvertimePolicy,
+  deleteOvertimePolicy,
   type PayrollPolicy,
   type PayrollDeductionRule,
   type EmployeeLoan,
   type EmployeeOvertimeLog,
+  type OvertimePolicy,
+  type OvertimePolicyTier,
   type PayrollRun,
   type Payslip,
   type HrLocation,
@@ -155,7 +160,8 @@ const overtimeStatusTone = (s: EmployeeOvertimeLog["status"]) =>
       ? "bg-destructive/10 text-destructive border-destructive/20"
       : "bg-warning/10 text-warning border-warning/20";
 
-const locName = (l: PayrollPolicy["locationId"]) => l?.name ?? "Tenant default";
+const locName = (l: { name: string } | null | undefined) =>
+  l?.name ?? "Tenant default";
 
 function buildPeriodOptions(): { label: string; start: string; end: string }[] {
   const opts = [];
@@ -189,6 +195,8 @@ export default function HRPayroll() {
   const [editingPolicy, setEditingPolicy] = useState<PayrollPolicy | null>(
     null,
   );
+  const [editingOvertimePolicy, setEditingOvertimePolicy] =
+    useState<OvertimePolicy | null>(null);
   const [decidingLoan, setDecidingLoan] = useState<EmployeeLoan | null>(null);
   const [decidingOvertime, setDecidingOvertime] =
     useState<EmployeeOvertimeLog | null>(null);
@@ -222,6 +230,12 @@ export default function HRPayroll() {
     queryKey: ["payroll-policies"],
     queryFn: fetchAllPayrollPolicies,
   });
+
+  const { data: overtimePolicies = [], isLoading: overtimePoliciesLoading } =
+    useQuery({
+      queryKey: ["overtime-policies"],
+      queryFn: fetchAllOvertimePolicies,
+    });
 
   const { data: pendingLoans = [] } = useQuery({
     queryKey: ["payroll-loans-pending"],
@@ -294,6 +308,27 @@ export default function HRPayroll() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["payroll-policies"] });
       toast.success("Policy removed.");
+    },
+  });
+
+  const upsertOvertimePolicyMutation = useMutation({
+    mutationFn: upsertOvertimePolicy,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["overtime-policies"] });
+      setEditingOvertimePolicy(null);
+      toast.success("Overtime policy saved.");
+    },
+    onError: (err: any) =>
+      toast.error(
+        err?.response?.data?.message ?? "Failed to save overtime policy",
+      ),
+  });
+
+  const deleteOvertimePolicyMutation = useMutation({
+    mutationFn: deleteOvertimePolicy,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["overtime-policies"] });
+      toast.success("Overtime policy removed.");
     },
   });
 
@@ -935,6 +970,81 @@ export default function HRPayroll() {
             end of the month so it's included in that month's pay — unapproved
             or unlogged overtime counts as 0.
           </p>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <CardTitle className="text-base">Overtime Policy</CardTitle>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setEditingOvertimePolicy({} as OvertimePolicy)}
+                >
+                  <Plus className="h-3.5 w-3.5 mr-1.5" /> New Policy
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <p className="text-xs text-muted-foreground pb-1">
+                Overtime rules differ by country, so nothing is calculated until
+                you set a rule — per location, or one tenant-wide default.
+              </p>
+              {overtimePoliciesLoading ? (
+                <LoadingRow label="Loading overtime policies…" />
+              ) : overtimePolicies.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-6">
+                  No overtime policy configured yet — employees can't log
+                  overtime until one exists.
+                </p>
+              ) : (
+                overtimePolicies.map((p) => (
+                  <div
+                    key={p._id}
+                    className="flex items-center justify-between flex-wrap gap-2 border rounded-lg p-3"
+                  >
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <MapPin className="h-4 w-4 text-muted-foreground" />
+                      <span className="font-medium text-sm">
+                        {locName(p.locationId)}
+                      </span>
+                      <Badge variant="outline">
+                        {p.standardWeeklyHours}hr week
+                      </Badge>
+                      {p.tiers.map((t, i) => (
+                        <Badge
+                          key={i}
+                          variant="outline"
+                          className="text-[10px]"
+                        >
+                          {t.upToHours == null
+                            ? `${t.multiplier}× beyond`
+                            : `${t.multiplier}× up to ${t.upToHours}h`}
+                        </Badge>
+                      ))}
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setEditingOvertimePolicy(p)}
+                      >
+                        <Settings2 className="h-3.5 w-3.5 mr-1.5" /> Edit
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() =>
+                          deleteOvertimePolicyMutation.mutate(p._id)
+                        }
+                      >
+                        <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                      </Button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
 
           {pendingOvertime.length > 0 && (
             <Card className="border-warning/30">
@@ -1692,6 +1802,16 @@ export default function HRPayroll() {
         />
       )}
 
+      {editingOvertimePolicy && (
+        <OvertimePolicyEditorDialog
+          policy={editingOvertimePolicy}
+          locations={locations}
+          onClose={() => setEditingOvertimePolicy(null)}
+          onSave={(dto) => upsertOvertimePolicyMutation.mutate(dto)}
+          saving={upsertOvertimePolicyMutation.isPending}
+        />
+      )}
+
       {decidingLoan && (
         <DecideLoanDialog
           loan={decidingLoan}
@@ -2282,6 +2402,199 @@ function PolicyEditorDialog({
                 payFrequency,
                 deductions,
                 allowanceTypes: policy.allowanceTypes ?? [],
+              })
+            }
+          >
+            {saving ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              "Save Policy"
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function OvertimePolicyEditorDialog({
+  policy,
+  locations,
+  onClose,
+  onSave,
+  saving,
+}: {
+  policy: OvertimePolicy;
+  locations: HrLocation[];
+  onClose: () => void;
+  onSave: (dto: any) => void;
+  saving: boolean;
+}) {
+  const [locationId, setLocationId] = useState(
+    policy.locationId?._id ?? "default",
+  );
+  const [standardWeeklyHours, setStandardWeeklyHours] = useState(
+    policy.standardWeeklyHours ?? 40,
+  );
+  const [tiers, setTiers] = useState<OvertimePolicyTier[]>(
+    policy.tiers?.length
+      ? policy.tiers
+      : [{ upToHours: null, multiplier: 1.5 }],
+  );
+
+  const addTier = () =>
+    setTiers((prev) => {
+      // The new tier takes over the open end; give the old last tier a
+      // cap so exactly one tier stays open-ended.
+      const next = [...prev];
+      const last = next[next.length - 1];
+      next[next.length - 1] = { ...last, upToHours: last.upToHours ?? 0 };
+      next.push({ upToHours: null, multiplier: last.multiplier });
+      return next;
+    });
+
+  const updateTier = (index: number, patch: Partial<OvertimePolicyTier>) =>
+    setTiers((prev) =>
+      prev.map((t, i) => (i === index ? { ...t, ...patch } : t)),
+    );
+
+  const removeTier = (index: number) =>
+    setTiers((prev) => {
+      if (prev.length <= 1) return prev;
+      const next = prev.filter((_, i) => i !== index);
+      // Make sure the new last tier is open-ended.
+      next[next.length - 1] = { ...next[next.length - 1], upToHours: null };
+      return next;
+    });
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="max-w-xl max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>
+            {policy._id ? "Edit Overtime Policy" : "New Overtime Policy"}
+          </DialogTitle>
+          <DialogDescription>
+            Sets how overtime is calculated for a location, or the tenant-wide
+            default. Overtime rules differ by country, so an employee can't log
+            overtime until a policy covers their location.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 py-2">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label>Applies to</Label>
+              <Select
+                value={locationId}
+                onValueChange={setLocationId}
+                disabled={!!policy._id}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="default">Tenant-wide default</SelectItem>
+                  {locations.map((l) => (
+                    <SelectItem key={l._id} value={l._id}>
+                      {l.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label>Standard work week (hours)</Label>
+              <Input
+                type="number"
+                min={1}
+                value={standardWeeklyHours}
+                onChange={(e) =>
+                  setStandardWeeklyHours(parseFloat(e.target.value) || 0)
+                }
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between pt-2 border-t">
+            <div>
+              <Label>Rate tiers</Label>
+              <p className="text-xs text-muted-foreground">
+                Applied progressively against total overtime hours logged for
+                the month — most countries need just one tier.
+              </p>
+            </div>
+            <Button size="sm" variant="outline" onClick={addTier}>
+              <Plus className="h-3.5 w-3.5 mr-1" /> Add Tier
+            </Button>
+          </div>
+
+          {tiers.map((t, i) => (
+            <div
+              key={i}
+              className="border rounded-lg p-3 flex items-center gap-3 bg-muted/20"
+            >
+              <div className="flex-1 space-y-1">
+                <Label className="text-xs">
+                  {t.upToHours == null
+                    ? "Hours beyond the tier(s) above"
+                    : "Up to total OT hours"}
+                </Label>
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.5"
+                  disabled={t.upToHours == null}
+                  value={t.upToHours ?? ""}
+                  placeholder="No cap"
+                  onChange={(e) =>
+                    updateTier(i, {
+                      upToHours: e.target.value
+                        ? parseFloat(e.target.value)
+                        : 0,
+                    })
+                  }
+                />
+              </div>
+              <div className="flex-1 space-y-1">
+                <Label className="text-xs">Multiplier</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.1"
+                  value={t.multiplier}
+                  onChange={(e) =>
+                    updateTier(i, {
+                      multiplier: parseFloat(e.target.value) || 0,
+                    })
+                  }
+                />
+              </div>
+              {tiers.length > 1 && (
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-8 w-8 mt-5"
+                  onClick={() => removeTier(i)}
+                >
+                  <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                </Button>
+              )}
+            </div>
+          ))}
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            disabled={saving}
+            onClick={() =>
+              onSave({
+                locationId: locationId !== "default" ? locationId : undefined,
+                standardWeeklyHours,
+                tiers,
               })
             }
           >

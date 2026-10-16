@@ -1492,6 +1492,75 @@ export const deleteOvertimeLog = async (logId: string): Promise<void> => {
   await api.delete(`/hr/payroll/overtime/${logId}`);
 };
 
+// ── Overtime Policy — Types ──────────────────────────────────────
+// Tenant-configurable overtime rule, per location or tenant-wide
+// default (mirrors PayrollPolicy). Overtime rules differ by the
+// country a tenant operates from, so this replaces the old hardcoded
+// 40hr/1.5x behavior — if no policy is configured for an employee's
+// location (or the tenant default), overtime is not calculated for
+// them at all. PO's Oct 2026 note.
+
+export interface OvertimePolicyTier {
+  upToHours: number | null;
+  multiplier: number;
+}
+
+export interface OvertimePolicy {
+  _id: string;
+  tenantId: string;
+  locationId: {
+    _id: string;
+    name: string;
+    country: string;
+    city: string | null;
+  } | null;
+  name: string;
+  standardWeeklyHours: number;
+  tiers: OvertimePolicyTier[];
+  createdAt: string;
+}
+
+export interface UpsertOvertimePolicyDto {
+  locationId?: string;
+  name?: string;
+  standardWeeklyHours: number;
+  tiers: OvertimePolicyTier[];
+}
+
+// ── Overtime Policy — API calls ──────────────────────────────────
+
+export const fetchAllOvertimePolicies = async (): Promise<OvertimePolicy[]> => {
+  const res = await api.get("/hr/payroll/overtime-policy");
+  const d = res.data?.data ?? res.data;
+  return Array.isArray(d) ? d : [];
+};
+
+export const fetchOvertimePolicyForLocation = async (
+  locationId: string,
+): Promise<OvertimePolicy | null> => {
+  const res = await api.get(
+    `/hr/payroll/overtime-policy/for-location/${locationId}`,
+  );
+  return res.data?.data ?? res.data ?? null;
+};
+
+export const fetchDefaultOvertimePolicy =
+  async (): Promise<OvertimePolicy | null> => {
+    const res = await api.get("/hr/payroll/overtime-policy/default");
+    return res.data?.data ?? res.data ?? null;
+  };
+
+export const upsertOvertimePolicy = async (
+  dto: UpsertOvertimePolicyDto,
+): Promise<OvertimePolicy> => {
+  const res = await api.post("/hr/payroll/overtime-policy", dto);
+  return res.data?.data ?? res.data;
+};
+
+export const deleteOvertimePolicy = async (policyId: string): Promise<void> => {
+  await api.delete(`/hr/payroll/overtime-policy/${policyId}`);
+};
+
 // ── Payroll Runs — Types ────────────────────────────────────────
 
 export type PayrollRunStatus = "draft" | "processed" | "paid";
