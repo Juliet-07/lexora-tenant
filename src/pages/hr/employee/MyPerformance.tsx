@@ -56,7 +56,6 @@ import {
 } from "@/lib/hr/hr-performance-api";
 import { fetchMyProbation } from "@/lib/hr/hr-probation-api";
 
-
 const STATUS_TONE: Record<string, string> = {
   employee_in_progress: "bg-info/10 text-info border-info/20",
   manager_in_progress: "bg-warning/10 text-warning border-warning/20",
@@ -92,14 +91,21 @@ export default function MyPerformance() {
   const onProbation =
     !!probation?.record && probation.record.status === "in_progress";
 
+  // Always fetched, even on probation — this is how the Month 3
+  // evaluation (a real PerformanceReview, created once the manager/
+  // tenant starts it from the probation panel) actually reaches the
+  // employee's self-assessment screen. getMyReviews() on the backend
+  // returns every review for this employee regardless of origin, so
+  // a probationary employee's list is simply empty until Month 3
+  // starts, then contains exactly that one review.
   const { data: reviews = [], isLoading } = useQuery({
     queryKey: ["my-performance-reviews"],
     queryFn: fetchMyReviews,
-    enabled: !onProbation,
   });
 
   const active = reviews.find((r) => r.status !== "completed");
   const completed = reviews.filter((r) => r.status === "completed");
+  const showCurrentReviewTab = !onProbation || !!active;
 
   const defaultTab = onProbation ? "probation" : "current";
 
@@ -139,13 +145,14 @@ export default function MyPerformance() {
 
       <Tabs defaultValue={defaultTab} className="space-y-4">
         <TabsList className="flex flex-wrap h-auto">
-          {onProbation ? (
+          {onProbation && (
             <TabsTrigger value="probation">Probation</TabsTrigger>
-          ) : (
-            <>
-              <TabsTrigger value="current">Current Review</TabsTrigger>
-              <TabsTrigger value="history">Past Reviews</TabsTrigger>
-            </>
+          )}
+          {showCurrentReviewTab && (
+            <TabsTrigger value="current">Current Review</TabsTrigger>
+          )}
+          {!onProbation && (
+            <TabsTrigger value="history">Past Reviews</TabsTrigger>
           )}
           {isManager && (
             <TabsTrigger value="team-reviews">Team Reviews</TabsTrigger>
@@ -159,40 +166,42 @@ export default function MyPerformance() {
           <TabsTrigger value="policies">Policies</TabsTrigger>
         </TabsList>
 
-        {onProbation ? (
+        {onProbation && (
           <TabsContent value="probation" className="space-y-3">
             <MyProbationPanel />
           </TabsContent>
-        ) : (
-          <>
-            <TabsContent value="current" className="space-y-3">
-              {isLoading || probationLoading ? (
-                <LoadingBlock />
-              ) : !active ? (
-                <Card>
-                  <CardContent className="p-6 text-sm text-muted-foreground">
-                    No review cycle assigned to you right now.
-                  </CardContent>
-                </Card>
-              ) : (
-                <CurrentReview reviewId={active._id} />
-              )}
-            </TabsContent>
+        )}
 
-            <TabsContent value="history" className="space-y-3">
-              {completed.length === 0 ? (
-                <Card>
-                  <CardContent className="p-6 text-sm text-muted-foreground">
-                    No completed reviews yet.
-                  </CardContent>
-                </Card>
-              ) : (
-                completed.map((r) => (
-                  <PastReviewCard key={r._id} reviewId={r._id} summary={r} />
-                ))
-              )}
-            </TabsContent>
-          </>
+        {showCurrentReviewTab && (
+          <TabsContent value="current" className="space-y-3">
+            {isLoading || probationLoading ? (
+              <LoadingBlock />
+            ) : !active ? (
+              <Card>
+                <CardContent className="p-6 text-sm text-muted-foreground">
+                  No review cycle assigned to you right now.
+                </CardContent>
+              </Card>
+            ) : (
+              <CurrentReview reviewId={active._id} />
+            )}
+          </TabsContent>
+        )}
+
+        {!onProbation && (
+          <TabsContent value="history" className="space-y-3">
+            {completed.length === 0 ? (
+              <Card>
+                <CardContent className="p-6 text-sm text-muted-foreground">
+                  No completed reviews yet.
+                </CardContent>
+              </Card>
+            ) : (
+              completed.map((r) => (
+                <PastReviewCard key={r._id} reviewId={r._id} summary={r} />
+              ))
+            )}
+          </TabsContent>
         )}
 
         {isManager && (
@@ -220,7 +229,6 @@ export default function MyPerformance() {
     </div>
   );
 }
-
 
 // ─────────────────────────────────────────────────────────────
 // Past review summary card — fetches its own scored view so the

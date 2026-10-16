@@ -388,11 +388,11 @@ export const updateManagerReviewSection = async (
 
 export const completeReview = async (
   reviewId: string,
+  probationRecommendationReasoning?: string,
 ): Promise<PerformanceReview> => {
-  const res = await api.post(
-    `/hr/performance/reviews/${reviewId}/complete`,
-    {},
-  );
+  const res = await api.post(`/hr/performance/reviews/${reviewId}/complete`, {
+    probationRecommendationReasoning,
+  });
   return res.data?.data ?? res.data;
 };
 
