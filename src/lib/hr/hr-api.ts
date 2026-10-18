@@ -2033,6 +2033,12 @@ export interface TerminateEmployeeDto {
   reason: string;
   status: "terminated" | "resigned";
   reassignDirectReportsTo?: string;
+  // Termination category drives the offboarding fairness-checklist
+  // defaults and statutory guidance. Only meaningful when status is
+  // "terminated".
+  category?: string;
+  // How the notice period is being handled.
+  noticeType?: string;
 }
 
 export const fetchMyDirectReports = async (): Promise<DirectReport[]> => {

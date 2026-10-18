@@ -148,8 +148,51 @@ export const getNextStage = (
 // OFFBOARDING — Types & API
 // ─────────────────────────────────────────────────────────────
 
-export type OffboardingStatus = "not_started" | "in_progress" | "completed";
+export type OffboardingStatus =
+  | "not_started"
+  | "in_progress"
+  | "completed"
+  | "reversed";
 export type OffboardingType = "resignation" | "termination";
+
+export type TerminationCategory =
+  | "misconduct"
+  | "performance"
+  | "redundancy"
+  | "mutual"
+  | "resignation"
+  | "fixed_term"
+  | "retirement"
+  | "probation";
+
+export const TERMINATION_CATEGORY_LABEL: Record<TerminationCategory, string> = {
+  misconduct: "Misconduct",
+  performance: "Poor performance / incapacity",
+  redundancy: "Redundancy",
+  mutual: "Mutual agreement",
+  resignation: "Resignation",
+  fixed_term: "Fixed-term contract expiry",
+  retirement: "Retirement",
+  probation: "Probation failure",
+};
+
+export type NoticeHandling = "serve" | "pil" | "garden" | "summary";
+
+export const NOTICE_HANDLING_LABEL: Record<NoticeHandling, string> = {
+  serve: "Serve the notice period",
+  pil: "Payment in lieu of notice",
+  garden: "Garden leave",
+  summary: "Summary dismissal (no notice)",
+};
+
+export type AppealOutcomeDecision =
+  | "pending"
+  | "hearing_scheduled"
+  | "upheld"
+  | "overturned"
+  | "modified"
+  | "adjourned"
+  | "withdrawn";
 
 export interface ClearanceItem {
   key: string;
@@ -159,12 +202,69 @@ export interface ClearanceItem {
   notes: string | null;
 }
 
-export interface OffboardingCertificateFile {
+export interface OffboardingFileRef {
   name: string;
   url: string;
   mimeType: string;
   size: number;
   uploadedAt: string;
+}
+
+// Kept as an alias — existing code referenced this name for the
+// certificate-of-service file before the shared OffboardingFileRef
+// shape was introduced.
+export type OffboardingCertificateFile = OffboardingFileRef;
+
+export interface FairnessItem {
+  cat: "substantive" | "procedural";
+  item: string;
+  detail: string;
+  status: "pass" | "pending";
+}
+
+export interface OffboardingAppeal {
+  window: string;
+  deadline: string | null;
+  filed: boolean;
+  filedAt: string | null;
+  grounds: string | null;
+  letterFile: OffboardingFileRef | null;
+  hearingDate: string | null;
+  status: AppealOutcomeDecision;
+  panelMembers: string | null;
+  hearingNotes: string | null;
+  hearingMinutesFile: OffboardingFileRef | null;
+  withdrawnReason: string | null;
+  withdrawnAt: string | null;
+  withdrawnFile: OffboardingFileRef | null;
+}
+
+export interface FinalPayDeductionLine {
+  key: string;
+  label: string;
+  employeeAmount: number;
+  employerAmount: number;
+  visibleToEmployee: boolean;
+}
+
+export interface OffboardingFinalPay {
+  proRataDays: number;
+  proRataAmount: number;
+  leaveBalanceDays: number;
+  leaveBalanceAmount: number;
+  thirteenthMonthAmount: number;
+  transportAllowanceProrated: number;
+  outstandingAdvances: number;
+  severanceDue: boolean;
+  severanceAmount: number;
+  grossFinalPay: number;
+  deductions: FinalPayDeductionLine[];
+  netFinalPay: number;
+  currency: string;
+  computedAt: string;
+  approved: boolean;
+  approvedAt: string | null;
+  sentToPayrollAt: string | null;
 }
 
 export interface OffboardingRecord {
@@ -174,17 +274,60 @@ export interface OffboardingRecord {
   employeeName: string;
   jobTitle: string;
   type: OffboardingType;
+  category: TerminationCategory | null;
   endDate: string;
   reason: string | null;
   status: OffboardingStatus;
+
+  // Step 1 — fairness checklist
+  fairnessChecklist: FairnessItem[];
+
+  // Step 2 — notice
+  noticePeriodDays: number | null;
+  noticePeriodLabel: string | null;
+  noticeType: NoticeHandling | null;
+  noticeServed: boolean;
+  noticeServedAt: string | null;
+  noticeMethod: string | null;
+  noticeFile: OffboardingFileRef | null;
+  noticePaused: boolean;
+  noticePausedAt: string | null;
+  noticePausedReason: string | null;
+
+  // Step 3 — appeal
+  appeal: OffboardingAppeal | null;
+
+  // Step 4 — exit interview
   exitInterviewDone: boolean;
   exitInterviewNotes: string | null;
+  exitFormSent: boolean;
+  exitFormSentAt: string | null;
+  exitFormDeadline: string | null;
+  exitScheduled: boolean;
+  exitScheduledAt: string | null;
+  exitInterviewer: string | null;
+  exitLocation: string | null;
+  exitReasonCategory: string | null;
+  exitRating: number | null;
+  exitWhatWentWell: string | null;
+  exitWhatToImprove: string | null;
+  exitFairnessAssessment: string | null;
+
+  // Step 5 — clearance & handover
   clearanceChecklist: ClearanceItem[];
   handoverNotes: string | null;
   assignedTo: string | null;
+  handoverAssigneeName: string | null;
+
+  // Step 6 — final pay
+  finalPay: OffboardingFinalPay | null;
+
+  // Step 7 — certificate of service
   completedAt: string | null;
   certificateOfServiceSentAt: string | null;
-  certificateOfServiceFile: OffboardingCertificateFile | null;
+  certificateGeneratedAt: string | null;
+  certificateOfServiceFile: OffboardingFileRef | null;
+
   createdAt: string;
 }
 
@@ -229,6 +372,16 @@ export const sendOffboardingCertificate = async (
   return res.data?.data ?? res.data;
 };
 
+export const generateOffboardingCertificate = async (
+  recordId: string,
+): Promise<OffboardingRecord> => {
+  const res = await api.post(
+    `/hr/recruitment/offboarding/${recordId}/certificate/generate`,
+    {},
+  );
+  return res.data?.data ?? res.data;
+};
+
 const RECRUITMENT_API_BASE = (api.defaults as any)?.baseURL ?? "/api";
 export const resolveOffboardingFileUrl = (url: string): string => {
   if (!url) return url;
@@ -245,9 +398,196 @@ export const updateOffboarding = async (
     clearanceChecklist?: { key: string; cleared: boolean; notes?: string }[];
     handoverNotes?: string;
     assignedTo?: string;
+    handoverAssigneeName?: string;
   },
 ): Promise<OffboardingRecord> => {
   const res = await api.patch(`/hr/recruitment/offboarding/${recordId}`, dto);
+  return res.data?.data ?? res.data;
+};
+
+// ── Step 1: Pre-termination fairness checklist ──
+
+export const updateOffboardingFairnessChecklist = async (
+  recordId: string,
+  items: { index: number; status: "pass" | "pending" }[],
+): Promise<OffboardingRecord> => {
+  const res = await api.patch(
+    `/hr/recruitment/offboarding/${recordId}/fairness`,
+    { items },
+  );
+  return res.data?.data ?? res.data;
+};
+
+// ── Step 2: Draft & serve notice ──
+
+export const downloadOffboardingNoticePdf = async (
+  recordId: string,
+  employeeName: string,
+): Promise<void> => {
+  const res = await api.get(
+    `/hr/recruitment/offboarding/${recordId}/notice/pdf`,
+    { responseType: "blob" },
+  );
+  const blob = new Blob([res.data], { type: "application/pdf" });
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `Termination-Notice-${employeeName.replace(/\s+/g, "_")}.pdf`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(url);
+};
+
+export const downloadOffboardingNoticeDocx = async (
+  recordId: string,
+  employeeName: string,
+): Promise<void> => {
+  const res = await api.get(
+    `/hr/recruitment/offboarding/${recordId}/notice/docx`,
+    { responseType: "blob" },
+  );
+  const blob = new Blob([res.data], {
+    type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  });
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `Termination-Notice-${employeeName.replace(/\s+/g, "_")}.docx`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(url);
+};
+
+export const serveOffboardingNotice = async (
+  recordId: string,
+  dto: { noticeType: NoticeHandling; method: string; servedAt?: string },
+): Promise<OffboardingRecord> => {
+  const res = await api.patch(
+    `/hr/recruitment/offboarding/${recordId}/notice/serve`,
+    dto,
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const uploadOffboardingNoticeFile = async (
+  recordId: string,
+  file: File,
+): Promise<OffboardingRecord> => {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await api.post(
+    `/hr/recruitment/offboarding/${recordId}/notice/file`,
+    form,
+    { headers: { "Content-Type": "multipart/form-data" } },
+  );
+  return res.data?.data ?? res.data;
+};
+
+// ── Step 3: Appeal period (Art. 29) ──
+
+export const fileOffboardingAppeal = async (
+  recordId: string,
+  dto: { filedAt: string; grounds: string; hearingDate?: string },
+): Promise<OffboardingRecord> => {
+  const res = await api.post(
+    `/hr/recruitment/offboarding/${recordId}/appeal/file`,
+    dto,
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const recordOffboardingAppealOutcome = async (
+  recordId: string,
+  dto: {
+    decision: "upheld" | "overturned" | "modified" | "adjourned";
+    panelMembers?: string;
+    notes?: string;
+  },
+): Promise<OffboardingRecord> => {
+  const res = await api.patch(
+    `/hr/recruitment/offboarding/${recordId}/appeal/outcome`,
+    dto,
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const withdrawOffboardingAppeal = async (
+  recordId: string,
+  reason: string,
+): Promise<OffboardingRecord> => {
+  const res = await api.post(
+    `/hr/recruitment/offboarding/${recordId}/appeal/withdraw`,
+    { reason },
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const uploadOffboardingAppealFile = async (
+  recordId: string,
+  kind: "hearing_minutes" | "withdrawal_letter",
+  file: File,
+): Promise<OffboardingRecord> => {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await api.post(
+    `/hr/recruitment/offboarding/${recordId}/appeal/upload`,
+    form,
+    {
+      headers: { "Content-Type": "multipart/form-data" },
+      params: { kind },
+    },
+  );
+  return res.data?.data ?? res.data;
+};
+
+// ── Step 4: Exit interview ──
+
+export const updateOffboardingExitInterview = async (
+  recordId: string,
+  dto: Partial<{
+    formSent: boolean;
+    formDeadline: string;
+    scheduled: boolean;
+    scheduledAt: string;
+    interviewer: string;
+    location: string;
+    done: boolean;
+    reasonCategory: string;
+    rating: number;
+    whatWentWell: string;
+    whatToImprove: string;
+    fairnessAssessment: string;
+    notes: string;
+  }>,
+): Promise<OffboardingRecord> => {
+  const res = await api.patch(
+    `/hr/recruitment/offboarding/${recordId}/exit-interview`,
+    dto,
+  );
+  return res.data?.data ?? res.data;
+};
+
+// ── Step 6: Final pay ──
+
+export const computeOffboardingFinalPay = async (
+  recordId: string,
+): Promise<OffboardingRecord> => {
+  const res = await api.post(
+    `/hr/recruitment/offboarding/${recordId}/final-pay/compute`,
+    {},
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const approveOffboardingFinalPay = async (
+  recordId: string,
+): Promise<OffboardingRecord> => {
+  const res = await api.post(
+    `/hr/recruitment/offboarding/${recordId}/final-pay/approve`,
+    {},
+  );
   return res.data?.data ?? res.data;
 };
 

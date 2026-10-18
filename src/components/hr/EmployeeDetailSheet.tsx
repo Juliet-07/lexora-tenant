@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -68,9 +69,7 @@ import {
   fetchEmployeeDetail,
   fetchEmployeeOnboardingRecord,
   fetchEmployeePayrollSnapshot,
-  fetchEmployeesByHierarchyRole,
   resendWelcomeEmail,
-  terminateEmployee,
   addEmployeeRecord,
   fetchEmployeeRecords,
   suspendEmployee,
@@ -246,17 +245,11 @@ const managerName = (e: Employee) =>
 
 export function EmployeeDetailSheet({ employee, onClose }: Props) {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const { refetchDashboard } = useModule();
   const { user } = useAuth();
-  const [terminateOpen, setTerminateOpen] = useState(false);
   const [suspendOpen, setSuspendOpen] = useState(false);
   const [previewDoc, setPreviewDoc] = useState<PreviewDocument | null>(null);
-  const [terminateForm, setTerminateForm] = useState({
-    endDate: new Date().toISOString().slice(0, 10),
-    status: "resigned" as "terminated" | "resigned",
-    reason: "",
-  });
-  const [reassignChoice, setReassignChoice] = useState<string>("");
   const [addRecordOpen, setAddRecordOpen] = useState(false);
   const [recordType, setRecordType] = useState<EmployeeRecordType>("note");
   const [recordDescription, setRecordDescription] = useState("");
@@ -288,19 +281,9 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
     useQuery({
       queryKey: ["employee-direct-reports", employee?._id],
       queryFn: () => fetchDirectReportsOf(employee!._id),
-      enabled: terminateOpen && !!employee,
+      enabled: !!employee,
       staleTime: 10_000,
     });
-
-  const { data: replacementCandidates = [] } = useQuery({
-    queryKey: ["hr-employees-by-role", "manager"],
-    queryFn: () => fetchEmployeesByHierarchyRole("manager"),
-    enabled:
-      terminateOpen &&
-      directReports.length > 0 &&
-      employee?.hierarchyRole === "manager",
-    staleTime: 30_000,
-  });
 
   const { data: reviewHistory = [], isLoading: reviewHistoryLoading } =
     useQuery({
@@ -369,48 +352,7 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
     retry: false,
   });
 
-  const replacementCandidatesForSameTeam = useMemo(() => {
-    if (!employee) return [];
-
-    const empTeamId =
-      typeof employee.teamId === "object" && employee.teamId !== null
-        ? employee.teamId._id
-        : employee.teamId;
-
-    return replacementCandidates.filter((c) => {
-      const cTeamId =
-        typeof c.teamId === "object" && c.teamId !== null
-          ? c.teamId._id
-          : c.teamId;
-      return cTeamId === empTeamId && c._id !== employee._id;
-    });
-  }, [replacementCandidates, employee]);
-
   // MUTATIONS ─────────────────────────────────────────
-
-  const terminateMutation = useMutation({
-    mutationFn: () =>
-      terminateEmployee(employee!._id, {
-        ...terminateForm,
-        reassignDirectReportsTo: reassignChoice || undefined,
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: ["employee-detail", employee!._id],
-      });
-      queryClient.invalidateQueries({ queryKey: ["hr-employees"] });
-      queryClient.invalidateQueries({ queryKey: ["recruitment-offboarding"] });
-      refetchDashboard(); // termination frees a seat — reflect it right away
-      setTerminateOpen(false);
-      toast.success(
-        `${employee!.firstName} ${employee!.lastName} marked as ${terminateForm.status}. An offboarding record was created.`,
-      );
-    },
-    onError: (err: any) =>
-      toast.error(
-        err?.response?.data?.message ?? "Failed to terminate employee",
-      ),
-  });
 
   const resendMutation = useMutation({
     mutationFn: () => resendWelcomeEmail(employee._id),
@@ -682,7 +624,15 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
                   size="sm"
                   variant="secondary"
                   className="bg-red-500 hover:bg-destructive/30 text-white border-destructive/30"
-                  onClick={() => setTerminateOpen(true)}
+                  onClick={() => {
+                    // The termination/offboarding flow now lives entirely
+                    // on the Recruitment page's Offboarding tab, so this
+                    // just hands off to it with the employee pre-selected.
+                    onClose();
+                    navigate(
+                      `/hr/recruitment?tab=offboarding&newOffboarding=${employee!._id}`,
+                    );
+                  }}
                 >
                   <UserX className="h-4 w-4 mr-2" /> Terminate
                 </Button>
@@ -1860,137 +1810,6 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
           onSubmit={(form) => suspendMutation.mutate(form)}
           isSubmitting={suspendMutation.isPending}
         />
-
-        {/* Termination Dialog */}
-        <Dialog open={terminateOpen} onOpenChange={setTerminateOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>
-                Terminate {emp.firstName} {emp.lastName}?
-              </DialogTitle>
-            </DialogHeader>
-            <div className="space-y-3">
-              <p className="text-sm text-muted-foreground">
-                This sets their employment status and automatically creates an
-                offboarding record (clearance checklist, exit interview
-                tracking). This cannot be undone from here.
-              </p>
-
-              {directReportsLoading ? (
-                <p className="text-xs text-muted-foreground">
-                  Checking direct reports…
-                </p>
-              ) : emp.hierarchyRole === "head_of_department" &&
-                directReports.length > 0 ? (
-                <div className="rounded-md bg-destructive/10 border border-destructive/20 text-destructive text-sm p-3">
-                  {emp.firstName} is the Head of Department with{" "}
-                  {directReports.length} Manager(s) reporting to them. Use{" "}
-                  <strong>Replace Head of Department</strong> on the Teams tab
-                  first, then terminate them afterward.
-                </div>
-              ) : (
-                <>
-                  {directReports.length > 0 && (
-                    <div className="space-y-1">
-                      <Label>
-                        {directReports.length} employee(s) report to{" "}
-                        {emp.firstName}. Reassign them to{" "}
-                        <span className="text-destructive">*</span>
-                      </Label>
-                      <Select
-                        value={reassignChoice}
-                        onValueChange={setReassignChoice}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Choose a replacement…" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="clear">
-                            Leave unassigned for now
-                          </SelectItem>
-                          {replacementCandidatesForSameTeam.map((c) => (
-                            <SelectItem key={c._id} value={c._id}>
-                              {c.firstName} {c.lastName}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <p className="text-xs text-muted-foreground">
-                        {directReports
-                          .map((r) => `${r.firstName} ${r.lastName}`)
-                          .join(", ")}
-                      </p>
-                    </div>
-                  )}
-
-                  <div className="space-y-1">
-                    <Label>Reason</Label>
-                    <Select
-                      value={terminateForm.status}
-                      onValueChange={(v: any) =>
-                        setTerminateForm((f) => ({ ...f, status: v }))
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="resigned">Resigned</SelectItem>
-                        <SelectItem value="terminated">Terminated</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1">
-                    <Label>Last working day</Label>
-                    <Input
-                      type="date"
-                      value={terminateForm.endDate}
-                      onChange={(e) =>
-                        setTerminateForm((f) => ({
-                          ...f,
-                          endDate: e.target.value,
-                        }))
-                      }
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label>Notes (optional)</Label>
-                    <Textarea
-                      rows={3}
-                      value={terminateForm.reason}
-                      onChange={(e) =>
-                        setTerminateForm((f) => ({
-                          ...f,
-                          reason: e.target.value,
-                        }))
-                      }
-                    />
-                  </div>
-                </>
-              )}
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setTerminateOpen(false)}>
-                Cancel
-              </Button>
-              <Button
-                variant="destructive"
-                disabled={
-                  !terminateForm.endDate ||
-                  (emp.hierarchyRole === "head_of_department" &&
-                    directReports.length > 0) ||
-                  (directReports.length > 0 && !reassignChoice) ||
-                  terminateMutation.isPending
-                }
-                onClick={() => terminateMutation.mutate()}
-              >
-                {terminateMutation.isPending
-                  ? "Processing…"
-                  : "Confirm Termination"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
       </SheetContent>
 
       <DocumentPreviewDialog
