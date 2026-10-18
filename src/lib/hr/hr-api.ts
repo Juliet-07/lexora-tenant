@@ -1733,6 +1733,38 @@ export const discardPayrollRun = async (runId: string): Promise<void> => {
   await api.delete(`/hr/payroll/runs/${runId}`);
 };
 
+// ── Offboarding payroll — employees whose final pay has been
+// approved and who've therefore dropped out of the normal payroll
+// run (they're no longer active). Settled separately here. ──
+export interface OffboardingPayable {
+  _id: string;
+  employeeId: string;
+  employeeName: string;
+  jobTitle: string;
+  type: "termination" | "resignation";
+  category: string | null;
+  endDate: string;
+  netFinalPay: number;
+  grossFinalPay: number;
+  currency: string;
+  approvedAt: string | null;
+  paid: boolean;
+  paidAt: string | null;
+}
+
+export const fetchOffboardingPayable = async (): Promise<
+  OffboardingPayable[]
+> => {
+  const res = await api.get("/hr/payroll/runs/offboarding");
+  return res.data?.data ?? res.data ?? [];
+};
+
+export const markOffboardingFinalPayPaid = async (
+  recordId: string,
+): Promise<void> => {
+  await api.post(`/hr/payroll/runs/offboarding/${recordId}/mark-paid`, {});
+};
+
 export const fetchPayslipById = async (payslipId: string): Promise<Payslip> => {
   const res = await api.get(`/hr/payroll/runs/payslip/${payslipId}`);
   return res.data?.data ?? res.data;

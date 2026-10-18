@@ -63,6 +63,7 @@ import {
   Hourglass,
   ThumbsUp,
   ThumbsDown,
+  UserMinus,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
@@ -110,6 +111,9 @@ import {
   fetchPayslipTemplate,
   updatePayslipTemplate,
   uploadPayslipLogo,
+  fetchOffboardingPayable,
+  markOffboardingFinalPayPaid,
+  type OffboardingPayable,
 } from "@/lib/hr/hr-api";
 
 const CURRENCIES = [
@@ -276,6 +280,14 @@ export default function HRPayroll() {
     queryFn: fetchAllPayrollRuns,
   });
 
+  const {
+    data: offboardingPayable = [],
+    isLoading: offboardingPayableLoading,
+  } = useQuery({
+    queryKey: ["payroll-offboarding-payable"],
+    queryFn: fetchOffboardingPayable,
+  });
+
   const { data: periodStatusMap = {}, isLoading: periodStatusLoading } =
     useQuery({
       queryKey: ["payroll-period-status", period],
@@ -436,6 +448,18 @@ export default function HRPayroll() {
     },
   });
 
+  const markOffboardingPaidMutation = useMutation({
+    mutationFn: markOffboardingFinalPayPaid,
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["payroll-offboarding-payable"],
+      });
+      toast.success("Marked as paid.");
+    },
+    onError: (err: any) =>
+      toast.error(err?.response?.data?.message ?? "Failed to mark as paid"),
+  });
+
   // ── Employees-tab mutations — calculate one employee, or run
   // payroll for everyone at once. Both go through the same
   // createPayrollRun call; "one" just adds employeeId to the dto. ──
@@ -550,6 +574,17 @@ export default function HRPayroll() {
           </TabsTrigger>
           <TabsTrigger value="runs">
             <Receipt className="h-3.5 w-3.5 mr-1.5" /> Payroll Runs
+          </TabsTrigger>
+          <TabsTrigger value="offboarding">
+            <UserMinus className="h-3.5 w-3.5 mr-1.5" /> Offboarding
+            {offboardingPayable.some((o) => !o.paid) && (
+              <Badge
+                variant="outline"
+                className="ml-1.5 h-4 min-w-4 px-1 text-[10px] bg-warning/10 text-warning border-warning/20"
+              >
+                {offboardingPayable.filter((o) => !o.paid).length}
+              </Badge>
+            )}
           </TabsTrigger>
           <TabsTrigger value="loans">
             <Landmark className="h-3.5 w-3.5 mr-1.5" /> Loans
@@ -818,6 +853,94 @@ export default function HRPayroll() {
                 </CardContent>
               </Card>
             ))
+          )}
+        </TabsContent>
+
+        <TabsContent value="offboarding" className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Employees with an approved final pay — they're excluded from the
+            normal payroll run above since they're no longer active. Settle and
+            mark each one paid here.
+          </p>
+
+          {offboardingPayableLoading ? (
+            <LoadingRow label="Loading offboarding payouts…" />
+          ) : offboardingPayable.length === 0 ? (
+            <EmptyCard text="No approved final pay awaiting payout." />
+          ) : (
+            <Card>
+              <CardContent className="p-0">
+                <div className="grid grid-cols-12 gap-2 px-4 py-2 text-[11px] uppercase text-muted-foreground bg-muted/40 border-b">
+                  <div className="col-span-4">Employee</div>
+                  <div className="col-span-2">Last working day</div>
+                  <div className="col-span-2 text-right">Net final pay</div>
+                  <div className="col-span-2">Status</div>
+                  <div className="col-span-2 text-right">Action</div>
+                </div>
+                {offboardingPayable.map((o) => (
+                  <div
+                    key={o._id}
+                    className="grid grid-cols-12 gap-2 px-4 py-3 items-center border-b last:border-b-0 hover:bg-muted/20"
+                  >
+                    <div className="col-span-4">
+                      <p className="text-sm font-medium">{o.employeeName}</p>
+                      <p className="text-[11px] text-muted-foreground">
+                        {o.jobTitle} ·{" "}
+                        {o.type === "resignation" ? "Resigned" : "Terminated"}
+                      </p>
+                    </div>
+                    <div className="col-span-2">
+                      <p className="text-xs">{fmtDate(o.endDate)}</p>
+                    </div>
+                    <div className="col-span-2 text-right">
+                      <p className="text-sm font-semibold">
+                        {fmt(o.netFinalPay, o.currency)}
+                      </p>
+                    </div>
+                    <div className="col-span-2">
+                      <Badge
+                        variant="outline"
+                        className={
+                          o.paid
+                            ? "bg-success/10 text-success border-success/20"
+                            : "bg-warning/10 text-warning border-warning/20"
+                        }
+                      >
+                        {o.paid ? "Paid" : "Awaiting payout"}
+                      </Badge>
+                      {o.paid && o.paidAt && (
+                        <p className="text-[10px] text-muted-foreground mt-0.5">
+                          {fmtDate(o.paidAt)}
+                        </p>
+                      )}
+                    </div>
+                    <div className="col-span-2 flex justify-end">
+                      {!o.paid && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={
+                            markOffboardingPaidMutation.isPending &&
+                            markOffboardingPaidMutation.variables === o._id
+                          }
+                          onClick={() =>
+                            markOffboardingPaidMutation.mutate(o._id)
+                          }
+                        >
+                          {markOffboardingPaidMutation.isPending &&
+                          markOffboardingPaidMutation.variables === o._id ? (
+                            <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                          ) : (
+                            <CheckCircle2 className="h-3 w-3 mr-1" />
+                          )}
+                          Mark as paid
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
           )}
         </TabsContent>
 
