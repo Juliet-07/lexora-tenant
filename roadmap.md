@@ -1,8 +1,10 @@
 # Roadmap
 
 ## Event management completion
-- [ ] Connect CRM Tools navigation and public registration links
-- [ ] Verify creation, invitations, registrations, attendance and exports; disclose prototype limitations
+- [x] Connect CRM Tools navigation and public registration links
+- [x] Test event creation, invitation tracking, registrations, attendance, cancellation and persistence; disclose prototype limitations
+- [x] Verify public invitation registration, saved results, invalid links and mobile layout in the browser
+- [ ] Verify tenant-side controls and CSV download in an authenticated browser session — blocked by unavailable sign-in access
 
 ## Insights blog
 - [x] Add full sample articles and clickable links to each insight
