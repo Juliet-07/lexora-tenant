@@ -202,7 +202,7 @@ export default function Events() {
 
   const dispatchInvites = () => {
     if (!selected) return;
-    const chosen = emailableContacts.filter((c) => checkedContacts.includes(c._id));
+    const chosen = contacts.filter((c) => checkedContacts.includes(c._id));
     if (!chosen.length) {
       toast.error("Select at least one contact.");
       return;

@@ -274,6 +274,9 @@ export function registerForEvent(
     return { ok: false, reason: "The registration deadline has passed." };
   }
   const email = dto.email.trim().toLowerCase();
+  if (!dto.name.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return { ok: false, reason: "Please provide your name and a valid email address." };
+  }
   if (
     ev.registrations.some(
       (r) => r.email.toLowerCase() === email && r.status !== "Cancelled",
@@ -319,14 +322,14 @@ export function setRegistrationStatus(
             ...r,
             status,
             checkedInAt:
-              status === "Attended" ? r.checkedInAt ?? new Date().toISOString() : r.checkedInAt,
+              status === "Attended" ? r.checkedInAt ?? new Date().toISOString() : null,
           }
         : r,
     ),
     invites: e.invites.map((i) => {
       const reg = e.registrations.find((r) => r.id === registrationId);
       if (reg && i.email.toLowerCase() === reg.email.toLowerCase()) {
-        return { ...i, status: status === "Attended" ? "Attended" : i.status };
+        return { ...i, status: status === "Attended" ? "Attended" : status === "Cancelled" ? "Declined" : "Registered" };
       }
       return i;
     }),
