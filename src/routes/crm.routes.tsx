@@ -28,6 +28,7 @@ import Contracts from "@/pages/crm/tools/Contracts";
 import ContractDetail from "@/pages/crm/tools/ContractDetail";
 import CrmCalendar from "@/pages/crm/tools/Calendar";
 import Newsletter from "@/pages/crm/tools/Newsletter";
+import Events from "@/pages/crm/tools/Events";
 
 import Reports from "@/pages/crm/Reports";
 import Pmo from "@/pages/crm/projects/Pmo";
@@ -179,6 +180,11 @@ export const crmRoutes = ({ isAdmin, accessibleModules }: RouteContext) => {
         key="crm-newsletter"
         path="/crm/newsletter"
         element={layout(<Newsletter />)}
+      />,
+      <Route
+        key="crm-events"
+        path="/crm/events"
+        element={layout(<Events />)}
       />,
       <Route
         key="crm-calendar"

@@ -202,7 +202,7 @@ export default function Events() {
 
   const dispatchInvites = () => {
     if (!selected) return;
-    const chosen = emailableContacts.filter((c) => checkedContacts.includes(c._id));
+    const chosen = contacts.filter((c) => checkedContacts.includes(c._id));
     if (!chosen.length) {
       toast.error("Select at least one contact.");
       return;
@@ -255,8 +255,7 @@ export default function Events() {
         <div>
           <h1 className="text-2xl font-bold">Event Management</h1>
           <p className="text-sm text-muted-foreground">
-            Create events, invite your CRM contacts and track registrations
-            through to check-in.
+            Preview data is saved only in this browser. Invitation links do not work on other devices, and no emails are sent.
           </p>
         </div>
         <Button onClick={openCreate}>
@@ -267,7 +266,7 @@ export default function Events() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {[
           { label: "Published events", value: totals.published, icon: CalendarDays },
-          { label: "Invitations sent", value: totals.invites, icon: Mail },
+          { label: "Invitations recorded", value: totals.invites, icon: Mail },
           { label: "Registrations", value: totals.regs, icon: Users },
           { label: "Attended", value: totals.attended, icon: CheckCircle2 },
         ].map(({ label, value, icon: Icon }) => (

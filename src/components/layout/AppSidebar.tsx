@@ -299,6 +299,7 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
         // { title: "Forms & Workflows", url: "/crm/forms" },
         { title: "Calendar", url: "/crm/calendar" },
         { title: "Newsletter", url: "/crm/newsletter" },
+        { title: "Event Management", url: "/crm/events" },
       ],
     },
     {
