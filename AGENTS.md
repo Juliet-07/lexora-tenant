@@ -5,3 +5,4 @@
 - Keep public marketing photography as directly viewable JPEG files in public/marketing because editors need inspectable images and stable web paths.
 - Use the shared GRC print report layout for client-generated governance documents because agendas, minutes, codes and audit exports need consistent branding.
 - Frame organogram image exports from graph bounds at natural scale with pixel margins, independent of viewport zoom, because proportional fit padding can make downloaded charts unreadably small.
+- Keep the existing event workflow explicitly browser-local until an events service is available; public registration routes must bypass login and must not imply email delivery or cross-device registration support.

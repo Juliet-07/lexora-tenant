@@ -31,6 +31,7 @@ import Advisory from "@/pages/marketing/Advisory";
 import MarketingInsights from "@/pages/marketing/Insights";
 import AboutPage from "@/pages/marketing/About";
 import ContactPage from "@/pages/marketing/Contact";
+import EventRegisterPage from "@/pages/public/EventRegisterPage";
 
 /**
  * Top-level router. Module-specific routes live in their own files so
@@ -38,6 +39,7 @@ import ContactPage from "@/pages/marketing/Contact";
  */
 
 const PUBLIC_ROUTE_PATTERNS = [
+  /^\/event-register\/[^/]+$/,
   /^\/sign-contract\/[^/]+$/,
   /^\/sign-tool-contract\/[^/]+$/,
   /^\/meeting-ack\/[^/]+$/,
@@ -86,6 +88,8 @@ export function AppRoutes() {
   if (isPublicRoute) {
     return (
       <Routes>
+        <Route path="/event-register/:token" element={<EventRegisterPage />} />
+        <Route path="/login/event-register/:token" element={<EventRegisterPage />} />
         <Route path="/sign-contract/:token" element={<SignContractPage />} />
         <Route
           path="/login/sign-contract/:token"

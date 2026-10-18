@@ -1,5 +1,9 @@
 # Roadmap
 
+## Event management completion
+- [ ] Connect CRM Tools navigation and public registration links
+- [ ] Verify creation, invitations, registrations, attendance and exports; disclose prototype limitations
+
 ## Insights blog
 - [x] Add full sample articles and clickable links to each insight
 - [x] Verify article reading, direct links and return navigation

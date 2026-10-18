@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -35,7 +35,7 @@ export default function EventRegisterPage() {
   // Subscribing to the store keeps the page fresh after registering.
   useEventsStore();
 
-  const found = useMemo(() => (token ? findEventByInviteToken(token) : null), [token]);
+  const found = token ? findEventByInviteToken(token) : null;
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -44,7 +44,16 @@ export default function EventRegisterPage() {
   const [notes, setNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
-  const [prefilled, setPrefilled] = useState(false);
+  const invite = found?.invite;
+  useEffect(() => {
+    setName(invite?.name ?? "");
+    setEmail(invite?.email ?? "");
+    setOrganisation(invite?.organisation ?? "");
+    setPhone("");
+    setNotes("");
+    setError(null);
+    setDone(false);
+  }, [token, invite?.id]);
 
   if (!found) {
     return (
@@ -63,14 +72,7 @@ export default function EventRegisterPage() {
     );
   }
 
-  const { event, invite } = found;
-
-  if (invite && !prefilled) {
-    setName(invite.name);
-    setEmail(invite.email);
-    setOrganisation(invite.organisation);
-    setPrefilled(true);
-  }
+  const { event } = found;
 
   const deadlinePassed =
     !!event.registrationDeadline &&
@@ -96,6 +98,9 @@ export default function EventRegisterPage() {
   return (
     <div className="min-h-screen bg-muted/30 py-10 px-4">
       <div className="max-w-2xl mx-auto space-y-4">
+        <p className="text-xs text-muted-foreground text-center">
+          Event preview: registrations are saved only in this browser, not sent to the organiser. No confirmation email is sent.
+        </p>
         <div className="text-center space-y-2">
           <CalendarDays className="h-8 w-8 text-primary mx-auto" />
           <Badge variant="secondary">{event.type}</Badge>
@@ -152,7 +157,7 @@ export default function EventRegisterPage() {
               <h2 className="text-lg font-semibold">You're registered</h2>
               <p className="text-sm text-muted-foreground">
                 Thank you, {name}. Your place at <strong>{event.title}</strong> is
-                confirmed. The organiser will share joining details closer to the date.
+                saved in this browser for this event preview.
               </p>
             </CardContent>
           </Card>
@@ -216,8 +221,7 @@ export default function EventRegisterPage() {
                 Register
               </Button>
               <p className="text-xs text-muted-foreground text-center">
-                Registration is recorded with the organiser. You can request
-                cancellation by contacting them directly.
+                This preview does not reserve a place with the organiser.
               </p>
             </CardContent>
           </Card>
