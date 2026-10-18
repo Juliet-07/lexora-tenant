@@ -602,12 +602,47 @@ export type BenchReadiness =
   | "ready_3_plus_years"
   | "gap";
 export type SuccessorPotential = "high" | "medium" | "low";
+export type DevelopmentMilestoneStatus = "pending" | "in_progress" | "done";
+
+export interface DevelopmentMilestone {
+  _id: string;
+  item: string;
+  dueDate: string;
+  status: DevelopmentMilestoneStatus;
+}
+
+export interface DevelopmentPlan {
+  targetRole: string;
+  timelineMonths: number;
+  startDate: string;
+  targetDate: string;
+  objectives: string | null;
+  milestones: DevelopmentMilestone[];
+  nextReviewDate: string | null;
+}
+
+export interface SuccessorAssessment {
+  technicalKnowledge: number | null;
+  leadershipAbility: number | null;
+  strategicThinking: number | null;
+  stakeholderManagement: number | null;
+  industryKnowledge: number | null;
+  culturalFit: number | null;
+  comments: string | null;
+  assessedAt: string | null;
+  assessedBy: string | null;
+}
 
 export interface Successor {
   employeeId: string;
   employeeName: string;
   readiness: BenchReadiness;
+  readinessPct: number;
   potential: SuccessorPotential;
+  strengths: string | null;
+  gaps: string | null;
+  assessment: SuccessorAssessment | null;
+  devPlan: DevelopmentPlan | null;
   notes: string | null;
 }
 
@@ -615,13 +650,55 @@ export interface SuccessionPlan {
   _id: string;
   tenantId: string;
   criticalRole: string;
+  department: string | null;
   incumbentId: string;
   incumbentName: string;
+  businessImpact: string | null;
   riskOfLoss: RiskOfLoss;
   overallReadiness: BenchReadiness;
   successors: Successor[];
+  holderExiting?: boolean;
+  interimCoverId: string | null;
+  interimCoverName: string | null;
+  externalBackupNotes: string | null;
+  nextReviewDate: string | null;
   notes: string | null;
   createdAt: string;
+}
+
+export interface RiskAlert {
+  severity: "high" | "medium";
+  type:
+    | "no_successor"
+    | "single_point_of_failure"
+    | "successor_behind"
+    | "holder_exiting";
+  planId: string;
+  role: string;
+  title: string;
+  detail: string;
+}
+
+export interface BenchStrengthRow {
+  planId: string;
+  role: string;
+  benchDepth: number;
+  nearestReady: BenchReadiness | null;
+  riskOfLoss: RiskOfLoss;
+}
+
+export interface BenchStrengthReport {
+  readyNowCount: number;
+  oneToTwoYearsCount: number;
+  noSuccessorCount: number;
+  rows: BenchStrengthRow[];
+}
+
+export interface NineBoxPerson {
+  employeeId: string;
+  employeeName: string;
+  potential: SuccessorPotential;
+  performance: "high" | "moderate" | "low";
 }
 
 export const fetchAllSuccessionPlans = async (): Promise<SuccessionPlan[]> => {
@@ -637,9 +714,39 @@ export const fetchSuccessionPlanById = async (
   return res.data?.data ?? res.data;
 };
 
+export const fetchSuccessionRiskAlerts = async (): Promise<RiskAlert[]> => {
+  const res = await api.get("/hr/recruitment/succession-plans/risk-alerts");
+  const d = res.data?.data ?? res.data;
+  return Array.isArray(d) ? d : [];
+};
+
+export const fetchSuccessionBenchStrength =
+  async (): Promise<BenchStrengthReport> => {
+    const res = await api.get(
+      "/hr/recruitment/succession-plans/bench-strength",
+    );
+    return (
+      res.data?.data ??
+      res.data ?? {
+        readyNowCount: 0,
+        oneToTwoYearsCount: 0,
+        noSuccessorCount: 0,
+        rows: [],
+      }
+    );
+  };
+
+export const fetchSuccessionNineBox = async (): Promise<NineBoxPerson[]> => {
+  const res = await api.get("/hr/recruitment/succession-plans/nine-box");
+  const d = res.data?.data ?? res.data;
+  return Array.isArray(d) ? d : [];
+};
+
 export const createSuccessionPlan = async (dto: {
   criticalRole: string;
+  department?: string;
   incumbentId: string;
+  businessImpact?: string;
   riskOfLoss?: RiskOfLoss;
   overallReadiness?: BenchReadiness;
   notes?: string;
@@ -652,6 +759,8 @@ export const updateSuccessionPlan = async (
   planId: string,
   dto: {
     criticalRole?: string;
+    department?: string;
+    businessImpact?: string;
     riskOfLoss?: RiskOfLoss;
     overallReadiness?: BenchReadiness;
     notes?: string;
@@ -673,7 +782,10 @@ export const addSuccessor = async (
   dto: {
     employeeId: string;
     readiness?: BenchReadiness;
+    readinessPct?: number;
     potential?: SuccessorPotential;
+    strengths?: string;
+    gaps?: string;
     notes?: string;
   },
 ): Promise<SuccessionPlan> => {
@@ -690,6 +802,103 @@ export const removeSuccessor = async (
 ): Promise<SuccessionPlan> => {
   const res = await api.delete(
     `/hr/recruitment/succession-plans/${planId}/successors/${employeeId}`,
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const recordSuccessorAssessment = async (
+  planId: string,
+  employeeId: string,
+  dto: {
+    technicalKnowledge?: number;
+    leadershipAbility?: number;
+    strategicThinking?: number;
+    stakeholderManagement?: number;
+    industryKnowledge?: number;
+    culturalFit?: number;
+    comments?: string;
+  },
+): Promise<SuccessionPlan> => {
+  const res = await api.patch(
+    `/hr/recruitment/succession-plans/${planId}/successors/${employeeId}/assessment`,
+    dto,
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const createDevelopmentPlan = async (
+  planId: string,
+  employeeId: string,
+  dto: {
+    targetRole: string;
+    timelineMonths: number;
+    startDate: string;
+    objectives?: string;
+    milestones?: { item: string; dueDate: string }[];
+  },
+): Promise<SuccessionPlan> => {
+  const res = await api.post(
+    `/hr/recruitment/succession-plans/${planId}/successors/${employeeId}/development-plan`,
+    dto,
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const addDevelopmentMilestone = async (
+  planId: string,
+  employeeId: string,
+  dto: { item: string; dueDate: string },
+): Promise<SuccessionPlan> => {
+  const res = await api.post(
+    `/hr/recruitment/succession-plans/${planId}/successors/${employeeId}/development-plan/milestones`,
+    dto,
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const updateDevelopmentMilestoneStatus = async (
+  planId: string,
+  employeeId: string,
+  milestoneId: string,
+  status: DevelopmentMilestoneStatus,
+): Promise<SuccessionPlan> => {
+  const res = await api.patch(
+    `/hr/recruitment/succession-plans/${planId}/successors/${employeeId}/development-plan/milestones/${milestoneId}`,
+    { status },
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const setDevelopmentPlanNextReview = async (
+  planId: string,
+  employeeId: string,
+  nextReviewDate: string,
+): Promise<SuccessionPlan> => {
+  const res = await api.patch(
+    `/hr/recruitment/succession-plans/${planId}/successors/${employeeId}/development-plan/next-review`,
+    { nextReviewDate },
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const setSuccessionEmergencyCover = async (
+  planId: string,
+  dto: { interimCoverId?: string | null; externalBackupNotes?: string },
+): Promise<SuccessionPlan> => {
+  const res = await api.patch(
+    `/hr/recruitment/succession-plans/${planId}/emergency-cover`,
+    dto,
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const setSuccessionNextReview = async (
+  planId: string,
+  nextReviewDate: string,
+): Promise<SuccessionPlan> => {
+  const res = await api.patch(
+    `/hr/recruitment/succession-plans/${planId}/next-review`,
+    { nextReviewDate },
   );
   return res.data?.data ?? res.data;
 };
