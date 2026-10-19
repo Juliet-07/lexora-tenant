@@ -101,6 +101,15 @@ const AUDIENCE_LABEL: Record<EventAudienceType, string> = {
   Contact: "Contact",
 };
 
+// The backend validates registrationDeadline's format only when a
+// real value is present (an empty string from the hidden InHouse
+// field, or a cleared date picker, is not a value) — but there's no
+// reason to send a meaningless "" either way.
+const cleanPayload = (d: EventPayload): EventPayload => ({
+  ...d,
+  registrationDeadline: d.registrationDeadline || undefined,
+});
+
 const emptyDraft = (): EventPayload => ({
   title: "",
   type: "Webinar",
@@ -232,8 +241,10 @@ export default function Events() {
   };
 
   const saveMut = useMutation({
-    mutationFn: () =>
-      editingId ? updateEvent(editingId, draft) : createEvent(draft),
+    mutationFn: () => {
+      const payload = cleanPayload(draft);
+      return editingId ? updateEvent(editingId, payload) : createEvent(payload);
+    },
     onSuccess: (e) => {
       invalidate();
       setEditorOpen(false);
