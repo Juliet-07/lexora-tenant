@@ -465,7 +465,9 @@ export const fetchSegmentMembers = async (
 // Newsletter — Campaigns
 // ══════════════════════════════════════════════════════════════
 
-export type CampaignType = "Newsletter" | "Event invite";
+// "Event invite" was retired Oct 2026 — Event Management (events-api
+// via eventsStore) is the one real place an event lives now.
+export type CampaignType = "Newsletter";
 export type CampaignStatus = "Draft" | "Scheduled" | "Sending" | "Sent";
 
 export interface CampaignEventDetails {
@@ -520,7 +522,6 @@ export const createCampaign = async (dto: {
   segmentIds: string[];
   subject?: string;
   body?: string;
-  event?: Partial<CampaignEventDetails>;
 }): Promise<Campaign> => unwrap(await api.post("/tools/campaigns", dto));
 export const updateCampaign = async (
   id: string,
@@ -530,7 +531,6 @@ export const updateCampaign = async (
     segmentIds: string[];
     subject?: string;
     body?: string;
-    event?: Partial<CampaignEventDetails>;
   },
 ): Promise<Campaign> => unwrap(await api.patch(`/tools/campaigns/${id}`, dto));
 export const duplicateCampaign = async (id: string): Promise<Campaign> =>
@@ -583,6 +583,127 @@ export const markDraftConverted = async (
       campaignId,
     }),
   );
+
+// ══════════════════════════════════════════════════════════════
+// Newsletter — Alerts
+// ══════════════════════════════════════════════════════════════
+
+export type AlertCategory =
+  | "Regulatory"
+  | "Legal"
+  | "Financial"
+  | "Compliance"
+  | "Government"
+  | "System"
+  | "Engineering"
+  | "Industry"
+  | "Health & Safety"
+  | "Environmental"
+  | "Cybersecurity"
+  | "Supply chain";
+export const ALERT_CATEGORIES: AlertCategory[] = [
+  "Regulatory",
+  "Legal",
+  "Financial",
+  "Compliance",
+  "Government",
+  "System",
+  "Engineering",
+  "Industry",
+  "Health & Safety",
+  "Environmental",
+  "Cybersecurity",
+  "Supply chain",
+];
+// Emoji shown next to each category pill in the prototype's design —
+// kept as a lookup rather than baked into the category string itself.
+export const ALERT_CATEGORY_ICON: Record<AlertCategory, string> = {
+  Regulatory: "🏛",
+  Legal: "⚖",
+  Financial: "💰",
+  Compliance: "📋",
+  Government: "🏗",
+  System: "⚙",
+  Engineering: "🔧",
+  Industry: "📢",
+  "Health & Safety": "🦺",
+  Environmental: "🌱",
+  Cybersecurity: "🔒",
+  "Supply chain": "🚚",
+};
+
+export type AlertPriority = "Critical" | "High" | "Medium" | "Low";
+export const ALERT_PRIORITIES: AlertPriority[] = [
+  "Critical",
+  "High",
+  "Medium",
+  "Low",
+];
+
+export type AlertStatus = "Draft" | "Scheduled" | "Sending" | "Sent";
+
+export interface Alert {
+  _id: string;
+  title: string;
+  category: AlertCategory;
+  priority: AlertPriority;
+  triggerType: string;
+  source: string;
+  summary: string;
+  actionRequired: string;
+  effectiveDate: string | null;
+  deadline: string | null;
+  segmentIds: string[];
+  segmentNames: string[];
+  status: AlertStatus;
+  scheduledAt: string | null;
+  sentAt: string | null;
+  recipients: CampaignRecipient[];
+  createdAt: string;
+}
+
+export interface AlertPayload {
+  title: string;
+  category: AlertCategory;
+  priority: AlertPriority;
+  triggerType?: string;
+  source?: string;
+  summary: string;
+  actionRequired?: string;
+  effectiveDate?: string;
+  deadline?: string;
+  segmentIds: string[];
+}
+
+export const fetchAlerts = async (): Promise<Alert[]> => {
+  const res = await api.get("/tools/alerts");
+  const d = unwrap(res);
+  return Array.isArray(d) ? d : [];
+};
+export const fetchAlert = async (id: string): Promise<Alert> =>
+  unwrap(await api.get(`/tools/alerts/${id}`));
+export const createAlert = async (dto: AlertPayload): Promise<Alert> =>
+  unwrap(await api.post("/tools/alerts", dto));
+export const updateAlert = async (
+  id: string,
+  dto: AlertPayload,
+): Promise<Alert> => unwrap(await api.patch(`/tools/alerts/${id}`, dto));
+export const deleteAlert = async (id: string): Promise<{ deleted: boolean }> =>
+  unwrap(await api.delete(`/tools/alerts/${id}`));
+export const scheduleAlert = async (
+  id: string,
+  scheduledAt: string,
+): Promise<Alert> =>
+  unwrap(await api.post(`/tools/alerts/${id}/schedule`, { scheduledAt }));
+export const unscheduleAlert = async (id: string): Promise<Alert> =>
+  unwrap(await api.post(`/tools/alerts/${id}/unschedule`));
+export const sendAlertNow = async (id: string): Promise<Alert> =>
+  unwrap(await api.post(`/tools/alerts/${id}/send-now`));
+export const sendAlertTest = async (
+  id: string,
+  to: string,
+): Promise<{ sent: boolean }> =>
+  unwrap(await api.post(`/tools/alerts/${id}/send-test`, { to }));
 
 // ══════════════════════════════════════════════════════════════
 // Calendar

@@ -60,6 +60,7 @@ import {
   assignTicket,
   setTicketStatus,
   addTicketNote,
+  convertTicketToMandate,
   TICKET_STATUSES,
   TICKET_CATEGORIES,
   type Ticket,
@@ -74,6 +75,7 @@ import {
   type KbAudience,
   type KbStatus,
 } from "@/lib/crm/service-desk-api";
+import type { MandateType, FeeStructure } from "@/lib/crm/mandates-api";
 
 const priorityClass: Record<string, string> = {
   Low: "bg-muted text-muted-foreground",
@@ -279,6 +281,56 @@ export default function ServiceDesk() {
       setNote("");
     },
     onError: onErr("Failed to post note"),
+  });
+
+  // ── Convert to mandate ──────────────────────────────────────
+  const [convertOpen, setConvertOpen] = useState(false);
+  const [convertDraft, setConvertDraft] = useState({
+    name: "",
+    type: "Advisory" as MandateType,
+    feeStructure: "Time & materials" as FeeStructure,
+    budget: 0,
+    currency: "USD",
+    targetDate: "",
+    manager: "",
+  });
+  const openConvert = () => {
+    if (!selected) return;
+    setConvertDraft({
+      name: selected.subject,
+      type: "Advisory",
+      feeStructure: "Time & materials",
+      budget: 0,
+      currency: "USD",
+      targetDate: "",
+      manager: selected.agent || "",
+    });
+    setConvertOpen(true);
+  };
+  const convertMut = useMutation({
+    mutationFn: () =>
+      convertTicketToMandate(selected!._id, {
+        name: convertDraft.name.trim() || undefined,
+        type: convertDraft.type,
+        feeStructure: convertDraft.feeStructure,
+        budget: Number(convertDraft.budget) || 0,
+        currency: convertDraft.currency,
+        targetDate: convertDraft.targetDate,
+        manager: convertDraft.manager.trim() || undefined,
+      }),
+    onSuccess: ({ mandate }) => {
+      invalidate();
+      setConvertOpen(false);
+      toast({
+        title: "Converted to mandate",
+        description: `${mandate.ref} created from this ticket${
+          (selected?.loggedHrs ?? 0) > 0
+            ? " — logged time carried over as its first time entry."
+            : "."
+        }`,
+      });
+    },
+    onError: onErr("Failed to convert to mandate"),
   });
 
   if (isLoading) {
@@ -666,15 +718,13 @@ export default function ServiceDesk() {
                 <div className="flex flex-wrap gap-2">
                   <Button
                     variant="outline"
-                    onClick={() =>
-                      toast({
-                        title: "Not built yet",
-                        description:
-                          "Convert to mandate is a deferred feature — coming in a later pass.",
-                      })
-                    }
+                    disabled={!!selected.convertedToMandateId}
+                    onClick={openConvert}
                   >
-                    <Briefcase className="mr-2 h-4 w-4" /> Convert to mandate
+                    <Briefcase className="mr-2 h-4 w-4" />
+                    {selected.convertedToMandateId
+                      ? `Converted to ${selected.convertedToMandateRef}`
+                      : "Convert to mandate"}
                   </Button>
                   <Button
                     variant="outline"
@@ -931,6 +981,169 @@ export default function ServiceDesk() {
           )}
         </SheetContent>
       </Sheet>
+
+      {/* Convert ticket to mandate */}
+      <Dialog open={convertOpen} onOpenChange={setConvertOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Convert to mandate</DialogTitle>
+          </DialogHeader>
+          {selected && (
+            <div className="space-y-3">
+              <p className="text-xs text-muted-foreground">
+                Turns <b>{selected.ref}</b> into a real, billable mandate for{" "}
+                <b>{selected.clientName}</b>. Confirm the engagement details
+                below — the subject and description carry over as the mandate's
+                name and description.
+              </p>
+              <div>
+                <Label>Mandate name</Label>
+                <Input
+                  value={convertDraft.name}
+                  onChange={(e) =>
+                    setConvertDraft({ ...convertDraft, name: e.target.value })
+                  }
+                />
+              </div>
+              <div>
+                <Label>Type</Label>
+                <Select
+                  value={convertDraft.type}
+                  onValueChange={(v) =>
+                    setConvertDraft({
+                      ...convertDraft,
+                      type: v as MandateType,
+                    })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[
+                      "Audit",
+                      "Advisory",
+                      "Transaction",
+                      "Compliance",
+                      "Onboarding",
+                      "Litigation",
+                    ].map((t) => (
+                      <SelectItem key={t} value={t}>
+                        {t}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label>Manager</Label>
+                  <Input
+                    value={convertDraft.manager}
+                    onChange={(e) =>
+                      setConvertDraft({
+                        ...convertDraft,
+                        manager: e.target.value,
+                      })
+                    }
+                    placeholder="Who owns this engagement"
+                  />
+                </div>
+                <div>
+                  <Label>Fee structure</Label>
+                  <Select
+                    value={convertDraft.feeStructure}
+                    onValueChange={(v) =>
+                      setConvertDraft({
+                        ...convertDraft,
+                        feeStructure: v as FeeStructure,
+                      })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {[
+                        "Fixed fee",
+                        "Time & materials",
+                        "Retainer",
+                        "Capped fee",
+                      ].map((f) => (
+                        <SelectItem key={f} value={f}>
+                          {f}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="grid grid-cols-[2fr_1fr_1fr] gap-3">
+                <div>
+                  <Label>Budget</Label>
+                  <Input
+                    type="number"
+                    value={convertDraft.budget}
+                    onChange={(e) =>
+                      setConvertDraft({
+                        ...convertDraft,
+                        budget: Number(e.target.value),
+                      })
+                    }
+                  />
+                </div>
+                <div>
+                  <Label>Currency</Label>
+                  <Input
+                    value={convertDraft.currency}
+                    onChange={(e) =>
+                      setConvertDraft({
+                        ...convertDraft,
+                        currency: e.target.value,
+                      })
+                    }
+                  />
+                </div>
+                <div>
+                  <Label>Target date</Label>
+                  <Input
+                    type="date"
+                    value={convertDraft.targetDate}
+                    onChange={(e) =>
+                      setConvertDraft({
+                        ...convertDraft,
+                        targetDate: e.target.value,
+                      })
+                    }
+                  />
+                </div>
+              </div>
+              {selected.loggedHrs > 0 && (
+                <p className="rounded-md border bg-muted/30 p-2 text-xs text-muted-foreground">
+                  {selected.loggedHrs}h already logged on this ticket will carry
+                  over as the mandate's first time entry
+                  {selected.agent ? `, attributed to ${selected.agent}` : ""}.
+                </p>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConvertOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={
+                convertMut.isPending ||
+                !convertDraft.name.trim() ||
+                !convertDraft.targetDate
+              }
+              onClick={() => convertMut.mutate()}
+            >
+              {convertMut.isPending ? "Converting…" : "Convert"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

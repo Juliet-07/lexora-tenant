@@ -1,4 +1,5 @@
 import { api } from "../api";
+import type { Mandate, MandateType, FeeStructure } from "./mandates-api";
 
 export type TicketStatus =
   | "New"
@@ -64,6 +65,10 @@ export interface Ticket {
   rating: number | null;
   ratingComment: string | null;
   notes: TicketNote[];
+  // Set once this ticket has been turned into a Mandate — see
+  // convertTicketToMandate below. A ticket converts at most once.
+  convertedToMandateId: string | null;
+  convertedToMandateRef: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -135,6 +140,30 @@ export const addTicketNote = async (
     body,
     internal,
   });
+  return unwrap(res);
+};
+
+// "Connect service desk to mandate" — turns a ticket into a real,
+// billable Mandate. Name/description/client carry over from the
+// ticket itself; everything else here is the real engagement detail
+// Mandate.create() needs that a ticket has no equivalent of.
+export interface ConvertTicketToMandatePayload {
+  name?: string;
+  type: MandateType;
+  feeStructure: FeeStructure;
+  budget: number;
+  targetDate: string;
+  manager?: string;
+  teamId?: string;
+  teamName?: string;
+  currency?: string;
+}
+
+export const convertTicketToMandate = async (
+  id: string,
+  dto: ConvertTicketToMandatePayload,
+): Promise<{ mandate: Mandate; ticket: Ticket }> => {
+  const res = await api.post(`/crm/tickets/${id}/convert-to-mandate`, dto);
   return unwrap(res);
 };
 
