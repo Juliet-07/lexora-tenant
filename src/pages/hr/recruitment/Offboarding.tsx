@@ -622,6 +622,24 @@ export function OffboardingDetailPanel({
     queryClient.invalidateQueries({ queryKey: ["recruitment-offboarding"] });
   };
 
+  // Full Notes text — the inline preview is clipped, "Read more" opens this.
+  const [notesDialogOpen, setNotesDialogOpen] = useState(false);
+
+  // Active employees, for the "Handover receiving colleague" dropdown below.
+  // Same query key as NewOffboardingDialog's employee list, so the two
+  // share one fetch/cache instead of each requesting it separately.
+  const { data: handoverEmpData } = useQuery({
+    queryKey: ["hr-employees-for-offboarding"],
+    queryFn: () => fetchEmployees({ limit: 500 }),
+    enabled: !!record,
+  });
+  const handoverCandidates = (handoverEmpData?.items ?? []).filter(
+    (e) =>
+      e._id !== o?.employeeId &&
+      e.employmentStatus !== "terminated" &&
+      e.employmentStatus !== "resigned",
+  );
+
   // ── Step 1: fairness checklist ──
   const fairnessMutation = useMutation({
     mutationFn: (items: { index: number; status: "pass" | "pending" }[]) =>
@@ -923,6 +941,18 @@ export function OffboardingDetailPanel({
     o.fairnessChecklist.every((f) => f.status === "pass");
   const isReversed = o.status === "reversed";
 
+  // Clearance is "recorded" once every item is cleared and saved as such —
+  // that's the point system access actually gets revoked, so once it's
+  // locked in, unchecking an item here (not just viewing) is what reopens
+  // the Save button.
+  const clearanceAllClearedLocally =
+    checklist.length > 0 && checklist.every((c) => c.cleared);
+  const clearanceAllClearedSaved =
+    o.clearanceChecklist.length > 0 &&
+    o.clearanceChecklist.every((c) => c.cleared);
+  const clearanceRecorded =
+    clearanceAllClearedSaved && clearanceAllClearedLocally;
+
   return (
     <Sheet open={!!record} onOpenChange={(v) => !v && onClose()}>
       <SheetContent className="w-full sm:max-w-2xl overflow-y-auto">
@@ -963,9 +993,33 @@ export function OffboardingDetailPanel({
               <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 Notes
               </p>
-              <p className="text-sm mt-1">{o.reason}</p>
+              <p className="text-sm mt-1 whitespace-pre-wrap">
+                {o.reason.length > 220
+                  ? `${o.reason.slice(0, 220).trimEnd()}…`
+                  : o.reason}
+              </p>
+              {o.reason.length > 220 && (
+                <Button
+                  size="sm"
+                  variant="link"
+                  className="h-auto p-0 text-xs"
+                  onClick={() => setNotesDialogOpen(true)}
+                >
+                  Read more
+                </Button>
+              )}
             </div>
           )}
+
+          <Dialog open={notesDialogOpen} onOpenChange={setNotesDialogOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Notes</DialogTitle>
+                <DialogDescription>{o.employeeName}</DialogDescription>
+              </DialogHeader>
+              <p className="text-sm whitespace-pre-wrap">{o.reason}</p>
+            </DialogContent>
+          </Dialog>
 
           {isTermination && (
             <>
@@ -1504,11 +1558,16 @@ export function OffboardingDetailPanel({
               <Button
                 size="sm"
                 className="w-full"
-                disabled={exitMutation.isPending}
+                disabled={
+                  exitMutation.isPending ||
+                  (o.exitInterviewDone && exitForm.done)
+                }
                 onClick={() => exitMutation.mutate()}
               >
                 {exitMutation.isPending ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : o.exitInterviewDone && exitForm.done ? (
+                  "Recorded"
                 ) : (
                   "Save exit interview"
                 )}
@@ -1516,72 +1575,11 @@ export function OffboardingDetailPanel({
             </CardContent>
           </Card>
 
-          {/* Step 5 — Clearance & handover */}
+          {/* Step 5 — Final pay */}
           <Card>
             <CardContent className="p-4 space-y-3">
               <p className="text-sm font-medium flex items-center gap-1.5">
-                <ShieldCheck className="h-4 w-4 text-primary" /> Step 5 —
-                Clearance & handover
-              </p>
-              {o.clearanceChecklist.map((item) => (
-                <label
-                  key={item.key}
-                  className="flex items-center gap-2 text-sm"
-                >
-                  <input
-                    type="checkbox"
-                    checked={
-                      checklist.find((c) => c.key === item.key)?.cleared ??
-                      item.cleared
-                    }
-                    onChange={(e) =>
-                      setChecklist((prev) =>
-                        prev.map((c) =>
-                          c.key === item.key
-                            ? { ...c, cleared: e.target.checked }
-                            : c,
-                        ),
-                      )
-                    }
-                  />
-                  {item.label}
-                </label>
-              ))}
-              <div className="space-y-1">
-                <Label className="text-xs">Handover receiving colleague</Label>
-                <Input
-                  value={handoverAssigneeName}
-                  onChange={(e) => setHandoverAssigneeName(e.target.value)}
-                />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Handover notes</Label>
-                <Textarea
-                  rows={2}
-                  value={handoverNotes}
-                  onChange={(e) => setHandoverNotes(e.target.value)}
-                />
-              </div>
-              <Button
-                size="sm"
-                className="w-full"
-                disabled={clearanceMutation.isPending}
-                onClick={() => clearanceMutation.mutate()}
-              >
-                {clearanceMutation.isPending ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  "Save clearance"
-                )}
-              </Button>
-            </CardContent>
-          </Card>
-
-          {/* Step 6 — Final pay */}
-          <Card>
-            <CardContent className="p-4 space-y-3">
-              <p className="text-sm font-medium flex items-center gap-1.5">
-                <Wallet className="h-4 w-4 text-primary" /> Step 6 — Final pay
+                <Wallet className="h-4 w-4 text-primary" /> Step 5 — Final pay
               </p>
               {!o.finalPay ? (
                 <>
@@ -1719,7 +1717,9 @@ export function OffboardingDetailPanel({
                     <Button
                       size="sm"
                       variant="outline"
-                      disabled={computeFinalPayMutation.isPending}
+                      disabled={
+                        computeFinalPayMutation.isPending || o.finalPay.approved
+                      }
                       onClick={() => computeFinalPayMutation.mutate()}
                     >
                       Recompute
@@ -1753,11 +1753,11 @@ export function OffboardingDetailPanel({
             </CardContent>
           </Card>
 
-          {/* Step 7 — Certificate of service */}
+          {/* Step 6 — Certificate of service */}
           <Card>
             <CardContent className="p-4 space-y-3">
               <p className="text-sm font-medium flex items-center gap-1.5">
-                <Award className="h-4 w-4 text-primary" /> Step 7 — Certificate
+                <Award className="h-4 w-4 text-primary" /> Step 6 — Certificate
                 of service
               </p>
               <p className="text-xs text-muted-foreground mt-0.5">
@@ -1900,6 +1900,84 @@ export function OffboardingDetailPanel({
                   Last emailed {fmtDate(o.certificateOfServiceSentAt)}
                 </p>
               )}
+            </CardContent>
+          </Card>
+
+          {/* Step 7 — Clearance & handover (last: system access is revoked
+              only once this checklist is fully cleared) */}
+          <Card>
+            <CardContent className="p-4 space-y-3">
+              <p className="text-sm font-medium flex items-center gap-1.5">
+                <ShieldCheck className="h-4 w-4 text-primary" /> Step 7 —
+                Clearance & handover
+              </p>
+              {o.clearanceChecklist.map((item) => (
+                <label
+                  key={item.key}
+                  className="flex items-center gap-2 text-sm"
+                >
+                  <input
+                    type="checkbox"
+                    checked={
+                      checklist.find((c) => c.key === item.key)?.cleared ??
+                      item.cleared
+                    }
+                    onChange={(e) =>
+                      setChecklist((prev) =>
+                        prev.map((c) =>
+                          c.key === item.key
+                            ? { ...c, cleared: e.target.checked }
+                            : c,
+                        ),
+                      )
+                    }
+                  />
+                  {item.label}
+                </label>
+              ))}
+              <div className="space-y-1">
+                <Label className="text-xs">Handover receiving colleague</Label>
+                <Select
+                  value={handoverAssigneeName || undefined}
+                  onValueChange={setHandoverAssigneeName}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Choose an active employee…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {handoverCandidates.map((e) => {
+                      const name = `${e.firstName} ${e.lastName}`;
+                      return (
+                        <SelectItem key={e._id} value={name}>
+                          {name} — {e.jobTitle}
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Handover notes</Label>
+                <Textarea
+                  rows={2}
+                  value={handoverNotes}
+                  onChange={(e) => setHandoverNotes(e.target.value)}
+                />
+              </div>
+              <Button
+                size="sm"
+                className="w-full"
+                disabled={clearanceMutation.isPending || clearanceRecorded}
+                onClick={() => clearanceMutation.mutate()}
+              >
+                {clearanceMutation.isPending ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : clearanceRecorded ? (
+                  "Recorded"
+                ) : (
+                  "Save clearance"
+                )}
+              </Button>
             </CardContent>
           </Card>
         </div>
