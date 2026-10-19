@@ -15,6 +15,7 @@ import MyPolicies from "@/pages/hr/employee/MyPolicies";
 import MyAuditRequests from "@/pages/hr/employee/MyAuditRequests";
 import MyBoardPackRequests from "@/pages/hr/employee/MyBoardPackRequests";
 import MyServiceDesk from "@/pages/hr/employee/MyServiceDesk";
+import MyEvents from "@/pages/hr/employee/MyEvents";
 import EmployeeOnboarding from "@/pages/EmployeeOnboarding";
 import MyCases from "@/pages/hr/employee/MyCases";
 import MyNotice from "@/pages/hr/employee/MyNotice";
@@ -67,6 +68,7 @@ export const employeeRoutes = ({ isAdmin, hierarchyRole }: RouteContext) => {
       path="/my/service-desk"
       element={layout(<MyServiceDesk />)}
     />,
+    <Route key="my-events" path="/my/events" element={layout(<MyEvents />)} />,
     <Route
       key="my-learning"
       path="/my/learning"

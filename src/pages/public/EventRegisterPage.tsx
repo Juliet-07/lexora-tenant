@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,26 +17,30 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import {
-  findEventByInviteToken,
+  fetchPublicEventByToken,
   registerForEvent,
-  useEventsStore,
-  activeRegistrations,
-} from "@/lib/crm/eventsStore";
+} from "@/lib/crm/events-api";
 
 // ─────────────────────────────────────────────────────────────
 // Public, unauthenticated registration page — reached via the
-// invite link sent from CRM → Tools → Events, or via the event's
-// open registration link. Prototype: reads/writes the same
-// localStorage store as the admin page, so it only works in the
-// same browser until the API supports events.
+// personal invite link emailed to each external invitee when the
+// tenant publishes an External event. Backed by the real API;
+// submitting this form is itself the invitee's attendance record.
 // ─────────────────────────────────────────────────────────────
 
 export default function EventRegisterPage() {
   const { token } = useParams<{ token: string }>();
-  // Subscribing to the store keeps the page fresh after registering.
-  useEventsStore();
 
-  const found = token ? findEventByInviteToken(token) : null;
+  const {
+    data: view,
+    isLoading,
+    isError,
+  } = useQuery({
+    queryKey: ["public-event", token],
+    queryFn: () => fetchPublicEventByToken(token as string),
+    enabled: !!token,
+    retry: false,
+  });
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -44,18 +49,45 @@ export default function EventRegisterPage() {
   const [notes, setNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
-  const invite = found?.invite;
+
   useEffect(() => {
-    setName(invite?.name ?? "");
-    setEmail(invite?.email ?? "");
-    setOrganisation(invite?.organisation ?? "");
+    if (!view) return;
+    setName(view.invite?.name ?? "");
+    setEmail(view.invite?.email ?? "");
+    setOrganisation(view.invite?.organisation ?? "");
     setPhone("");
     setNotes("");
     setError(null);
-    setDone(false);
-  }, [token, invite?.id]);
+    setDone(view.invite?.status === "Registered");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, view?.invite?.status]);
 
-  if (!found) {
+  const registerMut = useMutation({
+    mutationFn: () =>
+      registerForEvent(token as string, {
+        name,
+        email,
+        organisation,
+        phone,
+        notes,
+      }),
+    onSuccess: () => setDone(true),
+    onError: (err: any) =>
+      setError(
+        err?.response?.data?.message ??
+          "Registration failed. Please try again.",
+      ),
+  });
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-muted/30 p-6">
+        <p className="text-sm text-muted-foreground">Loading…</p>
+      </div>
+    );
+  }
+
+  if (isError || !view) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-muted/30 p-6">
         <Card className="max-w-md w-full">
@@ -72,14 +104,13 @@ export default function EventRegisterPage() {
     );
   }
 
-  const { event } = found;
-
   const deadlinePassed =
-    !!event.registrationDeadline &&
-    event.registrationDeadline < new Date().toISOString().slice(0, 10);
-  const full =
-    event.capacity > 0 && activeRegistrations(event).length >= event.capacity;
-  const closed = event.status !== "Published" || deadlinePassed || full;
+    !!view.registrationDeadline &&
+    view.registrationDeadline.slice(0, 10) <
+      new Date().toISOString().slice(0, 10);
+  const full = view.capacity > 0 && view.registeredCount >= view.capacity;
+  const alreadyRegistered = view.invite.status === "Registered";
+  const closed = view.status !== "Published" || deadlinePassed || full;
 
   const submit = () => {
     setError(null);
@@ -87,25 +118,21 @@ export default function EventRegisterPage() {
       setError("Please provide your name and email address.");
       return;
     }
-    const res = registerForEvent(event.id, { name, email, organisation, phone, notes });
-    if (!res.ok) {
-      setError(res.reason ?? "Registration failed.");
-      return;
-    }
-    setDone(true);
+    registerMut.mutate();
   };
 
   return (
     <div className="min-h-screen bg-muted/30 py-10 px-4">
       <div className="max-w-2xl mx-auto space-y-4">
-        <p className="text-xs text-muted-foreground text-center">
-          Event preview: registrations are saved only in this browser, not sent to the organiser. No confirmation email is sent.
-        </p>
         <div className="text-center space-y-2">
           <CalendarDays className="h-8 w-8 text-primary mx-auto" />
-          <Badge variant="secondary">{event.type}</Badge>
-          <h1 className="text-2xl font-bold">{event.title}</h1>
-          <p className="text-sm text-muted-foreground">Hosted by {event.host}</p>
+          <Badge variant="secondary">{view.type}</Badge>
+          <h1 className="text-2xl font-bold">{view.title}</h1>
+          {view.host && (
+            <p className="text-sm text-muted-foreground">
+              Hosted by {view.host}
+            </p>
+          )}
         </div>
 
         <Card>
@@ -113,51 +140,64 @@ export default function EventRegisterPage() {
             <div className="flex flex-wrap gap-4 text-sm">
               <span className="inline-flex items-center gap-1.5">
                 <CalendarDays className="h-4 w-4 text-muted-foreground" />
-                {event.date}
+                {view.date.slice(0, 10)}
               </span>
               <span className="inline-flex items-center gap-1.5">
                 <Clock className="h-4 w-4 text-muted-foreground" />
-                {event.startTime} – {event.endTime}
+                {view.startTime} – {view.endTime}
               </span>
               <span className="inline-flex items-center gap-1.5">
-                {event.virtual ? (
+                {view.virtual ? (
                   <Video className="h-4 w-4 text-muted-foreground" />
                 ) : (
                   <MapPin className="h-4 w-4 text-muted-foreground" />
                 )}
-                {event.location}
+                {view.virtual ? "Virtual" : view.location}
               </span>
-              {event.capacity > 0 && (
+              {view.capacity > 0 && (
                 <span className="inline-flex items-center gap-1.5">
                   <Users className="h-4 w-4 text-muted-foreground" />
-                  {activeRegistrations(event).length}/{event.capacity} registered
+                  {view.registeredCount}/{view.capacity} registered
                 </span>
               )}
             </div>
-            {event.description && (
+            {view.description && (
               <p className="text-sm text-muted-foreground whitespace-pre-line">
-                {event.description}
+                {view.description}
               </p>
             )}
-            {event.agenda && (
+            {view.agenda && (
               <div className="rounded-md border bg-muted/40 p-3">
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">
                   Agenda
                 </p>
-                <p className="text-sm whitespace-pre-line">{event.agenda}</p>
+                <p className="text-sm whitespace-pre-line">{view.agenda}</p>
               </div>
+            )}
+            {view.virtual && view.meetingLink && done && (
+              <p className="text-sm break-all">
+                <span className="text-muted-foreground">Meeting link: </span>
+                <a
+                  href={view.meetingLink}
+                  className="underline"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {view.meetingLink}
+                </a>
+              </p>
             )}
           </CardContent>
         </Card>
 
-        {done ? (
+        {done || alreadyRegistered ? (
           <Card>
             <CardContent className="p-8 text-center space-y-3">
               <CheckCircle2 className="h-10 w-10 text-success mx-auto" />
               <h2 className="text-lg font-semibold">You're registered</h2>
               <p className="text-sm text-muted-foreground">
-                Thank you, {name}. Your place at <strong>{event.title}</strong> is
-                saved in this browser for this event preview.
+                Thank you{name ? `, ${name}` : ""}. Your place at{" "}
+                <strong>{view.title}</strong> is confirmed.
               </p>
             </CardContent>
           </Card>
@@ -167,7 +207,7 @@ export default function EventRegisterPage() {
               <AlertTriangle className="h-8 w-8 text-warning mx-auto" />
               <h2 className="font-semibold">Registration is closed</h2>
               <p className="text-sm text-muted-foreground">
-                {event.status !== "Published"
+                {view.status !== "Published"
                   ? "This event is no longer accepting registrations."
                   : deadlinePassed
                     ? "The registration deadline for this event has passed."
@@ -182,7 +222,11 @@ export default function EventRegisterPage() {
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label htmlFor="er-name">Full name *</Label>
-                  <Input id="er-name" value={name} onChange={(e) => setName(e.target.value)} />
+                  <Input
+                    id="er-name"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                  />
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="er-email">Email *</Label>
@@ -203,11 +247,17 @@ export default function EventRegisterPage() {
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="er-phone">Phone</Label>
-                  <Input id="er-phone" value={phone} onChange={(e) => setPhone(e.target.value)} />
+                  <Input
+                    id="er-phone"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                  />
                 </div>
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="er-notes">Dietary or accessibility requirements</Label>
+                <Label htmlFor="er-notes">
+                  Dietary or accessibility requirements
+                </Label>
                 <Textarea
                   id="er-notes"
                   rows={3}
@@ -217,12 +267,13 @@ export default function EventRegisterPage() {
                 />
               </div>
               {error && <p className="text-sm text-destructive">{error}</p>}
-              <Button className="w-full" onClick={submit}>
+              <Button
+                className="w-full"
+                onClick={submit}
+                disabled={registerMut.isPending}
+              >
                 Register
               </Button>
-              <p className="text-xs text-muted-foreground text-center">
-                This preview does not reserve a place with the organiser.
-              </p>
             </CardContent>
           </Card>
         )}

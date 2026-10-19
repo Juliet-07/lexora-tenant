@@ -465,8 +465,9 @@ export const fetchSegmentMembers = async (
 // Newsletter — Campaigns
 // ══════════════════════════════════════════════════════════════
 
-// "Event invite" was retired Oct 2026 — Event Management (events-api
-// via eventsStore) is the one real place an event lives now.
+// "Event invite" was retired Oct 2026 — Event Management (events-api,
+// backed by the real backend Event module) is the one real place an
+// event lives now.
 export type CampaignType = "Newsletter";
 export type CampaignStatus = "Draft" | "Scheduled" | "Sending" | "Sent";
 

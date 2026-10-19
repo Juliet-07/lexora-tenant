@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Dialog,
   DialogContent,
@@ -53,24 +54,38 @@ import {
   Search,
   Video,
   MapPin,
+  Rocket,
+  Ban,
+  FlagOff,
 } from "lucide-react";
-import { toast } from "sonner";
+import { useToast } from "@/hooks/use-toast";
 import {
-  useEventsStore,
+  fetchEvents,
+  fetchEvent,
   createEvent,
-  updateEventDetails,
+  updateEvent,
   deleteEvent,
-  sendEventInvites,
-  removeInvite,
-  setRegistrationStatus,
-  activeRegistrations,
-  attendedCount,
+  inviteToEvent,
+  removeEventInvite,
+  publishEvent,
+  cancelEvent,
+  completeEvent,
   EVENT_TYPES,
   type CrmEvent,
+  type EventType,
+  type EventMode,
   type EventStatus,
-  type UpsertEventPayload,
-} from "@/lib/crm/eventsStore";
+  type EventAudienceType,
+  type EventPayload,
+} from "@/lib/crm/events-api";
+import {
+  fetchClients,
+  displayName,
+  type ApiClient,
+} from "@/lib/client/clients-api";
 import { fetchContacts, type Contact } from "@/lib/crm/crm-contacts-api";
+import { fetchBoardMembers, type BoardMember } from "@/lib/grc/governance-api";
+import { fetchEmployees, type Employee } from "@/lib/hr/hr-api";
 
 const STATUS_STYLES: Record<EventStatus, string> = {
   Draft: "bg-muted text-muted-foreground",
@@ -79,10 +94,17 @@ const STATUS_STYLES: Record<EventStatus, string> = {
   Cancelled: "bg-destructive/10 text-destructive",
 };
 
-const emptyDraft = (): UpsertEventPayload => ({
+const AUDIENCE_LABEL: Record<EventAudienceType, string> = {
+  Client: "Client",
+  BoardMember: "Board member",
+  Employee: "Employee",
+  Contact: "Contact",
+};
+
+const emptyDraft = (): EventPayload => ({
   title: "",
   type: "Webinar",
-  status: "Draft",
+  mode: "External",
   description: "",
   date: "",
   startTime: "09:00",
@@ -96,12 +118,12 @@ const emptyDraft = (): UpsertEventPayload => ({
   registrationDeadline: "",
 });
 
-const toDraft = (e: CrmEvent): UpsertEventPayload => ({
+const toDraft = (e: CrmEvent): EventPayload => ({
   title: e.title,
   type: e.type,
-  status: e.status,
+  mode: e.mode,
   description: e.description,
-  date: e.date,
+  date: e.date.slice(0, 10),
   startTime: e.startTime,
   endTime: e.endTime,
   location: e.location,
@@ -110,12 +132,16 @@ const toDraft = (e: CrmEvent): UpsertEventPayload => ({
   capacity: e.capacity,
   host: e.host,
   agenda: e.agenda,
-  registrationDeadline: e.registrationDeadline,
+  registrationDeadline: e.registrationDeadline
+    ? e.registrationDeadline.slice(0, 10)
+    : "",
 });
 
 const downloadCsv = (filename: string, rows: string[][]) => {
   const csv = rows
-    .map((r) => r.map((c) => `"${String(c ?? "").replace(/"/g, '""')}"`).join(","))
+    .map((r) =>
+      r.map((c) => `"${String(c ?? "").replace(/"/g, '""')}"`).join(","),
+    )
     .join("\n");
   const blob = new Blob([csv], { type: "text/csv" });
   const url = URL.createObjectURL(blob);
@@ -126,31 +152,72 @@ const downloadCsv = (filename: string, rows: string[][]) => {
   URL.revokeObjectURL(url);
 };
 
+// Real attendance signal for either event shape — a submitted
+// External registration or an InHouse portal acknowledgement; there
+// is no separate manual "check in" step on top of either.
+const hasResponded = (status: string) =>
+  status === "Registered" || status === "Acknowledged";
+
 export default function Events() {
-  const { events } = useEventsStore();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const onErr = (title: string) => (err: any) =>
+    toast({
+      title,
+      description: err?.response?.data?.message,
+      variant: "destructive",
+    });
+
+  const { data: events = [] } = useQuery({
+    queryKey: ["crm-events"],
+    queryFn: fetchEvents,
+  });
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: ["crm-events"] });
+
+  const { data: clients = [] } = useQuery<ApiClient[]>({
+    queryKey: ["clients-for-events"],
+    queryFn: fetchClients,
+  });
+  const { data: contacts = [] } = useQuery<Contact[]>({
+    queryKey: ["contacts-for-events"],
+    queryFn: fetchContacts,
+  });
+  const { data: boardMembers = [] } = useQuery<BoardMember[]>({
+    queryKey: ["board-members-for-events"],
+    queryFn: fetchBoardMembers,
+  });
+  const { data: employeesPage } = useQuery({
+    queryKey: ["employees-for-events"],
+    queryFn: () => fetchEmployees({ limit: 500 }),
+  });
+  const employees: Employee[] = employeesPage?.items ?? [];
 
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [draft, setDraft] = useState<UpsertEventPayload>(emptyDraft());
+  const [draft, setDraft] = useState<EventPayload>(emptyDraft());
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [inviteOpen, setInviteOpen] = useState(false);
-  const [contactSearch, setContactSearch] = useState("");
-  const [checkedContacts, setCheckedContacts] = useState<string[]>([]);
+  const [peopleSearch, setPeopleSearch] = useState("");
+  const [checkedInvitees, setCheckedInvitees] = useState<
+    { audienceType: EventAudienceType; sourceId: string }[]
+  >([]);
   const [regSearch, setRegSearch] = useState("");
 
-  const { data: contacts = [] } = useQuery<Contact[]>({
-    queryKey: ["crm-contacts"],
-    queryFn: fetchContacts,
-  });
-
-  const selected = events.find((e) => e.id === selectedId) ?? null;
+  const selected = events.find((e) => e._id === selectedId) ?? null;
 
   const totals = useMemo(() => {
     const published = events.filter((e) => e.status === "Published").length;
-    const invites = events.reduce((n, e) => n + e.invites.length, 0);
-    const regs = events.reduce((n, e) => n + activeRegistrations(e).length, 0);
-    const attended = events.reduce((n, e) => n + attendedCount(e), 0);
-    return { published, invites, regs, attended };
+    const invited = events.reduce((n, e) => n + e.invites.length, 0);
+    const responded = events.reduce(
+      (n, e) => n + e.invites.filter((i) => hasResponded(i.status)).length,
+      0,
+    );
+    const failed = events.reduce(
+      (n, e) => n + e.invites.filter((i) => i.deliveryError).length,
+      0,
+    );
+    return { published, invited, responded, failed };
   }, [events]);
 
   const openCreate = () => {
@@ -158,95 +225,170 @@ export default function Events() {
     setDraft(emptyDraft());
     setEditorOpen(true);
   };
-
   const openEdit = (e: CrmEvent) => {
-    setEditingId(e.id);
+    setEditingId(e._id);
     setDraft(toDraft(e));
     setEditorOpen(true);
   };
 
-  const saveEvent = () => {
-    if (!draft.title.trim() || !draft.date) {
-      toast.error("Give the event a title and a date.");
-      return;
-    }
-    if (editingId) {
-      updateEventDetails(editingId, draft);
-      toast.success("Event updated.");
-    } else {
-      createEvent(draft);
-      toast.success("Event created.");
-    }
-    setEditorOpen(false);
-  };
+  const saveMut = useMutation({
+    mutationFn: () =>
+      editingId ? updateEvent(editingId, draft) : createEvent(draft),
+    onSuccess: (e) => {
+      invalidate();
+      setEditorOpen(false);
+      setSelectedId(e._id);
+      toast({
+        title: editingId ? "Event updated" : "Event created as a draft",
+      });
+    },
+    onError: onErr(
+      editingId ? "Failed to save changes" : "Failed to create event",
+    ),
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: (id: string) => deleteEvent(id),
+    onSuccess: () => {
+      invalidate();
+      setSelectedId(null);
+      toast({ title: "Event deleted" });
+    },
+    onError: onErr("Failed to delete"),
+  });
+  const publishMut = useMutation({
+    mutationFn: (id: string) => publishEvent(id),
+    onSuccess: (e) => {
+      invalidate();
+      const sent = e.invites.filter((i) => i.sentAt).length;
+      toast({
+        title: "Event published",
+        description: sent
+          ? `Invitations sent to ${sent} invitee${sent === 1 ? "" : "s"}.`
+          : "No invitees yet — invite people, and they'll be emailed as soon as you do.",
+      });
+    },
+    onError: onErr("Failed to publish"),
+  });
+  const cancelMut = useMutation({
+    mutationFn: (id: string) => cancelEvent(id),
+    onSuccess: () => {
+      invalidate();
+      toast({ title: "Event cancelled" });
+    },
+    onError: onErr("Failed to cancel"),
+  });
+  const completeMut = useMutation({
+    mutationFn: (id: string) => completeEvent(id),
+    onSuccess: () => {
+      invalidate();
+      toast({ title: "Event marked completed" });
+    },
+    onError: onErr("Failed to mark completed"),
+  });
 
   const openInvites = () => {
-    setCheckedContacts([]);
-    setContactSearch("");
+    setCheckedInvitees([]);
+    setPeopleSearch("");
     setInviteOpen(true);
   };
 
-  const emailableContacts = useMemo(
+  const alreadyInvitedKeys = useMemo(
     () =>
-      contacts
-        .filter((c) => c.email)
-        .filter((c) =>
-          contactSearch
-            ? `${c.name} ${c.organisation} ${c.email}`
-                .toLowerCase()
-                .includes(contactSearch.toLowerCase())
-            : true,
-        ),
-    [contacts, contactSearch],
+      new Set(
+        (selected?.invites ?? []).map((i) => `${i.audienceType}:${i.sourceId}`),
+      ),
+    [selected],
   );
-
-  const dispatchInvites = () => {
-    if (!selected) return;
-    const chosen = contacts.filter((c) => checkedContacts.includes(c._id));
-    if (!chosen.length) {
-      toast.error("Select at least one contact.");
-      return;
-    }
-    // Demo dispatch only — no email is actually sent (prototype store).
-    sendEventInvites(
-      selected.id,
-      chosen.map((c) => ({
-        id: c._id,
-        name: c.name,
-        email: c.email,
-        organisation: c.organisation,
-      })),
+  const toggleInvitee = (audienceType: EventAudienceType, sourceId: string) => {
+    const key = `${audienceType}:${sourceId}`;
+    setCheckedInvitees((prev) =>
+      prev.some((p) => `${p.audienceType}:${p.sourceId}` === key)
+        ? prev.filter((p) => `${p.audienceType}:${p.sourceId}` !== key)
+        : [...prev, { audienceType, sourceId }],
     );
-    toast.success(
-      `${chosen.length} invitation${chosen.length === 1 ? "" : "s"} recorded (demo — no email sent).`,
-    );
-    setInviteOpen(false);
   };
+  const isChecked = (audienceType: EventAudienceType, sourceId: string) =>
+    checkedInvitees.some(
+      (p) => p.audienceType === audienceType && p.sourceId === sourceId,
+    );
+
+  const filteredClients = clients.filter((c) =>
+    displayName(c).toLowerCase().includes(peopleSearch.toLowerCase()),
+  );
+  const filteredBoardMembers = boardMembers
+    .filter((m) => m.lifecycleStatus !== "Offboarded")
+    .filter((m) => m.name.toLowerCase().includes(peopleSearch.toLowerCase()));
+  const filteredEmployees = employees.filter((e) =>
+    `${e.firstName} ${e.lastName}`
+      .toLowerCase()
+      .includes(peopleSearch.toLowerCase()),
+  );
+  const filteredContacts = contacts
+    .filter((c) => c.email)
+    .filter((c) =>
+      `${c.name} ${c.organisation} ${c.email}`
+        .toLowerCase()
+        .includes(peopleSearch.toLowerCase()),
+    );
+
+  const inviteMut = useMutation({
+    mutationFn: () => inviteToEvent(selected!._id, checkedInvitees),
+    onSuccess: (e) => {
+      invalidate();
+      const added = e.invites.length - (selected?.invites.length ?? 0);
+      toast({
+        title: `${added} invitation${added === 1 ? "" : "s"} added`,
+        description:
+          e.status === "Published"
+            ? "They've been emailed immediately — the event is already published."
+            : "They'll be emailed once you publish this event.",
+      });
+      setInviteOpen(false);
+    },
+    onError: onErr("Failed to invite"),
+  });
+  const removeInviteMut = useMutation({
+    mutationFn: (inviteId: string) =>
+      removeEventInvite(selected!._id, inviteId),
+    onSuccess: () => {
+      invalidate();
+      toast({ title: "Invite removed" });
+    },
+    onError: onErr("Failed to remove invite"),
+  });
 
   const copyLink = (token: string) => {
     navigator.clipboard
       .writeText(`${window.location.origin}/event-register/${token}`)
-      .then(() => toast.success("Registration link copied."))
-      .catch(() => toast.error("Couldn't copy the link."));
+      .then(() => toast({ title: "Registration link copied" }))
+      .catch(() =>
+        toast({ title: "Couldn't copy the link", variant: "destructive" }),
+      );
   };
 
-  const exportRegistrations = (e: CrmEvent) => {
-    downloadCsv(
-      `${e.title.replace(/\s+/g, "-").toLowerCase()}-registrations.csv`,
+  const exportInvites = (e: CrmEvent) => {
+    downloadCsv(`${e.title.replace(/\s+/g, "-").toLowerCase()}-invites.csv`, [
       [
-        ["Name", "Email", "Organisation", "Phone", "Status", "Registered at", "Checked in"],
-        ...e.registrations.map((r) => [
-          r.name,
-          r.email,
-          r.organisation,
-          r.phone,
-          r.status,
-          new Date(r.registeredAt).toLocaleString(),
-          r.checkedInAt ? new Date(r.checkedInAt).toLocaleString() : "",
-        ]),
+        "Name",
+        "Email",
+        "Audience",
+        "Organisation",
+        "Status",
+        "Sent at",
+        "Responded at",
       ],
-    );
-    toast.success("Registrations exported.");
+      ...e.invites.map((i) => [
+        i.name,
+        i.email,
+        AUDIENCE_LABEL[i.audienceType],
+        i.organisation,
+        i.status,
+        i.sentAt ? new Date(i.sentAt).toLocaleString() : "",
+        i.respondedAt ? new Date(i.respondedAt).toLocaleString() : "",
+      ]),
+    ]);
+    toast({ title: "Invitations exported" });
   };
 
   return (
@@ -255,7 +397,9 @@ export default function Events() {
         <div>
           <h1 className="text-2xl font-bold">Event Management</h1>
           <p className="text-sm text-muted-foreground">
-            Preview data is saved only in this browser. Invitation links do not work on other devices, and no emails are sent.
+            Publish an event to email every invitee their registration link
+            (external) or notify them to acknowledge attendance on their own
+            portal (in-house).
           </p>
         </div>
         <Button onClick={openCreate}>
@@ -265,10 +409,18 @@ export default function Events() {
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {[
-          { label: "Published events", value: totals.published, icon: CalendarDays },
-          { label: "Invitations recorded", value: totals.invites, icon: Mail },
-          { label: "Registrations", value: totals.regs, icon: Users },
-          { label: "Attended", value: totals.attended, icon: CheckCircle2 },
+          {
+            label: "Published events",
+            value: totals.published,
+            icon: CalendarDays,
+          },
+          { label: "Invitations sent", value: totals.invited, icon: Mail },
+          {
+            label: "Registered / acknowledged",
+            value: totals.responded,
+            icon: CheckCircle2,
+          },
+          { label: "Delivery failures", value: totals.failed, icon: Users },
         ].map(({ label, value, icon: Icon }) => (
           <Card key={label}>
             <CardContent className="p-4 flex items-center gap-3">
@@ -291,27 +443,26 @@ export default function Events() {
         <CardContent>
           {events.length === 0 ? (
             <p className="text-sm text-muted-foreground py-8 text-center">
-              No events yet — create your first event to start inviting contacts.
+              No events yet — create your first event to start inviting people.
             </p>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Event</TableHead>
+                  <TableHead>Mode</TableHead>
                   <TableHead>Date</TableHead>
-                  <TableHead>Type</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Invited</TableHead>
-                  <TableHead className="text-right">Registered</TableHead>
-                  <TableHead className="text-right">Attended</TableHead>
+                  <TableHead className="text-right">Responded</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {events.map((e) => (
                   <TableRow
-                    key={e.id}
+                    key={e._id}
                     className="cursor-pointer"
-                    onClick={() => setSelectedId(e.id)}
+                    onClick={() => setSelectedId(e._id)}
                   >
                     <TableCell>
                       <div className="font-medium">{e.title}</div>
@@ -321,29 +472,39 @@ export default function Events() {
                         ) : (
                           <MapPin className="h-3 w-3" />
                         )}
-                        {e.location}
+                        {e.location || (e.virtual ? "Virtual" : "—")}
                       </div>
                     </TableCell>
+                    <TableCell>
+                      <Badge variant="outline">
+                        {e.mode === "InHouse" ? "In-house" : "External"}
+                      </Badge>
+                    </TableCell>
                     <TableCell className="whitespace-nowrap">
-                      {e.date}
+                      {e.date.slice(0, 10)}
                       <div className="text-xs text-muted-foreground">
                         {e.startTime}–{e.endTime}
                       </div>
                     </TableCell>
-                    <TableCell>{e.type}</TableCell>
                     <TableCell>
-                      <Badge className={STATUS_STYLES[e.status]} variant="secondary">
+                      <Badge
+                        className={STATUS_STYLES[e.status]}
+                        variant="secondary"
+                      >
                         {e.status}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-right">{e.invites.length}</TableCell>
                     <TableCell className="text-right">
-                      {activeRegistrations(e).length}
+                      {e.invites.length}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {e.invites.filter((i) => hasResponded(i.status)).length}
                       {e.capacity > 0 && (
-                        <span className="text-xs text-muted-foreground">/{e.capacity}</span>
+                        <span className="text-xs text-muted-foreground">
+                          /{e.capacity}
+                        </span>
                       )}
                     </TableCell>
-                    <TableCell className="text-right">{attendedCount(e)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -358,7 +519,8 @@ export default function Events() {
           <DialogHeader>
             <DialogTitle>{editingId ? "Edit event" : "New event"}</DialogTitle>
             <DialogDescription>
-              Publish the event to open registration; keep it as a draft while you prepare.
+              Publish the event to email every invitee; keep it as a draft while
+              you prepare.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 sm:grid-cols-2">
@@ -373,7 +535,9 @@ export default function Events() {
               <Label>Type</Label>
               <Select
                 value={draft.type}
-                onValueChange={(v) => setDraft({ ...draft, type: v as UpsertEventPayload["type"] })}
+                onValueChange={(v) =>
+                  setDraft({ ...draft, type: v as EventType })
+                }
               >
                 <SelectTrigger>
                   <SelectValue />
@@ -388,22 +552,37 @@ export default function Events() {
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label>Status</Label>
-              <Select
-                value={draft.status}
-                onValueChange={(v) => setDraft({ ...draft, status: v as EventStatus })}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {(["Draft", "Published", "Completed", "Cancelled"] as EventStatus[]).map((s) => (
-                    <SelectItem key={s} value={s}>
-                      {s}
+              <Label>Audience</Label>
+              {editingId ? (
+                <div className="flex h-10 items-center">
+                  <Badge variant="outline">
+                    {draft.mode === "InHouse" ? "In-house" : "External"}
+                  </Badge>
+                  <span className="ml-2 text-xs text-muted-foreground">
+                    Fixed once created
+                  </span>
+                </div>
+              ) : (
+                <Select
+                  value={draft.mode}
+                  onValueChange={(v) =>
+                    setDraft({ ...draft, mode: v as EventMode })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="External">
+                      External — invite CRM contacts, who register
                     </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                    <SelectItem value="InHouse">
+                      In-house — invite clients / board members / employees, who
+                      acknowledge on their portal
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
             </div>
             <div className="space-y-1.5">
               <Label>Date *</Label>
@@ -413,20 +592,26 @@ export default function Events() {
                 onChange={(e) => setDraft({ ...draft, date: e.target.value })}
               />
             </div>
-            <div className="space-y-1.5">
-              <Label>Registration deadline</Label>
-              <Input
-                type="date"
-                value={draft.registrationDeadline}
-                onChange={(e) => setDraft({ ...draft, registrationDeadline: e.target.value })}
-              />
-            </div>
+            {draft.mode === "External" && (
+              <div className="space-y-1.5">
+                <Label>Registration deadline</Label>
+                <Input
+                  type="date"
+                  value={draft.registrationDeadline}
+                  onChange={(e) =>
+                    setDraft({ ...draft, registrationDeadline: e.target.value })
+                  }
+                />
+              </div>
+            )}
             <div className="space-y-1.5">
               <Label>Start time</Label>
               <Input
                 type="time"
                 value={draft.startTime}
-                onChange={(e) => setDraft({ ...draft, startTime: e.target.value })}
+                onChange={(e) =>
+                  setDraft({ ...draft, startTime: e.target.value })
+                }
               />
             </div>
             <div className="space-y-1.5">
@@ -434,7 +619,9 @@ export default function Events() {
               <Input
                 type="time"
                 value={draft.endTime}
-                onChange={(e) => setDraft({ ...draft, endTime: e.target.value })}
+                onChange={(e) =>
+                  setDraft({ ...draft, endTime: e.target.value })
+                }
               />
             </div>
             <div className="space-y-1.5 sm:col-span-2 flex items-center gap-2">
@@ -449,7 +636,9 @@ export default function Events() {
                 <Label>Meeting link</Label>
                 <Input
                   value={draft.meetingLink}
-                  onChange={(e) => setDraft({ ...draft, meetingLink: e.target.value })}
+                  onChange={(e) =>
+                    setDraft({ ...draft, meetingLink: e.target.value })
+                  }
                   placeholder="https://…"
                 />
               </div>
@@ -458,19 +647,28 @@ export default function Events() {
                 <Label>Venue</Label>
                 <Input
                   value={draft.location}
-                  onChange={(e) => setDraft({ ...draft, location: e.target.value })}
+                  onChange={(e) =>
+                    setDraft({ ...draft, location: e.target.value })
+                  }
                 />
               </div>
             )}
-            <div className="space-y-1.5">
-              <Label>Capacity (0 = unlimited)</Label>
-              <Input
-                type="number"
-                min={0}
-                value={draft.capacity}
-                onChange={(e) => setDraft({ ...draft, capacity: Number(e.target.value) || 0 })}
-              />
-            </div>
+            {draft.mode === "External" && (
+              <div className="space-y-1.5">
+                <Label>Capacity (0 = unlimited)</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={draft.capacity}
+                  onChange={(e) =>
+                    setDraft({
+                      ...draft,
+                      capacity: Number(e.target.value) || 0,
+                    })
+                  }
+                />
+              </div>
+            )}
             <div className="space-y-1.5">
               <Label>Host / organiser</Label>
               <Input
@@ -483,7 +681,9 @@ export default function Events() {
               <Textarea
                 rows={3}
                 value={draft.description}
-                onChange={(e) => setDraft({ ...draft, description: e.target.value })}
+                onChange={(e) =>
+                  setDraft({ ...draft, description: e.target.value })
+                }
               />
             </div>
             <div className="space-y-1.5 sm:col-span-2">
@@ -500,7 +700,12 @@ export default function Events() {
             <Button variant="outline" onClick={() => setEditorOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={saveEvent}>{editingId ? "Save changes" : "Create event"}</Button>
+            <Button
+              onClick={() => saveMut.mutate()}
+              disabled={!draft.title.trim() || !draft.date || saveMut.isPending}
+            >
+              {editingId ? "Save changes" : "Create event"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -513,34 +718,75 @@ export default function Events() {
               <SheetHeader>
                 <SheetTitle className="flex items-center gap-2 flex-wrap">
                   {selected.title}
-                  <Badge className={STATUS_STYLES[selected.status]} variant="secondary">
+                  <Badge
+                    className={STATUS_STYLES[selected.status]}
+                    variant="secondary"
+                  >
                     {selected.status}
+                  </Badge>
+                  <Badge variant="outline">
+                    {selected.mode === "InHouse" ? "In-house" : "External"}
                   </Badge>
                 </SheetTitle>
                 <SheetDescription>
-                  {selected.date} · {selected.startTime}–{selected.endTime} · {selected.location}
+                  {selected.date.slice(0, 10)} · {selected.startTime}–
+                  {selected.endTime} ·{" "}
+                  {selected.virtual ? "Virtual" : selected.location}
                 </SheetDescription>
               </SheetHeader>
 
               <div className="flex gap-2 flex-wrap mt-4">
-                <Button size="sm" variant="outline" onClick={() => openEdit(selected)}>
-                  <Pencil className="h-3.5 w-3.5 mr-1" /> Edit
-                </Button>
-                <Button size="sm" variant="outline" onClick={() => copyLink(selected.id)}>
-                  <Copy className="h-3.5 w-3.5 mr-1" /> Copy open link
-                </Button>
-                <Button size="sm" variant="outline" onClick={() => exportRegistrations(selected)}>
-                  <Download className="h-3.5 w-3.5 mr-1" /> Export registrations
+                {(selected.status === "Draft" ||
+                  selected.status === "Published") && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => openEdit(selected)}
+                  >
+                    <Pencil className="h-3.5 w-3.5 mr-1" /> Edit
+                  </Button>
+                )}
+                {selected.status === "Draft" && (
+                  <Button
+                    size="sm"
+                    onClick={() => publishMut.mutate(selected._id)}
+                    disabled={publishMut.isPending}
+                  >
+                    <Rocket className="h-3.5 w-3.5 mr-1" /> Publish
+                  </Button>
+                )}
+                {selected.status === "Published" && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => completeMut.mutate(selected._id)}
+                  >
+                    <FlagOff className="h-3.5 w-3.5 mr-1" /> Mark completed
+                  </Button>
+                )}
+                {(selected.status === "Draft" ||
+                  selected.status === "Published") && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-destructive"
+                    onClick={() => cancelMut.mutate(selected._id)}
+                  >
+                    <Ban className="h-3.5 w-3.5 mr-1" /> Cancel event
+                  </Button>
+                )}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => exportInvites(selected)}
+                >
+                  <Download className="h-3.5 w-3.5 mr-1" /> Export invitations
                 </Button>
                 <Button
                   size="sm"
                   variant="outline"
                   className="text-destructive"
-                  onClick={() => {
-                    deleteEvent(selected.id);
-                    setSelectedId(null);
-                    toast.success("Event deleted.");
-                  }}
+                  onClick={() => deleteMut.mutate(selected._id)}
                 >
                   <Trash2 className="h-3.5 w-3.5 mr-1" /> Delete
                 </Button>
@@ -552,41 +798,58 @@ export default function Events() {
                   <TabsTrigger value="invites">
                     Invitations ({selected.invites.length})
                   </TabsTrigger>
-                  <TabsTrigger value="registrations">
-                    Registrations ({activeRegistrations(selected).length})
-                  </TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="overview" className="space-y-4 pt-4">
                   {selected.description && (
-                    <p className="text-sm whitespace-pre-line">{selected.description}</p>
+                    <p className="text-sm whitespace-pre-line">
+                      {selected.description}
+                    </p>
                   )}
                   {selected.agenda && (
                     <div className="rounded-md border bg-muted/40 p-3">
                       <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">
                         Agenda
                       </p>
-                      <p className="text-sm whitespace-pre-line">{selected.agenda}</p>
+                      <p className="text-sm whitespace-pre-line">
+                        {selected.agenda}
+                      </p>
                     </div>
                   )}
                   <div className="grid grid-cols-2 gap-3 text-sm">
                     <div>
-                      <span className="text-muted-foreground">Type:</span> {selected.type}
+                      <span className="text-muted-foreground">Type:</span>{" "}
+                      {selected.type}
                     </div>
                     <div>
-                      <span className="text-muted-foreground">Host:</span> {selected.host || "—"}
+                      <span className="text-muted-foreground">Host:</span>{" "}
+                      {selected.host || "—"}
                     </div>
-                    <div>
-                      <span className="text-muted-foreground">Capacity:</span>{" "}
-                      {selected.capacity > 0 ? selected.capacity : "Unlimited"}
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Deadline:</span>{" "}
-                      {selected.registrationDeadline || "—"}
-                    </div>
+                    {selected.mode === "External" && (
+                      <>
+                        <div>
+                          <span className="text-muted-foreground">
+                            Capacity:
+                          </span>{" "}
+                          {selected.capacity > 0
+                            ? selected.capacity
+                            : "Unlimited"}
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">
+                            Deadline:
+                          </span>{" "}
+                          {selected.registrationDeadline
+                            ? selected.registrationDeadline.slice(0, 10)
+                            : "—"}
+                        </div>
+                      </>
+                    )}
                     {selected.virtual && selected.meetingLink && (
                       <div className="col-span-2 break-all">
-                        <span className="text-muted-foreground">Meeting link:</span>{" "}
+                        <span className="text-muted-foreground">
+                          Meeting link:
+                        </span>{" "}
                         {selected.meetingLink}
                       </div>
                     )}
@@ -596,10 +859,13 @@ export default function Events() {
                 <TabsContent value="invites" className="space-y-3 pt-4">
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-xs text-muted-foreground">
-                      Demo tracking only — invitations are recorded here, no email is sent.
+                      {selected.mode === "External"
+                        ? "Each invitee gets their own personal registration link — submitting it is their attendance record."
+                        : "Each invitee acknowledges attendance from their own portal — that's their attendance record."}
                     </p>
                     <Button size="sm" onClick={openInvites}>
-                      <Send className="h-3.5 w-3.5 mr-1" /> Invite contacts
+                      <Send className="h-3.5 w-3.5 mr-1" /> Invite{" "}
+                      {selected.mode === "External" ? "contacts" : "people"}
                     </Button>
                   </div>
                   {selected.invites.length === 0 ? (
@@ -607,126 +873,89 @@ export default function Events() {
                       No invitations yet.
                     </p>
                   ) : (
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Contact</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead />
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {selected.invites.map((inv) => (
-                          <TableRow key={inv.id}>
-                            <TableCell>
-                              <div className="font-medium">{inv.name}</div>
-                              <div className="text-xs text-muted-foreground">{inv.email}</div>
-                            </TableCell>
-                            <TableCell>
-                              <Badge variant="secondary">{inv.status}</Badge>
-                            </TableCell>
-                            <TableCell className="text-right space-x-1">
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                title="Copy personal registration link"
-                                onClick={() => copyLink(inv.token)}
-                              >
-                                <Copy className="h-3.5 w-3.5" />
-                              </Button>
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                title="Remove invite"
-                                onClick={() => removeInvite(selected.id, inv.id)}
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </Button>
-                            </TableCell>
+                    <>
+                      <div className="relative">
+                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          className="pl-8"
+                          placeholder="Search invitations…"
+                          value={regSearch}
+                          onChange={(e) => setRegSearch(e.target.value)}
+                        />
+                      </div>
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Invitee</TableHead>
+                            <TableHead>Audience</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead className="text-right">
+                              Actions
+                            </TableHead>
                           </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  )}
-                </TabsContent>
-
-                <TabsContent value="registrations" className="space-y-3 pt-4">
-                  <div className="relative">
-                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      className="pl-8"
-                      placeholder="Search registrations…"
-                      value={regSearch}
-                      onChange={(e) => setRegSearch(e.target.value)}
-                    />
-                  </div>
-                  {selected.registrations.length === 0 ? (
-                    <p className="text-sm text-muted-foreground py-6 text-center">
-                      No registrations yet — share the open link or invite contacts.
-                    </p>
-                  ) : (
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Attendee</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead className="text-right">Actions</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {selected.registrations
-                          .filter((r) =>
-                            regSearch
-                              ? `${r.name} ${r.email} ${r.organisation}`
-                                  .toLowerCase()
-                                  .includes(regSearch.toLowerCase())
-                              : true,
-                          )
-                          .map((r) => (
-                            <TableRow key={r.id}>
-                              <TableCell>
-                                <div className="font-medium">{r.name}</div>
-                                <div className="text-xs text-muted-foreground">
-                                  {r.email}
-                                  {r.organisation ? ` · ${r.organisation}` : ""}
-                                </div>
-                                {r.notes && (
-                                  <div className="text-xs text-muted-foreground italic">
-                                    {r.notes}
+                        </TableHeader>
+                        <TableBody>
+                          {selected.invites
+                            .filter((i) =>
+                              regSearch
+                                ? `${i.name} ${i.email} ${i.organisation}`
+                                    .toLowerCase()
+                                    .includes(regSearch.toLowerCase())
+                                : true,
+                            )
+                            .map((inv) => (
+                              <TableRow key={inv.id}>
+                                <TableCell>
+                                  <div className="font-medium">{inv.name}</div>
+                                  <div className="text-xs text-muted-foreground">
+                                    {inv.email}
+                                    {inv.deliveryError && (
+                                      <span className="text-destructive">
+                                        {" "}
+                                        · send failed: {inv.deliveryError}
+                                      </span>
+                                    )}
                                   </div>
-                                )}
-                              </TableCell>
-                              <TableCell>
-                                <Badge variant="secondary">{r.status}</Badge>
-                              </TableCell>
-                              <TableCell className="text-right space-x-1">
-                                {r.status === "Registered" && (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() =>
-                                      setRegistrationStatus(selected.id, r.id, "Attended")
-                                    }
-                                  >
-                                    Check in
-                                  </Button>
-                                )}
-                                {r.status !== "Cancelled" && (
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={() =>
-                                      setRegistrationStatus(selected.id, r.id, "Cancelled")
-                                    }
-                                  >
-                                    Cancel
-                                  </Button>
-                                )}
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                      </TableBody>
-                    </Table>
+                                </TableCell>
+                                <TableCell>
+                                  <Badge variant="outline" className="text-xs">
+                                    {AUDIENCE_LABEL[inv.audienceType]}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell>
+                                  <Badge variant="secondary">
+                                    {inv.status}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="text-right space-x-1">
+                                  {inv.audienceType === "Contact" && (
+                                    <Button
+                                      size="icon"
+                                      variant="ghost"
+                                      title="Copy personal registration link"
+                                      onClick={() => copyLink(inv.token)}
+                                    >
+                                      <Copy className="h-3.5 w-3.5" />
+                                    </Button>
+                                  )}
+                                  {!hasResponded(inv.status) && (
+                                    <Button
+                                      size="icon"
+                                      variant="ghost"
+                                      title="Remove invite"
+                                      onClick={() =>
+                                        removeInviteMut.mutate(inv.id)
+                                      }
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </Button>
+                                  )}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                        </TableBody>
+                      </Table>
+                    </>
                   )}
                 </TabsContent>
               </Tabs>
@@ -735,74 +964,203 @@ export default function Events() {
         </SheetContent>
       </Sheet>
 
-      {/* ── Invite contacts dialog ───────────────────────────── */}
+      {/* ── Invite people dialog — audience depends on the event's mode ── */}
       <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
         <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Invite contacts</DialogTitle>
+            <DialogTitle>
+              Invite {selected?.mode === "External" ? "contacts" : "people"}
+            </DialogTitle>
             <DialogDescription>
-              Select CRM contacts to invite. Invitation links are generated for each
-              contact; dispatch is recorded for tracking only — no email is sent in
-              this prototype.
+              {selected?.mode === "External"
+                ? "Select CRM contacts — each gets their own personal registration link by email."
+                : "Select clients, board members and/or employees — each is notified to acknowledge attendance on their own portal."}
             </DialogDescription>
           </DialogHeader>
           <div className="relative">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
               className="pl-8"
-              placeholder="Search contacts…"
-              value={contactSearch}
-              onChange={(e) => setContactSearch(e.target.value)}
+              placeholder="Search…"
+              value={peopleSearch}
+              onChange={(e) => setPeopleSearch(e.target.value)}
             />
           </div>
-          <div className="space-y-1">
-            {emailableContacts.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-6 text-center">
-                No contacts with an email address found.
-              </p>
-            ) : (
-              emailableContacts.map((c) => {
-                const already = selected?.invites.some(
-                  (i) => i.email.toLowerCase() === c.email.toLowerCase(),
-                );
-                return (
-                  <label
-                    key={c._id}
-                    className="flex items-center gap-3 rounded-md border p-2.5 cursor-pointer hover:bg-muted/50"
-                  >
-                    <Checkbox
-                      disabled={already}
-                      checked={already || checkedContacts.includes(c._id)}
-                      onCheckedChange={(v) =>
-                        setCheckedContacts((prev) =>
-                          v ? [...prev, c._id] : prev.filter((id) => id !== c._id),
-                        )
-                      }
-                    />
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium truncate">
-                        {c.name}
-                        {already && (
-                          <span className="text-xs text-muted-foreground"> (already invited)</span>
-                        )}
+
+          {selected?.mode === "External" ? (
+            <ScrollArea className="h-72">
+              <div className="space-y-1">
+                {filteredContacts.length === 0 && (
+                  <p className="text-sm text-muted-foreground py-6 text-center">
+                    No contacts with an email address found.
+                  </p>
+                )}
+                {filteredContacts.map((c) => {
+                  const already = alreadyInvitedKeys.has(`Contact:${c._id}`);
+                  return (
+                    <label
+                      key={c._id}
+                      className="flex items-center gap-3 rounded-md border p-2.5 cursor-pointer hover:bg-muted/50"
+                    >
+                      <Checkbox
+                        disabled={already}
+                        checked={already || isChecked("Contact", c._id)}
+                        onCheckedChange={() => toggleInvitee("Contact", c._id)}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium truncate">
+                          {c.name}
+                          {already && (
+                            <span className="text-xs text-muted-foreground">
+                              {" "}
+                              (already invited)
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-xs text-muted-foreground truncate">
+                          {c.organisation} · {c.email}
+                        </div>
                       </div>
-                      <div className="text-xs text-muted-foreground truncate">
-                        {c.organisation} · {c.email}
-                      </div>
-                    </div>
-                  </label>
-                );
-              })
-            )}
-          </div>
+                    </label>
+                  );
+                })}
+              </div>
+            </ScrollArea>
+          ) : (
+            <Tabs defaultValue="clients">
+              <TabsList className="flex-wrap">
+                <TabsTrigger value="clients">Clients</TabsTrigger>
+                <TabsTrigger value="board">Board members</TabsTrigger>
+                <TabsTrigger value="employees">Employees</TabsTrigger>
+              </TabsList>
+              <TabsContent value="clients">
+                <ScrollArea className="h-64">
+                  <div className="space-y-1">
+                    {filteredClients.map((c) => {
+                      const already = alreadyInvitedKeys.has(`Client:${c._id}`);
+                      return (
+                        <label
+                          key={c._id}
+                          className="flex items-center gap-3 rounded-md border p-2.5 cursor-pointer hover:bg-muted/50"
+                        >
+                          <Checkbox
+                            disabled={already}
+                            checked={already || isChecked("Client", c._id)}
+                            onCheckedChange={() =>
+                              toggleInvitee("Client", c._id)
+                            }
+                          />
+                          <div className="text-sm">
+                            {displayName(c)}
+                            {already && (
+                              <span className="text-xs text-muted-foreground">
+                                {" "}
+                                (already invited)
+                              </span>
+                            )}
+                          </div>
+                        </label>
+                      );
+                    })}
+                    {!filteredClients.length && (
+                      <p className="text-sm text-muted-foreground py-6 text-center">
+                        No clients match.
+                      </p>
+                    )}
+                  </div>
+                </ScrollArea>
+              </TabsContent>
+              <TabsContent value="board">
+                <ScrollArea className="h-64">
+                  <div className="space-y-1">
+                    {filteredBoardMembers.map((m) => {
+                      const already = alreadyInvitedKeys.has(
+                        `BoardMember:${m._id}`,
+                      );
+                      return (
+                        <label
+                          key={m._id}
+                          className="flex items-center gap-3 rounded-md border p-2.5 cursor-pointer hover:bg-muted/50"
+                        >
+                          <Checkbox
+                            disabled={already}
+                            checked={already || isChecked("BoardMember", m._id)}
+                            onCheckedChange={() =>
+                              toggleInvitee("BoardMember", m._id)
+                            }
+                          />
+                          <div className="text-sm">
+                            {m.name}
+                            {already && (
+                              <span className="text-xs text-muted-foreground">
+                                {" "}
+                                (already invited)
+                              </span>
+                            )}
+                          </div>
+                        </label>
+                      );
+                    })}
+                    {!filteredBoardMembers.length && (
+                      <p className="text-sm text-muted-foreground py-6 text-center">
+                        No board members match.
+                      </p>
+                    )}
+                  </div>
+                </ScrollArea>
+              </TabsContent>
+              <TabsContent value="employees">
+                <ScrollArea className="h-64">
+                  <div className="space-y-1">
+                    {filteredEmployees.map((e) => {
+                      const already = alreadyInvitedKeys.has(
+                        `Employee:${e._id}`,
+                      );
+                      return (
+                        <label
+                          key={e._id}
+                          className="flex items-center gap-3 rounded-md border p-2.5 cursor-pointer hover:bg-muted/50"
+                        >
+                          <Checkbox
+                            disabled={already}
+                            checked={already || isChecked("Employee", e._id)}
+                            onCheckedChange={() =>
+                              toggleInvitee("Employee", e._id)
+                            }
+                          />
+                          <div className="text-sm">
+                            {e.firstName} {e.lastName}
+                            {already && (
+                              <span className="text-xs text-muted-foreground">
+                                {" "}
+                                (already invited)
+                              </span>
+                            )}
+                          </div>
+                        </label>
+                      );
+                    })}
+                    {!filteredEmployees.length && (
+                      <p className="text-sm text-muted-foreground py-6 text-center">
+                        No employees match.
+                      </p>
+                    )}
+                  </div>
+                </ScrollArea>
+              </TabsContent>
+            </Tabs>
+          )}
+
           <DialogFooter>
             <Button variant="outline" onClick={() => setInviteOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={dispatchInvites} disabled={!checkedContacts.length}>
+            <Button
+              onClick={() => inviteMut.mutate()}
+              disabled={!checkedInvitees.length || inviteMut.isPending}
+            >
               <Send className="h-4 w-4 mr-2" />
-              Record {checkedContacts.length || ""} invitation
-              {checkedContacts.length === 1 ? "" : "s"}
+              Invite {checkedInvitees.length || ""}
             </Button>
           </DialogFooter>
         </DialogContent>

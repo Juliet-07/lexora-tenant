@@ -481,6 +481,7 @@ export function AppSidebar() {
         { title: "Projects", url: "/projects" },
         { title: "Cases", url: "/my/cases" },
         { title: "Service Desk", url: "/my/service-desk" },
+        { title: "Events", url: "/my/events" },
       ],
     },
     {
