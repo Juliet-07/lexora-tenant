@@ -463,6 +463,9 @@ export const fetchEmployees = async (params?: {
   locationId?: string;
   employmentStatus?: EmploymentStatus;
   employmentType?: EmploymentType;
+  // Regular calls exclude terminated/resigned employees by default on
+  // the backend — pass archived: true to see that excluded set instead.
+  archived?: boolean;
 }): Promise<Paginated<Employee>> => {
   const res = await api.get("/hr/employees", { params });
   return res.data?.data ?? res.data;

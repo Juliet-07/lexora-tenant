@@ -8,7 +8,7 @@ import {
 } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Loader2, Save, X, Pencil, Eye } from "lucide-react";
+import { Loader2, Save, Send, X, Pencil, Eye } from "lucide-react";
 import { RichTextEditor } from "@/components/RichTextEditor";
 
 interface DocumentEditorDialogProps {
@@ -20,6 +20,17 @@ interface DocumentEditorDialogProps {
   onClose: () => void;
   onSave: (html: string) => void;
   saving?: boolean;
+  /** Custom label for the save action — defaults to "Save Changes". */
+  saveLabel?: string;
+  /**
+   * Optional second action, e.g. emailing the typed content straight to
+   * the employee. When provided, a "Send" button appears alongside Save
+   * so the same draft can be saved for later or sent immediately.
+   */
+  onSend?: (html: string) => void;
+  sending?: boolean;
+  /** Custom label for the send action — defaults to "Send". */
+  sendLabel?: string;
 }
 
 // Shared, dedicated editing surface — a full-size popup around the
@@ -37,6 +48,10 @@ export function DocumentEditorDialog({
   onClose,
   onSave,
   saving = false,
+  saveLabel = "Save Changes",
+  onSend,
+  sending = false,
+  sendLabel = "Send",
 }: DocumentEditorDialogProps) {
   const [draft, setDraft] = useState(value);
   const [mode, setMode] = useState<"edit" | "preview">("edit");
@@ -90,13 +105,20 @@ export function DocumentEditorDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={saving}>
+          <Button
+            variant="outline"
+            onClick={onClose}
+            disabled={saving || sending}
+          >
             <X className="h-4 w-4 mr-2" /> Cancel
           </Button>
           <Button
-            className="bg-gradient-to-r from-primary to-secondary"
+            variant={onSend ? "outline" : "default"}
+            className={
+              onSend ? undefined : "bg-gradient-to-r from-primary to-secondary"
+            }
             onClick={() => onSave(draft)}
-            disabled={saving}
+            disabled={saving || sending}
           >
             {saving ? (
               <>
@@ -104,10 +126,27 @@ export function DocumentEditorDialog({
               </>
             ) : (
               <>
-                <Save className="h-4 w-4 mr-2" /> Save Changes
+                <Save className="h-4 w-4 mr-2" /> {saveLabel}
               </>
             )}
           </Button>
+          {onSend && (
+            <Button
+              className="bg-gradient-to-r from-primary to-secondary"
+              onClick={() => onSend(draft)}
+              disabled={saving || sending}
+            >
+              {sending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Sending…
+                </>
+              ) : (
+                <>
+                  <Send className="h-4 w-4 mr-2" /> {sendLabel}
+                </>
+              )}
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

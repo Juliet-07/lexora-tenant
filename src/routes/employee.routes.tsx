@@ -17,6 +17,7 @@ import MyBoardPackRequests from "@/pages/hr/employee/MyBoardPackRequests";
 import MyServiceDesk from "@/pages/hr/employee/MyServiceDesk";
 import EmployeeOnboarding from "@/pages/EmployeeOnboarding";
 import MyCases from "@/pages/hr/employee/MyCases";
+import MyNotice from "@/pages/hr/employee/MyNotice";
 
 /** Self-service routes available only to employee. */
 export const employeeRoutes = ({ isAdmin, hierarchyRole }: RouteContext) => {
@@ -70,6 +71,11 @@ export const employeeRoutes = ({ isAdmin, hierarchyRole }: RouteContext) => {
       key="my-learning"
       path="/my/learning"
       element={layout(<MyLearning />)}
+    />,
+    <Route
+      key="my-notices"
+      path="/my/notices"
+      element={layout(<MyNotice />)}
     />,
 
     // Onboarding is no longer a gate — it's a dedicated page employees

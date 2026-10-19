@@ -299,6 +299,17 @@ export default function HREmployees() {
     staleTime: 30_000,
   });
 
+  // Terminated/resigned employees — excluded from the regular directory
+  // above by default, surfaced here as their own read-only view instead
+  // of being deleted or mixed in with active headcount.
+  const { data: archivedData, isLoading: archivedLoading } = useQuery({
+    queryKey: ["hr-employees-archived"],
+    queryFn: () => fetchEmployees({ limit: 200, archived: true }),
+    enabled: tab === "archived",
+    staleTime: 30_000,
+  });
+  const archivedEmployees = archivedData?.items ?? [];
+
   const { data: teams = [], isLoading: teamsLoading } = useQuery({
     queryKey: ["hr-teams"],
     queryFn: fetchTeams,
@@ -616,6 +627,7 @@ export default function HREmployees() {
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList>
           <TabsTrigger value="employees">Employees</TabsTrigger>
+          <TabsTrigger value="archived">Archived</TabsTrigger>
           <TabsTrigger value="teams">Teams</TabsTrigger>
           <TabsTrigger value="locations">Locations</TabsTrigger>
         </TabsList>
@@ -819,6 +831,83 @@ export default function HREmployees() {
                             {emp.phone && (
                               <span className="inline-flex items-center gap-1">
                                 <Phone className="h-3 w-3" /> {emp.phone}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+        </TabsContent>
+
+        {/* ── Archived tab — terminated / resigned employees ── */}
+        <TabsContent value="archived" className="space-y-4 mt-4">
+          {archivedLoading ? (
+            <div className="flex items-center justify-center h-48 gap-3 text-muted-foreground">
+              <Loader2 className="h-5 w-5 animate-spin" />
+              <span className="text-sm">Loading archived employees…</span>
+            </div>
+          ) : archivedEmployees.length === 0 ? (
+            <Card>
+              <CardContent className="p-10 text-center text-sm text-muted-foreground">
+                No terminated or resigned employees yet.
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+              {archivedEmployees.map((emp) => {
+                const teamName = getTeamName(emp);
+                const locName = getLocationName(emp);
+                return (
+                  <Card
+                    key={emp._id}
+                    onClick={() => setSelectedEmployee(emp)}
+                    className="hover:shadow-md transition-shadow border-l-4 border-l-muted cursor-pointer opacity-80"
+                  >
+                    <CardContent className="p-5">
+                      <div className="flex items-start gap-3">
+                        <Avatar className="h-12 w-12 shrink-0">
+                          <AvatarFallback className="bg-muted text-muted-foreground font-semibold">
+                            {initials(emp.firstName, emp.lastName)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h3 className="font-semibold text-sm truncate">
+                              {emp.firstName} {emp.lastName}
+                            </h3>
+                            <Badge
+                              variant="outline"
+                              className={`text-[10px] ${STATUS_COLOR[emp.employmentStatus] ?? ""}`}
+                            >
+                              {STATUS_LABEL[emp.employmentStatus] ??
+                                emp.employmentStatus}
+                            </Badge>
+                          </div>
+                          <p className="text-sm text-muted-foreground truncate">
+                            {emp.jobTitle}
+                          </p>
+                          <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                            {teamName && (
+                              <span className="inline-flex items-center gap-1">
+                                <UsersRound className="h-3 w-3" /> {teamName}
+                              </span>
+                            )}
+                            {locName && (
+                              <span className="inline-flex items-center gap-1">
+                                <MapPin className="h-3 w-3" /> {locName}
+                              </span>
+                            )}
+                            <span className="inline-flex items-center gap-1">
+                              <Mail className="h-3 w-3" /> {emp.email}
+                            </span>
+                            {emp.endDate && (
+                              <span className="inline-flex items-center gap-1">
+                                Left {emp.endDate.slice(0, 10)}
                               </span>
                             )}
                           </div>

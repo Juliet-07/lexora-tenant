@@ -227,6 +227,7 @@ export interface OffboardingAppeal {
   deadline: string | null;
   filed: boolean;
   filedAt: string | null;
+  filedBy: "employee" | "tenant" | null;
   grounds: string | null;
   letterFile: OffboardingFileRef | null;
   hearingDate: string | null;
@@ -252,6 +253,7 @@ export interface OffboardingFinalPay {
   proRataAmount: number;
   leaveBalanceDays: number;
   leaveBalanceAmount: number;
+  includeThirteenthMonth: boolean;
   thirteenthMonthAmount: number;
   transportAllowanceProrated: number;
   outstandingAdvances: number;
@@ -290,6 +292,11 @@ export interface OffboardingRecord {
   noticeServedAt: string | null;
   noticeMethod: string | null;
   noticeFile: OffboardingFileRef | null;
+  // The tenant's own typed notice (rich-text HTML) — the primary path
+  // now, replacing the generated PDF/DOCX above. For a self-submitted
+  // resignation, this instead holds the employee's own letter.
+  noticeContent: string | null;
+  noticeAcknowledgedAt: string | null;
   noticePaused: boolean;
   noticePausedAt: string | null;
   noticePausedReason: string | null;
@@ -327,6 +334,9 @@ export interface OffboardingRecord {
   certificateOfServiceSentAt: string | null;
   certificateGeneratedAt: string | null;
   certificateOfServiceFile: OffboardingFileRef | null;
+  // The tenant's own typed certificate (rich-text HTML) — an
+  // alternative to the upload/generate-PDF path above.
+  certificateContent: string | null;
 
   createdAt: string;
 }
@@ -378,6 +388,32 @@ export const generateOffboardingCertificate = async (
   const res = await api.post(
     `/hr/recruitment/offboarding/${recordId}/certificate/generate`,
     {},
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const saveOffboardingCertificateDraft = async (
+  recordId: string,
+  content: string,
+): Promise<OffboardingRecord> => {
+  const res = await api.post(
+    `/hr/recruitment/offboarding/${recordId}/certificate/draft`,
+    { content },
+  );
+  return res.data?.data ?? res.data;
+};
+
+// Emails the tenant's own typed certificate directly — replaces the
+// upload/generate-then-sendOffboardingCertificate PDF path above as the
+// primary route. Completes offboarding: for a termination, this is what
+// finalizes it (drops the employee from headcount, deactivates login).
+export const sendOffboardingCertificateContent = async (
+  recordId: string,
+  content: string,
+): Promise<OffboardingRecord> => {
+  const res = await api.post(
+    `/hr/recruitment/offboarding/${recordId}/certificate/send-content`,
+    { content },
   );
   return res.data?.data ?? res.data;
 };
@@ -485,6 +521,29 @@ export const uploadOffboardingNoticeFile = async (
   return res.data?.data ?? res.data;
 };
 
+export const saveOffboardingNoticeDraft = async (
+  recordId: string,
+  content: string,
+): Promise<OffboardingRecord> => {
+  const res = await api.post(
+    `/hr/recruitment/offboarding/${recordId}/notice/draft`,
+    { content },
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const sendOffboardingNotice = async (
+  recordId: string,
+  content: string,
+  noticeType?: NoticeHandling,
+): Promise<OffboardingRecord> => {
+  const res = await api.post(
+    `/hr/recruitment/offboarding/${recordId}/notice/send`,
+    { content, noticeType },
+  );
+  return res.data?.data ?? res.data;
+};
+
 // ── Step 3: Appeal period (Art. 29) ──
 
 export const fileOffboardingAppeal = async (
@@ -573,10 +632,11 @@ export const updateOffboardingExitInterview = async (
 
 export const computeOffboardingFinalPay = async (
   recordId: string,
+  includeThirteenthMonth: boolean = true,
 ): Promise<OffboardingRecord> => {
   const res = await api.post(
     `/hr/recruitment/offboarding/${recordId}/final-pay/compute`,
-    {},
+    { includeThirteenthMonth },
   );
   return res.data?.data ?? res.data;
 };
@@ -589,6 +649,44 @@ export const approveOffboardingFinalPay = async (
     {},
   );
   return res.data?.data ?? res.data;
+};
+
+// ─────────────────────────────────────────────────────────────
+// EMPLOYEE SELF-SERVICE — Notices dashboard
+// ─────────────────────────────────────────────────────────────
+
+export const fetchMyNotices = async (): Promise<OffboardingRecord[]> => {
+  const res = await api.get("/employee/offboarding/my-notices");
+  const d = res.data?.data ?? res.data;
+  return Array.isArray(d) ? d : [];
+};
+
+export const acknowledgeMyNotice = async (
+  recordId: string,
+): Promise<OffboardingRecord> => {
+  const res = await api.post(
+    `/employee/offboarding/my-notices/${recordId}/acknowledge`,
+    {},
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const fileMyNoticeAppeal = async (
+  recordId: string,
+  grounds: string,
+): Promise<OffboardingRecord> => {
+  const res = await api.post(
+    `/employee/offboarding/my-notices/${recordId}/appeal`,
+    { grounds },
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const submitMyResignationNotice = async (dto: {
+  content: string;
+  lastWorkingDay: string;
+}): Promise<void> => {
+  await api.post("/employee/offboarding/resignation", dto);
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -726,7 +824,6 @@ export const fetchSuccessionBenchStrength =
       "/hr/recruitment/succession-plans/bench-strength",
     );
     return (
-      res.data?.data ??
       res.data ?? {
         readyNowCount: 0,
         oneToTwoYearsCount: 0,

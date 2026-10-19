@@ -9,6 +9,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import OnboardingDocumentsTab from "./OnboardingDocuments";
+import { DocumentEditorDialog } from "@/components/DocumentEditorDialog";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -102,11 +104,12 @@ import {
   uploadOffboardingCertificate,
   sendOffboardingCertificate,
   generateOffboardingCertificate,
+  saveOffboardingCertificateDraft,
+  sendOffboardingCertificateContent,
   resolveOffboardingFileUrl,
   updateOffboardingFairnessChecklist,
-  downloadOffboardingNoticePdf,
-  downloadOffboardingNoticeDocx,
-  serveOffboardingNotice,
+  saveOffboardingNoticeDraft,
+  sendOffboardingNotice,
   uploadOffboardingNoticeFile,
   fileOffboardingAppeal,
   recordOffboardingAppealOutcome,
@@ -1513,17 +1516,30 @@ function OffboardingDetailPanel({
       setNoticeForm((f) => ({ ...f, noticeType: o.noticeType! }));
   }, [o?._id]);
 
-  const [downloadingPdf, setDownloadingPdf] = useState(false);
-  const [downloadingDocx, setDownloadingDocx] = useState(false);
-
-  const serveNoticeMutation = useMutation({
-    mutationFn: () => serveOffboardingNotice(o!._id, noticeForm),
+  const [noticeDialogOpen, setNoticeDialogOpen] = useState(false);
+  const saveNoticeDraftMutation = useMutation({
+    mutationFn: (content: string) =>
+      saveOffboardingNoticeDraft(o!._id, content),
     onSuccess: () => {
       invalidate();
-      toast.success("Notice marked as served — appeal window has opened.");
+      setNoticeDialogOpen(false);
+      toast.success("Notice saved as a draft.");
     },
     onError: (e: any) =>
-      toast.error(e?.response?.data?.message ?? "Failed to serve notice"),
+      toast.error(e?.response?.data?.message ?? "Failed to save draft"),
+  });
+  const sendNoticeMutation = useMutation({
+    mutationFn: (content: string) =>
+      sendOffboardingNotice(o!._id, content, noticeForm.noticeType),
+    onSuccess: () => {
+      invalidate();
+      setNoticeDialogOpen(false);
+      toast.success(
+        `Notice emailed to ${o!.employeeName} — appeal window has opened.`,
+      );
+    },
+    onError: (e: any) =>
+      toast.error(e?.response?.data?.message ?? "Failed to send notice"),
   });
 
   const noticeFileInputRef = useRef<HTMLInputElement>(null);
@@ -1689,8 +1705,15 @@ function OffboardingDetailPanel({
   });
 
   // ── Step 6: final pay ──
+  const [includeThirteenthMonth, setIncludeThirteenthMonth] = useState(true);
+  useEffect(() => {
+    if (o?.finalPay) {
+      setIncludeThirteenthMonth(o.finalPay.includeThirteenthMonth ?? true);
+    }
+  }, [o?._id]);
   const computeFinalPayMutation = useMutation({
-    mutationFn: () => computeOffboardingFinalPay(o!._id),
+    mutationFn: () =>
+      computeOffboardingFinalPay(o!._id, includeThirteenthMonth),
     onSuccess: () => {
       invalidate();
       toast.success("Final pay computed from real salary and leave data.");
@@ -1736,6 +1759,30 @@ function OffboardingDetailPanel({
     mutationFn: () => sendOffboardingCertificate(o!._id),
     onSuccess: () => {
       invalidate();
+      toast.success(`Certificate of Service emailed to ${o!.employeeName}.`);
+    },
+    onError: (e: any) =>
+      toast.error(e?.response?.data?.message ?? "Failed to send certificate"),
+  });
+
+  const [certificateDialogOpen, setCertificateDialogOpen] = useState(false);
+  const saveCertificateDraftMutation = useMutation({
+    mutationFn: (content: string) =>
+      saveOffboardingCertificateDraft(o!._id, content),
+    onSuccess: () => {
+      invalidate();
+      setCertificateDialogOpen(false);
+      toast.success("Certificate saved as a draft.");
+    },
+    onError: (e: any) =>
+      toast.error(e?.response?.data?.message ?? "Failed to save draft"),
+  });
+  const sendCertificateContentMutation = useMutation({
+    mutationFn: (content: string) =>
+      sendOffboardingCertificateContent(o!._id, content),
+    onSuccess: () => {
+      invalidate();
+      setCertificateDialogOpen(false);
       toast.success(`Certificate of Service emailed to ${o!.employeeName}.`);
     },
     onError: (e: any) =>
@@ -1859,73 +1906,28 @@ function OffboardingDetailPanel({
                       Statutory notice period: {o.noticePeriodLabel}
                     </p>
                   )}
-                  <div className="flex items-center gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={downloadingPdf}
-                      onClick={async () => {
-                        setDownloadingPdf(true);
-                        try {
-                          await downloadOffboardingNoticePdf(
-                            o._id,
-                            o.employeeName,
-                          );
-                        } catch {
-                          toast.error("Failed to download PDF");
-                        } finally {
-                          setDownloadingPdf(false);
-                        }
-                      }}
-                    >
-                      {downloadingPdf ? (
-                        <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-                      ) : (
-                        <Download className="h-3.5 w-3.5 mr-1.5" />
-                      )}
-                      PDF
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={downloadingDocx}
-                      onClick={async () => {
-                        setDownloadingDocx(true);
-                        try {
-                          await downloadOffboardingNoticeDocx(
-                            o._id,
-                            o.employeeName,
-                          );
-                        } catch {
-                          toast.error("Failed to download Word document");
-                        } finally {
-                          setDownloadingDocx(false);
-                        }
-                      }}
-                    >
-                      {downloadingDocx ? (
-                        <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-                      ) : (
-                        <Download className="h-3.5 w-3.5 mr-1.5" />
-                      )}
-                      Word
-                    </Button>
-                  </div>
-
                   {o.noticeServed ? (
-                    <div className="rounded-md bg-success/10 border border-success/20 text-success text-sm p-2.5">
-                      Served via {o.noticeMethod} on{" "}
-                      {o.noticeServedAt ? fmtDate(o.noticeServedAt) : "—"}
-                      {o.noticeType
-                        ? ` — ${NOTICE_HANDLING_LABEL[o.noticeType]}`
-                        : ""}
+                    <div className="space-y-2">
+                      <div className="rounded-md bg-success/10 border border-success/20 text-success text-sm p-2.5">
+                        Served via {o.noticeMethod} on{" "}
+                        {o.noticeServedAt ? fmtDate(o.noticeServedAt) : "—"}
+                        {o.noticeType
+                          ? ` — ${NOTICE_HANDLING_LABEL[o.noticeType]}`
+                          : ""}
+                      </div>
+                      {o.noticeContent && (
+                        <div
+                          className="prose prose-sm max-w-none rounded-md border bg-muted/20 p-3 text-xs leading-relaxed max-h-56 overflow-y-auto"
+                          dangerouslySetInnerHTML={{ __html: o.noticeContent }}
+                        />
+                      )}
                     </div>
                   ) : (
                     <div className="space-y-2 border rounded-md p-3">
                       {!fairnessAllPass && (
                         <p className="text-xs text-warning">
-                          Complete the fairness checklist above before serving
-                          notice.
+                          Complete the fairness checklist above before sending
+                          the notice.
                         </p>
                       )}
                       <div className="space-y-1">
@@ -1950,50 +1952,32 @@ function OffboardingDetailPanel({
                           </SelectContent>
                         </Select>
                       </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs">Method of service</Label>
-                        <Input
-                          placeholder="e.g. Email, hand-delivered, registered post"
-                          value={noticeForm.method}
-                          onChange={(e) =>
-                            setNoticeForm((f) => ({
-                              ...f,
-                              method: e.target.value,
-                            }))
-                          }
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs">Served on</Label>
-                        <Input
-                          type="date"
-                          value={noticeForm.servedAt}
-                          onChange={(e) =>
-                            setNoticeForm((f) => ({
-                              ...f,
-                              servedAt: e.target.value,
-                            }))
-                          }
-                        />
-                      </div>
                       <Button
                         size="sm"
                         className="w-full"
-                        disabled={
-                          !fairnessAllPass ||
-                          !noticeForm.method ||
-                          serveNoticeMutation.isPending
-                        }
-                        onClick={() => serveNoticeMutation.mutate()}
+                        disabled={!fairnessAllPass}
+                        onClick={() => setNoticeDialogOpen(true)}
                       >
-                        {serveNoticeMutation.isPending ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          "Mark notice as served"
-                        )}
+                        <FileSignature className="h-3.5 w-3.5 mr-1.5" />
+                        {o.noticeContent
+                          ? "Edit & send notice"
+                          : "Compose notice"}
                       </Button>
                     </div>
                   )}
+
+                  <DocumentEditorDialog
+                    open={noticeDialogOpen}
+                    title="Termination notice"
+                    subtitle={`To ${o.employeeName}`}
+                    value={o.noticeContent ?? ""}
+                    onClose={() => setNoticeDialogOpen(false)}
+                    onSave={(html) => saveNoticeDraftMutation.mutate(html)}
+                    saving={saveNoticeDraftMutation.isPending}
+                    onSend={(html) => sendNoticeMutation.mutate(html)}
+                    sending={sendNoticeMutation.isPending}
+                    sendLabel="Send notice"
+                  />
 
                   <input
                     ref={noticeFileInputRef}
@@ -2474,18 +2458,35 @@ function OffboardingDetailPanel({
                 <Wallet className="h-4 w-4 text-primary" /> Step 6 — Final pay
               </p>
               {!o.finalPay ? (
-                <Button
-                  size="sm"
-                  className="w-full"
-                  disabled={computeFinalPayMutation.isPending}
-                  onClick={() => computeFinalPayMutation.mutate()}
-                >
-                  {computeFinalPayMutation.isPending ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    "Compute final pay"
-                  )}
-                </Button>
+                <>
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id="include-13th-month"
+                      checked={includeThirteenthMonth}
+                      onCheckedChange={(v) =>
+                        setIncludeThirteenthMonth(v === true)
+                      }
+                    />
+                    <Label
+                      htmlFor="include-13th-month"
+                      className="text-xs font-normal cursor-pointer"
+                    >
+                      Include 13th month / bonus payout (doesn't always apply)
+                    </Label>
+                  </div>
+                  <Button
+                    size="sm"
+                    className="w-full"
+                    disabled={computeFinalPayMutation.isPending}
+                    onClick={() => computeFinalPayMutation.mutate()}
+                  >
+                    {computeFinalPayMutation.isPending ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      "Compute final pay"
+                    )}
+                  </Button>
+                </>
               ) : (
                 <div className="space-y-2">
                   <Row
@@ -2504,13 +2505,15 @@ function OffboardingDetailPanel({
                     )}
                     sub={`${o.finalPay.leaveBalanceDays} day(s)`}
                   />
-                  <Row
-                    label="13th month (pro-rata)"
-                    value={fmtMoney(
-                      o.finalPay.thirteenthMonthAmount,
-                      o.finalPay.currency,
-                    )}
-                  />
+                  {o.finalPay.includeThirteenthMonth && (
+                    <Row
+                      label="13th month (pro-rata)"
+                      value={fmtMoney(
+                        o.finalPay.thirteenthMonthAmount,
+                        o.finalPay.currency,
+                      )}
+                    />
+                  )}
                   {o.finalPay.transportAllowanceProrated > 0 && (
                     <Row
                       label="Transport allowance (pro-rata)"
@@ -2569,6 +2572,23 @@ function OffboardingDetailPanel({
                       bold
                     />
                   </div>
+                  {!o.finalPay.approved && (
+                    <div className="flex items-center gap-2 pb-1">
+                      <Checkbox
+                        id="include-13th-month-recompute"
+                        checked={includeThirteenthMonth}
+                        onCheckedChange={(v) =>
+                          setIncludeThirteenthMonth(v === true)
+                        }
+                      />
+                      <Label
+                        htmlFor="include-13th-month-recompute"
+                        className="text-xs font-normal cursor-pointer"
+                      >
+                        Include 13th month / bonus payout on recompute
+                      </Label>
+                    </div>
+                  )}
                   <div className="flex items-center gap-2 pt-1">
                     <Button
                       size="sm"
@@ -2615,8 +2635,64 @@ function OffboardingDetailPanel({
                 of service
               </p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Generate a draft, or upload your own signed document, then send
-                it to {o.employeeName} by email.
+                Write the certificate yourself and send it directly, or generate
+                a draft / upload your own signed document to send as a file
+                instead.
+              </p>
+
+              {o.certificateContent && (
+                <div
+                  className="prose prose-sm max-w-none rounded-md border bg-muted/20 p-3 text-xs leading-relaxed max-h-56 overflow-y-auto"
+                  dangerouslySetInnerHTML={{ __html: o.certificateContent }}
+                />
+              )}
+
+              <div className="flex items-center gap-2 flex-wrap">
+                <Button
+                  size="sm"
+                  onClick={() => setCertificateDialogOpen(true)}
+                >
+                  <FileSignature className="h-3.5 w-3.5 mr-1.5" />
+                  {o.certificateContent
+                    ? "Edit certificate"
+                    : "Write certificate"}
+                </Button>
+                {o.certificateContent && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={sendCertificateContentMutation.isPending}
+                    onClick={() =>
+                      sendCertificateContentMutation.mutate(
+                        o.certificateContent!,
+                      )
+                    }
+                  >
+                    {sendCertificateContentMutation.isPending ? (
+                      <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                    ) : (
+                      <Mail className="h-3.5 w-3.5 mr-1.5" />
+                    )}
+                    {o.certificateOfServiceSentAt ? "Re-send" : "Send"}
+                  </Button>
+                )}
+              </div>
+
+              <DocumentEditorDialog
+                open={certificateDialogOpen}
+                title="Certificate of service"
+                subtitle={`To ${o.employeeName}`}
+                value={o.certificateContent ?? ""}
+                onClose={() => setCertificateDialogOpen(false)}
+                onSave={(html) => saveCertificateDraftMutation.mutate(html)}
+                saving={saveCertificateDraftMutation.isPending}
+                onSend={(html) => sendCertificateContentMutation.mutate(html)}
+                sending={sendCertificateContentMutation.isPending}
+                sendLabel="Send certificate"
+              />
+
+              <p className="text-xs text-muted-foreground font-medium pt-1">
+                Or send a generated / uploaded file instead:
               </p>
 
               <input

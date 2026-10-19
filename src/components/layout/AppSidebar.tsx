@@ -493,6 +493,7 @@ export function AppSidebar() {
         { title: "Learning", url: "/my/learning" },
         { title: "Dispute", url: "/my/disputes" },
         { title: "Requisition", url: "/my/requisitions" },
+        { title: "Notices", url: "/my/notices" },
       ],
     },
     {
