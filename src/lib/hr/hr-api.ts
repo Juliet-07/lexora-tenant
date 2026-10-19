@@ -305,6 +305,12 @@ export interface EmployeeStats {
   onLeave: number;
   probation: number;
   terminated: number;
+  resigned: number;
+  // Everyone currently on the books (not terminated/resigned) — this is
+  // the number the Employees page shows as "Headcount".
+  activeHeadcount: number;
+  // Terminated + resigned — the Archived view's count.
+  archivedCount: number;
   teamCount: number;
   locationCount: number;
   byTeam: { _id: string; count: number }[];

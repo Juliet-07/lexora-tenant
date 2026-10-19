@@ -2,7 +2,7 @@ import { Route } from "react-router-dom";
 import { layout, RouteContext } from "./_helpers";
 import { ModulePlaceholder } from "@/components/layout/ModulePlaceholder";
 import HREmployees from "@/pages/hr/Employees";
-import HRRecruitment from "@/pages/hr/Recruitment";
+import HRRecruitment from "@/pages/hr/recruitment";
 import HRAttendance from "@/pages/hr/Attendance";
 import HRLeave from "@/pages/hr/Leave";
 import HRPerformance from "@/pages/hr/Performance";

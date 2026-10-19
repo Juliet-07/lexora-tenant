@@ -535,10 +535,13 @@ export default function HREmployees() {
   };
 
   // ── Stats ─────────────────────────────────────────────────
-  const headcount = statsData?.total ?? employees.length;
+  // Headcount = everyone currently on the books (not terminated/
+  // resigned) — matches the directory's default exclusion, not the raw
+  // total of every employee record that's ever existed.
+  const headcount = statsData?.activeHeadcount ?? employees.length;
   const teamCount = statsData?.teamCount ?? teams.length;
   const locationCount = statsData?.locationCount ?? locations.length;
-  const activeCount = statsData?.active ?? 0;
+  const archivedStatCount = statsData?.archivedCount ?? 0;
 
   // ─────────────────────────────────────────────────────────
   return (
@@ -600,8 +603,8 @@ export default function HREmployees() {
             tone: "from-emerald-500 to-teal-500",
           },
           {
-            label: "Active",
-            value: activeCount,
+            label: "Archived",
+            value: archivedStatCount,
             icon: Briefcase,
             tone: "from-amber-500 to-orange-500",
           },

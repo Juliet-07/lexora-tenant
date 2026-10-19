@@ -823,8 +823,13 @@ export const fetchSuccessionBenchStrength =
     const res = await api.get(
       "/hr/recruitment/succession-plans/bench-strength",
     );
+    // Every response is wrapped as { success, message, data } by the
+    // backend's TransformInterceptor — this previously read res.data
+    // directly (the wrapper itself, always truthy), so the empty-report
+    // fallback never actually triggered and report.rows was undefined,
+    // crashing BenchStrengthDialog's .map on open.
     return (
-      res.data ?? {
+      res.data?.data ?? {
         readyNowCount: 0,
         oneToTwoYearsCount: 0,
         noSuccessorCount: 0,
