@@ -1323,6 +1323,7 @@ export default function MyDisputes() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey });
+      setTab("filed");
       setLogOpen(false);
       toast.success("Dispute case logged successfully.");
     },

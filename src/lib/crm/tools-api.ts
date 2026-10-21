@@ -718,7 +718,8 @@ export type CalendarLayer =
   | "ADR"
   | "Litigation"
   | "Contract"
-  | "Finance";
+  | "Finance"
+  | "HR";
 export type RecurrenceRule =
   | "None"
   | "Daily"
