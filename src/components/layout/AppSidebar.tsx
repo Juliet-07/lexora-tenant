@@ -90,7 +90,7 @@ type NavItem = {
   url?: string;
   icon: any;
   adminOnly?: boolean;
-  requiresRole?: string;
+  requiresRole?: string | string[];
   children?: NavChild[];
 };
 
@@ -510,7 +510,9 @@ export function AppSidebar() {
       title: "Team Disputes",
       url: "/my/team-disputes",
       icon: Gavel,
-      requiresRole: "manager",
+      // HoDs are the line manager for anyone reporting straight to them,
+      // so they resolve those cases here too.
+      requiresRole: ["manager", "head_of_department"],
     },
     {
       title: "My Department",
@@ -557,7 +559,9 @@ export function AppSidebar() {
                 {TEAM_MEMBER_NAV.filter(
                   (item) =>
                     !item.requiresRole ||
-                    item.requiresRole === user?.hierarchyRole,
+                    (Array.isArray(item.requiresRole)
+                      ? item.requiresRole.includes(user?.hierarchyRole ?? "")
+                      : item.requiresRole === user?.hierarchyRole),
                 ).map((item) => {
                   if (item.children && item.children.length > 0) {
                     const isBranchActive = item.children.some((c) =>

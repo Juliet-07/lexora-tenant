@@ -1277,23 +1277,30 @@ export default function MyDisputes() {
   const isHoD = hierarchyRole === "head_of_department";
   const queryClient = useQueryClient();
   const [logOpen, setLogOpen] = useState(false);
-  const [tab, setTab] = useState<"filed" | "against">("filed");
+  const [tab, setTab] = useState<"filed" | "against" | "department">("filed");
   const [selected, setSelected] = useState<DisputeCase | null>(null);
 
-  // HoD → department-wide read-only view. Manager & regular → their own filings.
-  const queryKey = isHoD ? ["department-disputes"] : ["my-disputes"];
-  const queryFn = isHoD ? fetchDepartmentDisputeCases : fetchMyDisputeCases;
+  // Everyone — HoDs included — sees what they filed and what was filed
+  // against them. An HoD additionally gets a read-only department view
+  // (which deliberately excludes cases the HoD is personally a party to).
+  const queryKey = ["my-disputes"];
 
   const { data: disputes = [], isLoading } = useQuery({
     queryKey,
-    queryFn,
+    queryFn: fetchMyDisputeCases,
   });
 
   const { data: againstMe = [], isLoading: loadingAgainst } = useQuery({
     queryKey: ["disputes-against-me"],
     queryFn: fetchDisputesAgainstMe,
-    enabled: !isHoD,
   });
+
+  const { data: departmentDisputes = [], isLoading: loadingDepartment } =
+    useQuery({
+      queryKey: ["department-disputes"],
+      queryFn: fetchDepartmentDisputeCases,
+      enabled: isHoD,
+    });
 
   const openMutation = useMutation({
     mutationFn: async ({
@@ -1323,12 +1330,12 @@ export default function MyDisputes() {
       toast.error(e?.response?.data?.message ?? "Failed to log dispute"),
   });
 
-  const activeList = isHoD ? disputes : tab === "filed" ? disputes : againstMe;
-  const activeLoading = isHoD
-    ? isLoading
-    : tab === "filed"
-      ? isLoading
-      : loadingAgainst;
+  const activeList =
+    tab === "filed"
+      ? disputes
+      : tab === "against"
+        ? againstMe
+        : departmentDisputes;
 
   const total = activeList.length;
   const open = activeList.filter((d) => d.status === "open").length;
@@ -1337,9 +1344,9 @@ export default function MyDisputes() {
   ).length;
   const resolved = activeList.filter((d) => d.status === "closed").length;
 
-  const pageTitle = isHoD ? "Department Disputes" : "My Disputes";
+  const pageTitle = "My Disputes";
   const subtitle = isHoD
-    ? "Read-only view of every dispute logged across your department, including who raised it and the latest action taken. You can still log your own dispute using the button above."
+    ? "Log and track your own workplace disputes — both those you have filed and those filed against you — and keep an eye on every dispute across your department."
     : "Log and track your workplace disputes — both those you have filed and those filed against you.";
 
   const renderCardsList = (items: DisputeCase[], showComplainant: boolean) => (
@@ -1469,108 +1476,118 @@ export default function MyDisputes() {
       </div>
 
       {/* List */}
-      {isHoD ? (
-        activeLoading ? (
-          <div className="flex items-center justify-center py-16 gap-2 text-muted-foreground">
-            <Loader2 className="h-5 w-5 animate-spin" />
-            <span className="text-sm">Loading disputes…</span>
-          </div>
-        ) : disputes.length === 0 ? (
-          <Card>
-            <CardContent className="py-16 text-center">
-              <Scale className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
-              <p className="text-sm text-muted-foreground">
-                No dispute cases have been logged in your department.
-              </p>
-            </CardContent>
-          </Card>
-        ) : (
-          <Card>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Case</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Logged by</TableHead>
-                    <TableHead>Filed</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Latest action</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {disputes.map((d) => (
-                    <TableRow
-                      key={d._id}
-                      className="cursor-pointer"
-                      onClick={() => setSelected(d)}
-                    >
-                      <TableCell className="font-mono text-xs">
-                        {d.caseNumber}
-                      </TableCell>
-                      <TableCell className="capitalize text-sm">
-                        {d.type}
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        {d.complainant
-                          ? `${d.complainant.firstName} ${d.complainant.lastName}`
-                          : "—"}
-                        {d.complainant?.jobTitle && (
-                          <p className="text-[11px] text-muted-foreground">
-                            {d.complainant.jobTitle}
-                          </p>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        {new Date(d.filedAt).toLocaleDateString()}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-col gap-1">
-                          <StatusBadge status={d.status} />
-                          <StageBadge stage={d.stage} />
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        {lastAction(d)}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        )
-      ) : (
-        <Tabs
-          value={tab}
-          onValueChange={(v) => setTab(v as "filed" | "against")}
-        >
-          <TabsList>
-            <TabsTrigger value="filed">
-              Filed by me ({disputes.length})
+      <Tabs
+        value={tab}
+        onValueChange={(v) => setTab(v as "filed" | "against" | "department")}
+      >
+        <TabsList>
+          <TabsTrigger value="filed">
+            Filed by me ({disputes.length})
+          </TabsTrigger>
+          <TabsTrigger value="against">
+            Filed against me ({againstMe.length})
+          </TabsTrigger>
+          {isHoD && (
+            <TabsTrigger value="department">
+              Department ({departmentDisputes.length})
             </TabsTrigger>
-            <TabsTrigger value="against">
-              Filed against me ({againstMe.length})
-            </TabsTrigger>
-          </TabsList>
-          <TabsContent value="filed" className="mt-4">
-            {renderEmptyOrList(
-              disputes,
-              isLoading,
-              "You have no dispute cases on file.",
-              false,
+          )}
+        </TabsList>
+        <TabsContent value="filed" className="mt-4">
+          {renderEmptyOrList(
+            disputes,
+            isLoading,
+            "You have no dispute cases on file.",
+            false,
+          )}
+        </TabsContent>
+        <TabsContent value="against" className="mt-4">
+          {renderEmptyOrList(
+            againstMe,
+            loadingAgainst,
+            "No disputes have been filed against you.",
+            true,
+          )}
+        </TabsContent>
+        {isHoD && (
+          <TabsContent value="department" className="mt-4 space-y-3">
+            <p className="text-xs text-muted-foreground">
+              Read-only. Disputes you are personally involved in are not listed
+              here — find them under "Filed by me" and "Filed against me".
+            </p>
+            {loadingDepartment ? (
+              <div className="flex items-center justify-center py-16 gap-2 text-muted-foreground">
+                <Loader2 className="h-5 w-5 animate-spin" />
+                <span className="text-sm">Loading disputes…</span>
+              </div>
+            ) : departmentDisputes.length === 0 ? (
+              <Card>
+                <CardContent className="py-16 text-center">
+                  <Scale className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
+                  <p className="text-sm text-muted-foreground">
+                    No dispute cases have been logged in your department.
+                  </p>
+                </CardContent>
+              </Card>
+            ) : (
+              <Card>
+                <CardContent className="p-0">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Case</TableHead>
+                        <TableHead>Type</TableHead>
+                        <TableHead>Logged by</TableHead>
+                        <TableHead>Filed</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Latest action</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {departmentDisputes.map((d) => (
+                        <TableRow
+                          key={d._id}
+                          className="cursor-pointer"
+                          onClick={() => setSelected(d)}
+                        >
+                          <TableCell className="font-mono text-xs">
+                            {d.caseNumber}
+                          </TableCell>
+                          <TableCell className="capitalize text-sm">
+                            {d.type}
+                          </TableCell>
+                          <TableCell className="text-sm">
+                            {d.complainant
+                              ? `${d.complainant.firstName} ${d.complainant.lastName}`
+                              : "—"}
+                            {d.complainant?.jobTitle && (
+                              <p className="text-[11px] text-muted-foreground">
+                                {d.complainant.jobTitle}
+                              </p>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-xs text-muted-foreground">
+                            {new Date(d.filedAt).toLocaleDateString()}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-col gap-1">
+                              <StatusBadge status={d.status} />
+                              <StageBadge stage={d.stage} />
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-xs text-muted-foreground">
+                            {lastAction(d)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
             )}
           </TabsContent>
-          <TabsContent value="against" className="mt-4">
-            {renderEmptyOrList(
-              againstMe,
-              loadingAgainst,
-              "No disputes have been filed against you.",
-              true,
-            )}
-          </TabsContent>
-        </Tabs>
-      )}
+        )}
+      </Tabs>
 
       <LogDisputeDialog
         open={logOpen}
@@ -1581,12 +1598,13 @@ export default function MyDisputes() {
 
       <DisputeDetailSheet
         dispute={selected}
-        canAppeal={!isHoD && tab === "against"}
-        canRespond={!isHoD && tab === "against"}
+        canAppeal={tab === "against"}
+        canRespond={tab === "against"}
         onClose={() => setSelected(null)}
         onAppealFiled={() => {
           queryClient.invalidateQueries({ queryKey: ["disputes-against-me"] });
           queryClient.invalidateQueries({ queryKey });
+          queryClient.invalidateQueries({ queryKey: ["department-disputes"] });
           setSelected(null);
         }}
         onResponseSent={() => {

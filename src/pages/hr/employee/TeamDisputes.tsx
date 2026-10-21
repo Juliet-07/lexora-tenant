@@ -275,9 +275,13 @@ function ManageCaseSheet({
   const [findings, setFindings] = useState("");
   const [invNote, setInvNote] = useState("");
   const [hearingDate, setHearingDate] = useState("");
-  const [hearingMode, setHearingMode] = useState<"physical" | "online">("physical");
+  const [hearingMode, setHearingMode] = useState<"physical" | "online">(
+    "physical",
+  );
   const [hearingVenue, setHearingVenue] = useState("");
-  const [hearingPlatform, setHearingPlatform] = useState<"google_meet" | "microsoft_teams" | "zoom">("zoom");
+  const [hearingPlatform, setHearingPlatform] = useState<
+    "google_meet" | "microsoft_teams" | "zoom"
+  >("zoom");
   const [hearingLink, setHearingLink] = useState("");
   const [hearingNote, setHearingNote] = useState("");
   const [closeReport, setCloseReport] = useState("");
@@ -625,41 +629,42 @@ function ManageCaseSheet({
             )}
 
             {/* Investigate */}
-            {canResolveOrEscalate &&
-              (d.status === "open" || d.status === "under_investigation") && (
-                <Section title="Investigation finding">
-                  <p className="text-xs text-muted-foreground">
-                    Add interview notes, evidence review, or observations. HR
-                    sees every entry you submit.
-                  </p>
-                  <Textarea
-                    rows={3}
-                    placeholder="Findings *"
-                    value={findings}
-                    onChange={(e) => setFindings(e.target.value)}
-                  />
-                  <Button
-                    size="sm"
-                    disabled={!findings.trim() || invMut.isPending}
-                    onClick={() =>
-                      invMut.mutate({
-                        findings: findings.trim(),
-                        notes: invNote.trim() || undefined,
-                      })
-                    }
-                  >
-                    {invMut.isPending ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      "Submit finding"
-                    )}
-                  </Button>
-                </Section>
-              )}
+            {canResolveOrEscalate && d.stage === "acknowledge" && (
+              <Section title="Investigation finding">
+                <p className="text-xs text-muted-foreground">
+                  Add interview notes, evidence review, or observations. HR sees
+                  every entry you submit.
+                </p>
+                <Textarea
+                  rows={3}
+                  placeholder="Findings *"
+                  value={findings}
+                  onChange={(e) => setFindings(e.target.value)}
+                />
+                <Button
+                  size="sm"
+                  disabled={!findings.trim() || invMut.isPending}
+                  onClick={() =>
+                    invMut.mutate({
+                      findings: findings.trim(),
+                      notes: invNote.trim() || undefined,
+                    })
+                  }
+                >
+                  {invMut.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    "Submit finding"
+                  )}
+                </Button>
+              </Section>
+            )}
 
             {/* Schedule hearing */}
+            {/* Hearing is scheduled from the investigate stage — same path
+                for every non-incident type (grievance, disciplinary, report). */}
             {canResolveOrEscalate &&
-              d.status === "under_investigation" &&
+              d.stage === "investigate" &&
               d.type !== "incident" && (
                 <Section title="Schedule hearing">
                   <p className="text-xs text-muted-foreground">

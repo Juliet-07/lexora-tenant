@@ -1,4 +1,5 @@
 import { api } from "../api";
+import type { OffboardingFinalPay } from "./hr-recruitment-api";
 
 // Unwraps the backend's { success, message, data } envelope. Plain
 // `res.data?.data ?? res.data` breaks whenever `data` is legitimately
@@ -1759,6 +1760,8 @@ export interface OffboardingPayable {
   approvedAt: string | null;
   paid: boolean;
   paidAt: string | null;
+  // Full frozen final-pay breakdown, as approved — drives "View more".
+  breakdown: OffboardingFinalPay;
 }
 
 export const fetchOffboardingPayable = async (): Promise<

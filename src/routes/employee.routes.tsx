@@ -92,6 +92,13 @@ export const employeeRoutes = ({ isAdmin, hierarchyRole }: RouteContext) => {
   if (hierarchyRole === "manager") {
     routes.push(
       <Route key="my-team" path="/my/team" element={layout(<MyTeam />)} />,
+    );
+  }
+
+  // Managers AND HoDs: an HoD is the assigned manager for anyone who
+  // reports straight to them, so those cases land here.
+  if (hierarchyRole === "manager" || hierarchyRole === "head_of_department") {
+    routes.push(
       <Route
         key="team-disputes"
         path="/my/team-disputes"

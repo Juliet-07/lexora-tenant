@@ -210,6 +210,8 @@ export default function HRPayroll() {
     PayrollRun["status"] | null
   >(null);
   const [openLoan, setOpenLoan] = useState<EmployeeLoan | null>(null);
+  const [viewingOffboarding, setViewingOffboarding] =
+    useState<OffboardingPayable | null>(null);
   const [editingPolicy, setEditingPolicy] = useState<PayrollPolicy | null>(
     null,
   );
@@ -871,18 +873,18 @@ export default function HRPayroll() {
             <Card>
               <CardContent className="p-0">
                 <div className="grid grid-cols-12 gap-2 px-4 py-2 text-[11px] uppercase text-muted-foreground bg-muted/40 border-b">
-                  <div className="col-span-4">Employee</div>
+                  <div className="col-span-3">Employee</div>
                   <div className="col-span-2">Last working day</div>
                   <div className="col-span-2 text-right">Net final pay</div>
                   <div className="col-span-2">Status</div>
-                  <div className="col-span-2 text-right">Action</div>
+                  <div className="col-span-3 text-right">Action</div>
                 </div>
                 {offboardingPayable.map((o) => (
                   <div
                     key={o._id}
                     className="grid grid-cols-12 gap-2 px-4 py-3 items-center border-b last:border-b-0 hover:bg-muted/20"
                   >
-                    <div className="col-span-4">
+                    <div className="col-span-3">
                       <p className="text-sm font-medium">{o.employeeName}</p>
                       <p className="text-[11px] text-muted-foreground">
                         {o.jobTitle} ·{" "}
@@ -914,7 +916,15 @@ export default function HRPayroll() {
                         </p>
                       )}
                     </div>
-                    <div className="col-span-2 flex justify-end">
+                    <div className="col-span-3 flex justify-end gap-2">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setViewingOffboarding(o)}
+                      >
+                        <Eye className="h-3 w-3 mr-1" />
+                        View more
+                      </Button>
                       {!o.paid && (
                         <Button
                           size="sm"
@@ -1905,6 +1915,11 @@ export default function HRPayroll() {
           )}
         </SheetContent>
       </Sheet>
+
+      <OffboardingBreakdownDialog
+        payable={viewingOffboarding}
+        onClose={() => setViewingOffboarding(null)}
+      />
 
       {emailComposeTarget && (
         <ComposePayslipEmailDialog
@@ -3477,5 +3492,169 @@ function PayslipBrandingPanel() {
         </Button>
       </CardContent>
     </Card>
+  );
+}
+
+// ── Offboarding payout breakdown ────────────────────────────────
+// Read-only view of the final pay exactly as it was approved on the
+// Offboarding record. `netFinalPay` is already net of outstanding
+// advances/loans (the payroll calculator subtracts loan installments
+// before returning it), so advances are listed as a deduction line
+// but are never subtracted from the net a second time.
+
+function BreakdownLine({
+  label,
+  value,
+  sub,
+  bold,
+  muted,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+  bold?: boolean;
+  muted?: boolean;
+}) {
+  return (
+    <div className="flex items-center justify-between text-sm">
+      <span className={muted ? "text-muted-foreground" : ""}>
+        {label}
+        {sub && (
+          <span className="text-xs text-muted-foreground ml-1">({sub})</span>
+        )}
+      </span>
+      <span
+        className={
+          bold ? "font-semibold" : muted ? "text-muted-foreground" : ""
+        }
+      >
+        {value}
+      </span>
+    </div>
+  );
+}
+
+function OffboardingBreakdownDialog({
+  payable,
+  onClose,
+}: {
+  payable: OffboardingPayable | null;
+  onClose: () => void;
+}) {
+  const b = payable?.breakdown;
+  const cur = b?.currency ?? "USD";
+  const employerTotal =
+    b?.deductions.reduce((s, d) => s + d.employerAmount, 0) ?? 0;
+
+  return (
+    <Dialog open={!!payable} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
+        {payable && b && (
+          <>
+            <DialogHeader>
+              <DialogTitle>{payable.employeeName}</DialogTitle>
+              <DialogDescription>
+                {payable.jobTitle} ·{" "}
+                {payable.type === "resignation" ? "Resigned" : "Terminated"} ·
+                last working day {fmtDate(payable.endDate)}
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-2">
+              <p className="text-[11px] uppercase text-muted-foreground">
+                Earnings
+              </p>
+              <BreakdownLine
+                label="Pro-rata salary"
+                sub={`${b.proRataDays} day(s)`}
+                value={fmt(b.proRataAmount, cur)}
+              />
+              <BreakdownLine
+                label="Accrued leave payout"
+                sub={`${b.leaveBalanceDays} day(s)`}
+                value={fmt(b.leaveBalanceAmount, cur)}
+              />
+              {b.includeThirteenthMonth && (
+                <BreakdownLine
+                  label="13th month (pro-rata)"
+                  value={fmt(b.thirteenthMonthAmount, cur)}
+                />
+              )}
+              {b.transportAllowanceProrated > 0 && (
+                <BreakdownLine
+                  label="Transport allowance (pro-rata)"
+                  value={fmt(b.transportAllowanceProrated, cur)}
+                />
+              )}
+              {b.severanceDue && (
+                <BreakdownLine
+                  label="Severance"
+                  value={fmt(b.severanceAmount, cur)}
+                />
+              )}
+              <div className="border-t pt-2">
+                <BreakdownLine
+                  label="Gross final pay"
+                  value={fmt(b.grossFinalPay, cur)}
+                  bold
+                />
+              </div>
+
+              <p className="text-[11px] uppercase text-muted-foreground pt-2">
+                Deductions
+              </p>
+              {b.deductions.map((d) => (
+                <BreakdownLine
+                  key={d.key}
+                  label={`− ${d.label}`}
+                  value={fmt(d.employeeAmount, cur)}
+                  muted
+                />
+              ))}
+              {b.outstandingAdvances > 0 && (
+                <BreakdownLine
+                  label="− Outstanding advances / loans"
+                  value={fmt(b.outstandingAdvances, cur)}
+                  muted
+                />
+              )}
+              <div className="border-t pt-2">
+                <BreakdownLine
+                  label="Net final pay"
+                  value={fmt(b.netFinalPay, cur)}
+                  bold
+                />
+              </div>
+
+              {employerTotal > 0 && (
+                <div className="rounded-md bg-muted/40 p-3 mt-2 space-y-1">
+                  <p className="text-[11px] uppercase text-muted-foreground">
+                    Employer contributions (not deducted from the employee)
+                  </p>
+                  {b.deductions
+                    .filter((d) => d.employerAmount > 0)
+                    .map((d) => (
+                      <BreakdownLine
+                        key={d.key}
+                        label={d.label}
+                        value={fmt(d.employerAmount, cur)}
+                        muted
+                      />
+                    ))}
+                </div>
+              )}
+
+              <div className="text-xs text-muted-foreground pt-2 space-y-0.5">
+                <p>Computed {fmtDate(b.computedAt)}</p>
+                {b.approvedAt && <p>Approved {fmtDate(b.approvedAt)}</p>}
+                {payable.paid && payable.paidAt && (
+                  <p>Paid {fmtDate(payable.paidAt)}</p>
+                )}
+              </div>
+            </div>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }

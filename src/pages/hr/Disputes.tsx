@@ -524,9 +524,13 @@ function DisputeDetailSheet({
   const [findings, setFindings] = useState("");
   const [findingsNotes, setFindingsNotes] = useState("");
   const [hearingDate, setHearingDate] = useState("");
-  const [hearingMode, setHearingMode] = useState<"physical" | "online">("physical");
+  const [hearingMode, setHearingMode] = useState<"physical" | "online">(
+    "physical",
+  );
   const [hearingVenue, setHearingVenue] = useState("");
-  const [hearingPlatform, setHearingPlatform] = useState<"google_meet" | "microsoft_teams" | "zoom">("zoom");
+  const [hearingPlatform, setHearingPlatform] = useState<
+    "google_meet" | "microsoft_teams" | "zoom"
+  >("zoom");
   const [hearingLink, setHearingLink] = useState("");
   const [hearingNotes, setHearingNotes] = useState("");
   const [outcomeDecision, setOutcomeDecision] =
@@ -710,6 +714,17 @@ function DisputeDetailSheet({
             )}
           </div>
         )}
+        {!locked &&
+          (dispute.complainant?.hierarchyRole === "head_of_department" ||
+            (dispute.respondents ?? []).some(
+              (r: any) => r.hierarchyRole === "head_of_department",
+            )) && (
+            <div className="rounded-md border border-info/30 bg-info/10 text-info text-xs p-3 mb-4">
+              A Head of Department is a party to this case, so it is handled
+              directly by HR. Line managers in the department cannot see or act
+              on it.
+            </div>
+          )}
         {locked && (
           <div className="rounded-md border border-warning/30 bg-warning/10 text-warning text-xs p-3 mb-4">
             This case is currently being handled by the employee's manager. You
@@ -954,9 +969,11 @@ function DisputeDetailSheet({
             </fieldset>
           )}
 
-          {/* Schedule Hearing */}
-          {(stage === "hearing" ||
-            (dispute.type === "incident" && stage === "investigate")) && (
+          {/* Schedule Hearing — every type except incident (grievance,
+              disciplinary, report) goes investigate → hearing → outcome.
+              The hearing is scheduled FROM the investigate stage; once
+              scheduled the case moves to "hearing" and this form is done. */}
+          {stage === "investigate" && dispute.type !== "incident" && (
             <fieldset
               disabled={locked}
               className={`rounded-md border p-4 space-y-3 ${locked ? "opacity-60" : ""}`}
@@ -1070,8 +1087,8 @@ function DisputeDetailSheet({
             </fieldset>
           )}
 
-          {/* Record Outcome */}
-          {/* Record Outcome */}
+          {/* Record Outcome — after the hearing; incidents skip the hearing
+              and record straight after investigation. */}
           {(stage === "hearing" ||
             (dispute.type === "incident" && stage === "investigate")) && (
             <fieldset

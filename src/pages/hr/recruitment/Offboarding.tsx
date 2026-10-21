@@ -1689,8 +1689,11 @@ export function OffboardingDetailPanel({
                   <div className="border-t pt-2">
                     <Row
                       label="Net final pay"
+                      // netFinalPay is already net of outstanding
+                      // advances (the payroll calculator subtracts loan
+                      // installments), so don't subtract them again.
                       value={fmtMoney(
-                        o.finalPay.netFinalPay - o.finalPay.outstandingAdvances,
+                        o.finalPay.netFinalPay,
                         o.finalPay.currency,
                       )}
                       bold
