@@ -71,6 +71,13 @@ import {
   type GrievanceNature,
   type InjurySeverity,
   type OpenDisputePayload,
+  type ReportedBy,
+  type ReportUrgency,
+  REPORTED_BY_OPTIONS,
+  REPORT_URGENCY_OPTIONS,
+  reportedByLabel,
+  urgencyLabel,
+  sanctionLabel,
   respondToDisputeAsEmployee,
 } from "@/lib/hr/hr-dispute-api";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -220,8 +227,19 @@ function DisputeDetailSheet({
     (h) => h.stage === "investigate",
   );
   const ackStage = d.stageHistory?.find((h) => h.stage === "acknowledge");
+  // A disciplinary case with "no action" has nothing to appeal. The
+  // backend enforces the 5-working-day window (7 calendar days).
+  const appealDeadline =
+    d.type === "disciplinary" && d.outcome
+      ? new Date(new Date(d.outcome.recordedAt).getTime() + 7 * 86_400_000)
+      : null;
   const isEligibleForAppeal =
-    canAppeal && d.status === "outcome_recorded" && !d.appeal;
+    canAppeal &&
+    d.status === "outcome_recorded" &&
+    d.stage === "outcome" &&
+    !d.appeal &&
+    !(d.type === "disciplinary" && d.outcome?.decision === "no_action") &&
+    !(appealDeadline && appealDeadline.getTime() < Date.now());
 
   return (
     <Sheet open={!!dispute} onOpenChange={(o) => !o && onClose()}>
@@ -374,6 +392,167 @@ function DisputeDetailSheet({
               </section>
             )}
 
+            {/* Incident — new fields */}
+            {d.type === "incident" &&
+              (d.incidentOccurredAt || d.immediateActionTaken) && (
+                <section className="space-y-2">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    When & what was done
+                  </h3>
+                  {d.incidentOccurredAt && (
+                    <div className="text-sm">
+                      <span className="text-muted-foreground text-xs">
+                        Date & time of incident:{" "}
+                      </span>
+                      {new Date(d.incidentOccurredAt).toLocaleString()}
+                    </div>
+                  )}
+                  {d.immediateActionTaken && (
+                    <div className="text-sm">
+                      <p className="text-muted-foreground text-xs">
+                        Action taken
+                      </p>
+                      <p className="whitespace-pre-wrap">
+                        {d.immediateActionTaken}
+                      </p>
+                    </div>
+                  )}
+                </section>
+              )}
+
+            {/* Report-specific */}
+            {d.type === "report" && (d.reportedBy || d.urgency) && (
+              <section className="space-y-2">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Report details
+                </h3>
+                {d.reportedBy && (
+                  <div className="text-sm">
+                    <span className="text-muted-foreground text-xs">
+                      Reported by:{" "}
+                    </span>
+                    {reportedByLabel(d.reportedBy)}
+                  </div>
+                )}
+                {d.urgency && (
+                  <div className="text-sm">
+                    <span className="text-muted-foreground text-xs">
+                      Urgency:{" "}
+                    </span>
+                    {urgencyLabel(d.urgency)}
+                  </div>
+                )}
+              </section>
+            )}
+
+            {/* Disciplinary — what the employee is charged with, and how
+                the procedure has progressed. Investigation notes and
+                minutes stay with HR. */}
+            {d.type === "disciplinary" && (
+              <>
+                <section className="space-y-2">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Allegation
+                  </h3>
+                  <div className="text-sm">
+                    <span className="text-muted-foreground text-xs">
+                      Policy breached:{" "}
+                    </span>
+                    {d.policyTitle ?? "—"}
+                  </div>
+                  <div className="text-sm">
+                    <span className="text-muted-foreground text-xs">
+                      Particular clause:{" "}
+                    </span>
+                    {d.particularClause ?? "—"}
+                  </div>
+                  <div className="text-sm">
+                    <span className="text-muted-foreground text-xs">
+                      Date of alleged misconduct:{" "}
+                    </span>
+                    {d.dateOfAllegedMisconduct
+                      ? new Date(d.dateOfAllegedMisconduct).toLocaleDateString()
+                      : "—"}
+                  </div>
+                </section>
+
+                {d.disciplinary?.suspension?.decision === "issued" && (
+                  <section className="space-y-1.5">
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Precautionary suspension
+                    </h3>
+                    <div className="text-sm bg-muted/40 rounded p-3 space-y-1">
+                      <p className="text-xs text-muted-foreground">
+                        Not a sanction — full pay and benefits continue.
+                      </p>
+                      {d.disciplinary.suspension.reason && (
+                        <p className="whitespace-pre-wrap">
+                          {d.disciplinary.suspension.reason}
+                        </p>
+                      )}
+                      {d.disciplinary.suspension.conditions.length > 0 && (
+                        <p className="text-xs">
+                          Conditions:{" "}
+                          {d.disciplinary.suspension.conditions.join("; ")}
+                        </p>
+                      )}
+                    </div>
+                  </section>
+                )}
+
+                {d.disciplinary?.notice && (
+                  <section className="space-y-1.5">
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Notice of allegations
+                    </h3>
+                    <div className="text-sm bg-muted/40 rounded p-3 space-y-1">
+                      <p className="whitespace-pre-wrap">
+                        {d.disciplinary.notice.charges}
+                      </p>
+                      <p className="text-xs">
+                        <span className="text-muted-foreground">
+                          Clause breached:{" "}
+                        </span>
+                        {d.disciplinary.notice.clauseBreached}
+                      </p>
+                      <p className="text-xs">
+                        <span className="text-muted-foreground">
+                          Maximum sanction:{" "}
+                        </span>
+                        {sanctionLabel(d.disciplinary.notice.maxSanction)}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground">
+                        Served{" "}
+                        {new Date(
+                          d.disciplinary.notice.servedAt,
+                        ).toLocaleDateString()}{" "}
+                        · please respond by{" "}
+                        {new Date(
+                          d.disciplinary.notice.responseDueBy,
+                        ).toLocaleDateString()}
+                      </p>
+                    </div>
+                  </section>
+                )}
+
+                {d.disciplinary?.finding && d.outcome && (
+                  <section className="space-y-1.5">
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Finding
+                    </h3>
+                    <div className="text-sm bg-muted/40 rounded p-3 space-y-1">
+                      <p className="font-medium capitalize">
+                        {d.disciplinary.finding.decision.replace(/_/g, " ")}
+                      </p>
+                      <p className="whitespace-pre-wrap">
+                        {d.disciplinary.finding.reasons}
+                      </p>
+                    </div>
+                  </section>
+                )}
+              </>
+            )}
+
             {/* Acknowledgement */}
             {ackStage?.notes && (
               <section className="space-y-1.5">
@@ -473,12 +652,22 @@ function DisputeDetailSheet({
                 <div className="text-sm bg-muted/40 rounded p-3 space-y-1">
                   <div className="flex items-center gap-2">
                     <Badge variant="outline" className="text-[10px]">
-                      {humanize(d.outcome.decision)}
+                      {d.type === "disciplinary"
+                        ? sanctionLabel(d.outcome.decision)
+                        : humanize(d.outcome.decision)}
                     </Badge>
                     <span className="text-[11px] text-muted-foreground">
                       {new Date(d.outcome.recordedAt).toLocaleString()}
                     </span>
                   </div>
+                  {d.outcome.warningExpiryDate && (
+                    <p className="text-xs text-muted-foreground">
+                      Valid until{" "}
+                      {new Date(
+                        d.outcome.warningExpiryDate,
+                      ).toLocaleDateString()}
+                    </p>
+                  )}
                   {d.outcome.notes && (
                     <p className="whitespace-pre-wrap pt-1">
                       {d.outcome.notes}
@@ -513,10 +702,56 @@ function DisputeDetailSheet({
                     <p className="text-muted-foreground text-xs">Grounds</p>
                     <p className="whitespace-pre-wrap">{d.appeal.grounds}</p>
                   </div>
+                  {d.appeal.hearing && (
+                    <div className="pt-1 text-sm">
+                      <p className="text-muted-foreground text-xs">
+                        Appeal hearing
+                      </p>
+                      <p>
+                        {new Date(
+                          d.appeal.hearing.scheduledAt,
+                        ).toLocaleString()}{" "}
+                        · chaired by {d.appeal.hearing.chairperson}
+                      </p>
+                      <p>
+                        {d.appeal.hearing.mode === "online" ? (
+                          <>
+                            Online
+                            {d.appeal.hearing.meetingLink && (
+                              <>
+                                {" "}
+                                ·{" "}
+                                <a
+                                  href={d.appeal.hearing.meetingLink}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-primary hover:underline"
+                                >
+                                  Join link
+                                </a>
+                              </>
+                            )}
+                          </>
+                        ) : (
+                          <>In person — {d.appeal.hearing.venue}</>
+                        )}
+                      </p>
+                    </div>
+                  )}
                   {d.appeal.decision && (
                     <div className="pt-1">
                       <p className="text-muted-foreground text-xs">Decision</p>
-                      <p className="whitespace-pre-wrap">{d.appeal.decision}</p>
+                      <p className="whitespace-pre-wrap">
+                        {d.type === "disciplinary"
+                          ? humanize(d.appeal.decision)
+                          : d.appeal.decision}
+                      </p>
+                      {d.appeal.newSanction && (
+                        <p className="text-xs">
+                          Reduced sanction:{" "}
+                          {sanctionLabel(d.appeal.newSanction)}
+                        </p>
+                      )}
                     </div>
                   )}
                   {d.appeal.notes && (
@@ -705,13 +940,23 @@ function DisputeDetailSheet({
             {isEligibleForAppeal && (
               <section className="border-t pt-4">
                 {!appealOpen ? (
-                  <Button
-                    variant="outline"
-                    onClick={() => setAppealOpen(true)}
-                    className="w-full"
-                  >
-                    File an appeal
-                  </Button>
+                  <div className="space-y-2">
+                    {appealDeadline && (
+                      <p className="text-xs text-muted-foreground">
+                        You have the right to appeal this decision until{" "}
+                        {appealDeadline.toLocaleDateString()}. If the sanction
+                        is a dismissal, it is suspended while your appeal is
+                        pending.
+                      </p>
+                    )}
+                    <Button
+                      variant="outline"
+                      onClick={() => setAppealOpen(true)}
+                      className="w-full"
+                    >
+                      File an appeal
+                    </Button>
+                  </div>
                 ) : (
                   <div className="space-y-2">
                     <Label className="text-xs">Grounds for appeal *</Label>
@@ -902,6 +1147,12 @@ function LogDisputeDialog({
   const [injuryLevel, setInjuryLevel] = useState<InjurySeverity>("no_injury");
   const [injuryNature, setInjuryNature] = useState("");
   const [medicalTreatment, setMedicalTreatment] = useState("");
+  const [incidentAt, setIncidentAt] = useState("");
+  const [actionTaken, setActionTaken] = useState("");
+
+  // Report-specific
+  const [reportedBy, setReportedBy] = useState<ReportedBy | "">("");
+  const [urgency, setUrgency] = useState<ReportUrgency | "">("");
 
   const reset = () => {
     setUiType("grievance");
@@ -918,6 +1169,10 @@ function LogDisputeDialog({
     setInjuryLevel("no_injury");
     setInjuryNature("");
     setMedicalTreatment("");
+    setIncidentAt("");
+    setActionTaken("");
+    setReportedBy("");
+    setUrgency("");
   };
 
   const handleClose = () => {
@@ -951,10 +1206,10 @@ function LogDisputeDialog({
       const injuryDetailsOk =
         injuryLevel === "no_injury" ||
         (!!injuryNature.trim() && !!medicalTreatment.trim());
-      return !!cause.trim() && injuryDetailsOk;
+      return !!cause.trim() && injuryDetailsOk && !!incidentAt;
     }
-    // report — only the base description is required
-    return true;
+    // report — who is reporting and how urgent it is are required
+    return !!reportedBy && !!urgency;
   };
 
   const backendType: DisputeType = uiType; // "grievance" | "report" | "incident" all map 1:1 now
@@ -977,13 +1232,17 @@ function LogDisputeDialog({
         payload.informalResolutionSteps = informalSteps.trim();
     } else if (uiType === "incident") {
       payload.causeOfIncident = cause.trim();
+      payload.incidentOccurredAt = new Date(incidentAt).toISOString();
+      if (actionTaken.trim()) payload.immediateActionTaken = actionTaken.trim();
       payload.injurySeverity = injuryLevel;
       if (injuryLevel !== "no_injury") {
         payload.natureOfInjury = injuryNature.trim();
         payload.medicalTreatmentProvided = medicalTreatment.trim();
       }
-    } else if (uiType === "report" && adverseEffect.trim()) {
-      payload.adverseEffect = adverseEffect.trim();
+    } else if (uiType === "report") {
+      payload.reportedBy = reportedBy as ReportedBy;
+      payload.urgency = urgency as ReportUrgency;
+      if (adverseEffect.trim()) payload.adverseEffect = adverseEffect.trim();
     }
 
     onSubmit(payload, attachments);
@@ -1090,21 +1349,80 @@ function LogDisputeDialog({
 
           {/* Report-specific */}
           {uiType === "report" && (
-            <div className="space-y-1.5">
-              <Label className="text-xs">
-                How has this adversely affected you? (optional)
-              </Label>
-              <Textarea
-                rows={3}
-                value={adverseEffect}
-                onChange={(e) => setAdverseEffect(e.target.value)}
-              />
-            </div>
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Reported by *</Label>
+                  <Select
+                    value={reportedBy}
+                    onValueChange={(v) => setReportedBy(v as ReportedBy)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {REPORTED_BY_OPTIONS.map((o) => (
+                        <SelectItem key={o.value} value={o.value}>
+                          {o.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Urgency *</Label>
+                  <Select
+                    value={urgency}
+                    onValueChange={(v) => setUrgency(v as ReportUrgency)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select urgency…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {REPORT_URGENCY_OPTIONS.map((o) => (
+                        <SelectItem key={o.value} value={o.value}>
+                          {o.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">
+                  How has this adversely affected you? (optional)
+                </Label>
+                <Textarea
+                  rows={3}
+                  value={adverseEffect}
+                  onChange={(e) => setAdverseEffect(e.target.value)}
+                />
+              </div>
+            </>
           )}
 
           {/* Incident-specific */}
           {uiType === "incident" && (
             <>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Date & time of incident *</Label>
+                <Input
+                  type="datetime-local"
+                  max={new Date().toISOString().slice(0, 16)}
+                  value={incidentAt}
+                  onChange={(e) => setIncidentAt(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">
+                  Action taken (first aid, area cordoned off…) (optional)
+                </Label>
+                <Textarea
+                  rows={2}
+                  value={actionTaken}
+                  onChange={(e) => setActionTaken(e.target.value)}
+                />
+              </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">
                   Cause of incident — what do you believe caused this? *

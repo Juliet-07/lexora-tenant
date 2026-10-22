@@ -18,7 +18,9 @@ export type DisputeStage =
   | "case_reported"
   | "acknowledge"
   | "investigate"
+  | "notice_of_allegations"
   | "hearing"
+  | "finding"
   | "outcome"
   | "appeal"
   | "labour_local"
@@ -31,7 +33,74 @@ export type DisputeOutcomeDecision =
   | "suspension"
   | "termination"
   | "grievance_resolved"
-  | "no_action";
+  | "no_action"
+  // Disciplinary sanctions
+  | "verbal_warning"
+  | "written_warning"
+  | "demotion"
+  | "suspension_without_pay"
+  | "dismissal_with_notice"
+  | "summary_dismissal";
+
+// The sanctions a disciplinary case can end in (Step 9), in the order
+// the product owner's flow lists them.
+export const DISCIPLINARY_SANCTIONS: {
+  value: DisputeOutcomeDecision;
+  label: string;
+}[] = [
+  { value: "no_action", label: "No action" },
+  { value: "verbal_warning", label: "Verbal warning" },
+  { value: "written_warning", label: "Written warning (valid 6 months)" },
+  { value: "final_warning", label: "Final written warning (valid 12 months)" },
+  { value: "demotion", label: "Demotion" },
+  {
+    value: "suspension_without_pay",
+    label: "Suspension without pay (max 5 days)",
+  },
+  { value: "dismissal_with_notice", label: "Dismissal with notice" },
+  { value: "summary_dismissal", label: "Summary dismissal (gross misconduct)" },
+];
+
+export const sanctionLabel = (decision: string | null | undefined): string =>
+  DISCIPLINARY_SANCTIONS.find((d) => d.value === decision)?.label ??
+  (decision ? decision.replace(/_/g, " ") : "—");
+
+export type ReportedBy =
+  | "named_employee"
+  | "anonymous"
+  | "external_party"
+  | "whistleblower";
+export type ReportUrgency = "low" | "medium" | "high" | "critical";
+export type DisciplinaryFindingDecision =
+  | "guilty"
+  | "not_guilty"
+  | "partially_guilty";
+export type InvestigationRecommendation =
+  | "proceed_to_hearing"
+  | "no_further_action"
+  | "informal_counselling"
+  | "mediation";
+export type AppealDecision = "dismissed" | "partially_upheld" | "upheld";
+
+export const REPORTED_BY_OPTIONS: { value: ReportedBy; label: string }[] = [
+  { value: "named_employee", label: "Named employee" },
+  { value: "anonymous", label: "Anonymous" },
+  { value: "external_party", label: "External party" },
+  { value: "whistleblower", label: "Whistleblower (protected)" },
+];
+
+export const REPORT_URGENCY_OPTIONS: { value: ReportUrgency; label: string }[] =
+  [
+    { value: "low", label: "Low (routine)" },
+    { value: "medium", label: "Medium (investigate within 7 days)" },
+    { value: "high", label: "High (investigate within 48 hours)" },
+    { value: "critical", label: "Critical (immediate action required)" },
+  ];
+
+export const reportedByLabel = (v: string | null | undefined) =>
+  REPORTED_BY_OPTIONS.find((o) => o.value === v)?.label ?? v ?? "—";
+export const urgencyLabel = (v: string | null | undefined) =>
+  REPORT_URGENCY_OPTIONS.find((o) => o.value === v)?.label ?? v ?? "—";
 export type DisputeResolverLevel = "manager" | "tenant";
 export type GrievanceNature =
   | "harassment_or_bullying"
@@ -62,6 +131,46 @@ export interface DisputeOutcome {
   recordedBy: string;
   notes: string | null;
   attachmentUrl: string | null;
+  emailSentAt?: string | null;
+  warningExpiryDate?: string | null;
+}
+
+export interface DisciplinaryProcess {
+  suspension?: {
+    decision: "issued" | "skipped";
+    effectiveDate: string | null;
+    reason: string | null;
+    conditions: string[];
+    decidedAt: string;
+    letterSentAt: string | null;
+  } | null;
+  investigation?: {
+    officer: string;
+    startDate: string | null;
+    findings: string;
+    recommendation: InvestigationRecommendation;
+    submittedAt: string;
+  } | null;
+  notice?: {
+    charges: string;
+    clauseBreached: string;
+    maxSanction: DisputeOutcomeDecision;
+    responseDeadlineDays: number;
+    responseDueBy: string;
+    servedAt: string;
+  } | null;
+  hearingRecord?: {
+    minutes: string;
+    checklist: string[];
+    recordedAt: string;
+  } | null;
+  finding?: {
+    decision: DisciplinaryFindingDecision;
+    reasons: string;
+    mitigatingFactors: string | null;
+    aggravatingFactors: string | null;
+    recordedAt: string;
+  } | null;
 }
 
 export interface DisputeAppeal {
@@ -72,6 +181,17 @@ export interface DisputeAppeal {
   decision: string | null;
   resolvedAt: string | null;
   notes: string | null;
+  // Disciplinary appeals only
+  hearing?: {
+    scheduledAt: string;
+    mode: HearingMode;
+    venue: string | null;
+    meetingPlatform: MeetingPlatform | null;
+    meetingLink: string | null;
+    chairperson: string;
+    notes: string | null;
+  } | null;
+  newSanction?: string | null;
 }
 
 export interface DisputeExternalEscalation {
@@ -135,6 +255,15 @@ export interface DisputeCase {
   injurySeverity: InjurySeverity | null;
   natureOfInjury: string | null;
   medicalTreatmentProvided: string | null;
+  incidentOccurredAt?: string | null;
+  immediateActionTaken?: string | null;
+  reportedBy?: ReportedBy | null;
+  urgency?: ReportUrgency | null;
+  policyId?: string | null;
+  policyTitle?: string | null;
+  particularClause?: string | null;
+  dateOfAllegedMisconduct?: string | null;
+  disciplinary?: DisciplinaryProcess | null;
   witnesses: string[];
   supportingDocs: DisputeSupportingDoc[];
   confidentialParties: string[];
@@ -190,6 +319,16 @@ export interface OpenDisputePayload {
   injurySeverity?: InjurySeverity;
   natureOfInjury?: string;
   medicalTreatmentProvided?: string;
+  // Incident
+  incidentOccurredAt?: string;
+  immediateActionTaken?: string;
+  // Report
+  reportedBy?: ReportedBy;
+  urgency?: ReportUrgency;
+  // Disciplinary
+  policyId?: string;
+  particularClause?: string;
+  dateOfAllegedMisconduct?: string;
 }
 
 // Minimal shape for the "employees involved" directory picker
@@ -275,6 +414,7 @@ export const recordDisputeOutcome = async (
     decision: DisputeOutcomeDecision;
     notes?: string;
     attachmentUrl?: string;
+    warningExpiryDate?: string;
   },
 ): Promise<DisputeCase> => {
   const res = await api.patch(`/hr/disputes/${caseId}/outcome`, dto);
@@ -328,6 +468,79 @@ export const fetchDisputesForEmployee = async (
   const d = res.data?.data ?? res.data;
   return Array.isArray(d) ? d : [];
 };
+
+// ── Disciplinary procedure (HR side) ─────────────────────────────
+
+const disciplinaryPatch = async (
+  caseId: string,
+  step: string,
+  dto: unknown,
+): Promise<DisputeCase> => {
+  const res = await api.patch(
+    `/hr/disputes/${caseId}/disciplinary/${step}`,
+    dto,
+  );
+  return res.data?.data ?? res.data;
+};
+
+export const recordDisciplinarySuspension = (
+  caseId: string,
+  dto: {
+    decision: "issued" | "skipped";
+    effectiveDate?: string;
+    reason?: string;
+    conditions?: string[];
+  },
+) => disciplinaryPatch(caseId, "suspension", dto);
+
+export const recordDisciplinaryInvestigation = (
+  caseId: string,
+  dto: {
+    officer: string;
+    startDate?: string;
+    findings: string;
+    recommendation: InvestigationRecommendation;
+  },
+) => disciplinaryPatch(caseId, "investigation", dto);
+
+export const serveNoticeOfAllegations = (
+  caseId: string,
+  dto: {
+    charges: string;
+    clauseBreached: string;
+    maxSanction: DisputeOutcomeDecision;
+    responseDeadlineDays: number;
+  },
+) => disciplinaryPatch(caseId, "notice-of-allegations", dto);
+
+export const recordHearingMinutes = (
+  caseId: string,
+  dto: { minutes: string; checklist?: string[] },
+) => disciplinaryPatch(caseId, "hearing-minutes", dto);
+
+export const recordDisciplinaryFinding = (
+  caseId: string,
+  dto: {
+    decision: DisciplinaryFindingDecision;
+    reasons: string;
+    mitigatingFactors?: string;
+    aggravatingFactors?: string;
+  },
+) => disciplinaryPatch(caseId, "finding", dto);
+
+export const scheduleDisciplinaryAppealHearing = (
+  caseId: string,
+  dto: ScheduleHearingPayload & { chairperson: string },
+) => disciplinaryPatch(caseId, "appeal-hearing", dto);
+
+export const recordDisciplinaryAppealOutcome = (
+  caseId: string,
+  dto: {
+    decision: AppealDecision;
+    newSanction?: DisputeOutcomeDecision;
+    reasons: string;
+  },
+) => disciplinaryPatch(caseId, "appeal-outcome", dto);
 
 // =================================================================
 // EMPLOYEE API FUNCTIONS

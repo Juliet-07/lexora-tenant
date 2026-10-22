@@ -75,8 +75,16 @@ import {
   type GrievanceNature,
   type InjurySeverity,
   type OpenDisputePayload,
+  type ReportedBy,
+  type ReportUrgency,
+  REPORTED_BY_OPTIONS,
+  REPORT_URGENCY_OPTIONS,
+  reportedByLabel,
+  urgencyLabel,
 } from "@/lib/hr/hr-dispute-api";
 import { fetchEmployees } from "@/lib/hr/hr-api";
+import { fetchPolicies } from "@/lib/grc/policy-api";
+import { DisciplinaryFlow } from "./DisciplinaryFlow";
 
 // ── helpers ──────────────────────────────────────────────────────
 const fmtDate = (d?: string | null) =>
@@ -156,9 +164,13 @@ function StageBadge({ stage }: { stage: string }) {
 function InvolvedEmployeesPicker({
   selected,
   onChange,
+  single = false,
 }: {
   selected: string[];
   onChange: (ids: string[]) => void;
+  // Disciplinary cases are about exactly one employee: picking replaces
+  // the selection instead of adding to it.
+  single?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const { data: directoryPage, isLoading } = useQuery({
@@ -169,6 +181,11 @@ function InvolvedEmployeesPicker({
   const selectedEmployees = directory.filter((e) => selected.includes(e._id));
 
   const toggle = (id: string) => {
+    if (single) {
+      onChange(selected.includes(id) ? [] : [id]);
+      setOpen(false);
+      return;
+    }
     onChange(
       selected.includes(id)
         ? selected.filter((x) => x !== id)
@@ -186,9 +203,13 @@ function InvolvedEmployeesPicker({
             aria-expanded={open}
             className="w-full justify-between font-normal"
           >
-            {selected.length > 0
-              ? `${selected.length} employee${selected.length === 1 ? "" : "s"} selected`
-              : "Select employees…"}
+            {single
+              ? selectedEmployees[0]
+                ? `${selectedEmployees[0].firstName} ${selectedEmployees[0].lastName}`
+                : "Select employee…"
+              : selected.length > 0
+                ? `${selected.length} employee${selected.length === 1 ? "" : "s"} selected`
+                : "Select employees…"}
             <ChevronsUpDown className="h-4 w-4 opacity-50" />
           </Button>
         </PopoverTrigger>
@@ -251,6 +272,56 @@ function InvolvedEmployeesPicker({
   );
 }
 
+function WitnessesField({
+  value,
+  onChange,
+}: {
+  value: string[];
+  onChange: (v: string[]) => void;
+}) {
+  const [draft, setDraft] = useState("");
+  const add = () => {
+    const name = draft.trim();
+    if (name && !value.includes(name)) onChange([...value, name]);
+    setDraft("");
+  };
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-xs">Witnesses (if any)</Label>
+      <div className="flex gap-2">
+        <Input
+          value={draft}
+          placeholder="Name of a witness…"
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              add();
+            }
+          }}
+        />
+        <Button type="button" variant="outline" size="sm" onClick={add}>
+          Add
+        </Button>
+      </div>
+      {value.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 pt-1">
+          {value.map((w) => (
+            <Badge
+              key={w}
+              variant="outline"
+              className="text-xs cursor-pointer hover:bg-destructive/10"
+              onClick={() => onChange(value.filter((x) => x !== w))}
+            >
+              {w} ×
+            </Badge>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function LogDisputeAsTenantDialog({
   open,
   onClose,
@@ -273,8 +344,39 @@ function LogDisputeAsTenantDialog({
   const [injuryLevel, setInjuryLevel] = useState<InjurySeverity>("no_injury");
   const [injuryNature, setInjuryNature] = useState("");
   const [medicalTreatment, setMedicalTreatment] = useState("");
+  // Incident
+  const [incidentAt, setIncidentAt] = useState("");
+  const [actionTaken, setActionTaken] = useState("");
+  // Incident + disciplinary
+  const [witnesses, setWitnesses] = useState<string[]>([]);
+  // Report
+  const [reportedBy, setReportedBy] = useState<ReportedBy | "">("");
+  const [urgency, setUrgency] = useState<ReportUrgency | "">("");
+  // Disciplinary
+  const [policyId, setPolicyId] = useState("");
+  const [clause, setClause] = useState("");
+  const [misconductDate, setMisconductDate] = useState("");
+
+  // The policy breached is picked from the GRC policy library — in-force
+  // (published) organisation policies only.
+  const { data: allPolicies = [], isLoading: loadingPolicies } = useQuery({
+    queryKey: ["grc-policies-for-disciplinary"],
+    queryFn: fetchPolicies,
+    enabled: open && type === "disciplinary",
+  });
+  const policies = allPolicies.filter(
+    (p) => p.status === "Published" && p.type === "organisation",
+  );
 
   const reset = () => {
+    setIncidentAt("");
+    setActionTaken("");
+    setWitnesses([]);
+    setReportedBy("");
+    setUrgency("");
+    setPolicyId("");
+    setClause("");
+    setMisconductDate("");
     setType("grievance");
     setRespondentIds([]);
     setDescription("");
@@ -298,8 +400,16 @@ function LogDisputeAsTenantDialog({
       const injuryOk =
         injuryLevel === "no_injury" ||
         (!!injuryNature.trim() && !!medicalTreatment.trim());
-      return !!cause.trim() && injuryOk;
+      return !!cause.trim() && injuryOk && !!incidentAt;
     }
+    if (type === "report") return !!reportedBy && !!urgency;
+    if (type === "disciplinary")
+      return (
+        respondentIds.length === 1 &&
+        !!policyId &&
+        !!clause.trim() &&
+        !!misconductDate
+      );
     return true;
   };
 
@@ -321,6 +431,17 @@ function LogDisputeAsTenantDialog({
         payload.natureOfInjury = injuryNature.trim();
         payload.medicalTreatmentProvided = medicalTreatment.trim();
       }
+      payload.incidentOccurredAt = new Date(incidentAt).toISOString();
+      if (actionTaken.trim()) payload.immediateActionTaken = actionTaken.trim();
+      if (witnesses.length) payload.witnesses = witnesses;
+    } else if (type === "report") {
+      payload.reportedBy = reportedBy as ReportedBy;
+      payload.urgency = urgency as ReportUrgency;
+    } else if (type === "disciplinary") {
+      payload.policyId = policyId;
+      payload.particularClause = clause.trim();
+      payload.dateOfAllegedMisconduct = new Date(misconductDate).toISOString();
+      if (witnesses.length) payload.witnesses = witnesses;
     }
     onSubmit(payload, attachments);
     reset();
@@ -337,7 +458,12 @@ function LogDisputeAsTenantDialog({
             <Label className="text-xs">Dispute Type *</Label>
             <Select
               value={type}
-              onValueChange={(v) => setType(v as DisputeType)}
+              onValueChange={(v) => {
+                setType(v as DisputeType);
+                // One employee per disciplinary filing.
+                if (v === "disciplinary")
+                  setRespondentIds((ids) => ids.slice(0, 1));
+              }}
             >
               <SelectTrigger>
                 <SelectValue />
@@ -352,10 +478,15 @@ function LogDisputeAsTenantDialog({
           </div>
 
           <div className="space-y-1.5">
-            <Label className="text-xs">Employees involved *</Label>
+            <Label className="text-xs">
+              {type === "disciplinary"
+                ? "Employee involved *"
+                : "Employees involved *"}
+            </Label>
             <InvolvedEmployeesPicker
               selected={respondentIds}
               onChange={setRespondentIds}
+              single={type === "disciplinary"}
             />
           </div>
 
@@ -411,6 +542,14 @@ function LogDisputeAsTenantDialog({
           {type === "incident" && (
             <>
               <div className="space-y-1.5">
+                <Label className="text-xs">Date and time of incident *</Label>
+                <Input
+                  type="datetime-local"
+                  value={incidentAt}
+                  onChange={(e) => setIncidentAt(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
                 <Label className="text-xs">Cause of incident *</Label>
                 <Textarea
                   rows={2}
@@ -457,6 +596,112 @@ function LogDisputeAsTenantDialog({
                   </div>
                 </>
               )}
+            </>
+          )}
+
+          {type === "incident" && (
+            <>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Action taken</Label>
+                <Textarea
+                  rows={2}
+                  placeholder="First aid administered, area cordoned off, etc."
+                  value={actionTaken}
+                  onChange={(e) => setActionTaken(e.target.value)}
+                />
+              </div>
+              <WitnessesField value={witnesses} onChange={setWitnesses} />
+            </>
+          )}
+
+          {type === "report" && (
+            <>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Reported by *</Label>
+                <Select
+                  value={reportedBy}
+                  onValueChange={(v) => setReportedBy(v as ReportedBy)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select reporter…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {REPORTED_BY_OPTIONS.map((o) => (
+                      <SelectItem key={o.value} value={o.value}>
+                        {o.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Urgency *</Label>
+                <Select
+                  value={urgency}
+                  onValueChange={(v) => setUrgency(v as ReportUrgency)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select urgency…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {REPORT_URGENCY_OPTIONS.map((o) => (
+                      <SelectItem key={o.value} value={o.value}>
+                        {o.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </>
+          )}
+
+          {type === "disciplinary" && (
+            <>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Policy breached *</Label>
+                <Select value={policyId} onValueChange={setPolicyId}>
+                  <SelectTrigger>
+                    <SelectValue
+                      placeholder={
+                        loadingPolicies
+                          ? "Loading policies…"
+                          : "Select a policy from your GRC library…"
+                      }
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {policies.map((p) => (
+                      <SelectItem key={p._id} value={p._id}>
+                        {p.title}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {!loadingPolicies && policies.length === 0 && (
+                  <p className="text-[11px] text-muted-foreground">
+                    No published policies yet. Publish the policy in GRC →
+                    Policies first, then log the case.
+                  </p>
+                )}
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Particular clause(s) *</Label>
+                <Textarea
+                  rows={2}
+                  placeholder="e.g. Clause 5.2 — Duties and obligations"
+                  value={clause}
+                  onChange={(e) => setClause(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Date of alleged misconduct *</Label>
+                <Input
+                  type="date"
+                  value={misconductDate}
+                  onChange={(e) => setMisconductDate(e.target.value)}
+                />
+              </div>
+              <WitnessesField value={witnesses} onChange={setWitnesses} />
             </>
           )}
 
@@ -748,6 +993,52 @@ function DisputeDetailSheet({
             )}
           </div>
 
+          {/* Per-type details added at filing */}
+          {dispute.type === "incident" &&
+            (dispute.incidentOccurredAt || dispute.immediateActionTaken) && (
+              <div className="rounded-md bg-muted/40 p-3 text-xs space-y-1">
+                <p className="font-semibold uppercase tracking-wide text-muted-foreground">
+                  Incident details
+                </p>
+                {dispute.incidentOccurredAt && (
+                  <p>
+                    <span className="text-muted-foreground">
+                      Date & time of incident:{" "}
+                    </span>
+                    {new Date(dispute.incidentOccurredAt).toLocaleString()}
+                  </p>
+                )}
+                {dispute.immediateActionTaken && (
+                  <p>
+                    <span className="text-muted-foreground">
+                      Action taken:{" "}
+                    </span>
+                    {dispute.immediateActionTaken}
+                  </p>
+                )}
+              </div>
+            )}
+          {dispute.type === "report" &&
+            (dispute.reportedBy || dispute.urgency) && (
+              <div className="rounded-md bg-muted/40 p-3 text-xs space-y-1">
+                <p className="font-semibold uppercase tracking-wide text-muted-foreground">
+                  Report details
+                </p>
+                {dispute.reportedBy && (
+                  <p>
+                    <span className="text-muted-foreground">Reported by: </span>
+                    {reportedByLabel(dispute.reportedBy)}
+                  </p>
+                )}
+                {dispute.urgency && (
+                  <p>
+                    <span className="text-muted-foreground">Urgency: </span>
+                    {urgencyLabel(dispute.urgency)}
+                  </p>
+                )}
+              </div>
+            )}
+
           {/* Stage history */}
           {dispute.stageHistory?.length > 0 && (
             <div>
@@ -831,7 +1122,7 @@ function DisputeDetailSheet({
             )}
 
           {/* Outcome */}
-          {dispute.outcome && (
+          {dispute.type !== "disciplinary" && dispute.outcome && (
             <div className="rounded-md bg-muted/40 p-3 text-xs space-y-1">
               <p className="font-semibold uppercase tracking-wide text-muted-foreground">
                 Outcome
@@ -849,7 +1140,7 @@ function DisputeDetailSheet({
           )}
 
           {/* Appeal */}
-          {dispute.appeal && (
+          {dispute.type !== "disciplinary" && dispute.appeal && (
             <div className="rounded-md bg-warning/10 border border-warning/20 p-3 text-xs space-y-1">
               <p className="font-semibold uppercase tracking-wide text-warning">
                 Appeal Filed
@@ -886,24 +1177,35 @@ function DisputeDetailSheet({
 
           {/* ── ACTION SECTIONS ── */}
 
+          {/* Disciplinary cases run their own procedure */}
+          {dispute.type === "disciplinary" && (
+            <DisciplinaryFlow
+              dispute={dispute}
+              locked={locked}
+              onUpdated={onUpdated}
+            />
+          )}
+
           {/* Acknowledge */}
-          {stage === "case_reported" && dispute.complainant && (
-            <fieldset
-              disabled={locked}
-              className={`rounded-md border p-4 space-y-3 ${locked ? "opacity-60" : ""}`}
-            >
-              <div className="rounded-md border p-4 space-y-3">
-                <p className="text-sm font-semibold">Acknowledge Case</p>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Acknowledgment text *</Label>
-                  <Textarea
-                    rows={3}
-                    placeholder="Written acknowledgment to complainant…"
-                    value={ackText}
-                    onChange={(e) => setAckText(e.target.value)}
-                  />
-                </div>
-                {/* <div className="space-y-1.5">
+          {dispute.type !== "disciplinary" &&
+            stage === "case_reported" &&
+            dispute.complainant && (
+              <fieldset
+                disabled={locked}
+                className={`rounded-md border p-4 space-y-3 ${locked ? "opacity-60" : ""}`}
+              >
+                <div className="rounded-md border p-4 space-y-3">
+                  <p className="text-sm font-semibold">Acknowledge Case</p>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Acknowledgment text *</Label>
+                    <Textarea
+                      rows={3}
+                      placeholder="Written acknowledgment to complainant…"
+                      value={ackText}
+                      onChange={(e) => setAckText(e.target.value)}
+                    />
+                  </div>
+                  {/* <div className="space-y-1.5">
                   <Label className="text-xs">Internal notes (optional)</Label>
                   <Textarea
                     rows={2}
@@ -911,42 +1213,43 @@ function DisputeDetailSheet({
                     onChange={(e) => setAckNotes(e.target.value)}
                   />
                 </div> */}
-                <Button
-                  size="sm"
-                  disabled={!ackText.trim() || ackMutation.isPending}
-                  onClick={() => ackMutation.mutate()}
-                >
-                  {ackMutation.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    "Acknowledge"
-                  )}
-                </Button>
-              </div>
-            </fieldset>
-          )}
+                  <Button
+                    size="sm"
+                    disabled={!ackText.trim() || ackMutation.isPending}
+                    onClick={() => ackMutation.mutate()}
+                  >
+                    {ackMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      "Acknowledge"
+                    )}
+                  </Button>
+                </div>
+              </fieldset>
+            )}
 
           {/* Investigate */}
-          {(stage === "acknowledge" ||
-            (stage === "case_reported" && !dispute.complainant)) && (
-            <fieldset
-              disabled={locked}
-              className={`rounded-md border p-4 space-y-3 ${locked ? "opacity-60" : ""}`}
-            >
-              <div className="rounded-md border p-4 space-y-3">
-                <p className="text-sm font-semibold">
-                  Record Investigation Findings
-                </p>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Findings *</Label>
-                  <Textarea
-                    rows={4}
-                    placeholder="Summary of investigation findings…"
-                    value={findings}
-                    onChange={(e) => setFindings(e.target.value)}
-                  />
-                </div>
-                {/* <div className="space-y-1.5">
+          {dispute.type !== "disciplinary" &&
+            (stage === "acknowledge" ||
+              (stage === "case_reported" && !dispute.complainant)) && (
+              <fieldset
+                disabled={locked}
+                className={`rounded-md border p-4 space-y-3 ${locked ? "opacity-60" : ""}`}
+              >
+                <div className="rounded-md border p-4 space-y-3">
+                  <p className="text-sm font-semibold">
+                    Record Investigation Findings
+                  </p>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Findings *</Label>
+                    <Textarea
+                      rows={4}
+                      placeholder="Summary of investigation findings…"
+                      value={findings}
+                      onChange={(e) => setFindings(e.target.value)}
+                    />
+                  </div>
+                  {/* <div className="space-y-1.5">
                   <Label className="text-xs">Notes (optional)</Label>
                   <Textarea
                     rows={2}
@@ -954,240 +1257,248 @@ function DisputeDetailSheet({
                     onChange={(e) => setFindingsNotes(e.target.value)}
                   />
                 </div> */}
-                <Button
-                  size="sm"
-                  disabled={!findings.trim() || investigateMutation.isPending}
-                  onClick={() => investigateMutation.mutate()}
-                >
-                  {investigateMutation.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    "Submit Findings"
-                  )}
-                </Button>
-              </div>
-            </fieldset>
-          )}
+                  <Button
+                    size="sm"
+                    disabled={!findings.trim() || investigateMutation.isPending}
+                    onClick={() => investigateMutation.mutate()}
+                  >
+                    {investigateMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      "Submit Findings"
+                    )}
+                  </Button>
+                </div>
+              </fieldset>
+            )}
 
           {/* Schedule Hearing — every type except incident (grievance,
               disciplinary, report) goes investigate → hearing → outcome.
               The hearing is scheduled FROM the investigate stage; once
               scheduled the case moves to "hearing" and this form is done. */}
-          {stage === "investigate" && dispute.type !== "incident" && (
-            <fieldset
-              disabled={locked}
-              className={`rounded-md border p-4 space-y-3 ${locked ? "opacity-60" : ""}`}
-            >
-              <div className="rounded-md border p-4 space-y-3">
-                <p className="text-sm font-semibold">Schedule Hearing</p>
-                <p className="text-xs text-muted-foreground">
-                  Both the employee who filed and everyone named will be emailed
-                  automatically.
-                </p>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Date & Time *</Label>
-                    <Input
-                      type="datetime-local"
-                      value={hearingDate}
-                      onChange={(e) => setHearingDate(e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Format *</Label>
-                    <Select
-                      value={hearingMode}
-                      onValueChange={(v) =>
-                        setHearingMode(v as "physical" | "online")
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="physical">In person</SelectItem>
-                        <SelectItem value="online">Online</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                {hearingMode === "physical" ? (
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Venue *</Label>
-                    <Input
-                      placeholder="Room / location…"
-                      value={hearingVenue}
-                      onChange={(e) => setHearingVenue(e.target.value)}
-                    />
-                  </div>
-                ) : (
+          {stage === "investigate" &&
+            dispute.type !== "incident" &&
+            dispute.type !== "disciplinary" && (
+              <fieldset
+                disabled={locked}
+                className={`rounded-md border p-4 space-y-3 ${locked ? "opacity-60" : ""}`}
+              >
+                <div className="rounded-md border p-4 space-y-3">
+                  <p className="text-sm font-semibold">Schedule Hearing</p>
+                  <p className="text-xs text-muted-foreground">
+                    Both the employee who filed and everyone named will be
+                    emailed automatically.
+                  </p>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5">
-                      <Label className="text-xs">Platform *</Label>
+                      <Label className="text-xs">Date & Time *</Label>
+                      <Input
+                        type="datetime-local"
+                        value={hearingDate}
+                        onChange={(e) => setHearingDate(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Format *</Label>
                       <Select
-                        value={hearingPlatform}
+                        value={hearingMode}
                         onValueChange={(v) =>
-                          setHearingPlatform(
-                            v as "google_meet" | "microsoft_teams" | "zoom",
-                          )
+                          setHearingMode(v as "physical" | "online")
                         }
                       >
                         <SelectTrigger>
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="google_meet">
-                            Google Meet
-                          </SelectItem>
-                          <SelectItem value="microsoft_teams">
-                            Microsoft Teams
-                          </SelectItem>
-                          <SelectItem value="zoom">Zoom</SelectItem>
+                          <SelectItem value="physical">In person</SelectItem>
+                          <SelectItem value="online">Online</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
+                  </div>
+
+                  {hearingMode === "physical" ? (
                     <div className="space-y-1.5">
-                      <Label className="text-xs">Meeting link *</Label>
+                      <Label className="text-xs">Venue *</Label>
                       <Input
-                        placeholder="https://…"
-                        value={hearingLink}
-                        onChange={(e) => setHearingLink(e.target.value)}
+                        placeholder="Room / location…"
+                        value={hearingVenue}
+                        onChange={(e) => setHearingVenue(e.target.value)}
                       />
                     </div>
-                  </div>
-                )}
-
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Notes (optional)</Label>
-                  <Textarea
-                    rows={2}
-                    value={hearingNotes}
-                    onChange={(e) => setHearingNotes(e.target.value)}
-                  />
-                </div>
-                <Button
-                  size="sm"
-                  disabled={
-                    !hearingDate ||
-                    (hearingMode === "physical"
-                      ? !hearingVenue.trim()
-                      : !hearingLink.trim()) ||
-                    hearingMutation.isPending
-                  }
-                  onClick={() => hearingMutation.mutate()}
-                >
-                  {hearingMutation.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
-                    "Schedule Hearing"
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">Platform *</Label>
+                        <Select
+                          value={hearingPlatform}
+                          onValueChange={(v) =>
+                            setHearingPlatform(
+                              v as "google_meet" | "microsoft_teams" | "zoom",
+                            )
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="google_meet">
+                              Google Meet
+                            </SelectItem>
+                            <SelectItem value="microsoft_teams">
+                              Microsoft Teams
+                            </SelectItem>
+                            <SelectItem value="zoom">Zoom</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">Meeting link *</Label>
+                        <Input
+                          placeholder="https://…"
+                          value={hearingLink}
+                          onChange={(e) => setHearingLink(e.target.value)}
+                        />
+                      </div>
+                    </div>
                   )}
-                </Button>
-              </div>
-            </fieldset>
-          )}
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Notes (optional)</Label>
+                    <Textarea
+                      rows={2}
+                      value={hearingNotes}
+                      onChange={(e) => setHearingNotes(e.target.value)}
+                    />
+                  </div>
+                  <Button
+                    size="sm"
+                    disabled={
+                      !hearingDate ||
+                      (hearingMode === "physical"
+                        ? !hearingVenue.trim()
+                        : !hearingLink.trim()) ||
+                      hearingMutation.isPending
+                    }
+                    onClick={() => hearingMutation.mutate()}
+                  >
+                    {hearingMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      "Schedule Hearing"
+                    )}
+                  </Button>
+                </div>
+              </fieldset>
+            )}
 
           {/* Record Outcome — after the hearing; incidents skip the hearing
               and record straight after investigation. */}
-          {(stage === "hearing" ||
-            (dispute.type === "incident" && stage === "investigate")) && (
-            <fieldset
-              disabled={locked}
-              className={`rounded-md border p-4 space-y-3 ${locked ? "opacity-60" : ""}`}
-            >
-              <div className="rounded-md border p-4 space-y-3">
-                <p className="text-sm font-semibold">Record Outcome</p>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Decision *</Label>
-                  <Select
-                    value={outcomeDecision}
-                    onValueChange={(v) =>
-                      setOutcomeDecision(v as DisputeOutcomeDecision)
-                    }
+          {dispute.type !== "disciplinary" &&
+            (stage === "hearing" ||
+              (dispute.type === "incident" && stage === "investigate")) && (
+              <fieldset
+                disabled={locked}
+                className={`rounded-md border p-4 space-y-3 ${locked ? "opacity-60" : ""}`}
+              >
+                <div className="rounded-md border p-4 space-y-3">
+                  <p className="text-sm font-semibold">Record Outcome</p>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Decision *</Label>
+                    <Select
+                      value={outcomeDecision}
+                      onValueChange={(v) =>
+                        setOutcomeDecision(v as DisputeOutcomeDecision)
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="first_warning">
+                          First Warning
+                        </SelectItem>
+                        <SelectItem value="second_warning">
+                          Second Warning
+                        </SelectItem>
+                        <SelectItem value="final_warning">
+                          Final Warning
+                        </SelectItem>
+                        <SelectItem value="suspension">Suspension</SelectItem>
+                        <SelectItem value="termination">Termination</SelectItem>
+                        <SelectItem value="grievance_resolved">
+                          Grievance Resolved
+                        </SelectItem>
+                        <SelectItem value="no_action">No Action</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Notes (optional)</Label>
+                    <Textarea
+                      rows={3}
+                      value={outcomeNotes}
+                      onChange={(e) => setOutcomeNotes(e.target.value)}
+                    />
+                  </div>
+                  <Button
+                    size="sm"
+                    disabled={outcomeMutation.isPending}
+                    onClick={() => outcomeMutation.mutate()}
                   >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="first_warning">
-                        First Warning
-                      </SelectItem>
-                      <SelectItem value="second_warning">
-                        Second Warning
-                      </SelectItem>
-                      <SelectItem value="final_warning">
-                        Final Warning
-                      </SelectItem>
-                      <SelectItem value="suspension">Suspension</SelectItem>
-                      <SelectItem value="termination">Termination</SelectItem>
-                      <SelectItem value="grievance_resolved">
-                        Grievance Resolved
-                      </SelectItem>
-                      <SelectItem value="no_action">No Action</SelectItem>
-                    </SelectContent>
-                  </Select>
+                    {outcomeMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      "Record Outcome"
+                    )}
+                  </Button>
                 </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Notes (optional)</Label>
-                  <Textarea
-                    rows={3}
-                    value={outcomeNotes}
-                    onChange={(e) => setOutcomeNotes(e.target.value)}
-                  />
-                </div>
-                <Button
-                  size="sm"
-                  disabled={outcomeMutation.isPending}
-                  onClick={() => outcomeMutation.mutate()}
-                >
-                  {outcomeMutation.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    "Record Outcome"
-                  )}
-                </Button>
-              </div>
-            </fieldset>
-          )}
+              </fieldset>
+            )}
 
           {/* Resolve Appeal */}
-          {stage === "appeal" && dispute.appeal && !dispute.appeal.decision && (
-            <fieldset
-              disabled={locked}
-              className={`rounded-md border p-4 space-y-3 ${locked ? "opacity-60" : ""}`}
-            >
-              <div className="rounded-md border p-4 space-y-3">
-                <p className="text-sm font-semibold">Resolve Appeal</p>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Decision *</Label>
-                  <Input
-                    placeholder="e.g. Appeal upheld, Warning reduced…"
-                    value={appealDecision}
-                    onChange={(e) => setAppealDecision(e.target.value)}
-                  />
+          {dispute.type !== "disciplinary" &&
+            stage === "appeal" &&
+            dispute.appeal &&
+            !dispute.appeal.decision && (
+              <fieldset
+                disabled={locked}
+                className={`rounded-md border p-4 space-y-3 ${locked ? "opacity-60" : ""}`}
+              >
+                <div className="rounded-md border p-4 space-y-3">
+                  <p className="text-sm font-semibold">Resolve Appeal</p>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Decision *</Label>
+                    <Input
+                      placeholder="e.g. Appeal upheld, Warning reduced…"
+                      value={appealDecision}
+                      onChange={(e) => setAppealDecision(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Notes (optional)</Label>
+                    <Textarea
+                      rows={2}
+                      value={appealNotes}
+                      onChange={(e) => setAppealNotes(e.target.value)}
+                    />
+                  </div>
+                  <Button
+                    size="sm"
+                    disabled={
+                      !appealDecision.trim() || appealMutation.isPending
+                    }
+                    onClick={() => appealMutation.mutate()}
+                  >
+                    {appealMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      "Resolve Appeal"
+                    )}
+                  </Button>
                 </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Notes (optional)</Label>
-                  <Textarea
-                    rows={2}
-                    value={appealNotes}
-                    onChange={(e) => setAppealNotes(e.target.value)}
-                  />
-                </div>
-                <Button
-                  size="sm"
-                  disabled={!appealDecision.trim() || appealMutation.isPending}
-                  onClick={() => appealMutation.mutate()}
-                >
-                  {appealMutation.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    "Resolve Appeal"
-                  )}
-                </Button>
-              </div>
-            </fieldset>
-          )}
+              </fieldset>
+            )}
 
           {/* Escalate Externally */}
           {canEscalate && (

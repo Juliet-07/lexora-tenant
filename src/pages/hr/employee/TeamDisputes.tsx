@@ -50,6 +50,8 @@ import {
   closeDisputeCaseAsManager,
   escalateDisputeToTenant,
   type DisputeCase,
+  reportedByLabel,
+  urgencyLabel,
   isImageFile,
   resolveDisputeFileUrl,
 } from "@/lib/hr/hr-dispute-api";
@@ -464,6 +466,73 @@ function ManageCaseSheet({
                         {d.desiredOutcome}
                       </p>
                     )}
+                  </div>
+                )}
+
+                {/* New per-type fields */}
+                {d.type === "report" && (d.reportedBy || d.urgency) && (
+                  <div className="pt-2 border-t space-y-1.5">
+                    {d.reportedBy && (
+                      <p>
+                        <span className="text-muted-foreground">
+                          Reported by:
+                        </span>{" "}
+                        {reportedByLabel(d.reportedBy)}
+                      </p>
+                    )}
+                    {d.urgency && (
+                      <p>
+                        <span className="text-muted-foreground">Urgency:</span>{" "}
+                        {urgencyLabel(d.urgency)}
+                      </p>
+                    )}
+                  </div>
+                )}
+                {d.type === "incident" &&
+                  (d.incidentOccurredAt || d.immediateActionTaken) && (
+                    <div className="pt-2 border-t space-y-1.5">
+                      {d.incidentOccurredAt && (
+                        <p>
+                          <span className="text-muted-foreground">
+                            Date & time of incident:
+                          </span>{" "}
+                          {new Date(d.incidentOccurredAt).toLocaleString()}
+                        </p>
+                      )}
+                      {d.immediateActionTaken && (
+                        <p>
+                          <span className="text-muted-foreground block">
+                            Action taken:
+                          </span>{" "}
+                          {d.immediateActionTaken}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                {d.type === "disciplinary" && (
+                  <div className="pt-2 border-t space-y-1.5">
+                    <p>
+                      <span className="text-muted-foreground">
+                        Policy breached:
+                      </span>{" "}
+                      {d.policyTitle ?? "—"}
+                    </p>
+                    <p>
+                      <span className="text-muted-foreground">
+                        Particular clause:
+                      </span>{" "}
+                      {d.particularClause ?? "—"}
+                    </p>
+                    <p>
+                      <span className="text-muted-foreground">
+                        Date of alleged misconduct:
+                      </span>{" "}
+                      {d.dateOfAllegedMisconduct
+                        ? new Date(
+                            d.dateOfAllegedMisconduct,
+                          ).toLocaleDateString()
+                        : "—"}
+                    </p>
                   </div>
                 )}
 
