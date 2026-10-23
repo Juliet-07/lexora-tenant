@@ -78,6 +78,7 @@ import {
   reportedByLabel,
   urgencyLabel,
   sanctionLabel,
+  formatSanctionDuration,
   respondToDisputeAsEmployee,
 } from "@/lib/hr/hr-dispute-api";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -319,7 +320,10 @@ function DisputeDetailSheet({
                     <span className="text-muted-foreground text-xs">
                       Nature:{" "}
                     </span>
-                    {humanize(d.natureOfGrievance)}
+                    {d.natureOfGrievance === "others" &&
+                    d.natureOfGrievanceOther
+                      ? d.natureOfGrievanceOther
+                      : humanize(d.natureOfGrievance)}
                   </div>
                 )}
                 {d.adverseEffect && (
@@ -660,13 +664,19 @@ function DisputeDetailSheet({
                       {new Date(d.outcome.recordedAt).toLocaleString()}
                     </span>
                   </div>
-                  {d.outcome.warningExpiryDate && (
+                  {formatSanctionDuration(d.outcome.duration) ? (
                     <p className="text-xs text-muted-foreground">
-                      Valid until{" "}
-                      {new Date(
-                        d.outcome.warningExpiryDate,
-                      ).toLocaleDateString()}
+                      Duration: {formatSanctionDuration(d.outcome.duration)}
                     </p>
+                  ) : (
+                    d.outcome.warningExpiryDate && (
+                      <p className="text-xs text-muted-foreground">
+                        Valid until{" "}
+                        {new Date(
+                          d.outcome.warningExpiryDate,
+                        ).toLocaleDateString()}
+                      </p>
+                    )
                   )}
                   {d.outcome.notes && (
                     <p className="whitespace-pre-wrap pt-1">
@@ -750,6 +760,10 @@ function DisputeDetailSheet({
                         <p className="text-xs">
                           Reduced sanction:{" "}
                           {sanctionLabel(d.appeal.newSanction)}
+                          {formatSanctionDuration(
+                            d.appeal.newSanctionDuration,
+                          ) &&
+                            ` — ${formatSanctionDuration(d.appeal.newSanctionDuration)}`}
                         </p>
                       )}
                     </div>
@@ -1138,6 +1152,7 @@ function LogDisputeDialog({
 
   // Grievance-specific
   const [nature, setNature] = useState<GrievanceNature | "">("");
+  const [natureOther, setNatureOther] = useState("");
   const [adverseEffect, setAdverseEffect] = useState("");
   const [informalSteps, setInformalSteps] = useState("");
   const [remedy, setRemedy] = useState("");
@@ -1162,6 +1177,7 @@ function LogDisputeDialog({
     setWitnesses([]);
     setAttachments([]);
     setNature("");
+    setNatureOther("");
     setAdverseEffect("");
     setInformalSteps("");
     setRemedy("");
@@ -1200,7 +1216,12 @@ function LogDisputeDialog({
     if (!description.trim() || description.trim().length < 10) return false;
 
     if (uiType === "grievance") {
-      return !!nature && !!adverseEffect.trim() && !!remedy.trim();
+      return (
+        !!nature &&
+        (nature !== "others" || natureOther.trim().length >= 3) &&
+        !!adverseEffect.trim() &&
+        !!remedy.trim()
+      );
     }
     if (uiType === "incident") {
       const injuryDetailsOk =
@@ -1226,6 +1247,8 @@ function LogDisputeDialog({
 
     if (uiType === "grievance") {
       payload.natureOfGrievance = nature as GrievanceNature;
+      if (nature === "others")
+        payload.natureOfGrievanceOther = natureOther.trim();
       payload.adverseEffect = adverseEffect.trim();
       payload.desiredOutcome = remedy.trim();
       if (informalSteps.trim())
@@ -1314,6 +1337,18 @@ function LogDisputeDialog({
                   </SelectContent>
                 </Select>
               </div>
+              {nature === "others" && (
+                <div className="space-y-1.5">
+                  <Label className="text-xs">
+                    What is the nature of this grievance? *
+                  </Label>
+                  <Input
+                    placeholder="Describe it in a few words…"
+                    value={natureOther}
+                    onChange={(e) => setNatureOther(e.target.value)}
+                  />
+                </div>
+              )}
               <div className="space-y-1.5">
                 <Label className="text-xs">
                   How has this adversely affected you? *

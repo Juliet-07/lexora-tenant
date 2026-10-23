@@ -32,6 +32,7 @@ import {
   getNextStage,
   getStageOrderFor,
   type Candidate,
+  type CandidateSource,
   type CandidateStage,
   type WorkerCategory,
 } from "@/lib/hr/hr-recruitment-api";
@@ -173,7 +174,9 @@ function PipelineColumn({
                 variant="outline"
                 className={`${stageColor(c.stage)} text-[10px] capitalize`}
               >
-                {c.source.replace("_", " ")}
+                {c.source === "other" && c.sourceOther
+                  ? c.sourceOther
+                  : c.source.replace("_", " ")}
               </Badge>
               <Badge variant="outline" className="text-[10px] capitalize">
                 {c.workerCategory}
@@ -389,7 +392,8 @@ export function AddCandidateDialog({
     email: "",
     phone: "",
     roleAppliedFor: "",
-    source: "other" as const,
+    source: "other" as CandidateSource,
+    sourceOther: "",
     workerCategory: "employee" as WorkerCategory,
     notes: "",
   });
@@ -405,6 +409,7 @@ export function AddCandidateDialog({
         phone: "",
         roleAppliedFor: "",
         source: "other",
+        sourceOther: "",
         workerCategory: "employee",
         notes: "",
       });
@@ -474,6 +479,15 @@ export function AddCandidateDialog({
                 <SelectItem value="other">Other</SelectItem>
               </SelectContent>
             </Select>
+            {form.source === "other" && (
+              <Input
+                placeholder="Where did this candidate come from? (optional)"
+                value={form.sourceOther}
+                onChange={(e) =>
+                  setForm({ ...form, sourceOther: e.target.value })
+                }
+              />
+            )}
           </div>
           <div className="space-y-1">
             <Label>Category</Label>
@@ -517,7 +531,15 @@ export function AddCandidateDialog({
               !form.roleAppliedFor ||
               createMutation.isPending
             }
-            onClick={() => createMutation.mutate(form)}
+            onClick={() =>
+              createMutation.mutate({
+                ...form,
+                sourceOther:
+                  form.source === "other"
+                    ? form.sourceOther.trim() || undefined
+                    : undefined,
+              })
+            }
           >
             {createMutation.isPending ? (
               <Loader2 className="h-4 w-4 animate-spin" />

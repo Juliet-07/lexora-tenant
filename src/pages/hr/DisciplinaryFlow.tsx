@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { Loader2, CheckCircle2, Circle } from "lucide-react";
+import { Loader2, CheckCircle2, Circle, UserX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -26,6 +26,12 @@ import {
   scheduleDisciplinaryAppealHearing,
   recordDisciplinaryAppealOutcome,
   sanctionLabel,
+  formatSanctionDuration,
+  isDismissalSanction,
+  sanctionHasDuration,
+  SANCTION_DURATION_UNITS,
+  type SanctionDuration,
+  type SanctionDurationUnit,
   type AppealDecision,
   type DisciplinaryFindingDecision,
   type DisputeCase,
@@ -152,6 +158,57 @@ function RecordBox({
     </div>
   );
 }
+
+// How long a sanction lasts — typed in by the tenant, never worked out
+// by the system.
+function DurationField({
+  label,
+  value,
+  unit,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  unit: SanctionDurationUnit;
+  onChange: (value: string, unit: SanctionDurationUnit) => void;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-xs">{label}</Label>
+      <div className="grid grid-cols-2 gap-3">
+        <Input
+          type="number"
+          min={1}
+          max={999}
+          placeholder="e.g. 6"
+          value={value}
+          onChange={(e) => onChange(e.target.value, unit)}
+        />
+        <Select
+          value={unit}
+          onValueChange={(u) => onChange(value, u as SanctionDurationUnit)}
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {SANCTION_DURATION_UNITS.map((u) => (
+              <SelectItem key={u.value} value={u.value}>
+                {u.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    </div>
+  );
+}
+
+const toDuration = (
+  value: string,
+  unit: SanctionDurationUnit,
+): SanctionDuration | undefined =>
+  Number(value) >= 1 ? { value: Math.floor(Number(value)), unit } : undefined;
 
 // Used by the hearing invitation (Step 5) and the appeal hearing (Step 9).
 function HearingForm({
@@ -444,19 +501,18 @@ export function DisciplinaryFlow({
   // Step 8 — sanction
   const [sanction, setSanction] = useState<DisputeOutcomeDecision>("no_action");
   const [sanctionNotes, setSanctionNotes] = useState("");
-  const [warningExpiry, setWarningExpiry] = useState("");
-  const isWarning = [
-    "verbal_warning",
-    "written_warning",
-    "final_warning",
-  ].includes(sanction);
+  const [durValue, setDurValue] = useState("");
+  const [durUnit, setDurUnit] = useState<SanctionDurationUnit>("months");
+  const durationRequired = sanction === "suspension_without_pay";
+  const durationMissing = durationRequired && !toDuration(durValue, durUnit);
   const sanctionMutation = useMutation({
     mutationFn: () =>
       recordDisputeOutcome(dispute._id, {
         decision: sanction,
         notes: sanctionNotes || undefined,
-        warningExpiryDate:
-          isWarning && warningExpiry ? warningExpiry : undefined,
+        duration: sanctionHasDuration(sanction)
+          ? toDuration(durValue, durUnit)
+          : undefined,
       }),
     onSuccess: ok("Sanction recorded and the employee notified."),
     onError: fail,
@@ -475,27 +531,38 @@ export function DisciplinaryFlow({
   const [apDecision, setApDecision] = useState<AppealDecision>("dismissed");
   const [apSanction, setApSanction] =
     useState<DisputeOutcomeDecision>("verbal_warning");
+  const [apDurValue, setApDurValue] = useState("");
+  const [apDurUnit, setApDurUnit] = useState<SanctionDurationUnit>("months");
   const [apReasons, setApReasons] = useState("");
   const appealOutcomeMutation = useMutation({
     mutationFn: () =>
       recordDisciplinaryAppealOutcome(dispute._id, {
         decision: apDecision,
         newSanction: apDecision === "partially_upheld" ? apSanction : undefined,
+        newSanctionDuration:
+          apDecision === "partially_upheld" && sanctionHasDuration(apSanction)
+            ? toDuration(apDurValue, apDurUnit)
+            : undefined,
         reasons: apReasons,
       }),
     onSuccess: ok("Appeal outcome recorded."),
     onError: fail,
   });
 
-  const dismissal =
-    dispute.outcome?.decision === "dismissal_with_notice" ||
-    dispute.outcome?.decision === "summary_dismissal";
   const appealOpen =
     stage === "appeal" && !!dispute.appeal && !dispute.appeal.resolvedAt;
-  // A dismissal only proceeds to offboarding when it was never appealed or
-  // the appeal was dismissed. A partially upheld / upheld appeal replaces it.
-  const appealStandsDismissal =
-    !dispute.appeal || dispute.appeal.decision === "dismissed";
+  // The sanction that actually stands: the original one, unless a decided
+  // appeal overturned it (upheld) or replaced it (partially upheld).
+  const effectiveSanction = !dispute.outcome
+    ? null
+    : dispute.appeal?.resolvedAt
+      ? dispute.appeal.decision === "upheld"
+        ? null
+        : dispute.appeal.decision === "partially_upheld"
+          ? (dispute.appeal.newSanction ?? null)
+          : dispute.outcome.decision
+      : dispute.outcome.decision;
+  const showTerminate = isDismissalSanction(effectiveSanction) && !!respondent;
 
   return (
     <div className="space-y-4">
@@ -620,8 +687,12 @@ export function DisciplinaryFlow({
           <p className="font-medium">
             {sanctionLabel(dispute.outcome.decision)}
           </p>
-          {dispute.outcome.warningExpiryDate && (
-            <p>Valid until {fmtDate(dispute.outcome.warningExpiryDate)}</p>
+          {formatSanctionDuration(dispute.outcome.duration) ? (
+            <p>Duration: {formatSanctionDuration(dispute.outcome.duration)}</p>
+          ) : (
+            dispute.outcome.warningExpiryDate && (
+              <p>Valid until {fmtDate(dispute.outcome.warningExpiryDate)}</p>
+            )
           )}
           {dispute.outcome.notes && (
             <p className="text-muted-foreground">{dispute.outcome.notes}</p>
@@ -645,7 +716,11 @@ export function DisciplinaryFlow({
             {(dispute.appeal.decision ?? "").replace(/_/g, " ")}
           </p>
           {dispute.appeal.newSanction && (
-            <p>Reduced sanction: {sanctionLabel(dispute.appeal.newSanction)}</p>
+            <p>
+              Reduced sanction: {sanctionLabel(dispute.appeal.newSanction)}
+              {formatSanctionDuration(dispute.appeal.newSanctionDuration) &&
+                ` — ${formatSanctionDuration(dispute.appeal.newSanctionDuration)}`}
+            </p>
           )}
           {dispute.appeal.notes && <p>{dispute.appeal.notes}</p>}
         </RecordBox>
@@ -1019,17 +1094,20 @@ export function DisciplinaryFlow({
               </SelectContent>
             </Select>
           </div>
-          {isWarning && (
-            <div className="space-y-1.5">
-              <Label className="text-xs">
-                Warning valid until (optional — defaults to the standard period)
-              </Label>
-              <Input
-                type="date"
-                value={warningExpiry}
-                onChange={(e) => setWarningExpiry(e.target.value)}
-              />
-            </div>
+          {sanctionHasDuration(sanction) && (
+            <DurationField
+              label={
+                durationRequired
+                  ? "Duration of the suspension *"
+                  : "Duration of the sanction (optional)"
+              }
+              value={durValue}
+              unit={durUnit}
+              onChange={(v, u) => {
+                setDurValue(v);
+                setDurUnit(u);
+              }}
+            />
           )}
           <div className="space-y-1.5">
             <Label className="text-xs">Reasons for the sanction</Label>
@@ -1042,6 +1120,7 @@ export function DisciplinaryFlow({
           <SubmitButton
             label="Record sanction"
             pending={sanctionMutation.isPending}
+            disabled={durationMissing}
             onClick={() => sanctionMutation.mutate()}
           />
         </StepCard>
@@ -1129,6 +1208,22 @@ export function DisciplinaryFlow({
               </Select>
             </div>
           )}
+          {apDecision === "partially_upheld" &&
+            sanctionHasDuration(apSanction) && (
+              <DurationField
+                label={
+                  apSanction === "suspension_without_pay"
+                    ? "Duration of the reduced sanction *"
+                    : "Duration of the reduced sanction (optional)"
+                }
+                value={apDurValue}
+                unit={apDurUnit}
+                onChange={(v, u) => {
+                  setApDurValue(v);
+                  setApDurUnit(u);
+                }}
+              />
+            )}
           <div className="space-y-1.5">
             <Label className="text-xs">Reasons *</Label>
             <Textarea
@@ -1140,40 +1235,44 @@ export function DisciplinaryFlow({
           <SubmitButton
             label="Record appeal outcome"
             pending={appealOutcomeMutation.isPending}
-            disabled={apReasons.trim().length < 5}
+            disabled={
+              apReasons.trim().length < 5 ||
+              (apDecision === "partially_upheld" &&
+                apSanction === "suspension_without_pay" &&
+                !toDuration(apDurValue, apDurUnit))
+            }
             onClick={() => appealOutcomeMutation.mutate()}
           />
         </StepCard>
       )}
 
-      {/* Dismissal → offboarding. Dismissals never terminate automatically. */}
-      {!closed &&
-        dismissal &&
-        !appealOpen &&
-        (!dispute.appeal || appealStandsDismissal) &&
-        respondent && (
-          <div className="rounded-md border border-destructive/20 bg-destructive/5 p-3 space-y-2">
-            <p className="text-xs">
-              The sanction is a dismissal
-              {dispute.appeal?.resolvedAt
-                ? ", and it stands after the appeal."
-                : ". The appeal window is open — only start offboarding once it has passed or the appeal is decided."}{" "}
-              Dismissing an employee is not automatic; start the offboarding
-              when you are ready.
-            </p>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() =>
-                navigate(
-                  `/hr/recruitment?tab=offboarding&newOffboarding=${respondent._id}`,
-                )
-              }
-            >
-              Go to Offboarding
-            </Button>
-          </div>
-        )}
+      {/* Dismissal → Terminate. Same hand-off as the employee details
+          sheet: the offboarding tab with the employee pre-selected.
+          Dismissals never terminate anyone automatically. */}
+      {showTerminate && respondent && (
+        <div className="rounded-md border border-destructive/20 bg-destructive/5 p-3 space-y-2">
+          <p className="text-xs">
+            {appealOpen
+              ? "The sanction is a dismissal, but the employee has appealed. Terminate becomes available once the appeal is decided."
+              : dispute.appeal?.resolvedAt
+                ? "The sanction is a dismissal and it stands after the appeal."
+                : "The sanction is a dismissal. Terminating starts the offboarding for this employee."}
+          </p>
+          <Button
+            size="sm"
+            variant="secondary"
+            className="bg-red-500 hover:bg-red-600 text-white border-destructive/30"
+            disabled={appealOpen}
+            onClick={() =>
+              navigate(
+                `/hr/recruitment?tab=offboarding&newOffboarding=${respondent._id}`,
+              )
+            }
+          >
+            <UserX className="h-4 w-4 mr-2" /> Terminate
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

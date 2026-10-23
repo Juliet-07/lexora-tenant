@@ -338,6 +338,7 @@ function LogDisputeAsTenantDialog({
   const [description, setDescription] = useState("");
   const [attachments, setAttachments] = useState<File[]>([]);
   const [nature, setNature] = useState<GrievanceNature | "">("");
+  const [natureOther, setNatureOther] = useState("");
   const [adverseEffect, setAdverseEffect] = useState("");
   const [remedy, setRemedy] = useState("");
   const [cause, setCause] = useState("");
@@ -382,6 +383,7 @@ function LogDisputeAsTenantDialog({
     setDescription("");
     setAttachments([]);
     setNature("");
+    setNatureOther("");
     setAdverseEffect("");
     setRemedy("");
     setCause("");
@@ -395,7 +397,12 @@ function LogDisputeAsTenantDialog({
     if (respondentIds.length === 0) return false;
     if (description.trim().length < 10) return false;
     if (type === "grievance")
-      return !!nature && !!adverseEffect.trim() && !!remedy.trim();
+      return (
+        !!nature &&
+        (nature !== "others" || natureOther.trim().length >= 3) &&
+        !!adverseEffect.trim() &&
+        !!remedy.trim()
+      );
     if (type === "incident") {
       const injuryOk =
         injuryLevel === "no_injury" ||
@@ -422,6 +429,8 @@ function LogDisputeAsTenantDialog({
     };
     if (type === "grievance") {
       payload.natureOfGrievance = nature as GrievanceNature;
+      if (nature === "others")
+        payload.natureOfGrievanceOther = natureOther.trim();
       payload.adverseEffect = adverseEffect.trim();
       payload.desiredOutcome = remedy.trim();
     } else if (type === "incident") {
@@ -520,6 +529,18 @@ function LogDisputeAsTenantDialog({
                   </SelectContent>
                 </Select>
               </div>
+              {nature === "others" && (
+                <div className="space-y-1.5">
+                  <Label className="text-xs">
+                    What is the nature of this grievance? *
+                  </Label>
+                  <Input
+                    placeholder="Describe it in a few words…"
+                    value={natureOther}
+                    onChange={(e) => setNatureOther(e.target.value)}
+                  />
+                </div>
+              )}
               <div className="space-y-1.5">
                 <Label className="text-xs">Adverse effect *</Label>
                 <Textarea
@@ -994,6 +1015,22 @@ function DisputeDetailSheet({
           </div>
 
           {/* Per-type details added at filing */}
+          {dispute.type === "grievance" && dispute.natureOfGrievance && (
+            <div className="rounded-md bg-muted/40 p-3 text-xs space-y-1">
+              <p className="font-semibold uppercase tracking-wide text-muted-foreground">
+                Grievance details
+              </p>
+              <p>
+                <span className="text-muted-foreground">Nature: </span>
+                {dispute.natureOfGrievance === "others" &&
+                dispute.natureOfGrievanceOther
+                  ? dispute.natureOfGrievanceOther
+                  : (GRIEVANCE_NATURES.find(
+                      (n) => n.value === dispute.natureOfGrievance,
+                    )?.label ?? dispute.natureOfGrievance)}
+              </p>
+            </div>
+          )}
           {dispute.type === "incident" &&
             (dispute.incidentOccurredAt || dispute.immediateActionTaken) && (
               <div className="rounded-md bg-muted/40 p-3 text-xs space-y-1">

@@ -800,6 +800,18 @@ export const createCustomLeaveType = async (
   return res.data?.data ?? res.data;
 };
 
+export const updateCustomLeaveType = async (
+  id: string,
+  label: string,
+): Promise<CustomLeaveType> => {
+  const res = await api.patch(`/hr/leave/custom-types/${id}`, { label });
+  return res.data?.data ?? res.data;
+};
+
+export const deleteCustomLeaveType = async (id: string): Promise<void> => {
+  await api.delete(`/hr/leave/custom-types/${id}`);
+};
+
 // ── Employee leave balance ─────────────────────────────────────
 
 export const fetchMyLeaveBalance =

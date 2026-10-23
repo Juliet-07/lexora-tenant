@@ -2,6 +2,16 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -36,6 +46,8 @@ import {
   MapPin,
   Settings2,
   FileText,
+  Pencil,
+  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -49,6 +61,8 @@ import {
   resolveLeaveFileUrl,
   fetchCustomLeaveTypes,
   createCustomLeaveType,
+  updateCustomLeaveType,
+  deleteCustomLeaveType,
   type LeaveRequest,
   type LeaveStats,
   type LeavePolicy,
@@ -168,6 +182,11 @@ export default function HRLeave() {
   // Custom leave type dialog state
   const [customTypeOpen, setCustomTypeOpen] = useState(false);
   const [customTypeLabel, setCustomTypeLabel] = useState("");
+  // Set while the "leave type" dialog is renaming one instead of adding.
+  const [editingType, setEditingType] = useState<CustomLeaveType | null>(null);
+  const [deletingType, setDeletingType] = useState<CustomLeaveType | null>(
+    null,
+  );
 
   // Filters
   const [statusFilter, setStatusFilter] = useState("all");
@@ -297,11 +316,22 @@ export default function HRLeave() {
   });
 
   const customTypeMutation = useMutation({
-    mutationFn: () => createCustomLeaveType(customTypeLabel),
+    mutationFn: () =>
+      editingType
+        ? updateCustomLeaveType(editingType._id, customTypeLabel)
+        : createCustomLeaveType(customTypeLabel),
     onSuccess: (created) => {
       queryClient.invalidateQueries({ queryKey: ["hr-custom-leave-types"] });
+      queryClient.invalidateQueries({ queryKey: ["hr-leave-policies"] });
+      queryClient.invalidateQueries({ queryKey: ["hr-leave-requests"] });
+      const renamed = !!editingType;
       setCustomTypeOpen(false);
       setCustomTypeLabel("");
+      setEditingType(null);
+      if (renamed) {
+        toast.success(`Leave type renamed to "${created.label}".`);
+        return;
+      }
       // If the policy dialog is open, give the new type a row right away
       // so it can be assigned days without reopening the dialog.
       setPolicyEntries((prev) =>
@@ -313,8 +343,34 @@ export default function HRLeave() {
     },
     onError: (err: any) =>
       toast.error(
-        err?.response?.data?.message ?? "Failed to create leave type",
+        err?.response?.data?.message ??
+          (editingType
+            ? "Failed to rename leave type"
+            : "Failed to create leave type"),
       ),
+  });
+
+  const deleteTypeMutation = useMutation({
+    mutationFn: (id: string) => deleteCustomLeaveType(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["hr-custom-leave-types"] });
+      queryClient.invalidateQueries({ queryKey: ["hr-leave-policies"] });
+      // Drop its row from an open policy dialog so it can't be re-saved.
+      if (deletingType) {
+        setPolicyEntries((prev) =>
+          prev.filter((e) => e.type !== deletingType.key),
+        );
+        if (typeFilter === deletingType.key) setTypeFilter("all");
+      }
+      toast.success(`"${deletingType?.label}" deleted.`);
+      setDeletingType(null);
+    },
+    onError: (err: any) => {
+      toast.error(
+        err?.response?.data?.message ?? "Failed to delete leave type",
+      );
+      setDeletingType(null);
+    },
   });
 
   // ─────────────────────────────────────────────────────────
@@ -544,7 +600,11 @@ export default function HRLeave() {
                 variant="outline"
                 size="sm"
                 className="h-9"
-                onClick={() => setCustomTypeOpen(true)}
+                onClick={() => {
+                  setEditingType(null);
+                  setCustomTypeLabel("");
+                  setCustomTypeOpen(true);
+                }}
               >
                 <Plus className="h-3.5 w-3.5 mr-1.5" /> Add leave type
               </Button>
@@ -577,9 +637,31 @@ export default function HRLeave() {
               {customTypes.map((c) => (
                 <span
                   key={c._id}
-                  className="text-[11px] px-2.5 py-1 rounded-full font-medium bg-cyan-500/10 text-cyan-600 border border-cyan-500/20"
+                  className="inline-flex items-center gap-1 max-w-full text-[11px] pl-2.5 pr-1 py-0.5 rounded-full font-medium bg-cyan-500/10 text-cyan-600 border border-cyan-500/20"
                 >
-                  {c.label}
+                  <span className="break-words min-w-0" title={c.label}>
+                    {c.label}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label={`Rename ${c.label}`}
+                    className="p-1 rounded-full hover:bg-cyan-500/20 shrink-0"
+                    onClick={() => {
+                      setEditingType(c);
+                      setCustomTypeLabel(c.label);
+                      setCustomTypeOpen(true);
+                    }}
+                  >
+                    <Pencil className="h-3 w-3" />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`Delete ${c.label}`}
+                    className="p-1 rounded-full hover:bg-destructive/20 hover:text-destructive shrink-0"
+                    onClick={() => setDeletingType(c)}
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
                 </span>
               ))}
             </div>
@@ -843,7 +925,7 @@ export default function HRLeave() {
 
       {/* ── Policy Dialog ── */}
       <Dialog open={policyOpen} onOpenChange={setPolicyOpen}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {policyLocId
@@ -861,10 +943,12 @@ export default function HRLeave() {
             {policyEntries.map((entry, i) => (
               <div
                 key={entry.type}
-                className="flex items-center gap-3 py-1.5 border-b last:border-b-0"
+                className="flex flex-wrap items-center gap-x-3 gap-y-1.5 py-2 border-b last:border-b-0"
               >
+                {/* Long names wrap onto a second line instead of being cut off */}
                 <span
-                  className={`text-[11px] px-2.5 py-1 rounded-full font-medium w-28 text-center shrink-0 truncate ${typeColor(entry.type, customTypes)}`}
+                  title={typeLabel(entry.type, customTypes)}
+                  className={`text-[11px] leading-tight px-2.5 py-1 rounded-2xl font-medium w-36 text-left shrink-0 whitespace-normal break-words ${typeColor(entry.type, customTypes)}`}
                 >
                   {typeLabel(entry.type, customTypes)}
                 </span>
@@ -927,10 +1011,13 @@ export default function HRLeave() {
       <Dialog open={customTypeOpen} onOpenChange={setCustomTypeOpen}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Add Leave Type</DialogTitle>
+            <DialogTitle>
+              {editingType ? "Rename Leave Type" : "Add Leave Type"}
+            </DialogTitle>
             <DialogDescription>
-              Create a leave type beyond the built-in ones (e.g. "Sabbatical" or
-              "Jury Duty"). It becomes available in every location's policy.
+              {editingType
+                ? "Change the name shown for this leave type. Existing policies and leave requests keep working."
+                : 'Create a leave type beyond the built-in ones (e.g. "Sabbatical" or "Jury Duty"). It becomes available in every location\'s policy.'}
             </DialogDescription>
           </DialogHeader>
           <div className="py-2">
@@ -954,6 +1041,7 @@ export default function HRLeave() {
               onClick={() => {
                 setCustomTypeOpen(false);
                 setCustomTypeLabel("");
+                setEditingType(null);
               }}
             >
               Cancel
@@ -965,8 +1053,11 @@ export default function HRLeave() {
             >
               {customTypeMutation.isPending ? (
                 <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Adding…
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />{" "}
+                  {editingType ? "Saving…" : "Adding…"}
                 </>
+              ) : editingType ? (
+                "Save"
               ) : (
                 "Add Leave Type"
               )}
@@ -974,6 +1065,39 @@ export default function HRLeave() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ── Delete Custom Leave Type ── */}
+      <AlertDialog
+        open={!!deletingType}
+        onOpenChange={(o) => !o && setDeletingType(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this leave type?</AlertDialogTitle>
+            <AlertDialogDescription>
+              "{deletingType?.label}" will be removed from every location's
+              leave policy. If anyone has already requested leave with it, it
+              can't be deleted — rename it instead.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={deleteTypeMutation.isPending}
+              onClick={(e) => {
+                e.preventDefault();
+                if (deletingType) deleteTypeMutation.mutate(deletingType._id);
+              }}
+            >
+              {deleteTypeMutation.isPending ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                "Delete"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

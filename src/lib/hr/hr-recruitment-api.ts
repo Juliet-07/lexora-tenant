@@ -35,6 +35,7 @@ export interface Candidate {
   phone: string | null;
   roleAppliedFor: string;
   source: CandidateSource;
+  sourceOther?: string | null;
   workerCategory: WorkerCategory;
   stage: CandidateStage;
   rating: number;
@@ -90,6 +91,7 @@ export const createCandidate = async (dto: {
   phone?: string;
   roleAppliedFor: string;
   source?: CandidateSource;
+  sourceOther?: string;
   workerCategory?: WorkerCategory;
   notes?: string;
 }): Promise<Candidate> => {
@@ -105,6 +107,7 @@ export const updateCandidate = async (
     phone?: string;
     roleAppliedFor?: string;
     source?: CandidateSource;
+    sourceOther?: string;
     rating?: number;
     notes?: string;
   },

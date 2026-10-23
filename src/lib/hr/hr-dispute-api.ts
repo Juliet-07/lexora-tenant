@@ -50,16 +50,54 @@ export const DISCIPLINARY_SANCTIONS: {
 }[] = [
   { value: "no_action", label: "No action" },
   { value: "verbal_warning", label: "Verbal warning" },
-  { value: "written_warning", label: "Written warning (valid 6 months)" },
-  { value: "final_warning", label: "Final written warning (valid 12 months)" },
+  { value: "written_warning", label: "Written warning" },
+  { value: "final_warning", label: "Final written warning" },
   { value: "demotion", label: "Demotion" },
   {
     value: "suspension_without_pay",
-    label: "Suspension without pay (max 5 days)",
+    label: "Suspension without pay",
   },
   { value: "dismissal_with_notice", label: "Dismissal with notice" },
   { value: "summary_dismissal", label: "Summary dismissal (gross misconduct)" },
 ];
+
+// How long a sanction lasts. Always typed in by the tenant — the system
+// never decides it.
+export type SanctionDurationUnit = "days" | "weeks" | "months" | "years";
+export interface SanctionDuration {
+  value: number;
+  unit: SanctionDurationUnit;
+}
+export const SANCTION_DURATION_UNITS: {
+  value: SanctionDurationUnit;
+  label: string;
+}[] = [
+  { value: "days", label: "Days" },
+  { value: "weeks", label: "Weeks" },
+  { value: "months", label: "Months" },
+  { value: "years", label: "Years" },
+];
+export const formatSanctionDuration = (
+  d?: SanctionDuration | null,
+): string | null =>
+  d?.value && d?.unit
+    ? `${d.value} ${d.value === 1 ? d.unit.replace(/s$/, "") : d.unit}`
+    : null;
+
+// Sanctions that end the employment, or look like it. Used to offer the
+// Terminate hand-off to offboarding.
+export const isDismissalSanction = (
+  decision: string | null | undefined,
+): boolean =>
+  decision === "dismissal_with_notice" ||
+  decision === "summary_dismissal" ||
+  decision === "termination";
+
+// Sanctions a duration makes no sense for.
+export const sanctionHasDuration = (
+  decision: string | null | undefined,
+): boolean =>
+  !!decision && decision !== "no_action" && !isDismissalSanction(decision);
 
 export const sanctionLabel = (decision: string | null | undefined): string =>
   DISCIPLINARY_SANCTIONS.find((d) => d.value === decision)?.label ??
@@ -133,6 +171,7 @@ export interface DisputeOutcome {
   attachmentUrl: string | null;
   emailSentAt?: string | null;
   warningExpiryDate?: string | null;
+  duration?: SanctionDuration | null;
 }
 
 export interface DisciplinaryProcess {
@@ -192,6 +231,7 @@ export interface DisputeAppeal {
     notes: string | null;
   } | null;
   newSanction?: string | null;
+  newSanctionDuration?: SanctionDuration | null;
 }
 
 export interface DisputeExternalEscalation {
@@ -248,6 +288,7 @@ export interface DisputeCase {
   respondentIds: string[];
   description: string;
   natureOfGrievance: GrievanceNature | null;
+  natureOfGrievanceOther?: string | null;
   adverseEffect: string | null;
   informalResolutionSteps: string | null;
   desiredOutcome: string | null;
@@ -312,6 +353,7 @@ export interface OpenDisputePayload {
   witnesses?: string[];
   filedAt?: string;
   natureOfGrievance?: GrievanceNature;
+  natureOfGrievanceOther?: string;
   adverseEffect?: string;
   informalResolutionSteps?: string;
   desiredOutcome?: string;
@@ -414,7 +456,7 @@ export const recordDisputeOutcome = async (
     decision: DisputeOutcomeDecision;
     notes?: string;
     attachmentUrl?: string;
-    warningExpiryDate?: string;
+    duration?: SanctionDuration;
   },
 ): Promise<DisputeCase> => {
   const res = await api.patch(`/hr/disputes/${caseId}/outcome`, dto);
@@ -538,6 +580,7 @@ export const recordDisciplinaryAppealOutcome = (
   dto: {
     decision: AppealDecision;
     newSanction?: DisputeOutcomeDecision;
+    newSanctionDuration?: SanctionDuration;
     reasons: string;
   },
 ) => disciplinaryPatch(caseId, "appeal-outcome", dto);

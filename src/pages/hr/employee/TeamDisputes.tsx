@@ -438,7 +438,10 @@ function ManageCaseSheet({
                           Nature of grievance:
                         </span>{" "}
                         <span className="capitalize">
-                          {d.natureOfGrievance.replace(/_/g, " ")}
+                          {d.natureOfGrievance === "others" &&
+                          d.natureOfGrievanceOther
+                            ? d.natureOfGrievanceOther
+                            : d.natureOfGrievance.replace(/_/g, " ")}
                         </span>
                       </p>
                     )}
