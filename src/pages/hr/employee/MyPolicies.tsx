@@ -27,6 +27,7 @@ import {
   fetchPolicies,
   acknowledgePolicyAsEmployee,
   resolvePolicyFileUrl,
+  isStaffPolicy,
   type Policy,
 } from "@/lib/grc/policy-api";
 
@@ -39,8 +40,15 @@ export default function MyPolicies() {
   });
   const policies = useMemo(
     () =>
-      all.filter((p) => p.type === "organisation" && p.status === "Published"),
-    [all],
+      all.filter((p) => {
+        if (p.status !== "Published" || !isStaffPolicy(p.type)) return false;
+        // Organisation-wide policies are for everyone; the audience-specific
+        // types only show to the people they were addressed to.
+        return (
+          p.type === "organisation" || (p.audienceEmails ?? []).includes(email)
+        );
+      }),
+    [all, email],
   );
   const [active, setActive] = useState<Policy | null>(null);
   const [reading, setReading] = useState<Policy | null>(null);

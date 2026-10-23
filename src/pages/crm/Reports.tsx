@@ -6,6 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   Table,
   TableBody,
   TableCell,
@@ -890,98 +897,95 @@ export default function Reports() {
         )}
       </div>
 
-      {preview && (
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <div>
-              <CardTitle className="text-base">{preview.title}</CardTitle>
-              <p className="text-xs text-muted-foreground">
-                {preview.subtitle}
-              </p>
-            </div>
-            <div className="flex gap-2">
-              <Button size="sm" onClick={() => exportReportPdf(preview)}>
-                <Download className="mr-1 h-3.5 w-3.5" /> Download PDF
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => exportReportExcel(preview)}
-              >
-                <FileSpreadsheet className="mr-1 h-3.5 w-3.5" /> Download Excel
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => setPreview(null)}
-              >
-                Close
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {preview.summary && (
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                {preview.summary.map((s) => (
-                  <div key={s.label} className="rounded-md border p-3">
-                    <p className="text-xs text-muted-foreground">{s.label}</p>
-                    <p className="text-lg font-semibold">{s.value}</p>
+      {/* Preview opens in a popup rather than below the report cards */}
+      <Dialog open={!!preview} onOpenChange={(o) => !o && setPreview(null)}>
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+          {preview && (
+            <>
+              <DialogHeader className="pr-6">
+                <DialogTitle>{preview.title}</DialogTitle>
+                <DialogDescription>{preview.subtitle}</DialogDescription>
+              </DialogHeader>
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" onClick={() => exportReportPdf(preview)}>
+                  <Download className="mr-1 h-3.5 w-3.5" /> Download PDF
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => exportReportExcel(preview)}
+                >
+                  <FileSpreadsheet className="mr-1 h-3.5 w-3.5" /> Download
+                  Excel
+                </Button>
+              </div>
+              <div className="space-y-6">
+                {preview.summary && (
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    {preview.summary.map((s) => (
+                      <div key={s.label} className="rounded-md border p-3">
+                        <p className="text-xs text-muted-foreground">
+                          {s.label}
+                        </p>
+                        <p className="text-lg font-semibold">{s.value}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {preview.sections.map((section) => (
+                  <div key={section.heading} className="space-y-2">
+                    <h4 className="text-sm font-semibold">{section.heading}</h4>
+                    {section.note && (
+                      <p className="text-xs text-muted-foreground">
+                        {section.note}
+                      </p>
+                    )}
+                    <div className="overflow-x-auto rounded-md border">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            {section.columns.map((c) => (
+                              <TableHead key={c}>{c}</TableHead>
+                            ))}
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {section.rows.length ? (
+                            section.rows.slice(0, 10).map((row, i) => (
+                              <TableRow key={i}>
+                                {row.map((cell, j) => (
+                                  <TableCell key={j} className="text-sm">
+                                    {String(cell)}
+                                  </TableCell>
+                                ))}
+                              </TableRow>
+                            ))
+                          ) : (
+                            <TableRow>
+                              <TableCell
+                                colSpan={section.columns.length}
+                                className="text-center text-sm text-muted-foreground"
+                              >
+                                No records for this period.
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </TableBody>
+                      </Table>
+                    </div>
+                    {section.rows.length > 10 && (
+                      <p className="text-xs text-muted-foreground">
+                        Showing first 10 of {section.rows.length} rows — full
+                        data included in the download.
+                      </p>
+                    )}
                   </div>
                 ))}
               </div>
-            )}
-            {preview.sections.map((section) => (
-              <div key={section.heading} className="space-y-2">
-                <h4 className="text-sm font-semibold">{section.heading}</h4>
-                {section.note && (
-                  <p className="text-xs text-muted-foreground">
-                    {section.note}
-                  </p>
-                )}
-                <div className="overflow-x-auto rounded-md border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        {section.columns.map((c) => (
-                          <TableHead key={c}>{c}</TableHead>
-                        ))}
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {section.rows.length ? (
-                        section.rows.slice(0, 10).map((row, i) => (
-                          <TableRow key={i}>
-                            {row.map((cell, j) => (
-                              <TableCell key={j} className="text-sm">
-                                {String(cell)}
-                              </TableCell>
-                            ))}
-                          </TableRow>
-                        ))
-                      ) : (
-                        <TableRow>
-                          <TableCell
-                            colSpan={section.columns.length}
-                            className="text-center text-sm text-muted-foreground"
-                          >
-                            No records for this period.
-                          </TableCell>
-                        </TableRow>
-                      )}
-                    </TableBody>
-                  </Table>
-                </div>
-                {section.rows.length > 10 && (
-                  <p className="text-xs text-muted-foreground">
-                    Showing first 10 of {section.rows.length} rows — full data
-                    included in the download.
-                  </p>
-                )}
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      )}
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -1,6 +1,13 @@
 import { api } from "../api";
 
-export type PolicyType = "organisation" | "board";
+// Who the policy is for. organisation = employees + consultants + board;
+// employees = employees only; employees_consultants = employees and
+// consultants (no board); board = the board only.
+export type PolicyType =
+  | "organisation"
+  | "employees"
+  | "employees_consultants"
+  | "board";
 export type PolicyStatus =
   | "Draft"
   | "Under review"
@@ -11,8 +18,7 @@ export type ReviewFrequency =
   | "Annual"
   | "Semi-annual"
   | "Quarterly"
-  | "Biennial"
-  | "Ad hoc";
+  | "Biennial";
 export type AckRequirement =
   | "All staff must acknowledge"
   | "Department heads only"
@@ -24,7 +30,6 @@ export const REVIEW_FREQUENCIES: ReviewFrequency[] = [
   "Semi-annual",
   "Quarterly",
   "Biennial",
-  "Ad hoc",
 ];
 export const ACK_REQUIREMENTS: AckRequirement[] = [
   "All staff must acknowledge",
@@ -33,9 +38,19 @@ export const ACK_REQUIREMENTS: AckRequirement[] = [
   "No acknowledgement required",
 ];
 export const POLICY_TYPES: { value: PolicyType; label: string }[] = [
-  { value: "organisation", label: "Organisation-wide (employees + board)" },
+  {
+    value: "organisation",
+    label: "Organisation-wide (employees, consultants + board)",
+  },
+  { value: "employees", label: "Employees only" },
+  { value: "employees_consultants", label: "Employees + consultants" },
   { value: "board", label: "Board only" },
 ];
+export const policyTypeLabel = (t: PolicyType | string): string =>
+  POLICY_TYPES.find((p) => p.value === t)?.label.replace(/ \(.*\)$/, "") ??
+  String(t);
+// Policies addressed to staff (everything except board-only).
+export const isStaffPolicy = (t: PolicyType | string): boolean => t !== "board";
 export const POLICY_CATEGORIES = [
   "Legal and Compliance",
   "IT, Data and Cyber",
@@ -149,6 +164,8 @@ export interface Policy {
   acknowledgedCount: number;
   ackRate: number | null;
   rosterStatus: PolicyRosterEntry[];
+  // Emails of the staff the policy is addressed to (set by the server).
+  audienceEmails?: string[];
   boardApprovalSummary: BoardApprovalSummary | null;
 }
 

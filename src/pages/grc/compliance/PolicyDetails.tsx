@@ -57,6 +57,7 @@ import {
   REVIEW_FREQUENCIES,
   ACK_REQUIREMENTS,
   POLICY_TYPES,
+  policyTypeLabel,
   type Policy,
   type PolicyType,
   type ReviewFrequency,
@@ -184,9 +185,7 @@ export default function PolicyDetail() {
         <div>
           <div className="flex gap-2 mb-1">
             <Badge variant="secondary">{policy.category}</Badge>
-            <Badge variant="outline">
-              {policy.type === "board" ? "Board only" : "Organisation-wide"}
-            </Badge>
+            <Badge variant="outline">{policyTypeLabel(policy.type)}</Badge>
             <Badge variant="outline" className={statusTone[policy.status]}>
               {policy.status}
             </Badge>

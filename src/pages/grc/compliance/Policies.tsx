@@ -569,8 +569,9 @@ function NewPolicyDialog({
                 </SelectContent>
               </Select>
               <p className="text-[11px] text-muted-foreground mt-1">
-                Organisation-wide policies are visible to employees and the
-                board; board-only policies are restricted to the board.
+                Organisation-wide reaches employees, consultants and the board.
+                Employees only and Employees + consultants leave the board out;
+                board-only is restricted to the board.
               </p>
             </div>
             <div>

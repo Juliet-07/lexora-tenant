@@ -359,14 +359,14 @@ function LogDisputeAsTenantDialog({
   const [misconductDate, setMisconductDate] = useState("");
 
   // The policy breached is picked from the GRC policy library — in-force
-  // (published) organisation policies only.
+  // (published) policies for staff — board-only ones are left out.
   const { data: allPolicies = [], isLoading: loadingPolicies } = useQuery({
     queryKey: ["grc-policies-for-disciplinary"],
     queryFn: fetchPolicies,
     enabled: open && type === "disciplinary",
   });
   const policies = allPolicies.filter(
-    (p) => p.status === "Published" && p.type === "organisation",
+    (p) => p.status === "Published" && p.type !== "board",
   );
 
   const reset = () => {
