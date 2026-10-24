@@ -72,6 +72,11 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { RichTextEditor } from "@/components/RichTextEditor";
 import {
+  NewsletterTemplateForm,
+  NEWSLETTER_TEMPLATE_LABELS,
+  emptyNewsletterTemplateData,
+} from "@/components/crm/NewsletterTemplateForm";
+import {
   fetchClients,
   displayName,
   type ApiClient,
@@ -112,6 +117,7 @@ import {
   type SegmentAudience,
   type Campaign,
   type CampaignType,
+  type NewsletterTemplate,
   type Alert,
   type AlertCategory,
   type AlertPriority,
@@ -376,6 +382,15 @@ export default function Newsletter() {
     segmentIds: [] as string[],
     subject: "",
     body: "",
+    // "custom" = free rich-text body; "template" = one of the branded
+    // designs (rendered by the engine for email AND the portals).
+    contentMode: "custom" as "custom" | "template",
+    template: "RegulatoryAlert" as NewsletterTemplate,
+    templateData: emptyNewsletterTemplateData("RegulatoryAlert") as Record<
+      string,
+      any
+    >,
+    previewText: "",
   });
   const [prefillNewsletterId, setPrefillNewsletterId] = useState<string | null>(
     null,
@@ -400,6 +415,10 @@ export default function Newsletter() {
       segmentIds: segments[0] ? [segments[0]._id] : [],
       subject: prefill?.title ?? "",
       body: prefill?.body ?? "",
+      contentMode: "custom",
+      template: "RegulatoryAlert",
+      templateData: emptyNewsletterTemplateData("RegulatoryAlert"),
+      previewText: "",
     });
     setOpenCampaignDialog(true);
   };
@@ -415,6 +434,13 @@ export default function Newsletter() {
       segmentIds: c.segmentIds,
       subject: c.subject,
       body: c.body,
+      contentMode: c.template ? "template" : "custom",
+      template: (c.template ?? "RegulatoryAlert") as NewsletterTemplate,
+      templateData:
+        c.template && c.templateData
+          ? c.templateData
+          : emptyNewsletterTemplateData("RegulatoryAlert"),
+      previewText: c.previewText ?? "",
     });
     setOpenCampaignDialog(true);
   };
@@ -430,7 +456,16 @@ export default function Newsletter() {
         type: campaignDraft.type,
         segmentIds: campaignDraft.segmentIds,
         subject: campaignDraft.subject,
-        body: campaignDraft.body,
+        ...(campaignDraft.contentMode === "template"
+          ? {
+              template: campaignDraft.template,
+              templateData: campaignDraft.templateData,
+              previewText: campaignDraft.previewText,
+            }
+          : {
+              body: campaignDraft.body,
+              previewText: campaignDraft.previewText,
+            }),
       };
       return editingCampaignId
         ? updateCampaign(editingCampaignId, payload)
@@ -1761,7 +1796,7 @@ export default function Newsletter() {
 
       {/* New / edit campaign dialog */}
       <Dialog open={openCampaignDialog} onOpenChange={setOpenCampaignDialog}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {editingCampaignId ? "Edit campaign" : "New campaign"}
@@ -1856,16 +1891,71 @@ export default function Newsletter() {
               />
             </div>
 
-            <div>
-              <Label>Content</Label>
-              <RichTextEditor
-                value={campaignDraft.body}
-                onChange={(html) =>
-                  setCampaignDraft({ ...campaignDraft, body: html })
-                }
-                placeholder="Write your campaign content…"
-                minHeight={160}
-              />
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label>Content</Label>
+                <div className="flex gap-1 rounded-md bg-muted p-1 text-xs">
+                  {(
+                    [
+                      ["custom", "Write my own"],
+                      ["template", "Use a template"],
+                    ] as const
+                  ).map(([mode, label]) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() =>
+                        setCampaignDraft({
+                          ...campaignDraft,
+                          contentMode: mode,
+                        })
+                      }
+                      className={`rounded px-3 py-1 font-medium ${
+                        campaignDraft.contentMode === mode
+                          ? "bg-background shadow-sm"
+                          : "text-muted-foreground"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {campaignDraft.contentMode === "custom" ? (
+                <RichTextEditor
+                  value={campaignDraft.body}
+                  onChange={(html) =>
+                    setCampaignDraft({ ...campaignDraft, body: html })
+                  }
+                  placeholder="Write your campaign content…"
+                  minHeight={160}
+                />
+              ) : (
+                <NewsletterTemplateForm
+                  template={campaignDraft.template}
+                  data={campaignDraft.templateData}
+                  previewText={campaignDraft.previewText}
+                  onTemplateChange={(t) =>
+                    setCampaignDraft({
+                      ...campaignDraft,
+                      template: t,
+                      // Switching design starts that design's fields fresh.
+                      templateData: emptyNewsletterTemplateData(t),
+                    })
+                  }
+                  onDataChange={(d) =>
+                    setCampaignDraft({ ...campaignDraft, templateData: d })
+                  }
+                  onPreviewTextChange={(v) =>
+                    setCampaignDraft({ ...campaignDraft, previewText: v })
+                  }
+                />
+              )}
+              <p className="text-xs text-muted-foreground">
+                Branded with your business name and delivered as a proper HTML
+                email. Clients and board members also see it in their portal
+                newsletters.
+              </p>
             </div>
           </div>
           <DialogFooter>
@@ -2361,6 +2451,11 @@ export default function Newsletter() {
                   >
                     {detailCampaign.status}
                   </Badge>
+                  {detailCampaign.template && (
+                    <Badge variant="secondary">
+                      {NEWSLETTER_TEMPLATE_LABELS[detailCampaign.template]}
+                    </Badge>
+                  )}
                 </SheetTitle>
               </SheetHeader>
 

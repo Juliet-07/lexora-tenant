@@ -51,6 +51,111 @@ export interface EventInvite {
   respondedAt: string | null;
   phone: string;
   notes: string;
+  // Lifecycle — null means "not recorded": the registration /
+  // acknowledgement signal then counts as attendance.
+  attended?: boolean | null;
+  attendanceRecordedAt?: string | null;
+  syncedToContact?: boolean;
+  feedbackRating?: number | null;
+  feedbackComment?: string;
+  feedbackAt?: string | null;
+}
+
+export type EventPhase = "Pre-event" | "During" | "Post-event" | "Cancelled";
+export type ScheduleStatus =
+  | "Off"
+  | "Pending"
+  | "Sending"
+  | "Sent"
+  | "Skipped"
+  | "Failed";
+export type PipelineState = "done" | "active" | "pending" | "skipped";
+
+export interface EventAutomation {
+  configured: boolean;
+  reminderWeek: boolean;
+  reminderDay: boolean;
+  reminderHour: boolean;
+  customReminderHours: number | null;
+  thankYouEnabled: boolean;
+  thankYouDelayHours: number;
+  feedbackEnabled: boolean;
+  feedbackDelayHours: number;
+  recordingEnabled: boolean;
+  recordingDelayHours: number;
+  noShowEnabled: boolean;
+  noShowDelayHours: number;
+  syncContacts: boolean;
+  notifyOrganiser: boolean;
+}
+
+export interface EventStats {
+  invited: number;
+  sent: number;
+  failed: number;
+  responded: number;
+  declined: number;
+  attendedInvites: number;
+  walkIns: number;
+  totalAttendance: number;
+  noShows: number;
+  attendanceRate: number | null;
+  feedbackResponses: number;
+  feedbackScore: number | null;
+  spotsLeft: number | null;
+}
+
+export interface EventScheduleItem {
+  key: string;
+  label: string;
+  group: "pre" | "post" | "organiser";
+  audience: string;
+  dueAt: string;
+  status: ScheduleStatus;
+  note: string;
+  manual: boolean;
+  recipients: number;
+  delivered: number;
+  failed: number;
+  ranAt: string | null;
+  overdue: boolean;
+}
+
+export interface EventPipelineStage {
+  key: string;
+  label: string;
+  state: PipelineState;
+  detail: string;
+}
+
+export interface EventOutcome {
+  walkIns?: number;
+  avgSessionDuration?: string;
+  leadsGenerated?: number;
+  followUpCallsBooked?: number;
+  newContacts?: number;
+  recordingUrl?: string;
+  materialsUrl?: string;
+  notes?: string;
+  recordedAt?: string | null;
+  attendanceRecordedAt?: string | null;
+}
+
+export interface EventActivityItem {
+  at: string;
+  kind: string;
+  message: string;
+}
+
+export interface EventLifecycle {
+  phase: EventPhase;
+  startsAt: string;
+  endsAt: string;
+  stats: EventStats;
+  schedule: EventScheduleItem[];
+  pipeline: EventPipelineStage[];
+  attendanceRecorded: boolean;
+  resultsRecorded: boolean;
 }
 
 export interface CrmEvent {
@@ -73,6 +178,13 @@ export interface CrmEvent {
   invites: EventInvite[];
   publishedAt: string | null;
   createdAt: string;
+  timezone?: string;
+  completedAt?: string | null;
+  autoCompleted?: boolean;
+  automation?: EventAutomation;
+  outcome?: EventOutcome;
+  activity?: EventActivityItem[];
+  lifecycle?: EventLifecycle;
 }
 
 export interface EventPayload {
@@ -90,6 +202,7 @@ export interface EventPayload {
   host?: string;
   agenda?: string;
   registrationDeadline?: string;
+  timezone?: string;
 }
 
 export interface EventInviteeRef {
@@ -124,10 +237,54 @@ export const removeEventInvite = async (
   unwrap(await api.delete(`/tools/events/${id}/invites/${inviteId}`));
 export const publishEvent = async (id: string): Promise<CrmEvent> =>
   unwrap(await api.post(`/tools/events/${id}/publish`));
-export const cancelEvent = async (id: string): Promise<CrmEvent> =>
-  unwrap(await api.post(`/tools/events/${id}/cancel`));
+export const cancelEvent = async (
+  id: string,
+  dto: { notifyInvitees?: boolean; reason?: string } = {},
+): Promise<CrmEvent> =>
+  unwrap(await api.post(`/tools/events/${id}/cancel`, dto));
 export const completeEvent = async (id: string): Promise<CrmEvent> =>
   unwrap(await api.post(`/tools/events/${id}/complete`));
+
+// ── Lifecycle: automation, attendance, results ───────────────
+
+export type EventAutomationPatch = Partial<Omit<EventAutomation, "configured">>;
+
+export const updateEventAutomation = async (
+  id: string,
+  dto: EventAutomationPatch,
+): Promise<CrmEvent> =>
+  unwrap(await api.patch(`/tools/events/${id}/automation`, dto));
+export const sendEventAutomationStep = async (
+  id: string,
+  key: string,
+): Promise<CrmEvent> =>
+  unwrap(
+    await api.post(
+      `/tools/events/${id}/automation/${encodeURIComponent(key)}/send`,
+    ),
+  );
+export const markEventAttendance = async (
+  id: string,
+  dto: {
+    entries?: { inviteId: string; attended: boolean | null }[];
+    markAllRespondedAttended?: boolean;
+  },
+): Promise<CrmEvent> =>
+  unwrap(await api.post(`/tools/events/${id}/attendance`, dto));
+export const recordEventOutcome = async (
+  id: string,
+  dto: {
+    walkIns?: number;
+    avgSessionDuration?: string;
+    leadsGenerated?: number;
+    followUpCallsBooked?: number;
+    newContacts?: number;
+    recordingUrl?: string;
+    materialsUrl?: string;
+    notes?: string;
+  },
+): Promise<CrmEvent> =>
+  unwrap(await api.patch(`/tools/events/${id}/outcome`, dto));
 
 // ── Public registration (no auth) ─────────────────────────────
 
@@ -215,3 +372,29 @@ export const acknowledgeMyEvent = async (
   id: string,
 ): Promise<{ acknowledged: boolean }> =>
   unwrap(await api.post(`/crm/my-events/${id}/acknowledge`));
+
+// ── Public feedback (no auth) — the link in the post-event email ──
+
+export interface PublicEventFeedbackView {
+  title: string;
+  type: EventType;
+  when: string;
+  host: string;
+  open: boolean;
+  alreadySubmitted: boolean;
+  invite: { name: string };
+}
+
+export const fetchEventFeedbackByToken = async (
+  token: string,
+): Promise<PublicEventFeedbackView> => {
+  const res = await publicApi.get(`/tools/events/feedback/${token}`);
+  return res.data?.data ?? res.data;
+};
+export const submitEventFeedback = async (
+  token: string,
+  dto: { rating: number; comment?: string },
+): Promise<{ ok: boolean }> => {
+  const res = await publicApi.post(`/tools/events/feedback/${token}`, dto);
+  return res.data?.data ?? res.data;
+};

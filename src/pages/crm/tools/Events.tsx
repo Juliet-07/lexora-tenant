@@ -60,6 +60,15 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
+  ActivityPanel,
+  AttendeesPanel,
+  AutomationPanel,
+  CancelEventDialog,
+  EventKpis,
+  PipelineStrip,
+  ResultsPanel,
+} from "@/components/crm/EventLifeCycle";
+import {
   fetchEvents,
   fetchEvent,
   createEvent,
@@ -68,7 +77,6 @@ import {
   inviteToEvent,
   removeEventInvite,
   publishEvent,
-  cancelEvent,
   completeEvent,
   EVENT_TYPES,
   type CrmEvent,
@@ -110,6 +118,29 @@ const cleanPayload = (d: EventPayload): EventPayload => ({
   registrationDeadline: d.registrationDeadline || undefined,
 });
 
+const browserZone = () => {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "Africa/Kigali";
+  } catch {
+    return "Africa/Kigali";
+  }
+};
+const COMMON_ZONES = [
+  "Africa/Kigali",
+  "Africa/Nairobi",
+  "Africa/Lagos",
+  "Africa/Johannesburg",
+  "Africa/Cairo",
+  "Europe/London",
+  "Europe/Paris",
+  "America/New_York",
+  "America/Los_Angeles",
+  "Asia/Dubai",
+  "Asia/Kolkata",
+  "Asia/Singapore",
+  "UTC",
+];
+
 const emptyDraft = (): EventPayload => ({
   title: "",
   type: "Webinar",
@@ -125,6 +156,7 @@ const emptyDraft = (): EventPayload => ({
   host: "",
   agenda: "",
   registrationDeadline: "",
+  timezone: browserZone(),
 });
 
 const toDraft = (e: CrmEvent): EventPayload => ({
@@ -144,6 +176,7 @@ const toDraft = (e: CrmEvent): EventPayload => ({
   registrationDeadline: e.registrationDeadline
     ? e.registrationDeadline.slice(0, 10)
     : "",
+  timezone: e.timezone || "Africa/Kigali",
 });
 
 const downloadCsv = (filename: string, rows: string[][]) => {
@@ -214,6 +247,13 @@ export default function Events() {
   const [regSearch, setRegSearch] = useState("");
 
   const selected = events.find((e) => e._id === selectedId) ?? null;
+  const zoneOptions = useMemo(
+    () =>
+      Array.from(new Set([draft.timezone, ...COMMON_ZONES])).filter(
+        Boolean,
+      ) as string[],
+    [draft.timezone],
+  );
 
   const totals = useMemo(() => {
     const published = events.filter((e) => e.status === "Published").length;
@@ -251,6 +291,9 @@ export default function Events() {
       setSelectedId(e._id);
       toast({
         title: editingId ? "Event updated" : "Event created as a draft",
+        description: editingId
+          ? undefined
+          : "It's on your calendar, and reminders will go out once you publish.",
       });
     },
     onError: onErr(
@@ -281,14 +324,7 @@ export default function Events() {
     },
     onError: onErr("Failed to publish"),
   });
-  const cancelMut = useMutation({
-    mutationFn: (id: string) => cancelEvent(id),
-    onSuccess: () => {
-      invalidate();
-      toast({ title: "Event cancelled" });
-    },
-    onError: onErr("Failed to cancel"),
-  });
+  const [cancelOpen, setCancelOpen] = useState(false);
   const completeMut = useMutation({
     mutationFn: (id: string) => completeEvent(id),
     onSuccess: () => {
@@ -408,9 +444,10 @@ export default function Events() {
         <div>
           <h1 className="text-2xl font-bold">Event Management</h1>
           <p className="text-sm text-muted-foreground">
-            Publish an event to email every invitee their registration link
-            (external) or notify them to acknowledge attendance on their own
-            portal (in-house).
+            Plan it, run it and follow it up. Publishing emails every invitee
+            their registration link (external) or asks them to acknowledge on
+            their own portal (in-house); reminders, attendance, feedback and
+            follow-ups are tracked here, and every event is on your calendar.
           </p>
         </div>
         <Button onClick={openCreate}>
@@ -466,6 +503,7 @@ export default function Events() {
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Invited</TableHead>
                   <TableHead className="text-right">Responded</TableHead>
+                  <TableHead className="text-right">Attended</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -515,6 +553,16 @@ export default function Events() {
                           /{e.capacity}
                         </span>
                       )}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {e.lifecycle &&
+                      (e.status === "Completed" ||
+                        e.lifecycle.phase === "During" ||
+                        e.lifecycle.phase === "Post-event") &&
+                      e.status !== "Cancelled" &&
+                      e.status !== "Draft"
+                        ? e.lifecycle.stats.totalAttendance
+                        : "—"}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -635,6 +683,28 @@ export default function Events() {
                 }
               />
             </div>
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label>Time zone</Label>
+              <Select
+                value={draft.timezone}
+                onValueChange={(v) => setDraft({ ...draft, timezone: v })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {zoneOptions.map((z) => (
+                    <SelectItem key={z} value={z}>
+                      {z.replace(/_/g, " ")}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                The times above are in this zone — reminders and follow-ups are
+                scheduled against it.
+              </p>
+            </div>
             <div className="space-y-1.5 sm:col-span-2 flex items-center gap-2">
               <Switch
                 checked={draft.virtual}
@@ -723,7 +793,7 @@ export default function Events() {
 
       {/* ── Event detail sheet ───────────────────────────────── */}
       <Sheet open={!!selected} onOpenChange={(o) => !o && setSelectedId(null)}>
-        <SheetContent className="w-full sm:max-w-2xl overflow-y-auto">
+        <SheetContent className="w-full sm:max-w-3xl overflow-y-auto">
           {selected && (
             <>
               <SheetHeader>
@@ -781,7 +851,7 @@ export default function Events() {
                     size="sm"
                     variant="outline"
                     className="text-destructive"
-                    onClick={() => cancelMut.mutate(selected._id)}
+                    onClick={() => setCancelOpen(true)}
                   >
                     <Ban className="h-3.5 w-3.5 mr-1" /> Cancel event
                   </Button>
@@ -803,13 +873,37 @@ export default function Events() {
                 </Button>
               </div>
 
-              <Tabs defaultValue="invites" className="mt-6">
-                <TabsList>
+              {selected.status !== "Draft" && (
+                <div className="mt-5 space-y-4">
+                  <EventKpis event={selected} />
+                  <PipelineStrip event={selected} />
+                </div>
+              )}
+
+              <Tabs defaultValue="overview" className="mt-6" key={selected._id}>
+                <TabsList className="h-auto flex-wrap justify-start">
                   <TabsTrigger value="overview">Overview</TabsTrigger>
                   <TabsTrigger value="invites">
                     Invitations ({selected.invites.length})
                   </TabsTrigger>
+                  <TabsTrigger value="automation">Automation</TabsTrigger>
+                  <TabsTrigger value="attendees">Attendees</TabsTrigger>
+                  <TabsTrigger value="results">Post-event stats</TabsTrigger>
+                  <TabsTrigger value="activity">Activity</TabsTrigger>
                 </TabsList>
+
+                <TabsContent value="automation">
+                  <AutomationPanel event={selected} />
+                </TabsContent>
+                <TabsContent value="attendees">
+                  <AttendeesPanel event={selected} />
+                </TabsContent>
+                <TabsContent value="results">
+                  <ResultsPanel event={selected} />
+                </TabsContent>
+                <TabsContent value="activity">
+                  <ActivityPanel event={selected} />
+                </TabsContent>
 
                 <TabsContent value="overview" className="space-y-4 pt-4">
                   {selected.description && (
@@ -835,6 +929,10 @@ export default function Events() {
                     <div>
                       <span className="text-muted-foreground">Host:</span>{" "}
                       {selected.host || "—"}
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Time zone:</span>{" "}
+                      {selected.timezone || "Africa/Kigali"}
                     </div>
                     {selected.mode === "External" && (
                       <>
@@ -974,6 +1072,12 @@ export default function Events() {
           )}
         </SheetContent>
       </Sheet>
+
+      <CancelEventDialog
+        event={selected}
+        open={cancelOpen}
+        onOpenChange={setCancelOpen}
+      />
 
       {/* ── Invite people dialog — audience depends on the event's mode ── */}
       <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>

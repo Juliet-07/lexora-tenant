@@ -492,6 +492,18 @@ export interface CampaignRecipient {
   clicked: boolean;
   rsvped: boolean;
 }
+export type NewsletterTemplate =
+  | "RegulatoryAlert"
+  | "QuarterlyRoundup"
+  | "ArticleSpotlight"
+  | "EventInvite";
+export interface CampaignContentPayload {
+  subject?: string;
+  body?: string;
+  previewText?: string;
+  template?: NewsletterTemplate;
+  templateData?: Record<string, any>;
+}
 export interface Campaign {
   _id: string;
   name: string;
@@ -502,6 +514,12 @@ export interface Campaign {
   segmentNames: string[];
   subject: string;
   body: string;
+  // Template newsletters: `template` + `templateData` are the source of
+  // truth (the editor reloads from them); `body` is the rendered
+  // portal-safe fragment the client/board portals display.
+  previewText?: string;
+  template?: NewsletterTemplate | null;
+  templateData?: Record<string, any>;
   event: CampaignEventDetails | null;
   status: CampaignStatus;
   scheduledAt: string | null;
@@ -517,23 +535,35 @@ export const fetchCampaigns = async (): Promise<Campaign[]> => {
 };
 export const fetchCampaign = async (id: string): Promise<Campaign> =>
   unwrap(await api.get(`/tools/campaigns/${id}`));
-export const createCampaign = async (dto: {
-  name: string;
-  type: CampaignType;
-  segmentIds: string[];
-  subject?: string;
-  body?: string;
-}): Promise<Campaign> => unwrap(await api.post("/tools/campaigns", dto));
+export const createCampaign = async (
+  dto: {
+    name: string;
+    type: CampaignType;
+    segmentIds: string[];
+  } & CampaignContentPayload,
+): Promise<Campaign> => unwrap(await api.post("/tools/campaigns", dto));
 export const updateCampaign = async (
   id: string,
   dto: {
     name: string;
     type: CampaignType;
     segmentIds: string[];
-    subject?: string;
-    body?: string;
-  },
+  } & CampaignContentPayload,
 ): Promise<Campaign> => unwrap(await api.patch(`/tools/campaigns/${id}`, dto));
+export const previewNewsletter = async (dto: {
+  template: NewsletterTemplate;
+  templateData: Record<string, any>;
+  previewText?: string;
+}): Promise<{ html: string; missingFields: string[] }> =>
+  unwrap(await api.post("/tools/campaigns/preview", dto));
+export const uploadNewsletterImage = async (file: File): Promise<string> => {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await api.post("/tools/campaigns/media", form, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return unwrap(res).url;
+};
 export const duplicateCampaign = async (id: string): Promise<Campaign> =>
   unwrap(await api.post(`/tools/campaigns/${id}/duplicate`));
 export const deleteCampaign = async (
@@ -719,7 +749,8 @@ export type CalendarLayer =
   | "Litigation"
   | "Contract"
   | "Finance"
-  | "HR";
+  | "HR"
+  | "Event";
 export type RecurrenceRule =
   | "None"
   | "Daily"

@@ -56,6 +56,7 @@ const LAYERS: CalendarLayer[] = [
   "Contract",
   "Finance",
   "HR",
+  "Event",
 ];
 
 const layerClass: Record<CalendarLayer, string> = {
@@ -68,6 +69,7 @@ const layerClass: Record<CalendarLayer, string> = {
   Contract: "bg-muted text-muted-foreground border-border",
   Finance: "bg-secondary/10 text-secondary border-secondary/20",
   HR: "bg-info/10 text-info border-info/20",
+  Event: "bg-primary/10 text-primary border-primary/30",
 };
 
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -690,7 +692,8 @@ export default function CalendarPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {LAYERS.map((l) => (
+                    {/* "Event" entries come from Event Management itself. */}
+                    {LAYERS.filter((l) => l !== "Event").map((l) => (
                       <SelectItem key={l} value={l}>
                         {l}
                       </SelectItem>
