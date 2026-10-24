@@ -42,6 +42,7 @@ import EventFeedbackPage from "@/pages/public/EventFeedbackPage";
 const PUBLIC_ROUTE_PATTERNS = [
   /^\/event-register\/[^/]+$/,
   /^\/event-feedback\/[^/]+$/,
+  /^\/event-join\/[^/]+$/,
   /^\/sign-contract\/[^/]+$/,
   /^\/sign-tool-contract\/[^/]+$/,
   /^\/meeting-ack\/[^/]+$/,
@@ -94,6 +95,11 @@ export function AppRoutes() {
         <Route
           path="/login/event-register/:token"
           element={<EventRegisterPage />}
+        />
+        <Route path="/event-join/:token" element={<EventRegisterPage open />} />
+        <Route
+          path="/login/event-join/:token"
+          element={<EventRegisterPage open />}
         />
         <Route path="/event-feedback/:token" element={<EventFeedbackPage />} />
         <Route

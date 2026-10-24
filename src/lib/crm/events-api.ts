@@ -59,6 +59,8 @@ export interface EventInvite {
   feedbackRating?: number | null;
   feedbackComment?: string;
   feedbackAt?: string | null;
+  // 'OpenLink' = registered themselves through the event's public link.
+  source?: "Invited" | "OpenLink" | string;
 }
 
 export type EventPhase = "Pre-event" | "During" | "Post-event" | "Cancelled";
@@ -179,6 +181,8 @@ export interface CrmEvent {
   publishedAt: string | null;
   createdAt: string;
   timezone?: string;
+  // External events: the shareable public registration link.
+  openRegistration?: { enabled: boolean; token: string | null };
   completedAt?: string | null;
   autoCompleted?: boolean;
   automation?: EventAutomation;
@@ -235,6 +239,14 @@ export const removeEventInvite = async (
   inviteId: string,
 ): Promise<CrmEvent> =>
   unwrap(await api.delete(`/tools/events/${id}/invites/${inviteId}`));
+// External events: the public link anyone can register through.
+export const getEventOpenLink = async (id: string): Promise<CrmEvent> =>
+  unwrap(await api.post(`/tools/events/${id}/open-link`));
+export const setEventOpenRegistration = async (
+  id: string,
+  dto: { enabled?: boolean; regenerate?: boolean },
+): Promise<CrmEvent> =>
+  unwrap(await api.patch(`/tools/events/${id}/open-registration`, dto));
 export const publishEvent = async (id: string): Promise<CrmEvent> =>
   unwrap(await api.post(`/tools/events/${id}/publish`));
 export const cancelEvent = async (
@@ -325,6 +337,27 @@ export const fetchPublicEventByToken = async (
   token: string,
 ): Promise<PublicEventView> => {
   const res = await publicApi.get(`/tools/events/register/${token}`);
+  return res.data?.data ?? res.data;
+};
+
+// Same page content as the personal link, via the event's public link.
+export const fetchPublicEventByOpenToken = async (
+  token: string,
+): Promise<PublicEventView> => {
+  const res = await publicApi.get(`/tools/events/join/${token}`);
+  return res.data?.data ?? res.data;
+};
+export const registerViaOpenLink = async (
+  token: string,
+  dto: {
+    name: string;
+    email: string;
+    organisation?: string;
+    phone?: string;
+    notes?: string;
+  },
+): Promise<{ ok: boolean }> => {
+  const res = await publicApi.post(`/tools/events/join/${token}`, dto);
   return res.data?.data ?? res.data;
 };
 

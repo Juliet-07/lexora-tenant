@@ -59,6 +59,7 @@ import {
   FlagOff,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { EventOpenLink } from "@/components/crm/EventOpenLink";
 import {
   ActivityPanel,
   AttendeesPanel,
@@ -424,6 +425,7 @@ export default function Events() {
         "Status",
         "Sent at",
         "Responded at",
+        "Source",
       ],
       ...e.invites.map((i) => [
         i.name,
@@ -433,6 +435,7 @@ export default function Events() {
         i.status,
         i.sentAt ? new Date(i.sentAt).toLocaleString() : "",
         i.respondedAt ? new Date(i.respondedAt).toLocaleString() : "",
+        i.source === "OpenLink" ? "Public link" : "Invited",
       ]),
     ]);
     toast({ title: "Invitations exported" });
@@ -969,7 +972,7 @@ export default function Events() {
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-xs text-muted-foreground">
                       {selected.mode === "External"
-                        ? "Each invitee gets their own personal registration link — submitting it is their attendance record."
+                        ? "Each invited contact gets their own personal registration link — submitting it is their attendance record. For people who aren't contacts yet, share the public link below."
                         : "Each invitee acknowledges attendance from their own portal — that's their attendance record."}
                     </p>
                     <Button size="sm" onClick={openInvites}>
@@ -977,6 +980,7 @@ export default function Events() {
                       {selected.mode === "External" ? "contacts" : "people"}
                     </Button>
                   </div>
+                  <EventOpenLink event={selected} />
                   {selected.invites.length === 0 ? (
                     <p className="text-sm text-muted-foreground py-6 text-center">
                       No invitations yet.
@@ -1030,6 +1034,14 @@ export default function Events() {
                                   <Badge variant="outline" className="text-xs">
                                     {AUDIENCE_LABEL[inv.audienceType]}
                                   </Badge>
+                                  {inv.source === "OpenLink" && (
+                                    <Badge
+                                      variant="secondary"
+                                      className="ml-1 text-xs"
+                                    >
+                                      Public link
+                                    </Badge>
+                                  )}
                                 </TableCell>
                                 <TableCell>
                                   <Badge variant="secondary">
@@ -1037,16 +1049,17 @@ export default function Events() {
                                   </Badge>
                                 </TableCell>
                                 <TableCell className="text-right space-x-1">
-                                  {inv.audienceType === "Contact" && (
-                                    <Button
-                                      size="icon"
-                                      variant="ghost"
-                                      title="Copy personal registration link"
-                                      onClick={() => copyLink(inv.token)}
-                                    >
-                                      <Copy className="h-3.5 w-3.5" />
-                                    </Button>
-                                  )}
+                                  {inv.audienceType === "Contact" &&
+                                    inv.source !== "OpenLink" && (
+                                      <Button
+                                        size="icon"
+                                        variant="ghost"
+                                        title="Copy personal registration link"
+                                        onClick={() => copyLink(inv.token)}
+                                      >
+                                        <Copy className="h-3.5 w-3.5" />
+                                      </Button>
+                                    )}
                                   {!hasResponded(inv.status) && (
                                     <Button
                                       size="icon"

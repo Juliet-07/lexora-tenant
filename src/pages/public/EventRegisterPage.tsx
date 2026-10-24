@@ -18,7 +18,9 @@ import {
 } from "lucide-react";
 import {
   fetchPublicEventByToken,
+  fetchPublicEventByOpenToken,
   registerForEvent,
+  registerViaOpenLink,
 } from "@/lib/crm/events-api";
 
 // ─────────────────────────────────────────────────────────────
@@ -28,7 +30,14 @@ import {
 // submitting this form is itself the invitee's attendance record.
 // ─────────────────────────────────────────────────────────────
 
-export default function EventRegisterPage() {
+// `open` = the event's shareable public link (/event-join/:token) —
+// anyone can register, nothing is pre-filled. Otherwise it's an
+// invitee's personal link (/event-register/:token).
+export default function EventRegisterPage({
+  open = false,
+}: {
+  open?: boolean;
+}) {
   const { token } = useParams<{ token: string }>();
 
   const {
@@ -36,8 +45,11 @@ export default function EventRegisterPage() {
     isLoading,
     isError,
   } = useQuery({
-    queryKey: ["public-event", token],
-    queryFn: () => fetchPublicEventByToken(token as string),
+    queryKey: ["public-event", open ? "open" : "personal", token],
+    queryFn: () =>
+      open
+        ? fetchPublicEventByOpenToken(token as string)
+        : fetchPublicEventByToken(token as string),
     enabled: !!token,
     retry: false,
   });
@@ -64,7 +76,7 @@ export default function EventRegisterPage() {
 
   const registerMut = useMutation({
     mutationFn: () =>
-      registerForEvent(token as string, {
+      (open ? registerViaOpenLink : registerForEvent)(token as string, {
         name,
         email,
         organisation,
