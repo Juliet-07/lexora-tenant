@@ -41,7 +41,7 @@ export const NEWSLETTER_TEMPLATE_HINTS: Record<NewsletterTemplate, string> = {
   ArticleSpotlight:
     "One featured article with an excerpt and a read-more button, plus related items.",
   EventInvite:
-    "A date badge, agenda and a register button — for webinars, briefings and events.",
+    "Retired for new newsletters — event invitations are now sent from Events.",
 };
 
 export function emptyNewsletterTemplateData(
@@ -732,7 +732,12 @@ export function NewsletterTemplateForm({
   return (
     <div className="space-y-3">
       <div className="grid gap-2 sm:grid-cols-2">
-        {NEWSLETTER_TEMPLATES.map((t) => (
+        {NEWSLETTER_TEMPLATES.filter(
+          // Event invitations now live in Events (one invitation, built
+          // from the event). A campaign that already uses the design
+          // keeps its tile so it can still be edited.
+          (t) => t !== "EventInvite" || template === "EventInvite",
+        ).map((t) => (
           <button
             key={t}
             type="button"
@@ -752,6 +757,12 @@ export function NewsletterTemplateForm({
           </button>
         ))}
       </div>
+
+      <p className="rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+        Inviting people to an event? Create it in <b>Events</b> — its invitation
+        uses the Event invite design, filled from the event itself, with
+        registration, reminders and follow-ups built in.
+      </p>
 
       <div className="space-y-1">
         <Label>Preview text</Label>

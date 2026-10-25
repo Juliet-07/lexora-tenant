@@ -176,6 +176,10 @@ export interface CrmEvent {
   capacity: number;
   host: string;
   agenda: string;
+  // Invitation email extras (the rest of the email is built from the event).
+  inviteMessage?: string;
+  inviteImageUrl?: string;
+  inviteCtaLabel?: string;
   registrationDeadline: string | null;
   invites: EventInvite[];
   publishedAt: string | null;
@@ -205,6 +209,9 @@ export interface EventPayload {
   capacity?: number;
   host?: string;
   agenda?: string;
+  inviteMessage?: string;
+  inviteImageUrl?: string;
+  inviteCtaLabel?: string;
   registrationDeadline?: string;
   timezone?: string;
 }
@@ -431,3 +438,10 @@ export const submitEventFeedback = async (
   const res = await publicApi.post(`/tools/events/feedback/${token}`, dto);
   return res.data?.data ?? res.data;
 };
+
+// The invitation email exactly as invitees receive it (sample guest,
+// nothing is sent).
+export const previewEventInvitation = async (
+  id: string,
+): Promise<{ subject: string; html: string }> =>
+  unwrap(await api.get(`/tools/events/${id}/invitation-preview`));

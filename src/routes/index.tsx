@@ -33,6 +33,7 @@ import AboutPage from "@/pages/marketing/About";
 import ContactPage from "@/pages/marketing/Contact";
 import EventRegisterPage from "@/pages/public/EventRegisterPage";
 import EventFeedbackPage from "@/pages/public/EventFeedbackPage";
+import UnsubscribePage from "@/pages/public/UnsubscribePage";
 
 /**
  * Top-level router. Module-specific routes live in their own files so
@@ -43,6 +44,7 @@ const PUBLIC_ROUTE_PATTERNS = [
   /^\/event-register\/[^/]+$/,
   /^\/event-feedback\/[^/]+$/,
   /^\/event-join\/[^/]+$/,
+  /^\/unsubscribe\/[^/]+$/,
   /^\/sign-contract\/[^/]+$/,
   /^\/sign-tool-contract\/[^/]+$/,
   /^\/meeting-ack\/[^/]+$/,
@@ -101,6 +103,8 @@ export function AppRoutes() {
           path="/login/event-join/:token"
           element={<EventRegisterPage open />}
         />
+        <Route path="/unsubscribe/:token" element={<UnsubscribePage />} />
+        <Route path="/login/unsubscribe/:token" element={<UnsubscribePage />} />
         <Route path="/event-feedback/:token" element={<EventFeedbackPage />} />
         <Route
           path="/login/event-feedback/:token"

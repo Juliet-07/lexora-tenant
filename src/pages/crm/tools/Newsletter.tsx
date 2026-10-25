@@ -51,6 +51,7 @@ import {
   Copy,
   Trash2,
   Eye,
+  Share2,
   CheckCircle2,
   Info,
   Pencil,
@@ -82,9 +83,14 @@ import {
   type ApiClient,
 } from "@/lib/client/clients-api";
 import { fetchContacts, type Contact } from "@/lib/crm/crm-contacts-api";
+import {
+  EmailFooterDialog,
+  UNSUBSCRIBED_QUERY_KEY,
+} from "@/components/crm/EmailFooterDialog";
 import { fetchBoardMembers, type BoardMember } from "@/lib/grc/governance-api";
 import {
   fetchSegments,
+  fetchUnsubscribed,
   createSegment,
   updateSegment,
   deleteSegment,
@@ -229,6 +235,22 @@ export default function Newsletter() {
     queryKey: ["board-members-for-segments"],
     queryFn: fetchBoardMembers,
   });
+
+  // Everyone who has used the unsubscribe link. They can't be added to
+  // a segment (the server refuses too) — the pickers grey them out.
+  const { data: unsubscribedPeople = [] } = useQuery({
+    queryKey: UNSUBSCRIBED_QUERY_KEY,
+    queryFn: fetchUnsubscribed,
+  });
+  const unsubSet = useMemo(
+    () => new Set(unsubscribedPeople.map((u) => u.email.toLowerCase())),
+    [unsubscribedPeople],
+  );
+  const isUnsub = (email?: string | null) =>
+    !!email && unsubSet.has(email.toLowerCase());
+  const [footerDialog, setFooterDialog] = useState<
+    null | "links" | "unsubscribed"
+  >(null);
 
   const invalidateSegments = () =>
     queryClient.invalidateQueries({ queryKey: ["segments"] });
@@ -964,11 +986,22 @@ export default function Newsletter() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Communications</h1>
-        <p className="text-sm text-muted-foreground">
-          Campaigns, newsletters and client segmentation.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold">Communications</h1>
+          <p className="text-sm text-muted-foreground">
+            Campaigns, newsletters and client segmentation.
+          </p>
+        </div>
+        <Button variant="outline" onClick={() => setFooterDialog("links")}>
+          <Share2 className="mr-2 h-4 w-4" />
+          Email footer &amp; unsubscribes
+          {unsubscribedPeople.length > 0 && (
+            <Badge variant="secondary" className="ml-2">
+              {unsubscribedPeople.length}
+            </Badge>
+          )}
+        </Button>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -1287,6 +1320,11 @@ export default function Newsletter() {
                       </TableCell>
                       <TableCell className="text-right text-sm">
                         {s.memberCount}
+                        {!!s.unsubscribedCount && (
+                          <p className="text-[11px] text-muted-foreground">
+                            +{s.unsubscribedCount} unsubscribed
+                          </p>
+                        )}
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
@@ -1677,6 +1715,10 @@ export default function Newsletter() {
                       >
                         <Checkbox
                           checked={segDraft.memberIds.includes(c._id)}
+                          disabled={
+                            isUnsub(c.email) &&
+                            !segDraft.memberIds.includes(c._id)
+                          }
                           onCheckedChange={(chk) =>
                             setSegDraft({
                               ...segDraft,
@@ -1689,6 +1731,11 @@ export default function Newsletter() {
                           }
                         />
                         {displayName(c)}
+                        {isUnsub(c.email) && (
+                          <Badge variant="outline" className="ml-1 text-[10px]">
+                            Unsubscribed
+                          </Badge>
+                        )}
                       </label>
                     ))}
                   {segDraft.audience === "Contact" &&
@@ -1699,6 +1746,10 @@ export default function Newsletter() {
                       >
                         <Checkbox
                           checked={segDraft.memberIds.includes(c._id)}
+                          disabled={
+                            isUnsub(c.email) &&
+                            !segDraft.memberIds.includes(c._id)
+                          }
                           onCheckedChange={(chk) =>
                             setSegDraft({
                               ...segDraft,
@@ -1712,6 +1763,11 @@ export default function Newsletter() {
                         />
                         {c.name}
                         {c.email ? "" : " (no email)"}
+                        {isUnsub(c.email) && (
+                          <Badge variant="outline" className="ml-1 text-[10px]">
+                            Unsubscribed
+                          </Badge>
+                        )}
                       </label>
                     ))}
                   {segDraft.audience === "BoardMember" &&
@@ -1722,6 +1778,10 @@ export default function Newsletter() {
                       >
                         <Checkbox
                           checked={segDraft.memberIds.includes(m._id)}
+                          disabled={
+                            isUnsub(m.email) &&
+                            !segDraft.memberIds.includes(m._id)
+                          }
                           onCheckedChange={(chk) =>
                             setSegDraft({
                               ...segDraft,
@@ -1734,6 +1794,11 @@ export default function Newsletter() {
                           }
                         />
                         {m.name}
+                        {isUnsub(m.email) && (
+                          <Badge variant="outline" className="ml-1 text-[10px]">
+                            Unsubscribed
+                          </Badge>
+                        )}
                       </label>
                     ))}
                   {segDraft.audience === "Client" &&
@@ -2686,6 +2751,11 @@ export default function Newsletter() {
           )}
         </SheetContent>
       </Sheet>
+      <EmailFooterDialog
+        open={footerDialog !== null}
+        onOpenChange={(o) => !o && setFooterDialog(null)}
+        initialTab={footerDialog ?? "links"}
+      />
     </div>
   );
 }

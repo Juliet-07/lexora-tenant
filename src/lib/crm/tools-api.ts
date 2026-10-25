@@ -418,6 +418,9 @@ export interface Segment {
   memberIds: string[];
   rule: SegmentRule | null;
   memberCount: number;
+  // People the segment would hold but who have unsubscribed — they're
+  // skipped, not counted in memberCount.
+  unsubscribedCount?: number;
 }
 export interface SegmentMember {
   _id: string;
@@ -626,11 +629,10 @@ export type AlertCategory =
   | "Compliance"
   | "Government"
   | "System"
-  | "Engineering"
   | "Industry"
   | "Health & Safety"
   | "Environmental"
-  | "Cybersecurity"
+  | "Technology"
   | "Supply chain";
 export const ALERT_CATEGORIES: AlertCategory[] = [
   "Regulatory",
@@ -639,11 +641,10 @@ export const ALERT_CATEGORIES: AlertCategory[] = [
   "Compliance",
   "Government",
   "System",
-  "Engineering",
   "Industry",
   "Health & Safety",
   "Environmental",
-  "Cybersecurity",
+  "Technology",
   "Supply chain",
 ];
 // Emoji shown next to each category pill in the prototype's design —
@@ -655,11 +656,10 @@ export const ALERT_CATEGORY_ICON: Record<AlertCategory, string> = {
   Compliance: "📋",
   Government: "🏗",
   System: "⚙",
-  Engineering: "🔧",
   Industry: "📢",
   "Health & Safety": "🦺",
   Environmental: "🌱",
-  Cybersecurity: "🔒",
+  Technology: "💻",
   "Supply chain": "🚚",
 };
 
@@ -1156,3 +1156,94 @@ export const declineToolContract = async (
   });
   return res.data?.data ?? res.data;
 };
+
+// ══════════════════════════════════════════════════════════════
+// Email footer (social links) + unsubscribes
+// ══════════════════════════════════════════════════════════════
+
+export type SocialLinkKey =
+  | "website"
+  | "linkedin"
+  | "x"
+  | "facebook"
+  | "instagram"
+  | "youtube";
+export const SOCIAL_LINK_FIELDS: {
+  key: SocialLinkKey;
+  label: string;
+  placeholder: string;
+}[] = [
+  { key: "website", label: "Website", placeholder: "https://yourcompany.com" },
+  {
+    key: "linkedin",
+    label: "LinkedIn",
+    placeholder: "https://linkedin.com/company/yourcompany",
+  },
+  { key: "x", label: "X (Twitter)", placeholder: "https://x.com/yourcompany" },
+  {
+    key: "facebook",
+    label: "Facebook",
+    placeholder: "https://facebook.com/yourcompany",
+  },
+  {
+    key: "instagram",
+    label: "Instagram",
+    placeholder: "https://instagram.com/yourcompany",
+  },
+  {
+    key: "youtube",
+    label: "YouTube",
+    placeholder: "https://youtube.com/@yourcompany",
+  },
+];
+export type EmailFooterSettings = Record<SocialLinkKey, string> & {
+  address: string;
+};
+export interface UnsubscribedPerson {
+  _id: string;
+  email: string;
+  name: string;
+  role: string;
+  reason: string;
+  unsubscribedAt: string;
+}
+
+export const fetchEmailFooter = async (): Promise<EmailFooterSettings> =>
+  unwrap(await api.get("/tools/email-footer"));
+export const saveEmailFooter = async (
+  dto: Partial<EmailFooterSettings>,
+): Promise<EmailFooterSettings> =>
+  unwrap(await api.put("/tools/email-footer", dto));
+export const fetchUnsubscribed = async (): Promise<UnsubscribedPerson[]> => {
+  const d = unwrap(await api.get("/tools/email-footer/unsubscribed"));
+  return Array.isArray(d) ? d : [];
+};
+
+// Public, token-gated (the link at the bottom of every email).
+// Plain axios-style calls through the same client; no auth needed.
+export interface UnsubscribeInfo {
+  businessName: string;
+  email: string;
+  unsubscribed: boolean;
+}
+export const fetchUnsubscribeInfo = async (
+  token: string,
+): Promise<UnsubscribeInfo> =>
+  unwrap(await api.get(`/tools/unsubscribe/${encodeURIComponent(token)}`));
+export const submitUnsubscribe = async (
+  token: string,
+  reason?: string,
+): Promise<{ unsubscribed: boolean; businessName: string }> =>
+  unwrap(
+    await api.post(`/tools/unsubscribe/${encodeURIComponent(token)}`, {
+      reason,
+    }),
+  );
+export const submitResubscribe = async (
+  token: string,
+): Promise<{ unsubscribed: boolean; businessName: string }> =>
+  unwrap(
+    await api.post(
+      `/tools/unsubscribe/${encodeURIComponent(token)}/resubscribe`,
+    ),
+  );

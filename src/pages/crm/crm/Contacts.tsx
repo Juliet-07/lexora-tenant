@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { fetchUnsubscribed } from "@/lib/crm/tools-api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -103,6 +104,18 @@ export default function Contacts() {
     queryKey: ["crmContacts"],
     queryFn: fetchContacts,
   });
+
+  // Who has used the unsubscribe link in a newsletter, alert or event
+  // email — shown as a tag so the tenant knows they won't be emailed.
+  const { data: unsubscribedPeople = [] } = useQuery({
+    queryKey: ["crm-unsubscribed"],
+    queryFn: fetchUnsubscribed,
+  });
+  const unsubEmails = new Set(
+    unsubscribedPeople.map((u) => u.email.toLowerCase()),
+  );
+  const isUnsub = (email?: string) =>
+    !!email && unsubEmails.has(email.toLowerCase());
 
   // Real, active employees with a login-capable user account — only
   // these can actually be assigned, since assignedTo enforces access
@@ -510,6 +523,11 @@ export default function Contacts() {
                   <TableCell onClick={() => setSelected(c)}>
                     <p className="text-xs">{c.email}</p>
                     <p className="text-xs text-muted-foreground">{c.phone}</p>
+                    {isUnsub(c.email) && (
+                      <Badge variant="outline" className="mt-1 text-[10px]">
+                        Unsubscribed
+                      </Badge>
+                    )}
                   </TableCell>
                   <TableCell onClick={() => setSelected(c)} className="text-sm">
                     {c.source}
@@ -760,6 +778,11 @@ export default function Contacts() {
                     <div className="flex items-center gap-2">
                       <Mail className="h-4 w-4 text-muted-foreground" />
                       {selected.email || "—"}
+                      {isUnsub(selected.email) && (
+                        <Badge variant="outline" className="text-[10px]">
+                          Unsubscribed
+                        </Badge>
+                      )}
                     </div>
                     <div className="flex items-center gap-2">
                       <Phone className="h-4 w-4 text-muted-foreground" />

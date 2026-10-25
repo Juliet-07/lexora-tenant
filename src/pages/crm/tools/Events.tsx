@@ -57,9 +57,16 @@ import {
   Rocket,
   Ban,
   FlagOff,
+  Eye,
+  Share2,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { EventOpenLink } from "@/components/crm/EventOpenLink";
+import {
+  EmailFooterDialog,
+  UNSUBSCRIBED_QUERY_KEY,
+} from "@/components/crm/EmailFooterDialog";
+import { fetchUnsubscribed, uploadNewsletterImage } from "@/lib/crm/tools-api";
 import {
   ActivityPanel,
   AttendeesPanel,
@@ -79,6 +86,7 @@ import {
   removeEventInvite,
   publishEvent,
   completeEvent,
+  previewEventInvitation,
   EVENT_TYPES,
   type CrmEvent,
   type EventType,
@@ -156,6 +164,9 @@ const emptyDraft = (): EventPayload => ({
   capacity: 0,
   host: "",
   agenda: "",
+  inviteMessage: "",
+  inviteImageUrl: "",
+  inviteCtaLabel: "",
   registrationDeadline: "",
   timezone: browserZone(),
 });
@@ -174,6 +185,9 @@ const toDraft = (e: CrmEvent): EventPayload => ({
   capacity: e.capacity,
   host: e.host,
   agenda: e.agenda,
+  inviteMessage: e.inviteMessage ?? "",
+  inviteImageUrl: e.inviteImageUrl ?? "",
+  inviteCtaLabel: e.inviteCtaLabel ?? "",
   registrationDeadline: e.registrationDeadline
     ? e.registrationDeadline.slice(0, 10)
     : "",
@@ -242,6 +256,24 @@ export default function Events() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [peopleSearch, setPeopleSearch] = useState("");
+  // Invitation email: preview, footer settings, hero-image upload.
+  const [invitePreviewOpen, setInvitePreviewOpen] = useState(false);
+  const [footerOpen, setFooterOpen] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const { data: unsubscribedPeople = [] } = useQuery({
+    queryKey: UNSUBSCRIBED_QUERY_KEY,
+    queryFn: fetchUnsubscribed,
+  });
+  const unsubEmails = new Set(
+    unsubscribedPeople.map((u) => u.email.toLowerCase()),
+  );
+  const { data: invitePreview, isFetching: loadingInvitePreview } = useQuery({
+    queryKey: ["event-invite-preview", selectedId, invitePreviewOpen],
+    queryFn: () => previewEventInvitation(selectedId as string),
+    enabled: invitePreviewOpen && !!selectedId,
+    staleTime: 0,
+    gcTime: 0,
+  });
   const [checkedInvitees, setCheckedInvitees] = useState<
     { audienceType: EventAudienceType; sourceId: string }[]
   >([]);
@@ -776,8 +808,99 @@ export default function Events() {
                 rows={3}
                 value={draft.agenda}
                 onChange={(e) => setDraft({ ...draft, agenda: e.target.value })}
-                placeholder="09:00 — Opening keynote…"
+                placeholder={
+                  "09:00 Welcome and registration\n09:30 Opening keynote"
+                }
               />
+              <p className="text-xs text-muted-foreground">
+                One item per line — a leading time becomes the agenda row in the
+                invitation email.
+              </p>
+            </div>
+
+            <div className="sm:col-span-2 space-y-3 rounded-md border bg-muted/20 p-3">
+              <div>
+                <p className="text-sm font-medium">Invitation email</p>
+                <p className="text-xs text-muted-foreground">
+                  The email is built from this event — date badge, venue,
+                  agenda, your{" "}
+                  {draft.mode === "External" ? "registration" : "portal"} link
+                  and an add-to-calendar link — in the Event invite design,
+                  followed by your social links. These three extras are
+                  optional. Open the event after saving to preview it.
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Your message</Label>
+                <Textarea
+                  rows={3}
+                  maxLength={2000}
+                  value={draft.inviteMessage ?? ""}
+                  onChange={(e) =>
+                    setDraft({ ...draft, inviteMessage: e.target.value })
+                  }
+                  placeholder="A personal note shown above the details. Leave empty to use the description."
+                />
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label>Button text</Label>
+                  <Input
+                    maxLength={40}
+                    value={draft.inviteCtaLabel ?? ""}
+                    onChange={(e) =>
+                      setDraft({ ...draft, inviteCtaLabel: e.target.value })
+                    }
+                    placeholder={
+                      draft.mode === "External"
+                        ? "Register now"
+                        : "View in your portal"
+                    }
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Banner image (optional)</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      value={draft.inviteImageUrl ?? ""}
+                      onChange={(e) =>
+                        setDraft({ ...draft, inviteImageUrl: e.target.value })
+                      }
+                      placeholder="https://…"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={uploadingImage}
+                      onClick={() => {
+                        const input = document.createElement("input");
+                        input.type = "file";
+                        input.accept = "image/*";
+                        input.onchange = async () => {
+                          const file = input.files?.[0];
+                          if (!file) return;
+                          setUploadingImage(true);
+                          try {
+                            const url = await uploadNewsletterImage(file);
+                            setDraft((d) => ({ ...d, inviteImageUrl: url }));
+                          } catch (err: any) {
+                            toast({
+                              title: "Couldn't upload the image",
+                              description: err?.response?.data?.message,
+                              variant: "destructive",
+                            });
+                          } finally {
+                            setUploadingImage(false);
+                          }
+                        };
+                        input.click();
+                      }}
+                    >
+                      {uploadingImage ? "Uploading…" : "Upload"}
+                    </Button>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
           <DialogFooter>
@@ -859,6 +982,20 @@ export default function Events() {
                     <Ban className="h-3.5 w-3.5 mr-1" /> Cancel event
                   </Button>
                 )}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setInvitePreviewOpen(true)}
+                >
+                  <Eye className="h-3.5 w-3.5 mr-1" /> Preview invitation
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setFooterOpen(true)}
+                >
+                  <Share2 className="h-3.5 w-3.5 mr-1" /> Email footer
+                </Button>
                 <Button
                   size="sm"
                   variant="outline"
@@ -1092,6 +1229,56 @@ export default function Events() {
         onOpenChange={setCancelOpen}
       />
 
+      {/* ── Invitation email preview — the real email, sample guest ── */}
+      <Dialog open={invitePreviewOpen} onOpenChange={setInvitePreviewOpen}>
+        <DialogContent className="max-w-3xl max-h-[92vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Invitation email</DialogTitle>
+            <DialogDescription>
+              Exactly what invitees receive, shown for a sample guest. Nothing
+              is sent.
+              {invitePreview?.subject && (
+                <>
+                  {" "}
+                  Subject: <b>{invitePreview.subject}</b>
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 min-h-0 rounded-md border bg-muted/30">
+            {loadingInvitePreview || !invitePreview ? (
+              <p className="p-6 text-sm text-muted-foreground">Loading…</p>
+            ) : (
+              <iframe
+                title="Invitation email preview"
+                srcDoc={invitePreview.html}
+                sandbox=""
+                className="h-[65vh] w-full rounded-md bg-white"
+              />
+            )}
+          </div>
+          <DialogFooter className="sm:justify-between">
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setInvitePreviewOpen(false);
+                setFooterOpen(true);
+              }}
+            >
+              <Share2 className="h-4 w-4 mr-2" /> Edit social links
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => setInvitePreviewOpen(false)}
+            >
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <EmailFooterDialog open={footerOpen} onOpenChange={setFooterOpen} />
+
       {/* ── Invite people dialog — audience depends on the event's mode ── */}
       <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
         <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
@@ -1125,6 +1312,7 @@ export default function Events() {
                 )}
                 {filteredContacts.map((c) => {
                   const already = alreadyInvitedKeys.has(`Contact:${c._id}`);
+                  const unsubscribed = unsubEmails.has(c.email.toLowerCase());
                   return (
                     <label
                       key={c._id}
@@ -1148,6 +1336,12 @@ export default function Events() {
                         <div className="text-xs text-muted-foreground truncate">
                           {c.organisation} · {c.email}
                         </div>
+                        {unsubscribed && (
+                          <div className="text-xs text-warning">
+                            Unsubscribed from your emails — can be added to the
+                            guest list but won't be emailed the invitation.
+                          </div>
+                        )}
                       </div>
                     </label>
                   );
