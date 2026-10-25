@@ -62,6 +62,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { EventOpenLink } from "@/components/crm/EventOpenLink";
+import { ObjectListEditor } from "@/components/crm/NewsletterTemplateForm";
 import {
   EmailFooterDialog,
   UNSUBSCRIBED_QUERY_KEY,
@@ -124,6 +125,15 @@ const AUDIENCE_LABEL: Record<EventAudienceType, string> = {
 // reason to send a meaningless "" either way.
 const cleanPayload = (d: EventPayload): EventPayload => ({
   ...d,
+  // The agenda is saved as rows; the server derives the plain-text
+  // copy itself, so the old free-text field is never sent.
+  agenda: undefined,
+  agendaItems: (d.agendaItems ?? [])
+    .map((r) => ({
+      time: (r.time ?? "").trim(),
+      label: (r.label ?? "").trim(),
+    }))
+    .filter((r) => r.label),
   registrationDeadline: d.registrationDeadline || undefined,
 });
 
@@ -164,6 +174,7 @@ const emptyDraft = (): EventPayload => ({
   capacity: 0,
   host: "",
   agenda: "",
+  agendaItems: [],
   inviteMessage: "",
   inviteImageUrl: "",
   inviteCtaLabel: "",
@@ -185,6 +196,10 @@ const toDraft = (e: CrmEvent): EventPayload => ({
   capacity: e.capacity,
   host: e.host,
   agenda: e.agenda,
+  agendaItems: (e.agendaItems ?? []).map((r) => ({
+    time: r.time ?? "",
+    label: r.label,
+  })),
   inviteMessage: e.inviteMessage ?? "",
   inviteImageUrl: e.inviteImageUrl ?? "",
   inviteCtaLabel: e.inviteCtaLabel ?? "",
@@ -804,17 +819,22 @@ export default function Events() {
             </div>
             <div className="space-y-1.5 sm:col-span-2">
               <Label>Agenda</Label>
-              <Textarea
-                rows={3}
-                value={draft.agenda}
-                onChange={(e) => setDraft({ ...draft, agenda: e.target.value })}
-                placeholder={
-                  "09:00 Welcome and registration\n09:30 Opening keynote"
+              <ObjectListEditor
+                values={(draft.agendaItems ?? []) as Record<string, string>[]}
+                fields={[
+                  { key: "time", label: "Time" },
+                  { key: "label", label: "Item", wide: true },
+                ]}
+                onChange={(next) =>
+                  setDraft({
+                    ...draft,
+                    agendaItems: next as { time: string; label: string }[],
+                  })
                 }
               />
               <p className="text-xs text-muted-foreground">
-                One item per line — a leading time becomes the agenda row in the
-                invitation email.
+                Each row shows as a time and an item in the invitation email, on
+                the registration page and in the portal pop-up.
               </p>
             </div>
 
@@ -1051,14 +1071,23 @@ export default function Events() {
                       {selected.description}
                     </p>
                   )}
-                  {selected.agenda && (
+                  {(selected.agendaItems ?? []).length > 0 && (
                     <div className="rounded-md border bg-muted/40 p-3">
                       <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">
                         Agenda
                       </p>
-                      <p className="text-sm whitespace-pre-line">
-                        {selected.agenda}
-                      </p>
+                      <ul className="divide-y">
+                        {(selected.agendaItems ?? []).map((r, i) => (
+                          <li key={i} className="flex gap-4 py-1.5 text-sm">
+                            {r.time && (
+                              <span className="w-14 shrink-0 font-semibold text-primary">
+                                {r.time}
+                              </span>
+                            )}
+                            <span>{r.label}</span>
+                          </li>
+                        ))}
+                      </ul>
                     </div>
                   )}
                   <div className="grid grid-cols-2 gap-3 text-sm">

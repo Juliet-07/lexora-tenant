@@ -178,12 +178,27 @@ export default function EventRegisterPage({
                 {view.description}
               </p>
             )}
-            {view.agenda && (
+            {(view.agendaItems?.length || view.agenda) && (
               <div className="rounded-md border bg-muted/40 p-3">
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">
                   Agenda
                 </p>
-                <p className="text-sm whitespace-pre-line">{view.agenda}</p>
+                {view.agendaItems?.length ? (
+                  <ul className="divide-y">
+                    {view.agendaItems.map((r, i) => (
+                      <li key={i} className="flex gap-4 py-1.5 text-sm">
+                        {r.time && (
+                          <span className="w-14 shrink-0 font-semibold text-primary">
+                            {r.time}
+                          </span>
+                        )}
+                        <span>{r.label}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-sm whitespace-pre-line">{view.agenda}</p>
+                )}
               </div>
             )}
             {view.virtual && view.meetingLink && done && (

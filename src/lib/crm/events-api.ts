@@ -37,6 +37,13 @@ export type EventInviteStatus =
   | "Acknowledged"
   | "Declined";
 
+// One row of an event's agenda — the same Time + Item pair the
+// newsletter template uses.
+export type EventAgendaItem = {
+  time: string;
+  label: string;
+};
+
 export interface EventInvite {
   id: string;
   audienceType: EventAudienceType;
@@ -176,6 +183,7 @@ export interface CrmEvent {
   capacity: number;
   host: string;
   agenda: string;
+  agendaItems?: EventAgendaItem[];
   // Invitation email extras (the rest of the email is built from the event).
   inviteMessage?: string;
   inviteImageUrl?: string;
@@ -209,6 +217,7 @@ export interface EventPayload {
   capacity?: number;
   host?: string;
   agenda?: string;
+  agendaItems?: EventAgendaItem[];
   inviteMessage?: string;
   inviteImageUrl?: string;
   inviteCtaLabel?: string;
@@ -318,6 +327,7 @@ export interface PublicEventView {
   virtual: boolean;
   meetingLink: string;
   agenda: string;
+  agendaItems?: EventAgendaItem[];
   host: string;
   capacity: number;
   registrationDeadline: string | null;
@@ -400,7 +410,12 @@ export interface MyPortalEvent {
   meetingLink: string;
   host: string;
   agenda: string;
+  agendaItems?: EventAgendaItem[];
+  timezone?: string;
+  inviteMessage?: string;
+  inviteImageUrl?: string;
   myStatus: EventInviteStatus | null;
+  myRespondedAt?: string | null;
 }
 
 export const fetchMyEvents = async (): Promise<MyPortalEvent[]> => {

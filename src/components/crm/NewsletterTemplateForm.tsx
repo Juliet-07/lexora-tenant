@@ -157,7 +157,7 @@ function StringListEditor({
   );
 }
 
-function ObjectListEditor({
+export function ObjectListEditor({
   values,
   fields,
   onChange,
