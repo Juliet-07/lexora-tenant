@@ -627,7 +627,7 @@ export type AlertCategory =
   | "Legal"
   | "Financial"
   | "Compliance"
-  | "Government"
+  | "Operations"
   | "System"
   | "Industry"
   | "Health & Safety"
@@ -639,7 +639,7 @@ export const ALERT_CATEGORIES: AlertCategory[] = [
   "Legal",
   "Financial",
   "Compliance",
-  "Government",
+  "Operations",
   "System",
   "Industry",
   "Health & Safety",
@@ -654,7 +654,7 @@ export const ALERT_CATEGORY_ICON: Record<AlertCategory, string> = {
   Legal: "⚖",
   Financial: "💰",
   Compliance: "📋",
-  Government: "🏗",
+  Operations: "🏗",
   System: "⚙",
   Industry: "📢",
   "Health & Safety": "🦺",

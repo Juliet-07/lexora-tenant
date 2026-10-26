@@ -201,6 +201,33 @@ export default function EventRegisterPage({
                 )}
               </div>
             )}
+            {(view.documents?.length ?? 0) > 0 && (
+              <div className="rounded-md border bg-muted/40 p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">
+                  Documents from the event
+                </p>
+                <ul className="space-y-1">
+                  {view.documents!.map((d) => (
+                    <li key={d.id}>
+                      <a
+                        href={d.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-sm underline break-all"
+                      >
+                        {d.name}
+                      </a>
+                      {d.description && (
+                        <span className="text-xs text-muted-foreground">
+                          {" "}
+                          — {d.description}
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             {view.virtual && view.meetingLink && done && (
               <p className="text-sm break-all">
                 <span className="text-muted-foreground">Meeting link: </span>

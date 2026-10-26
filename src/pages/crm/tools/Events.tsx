@@ -62,6 +62,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { EventOpenLink } from "@/components/crm/EventOpenLink";
+import { EventDocumentsPanel } from "@/components/crm/EventDocuments";
 import { ObjectListEditor } from "@/components/crm/NewsletterTemplateForm";
 import {
   EmailFooterDialog,
@@ -89,6 +90,9 @@ import {
   completeEvent,
   previewEventInvitation,
   EVENT_TYPES,
+  EVENT_MODE_LABEL,
+  hasExternalGuests,
+  hasInternalGuests,
   type CrmEvent,
   type EventType,
   type EventMode,
@@ -273,6 +277,9 @@ export default function Events() {
   const [peopleSearch, setPeopleSearch] = useState("");
   // Invitation email: preview, footer settings, hero-image upload.
   const [invitePreviewOpen, setInvitePreviewOpen] = useState(false);
+  const [previewAudience, setPreviewAudience] = useState<
+    "external" | "internal" | ""
+  >("");
   const [footerOpen, setFooterOpen] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const { data: unsubscribedPeople = [] } = useQuery({
@@ -283,8 +290,19 @@ export default function Events() {
     unsubscribedPeople.map((u) => u.email.toLowerCase()),
   );
   const { data: invitePreview, isFetching: loadingInvitePreview } = useQuery({
-    queryKey: ["event-invite-preview", selectedId, invitePreviewOpen],
-    queryFn: () => previewEventInvitation(selectedId as string),
+    queryKey: [
+      "event-invite-preview",
+      selectedId,
+      invitePreviewOpen,
+      previewAudience,
+    ],
+    queryFn: () =>
+      previewEventInvitation(
+        selectedId as string,
+        previewAudience === "external" || previewAudience === "internal"
+          ? previewAudience
+          : undefined,
+      ),
     enabled: invitePreviewOpen && !!selectedId,
     staleTime: 0,
     gcTime: 0,
@@ -576,7 +594,7 @@ export default function Events() {
                     </TableCell>
                     <TableCell>
                       <Badge variant="outline">
-                        {e.mode === "InHouse" ? "In-house" : "External"}
+                        {EVENT_MODE_LABEL[e.mode]}
                       </Badge>
                     </TableCell>
                     <TableCell className="whitespace-nowrap">
@@ -662,35 +680,46 @@ export default function Events() {
             </div>
             <div className="space-y-1.5">
               <Label>Audience</Label>
-              {editingId ? (
+              {editingId && draft.mode === "Both" ? (
                 <div className="flex h-10 items-center">
-                  <Badge variant="outline">
-                    {draft.mode === "InHouse" ? "In-house" : "External"}
-                  </Badge>
-                  <span className="ml-2 text-xs text-muted-foreground">
-                    Fixed once created
-                  </span>
+                  <Badge variant="outline">{EVENT_MODE_LABEL.Both}</Badge>
                 </div>
               ) : (
-                <Select
-                  value={draft.mode}
-                  onValueChange={(v) =>
-                    setDraft({ ...draft, mode: v as EventMode })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="External">
-                      External — invite CRM contacts, who register
-                    </SelectItem>
-                    <SelectItem value="InHouse">
-                      In-house — invite clients / board members / employees, who
-                      acknowledge on their portal
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
+                <>
+                  <Select
+                    value={draft.mode}
+                    onValueChange={(v) =>
+                      setDraft({ ...draft, mode: v as EventMode })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(!editingId || draft.mode === "External") && (
+                        <SelectItem value="External">
+                          External — invite CRM contacts, who register
+                        </SelectItem>
+                      )}
+                      {(!editingId || draft.mode === "InHouse") && (
+                        <SelectItem value="InHouse">
+                          In-house — invite clients / board members / employees,
+                          who acknowledge on their portal
+                        </SelectItem>
+                      )}
+                      <SelectItem value="Both">
+                        Internal &amp; external — invite contacts as well as
+                        clients, board members and employees
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {editingId && (
+                    <p className="text-xs text-muted-foreground">
+                      You can widen this event to internal &amp; external, but
+                      not narrow it again.
+                    </p>
+                  )}
+                </>
               )}
             </div>
             <div className="space-y-1.5">
@@ -701,7 +730,7 @@ export default function Events() {
                 onChange={(e) => setDraft({ ...draft, date: e.target.value })}
               />
             </div>
-            {draft.mode === "External" && (
+            {hasExternalGuests(draft.mode) && (
               <div className="space-y-1.5">
                 <Label>Registration deadline</Label>
                 <Input
@@ -784,7 +813,7 @@ export default function Events() {
                 />
               </div>
             )}
-            {draft.mode === "External" && (
+            {hasExternalGuests(draft.mode) && (
               <div className="space-y-1.5">
                 <Label>Capacity (0 = unlimited)</Label>
                 <Input
@@ -844,8 +873,12 @@ export default function Events() {
                 <p className="text-xs text-muted-foreground">
                   The email is built from this event — date badge, venue,
                   agenda, your{" "}
-                  {draft.mode === "External" ? "registration" : "portal"} link
-                  and an add-to-calendar link — in the Event invite design,
+                  {draft.mode === "External"
+                    ? "registration"
+                    : draft.mode === "Both"
+                      ? "registration / portal"
+                      : "portal"}{" "}
+                  link and an add-to-calendar link — in the Event invite design,
                   followed by your social links. These three extras are
                   optional. Open the event after saving to preview it.
                 </p>
@@ -872,7 +905,7 @@ export default function Events() {
                       setDraft({ ...draft, inviteCtaLabel: e.target.value })
                     }
                     placeholder={
-                      draft.mode === "External"
+                      draft.mode !== "InHouse"
                         ? "Register now"
                         : "View in your portal"
                     }
@@ -952,7 +985,7 @@ export default function Events() {
                     {selected.status}
                   </Badge>
                   <Badge variant="outline">
-                    {selected.mode === "InHouse" ? "In-house" : "External"}
+                    {EVENT_MODE_LABEL[selected.mode]}
                   </Badge>
                 </SheetTitle>
                 <SheetDescription>
@@ -1049,6 +1082,12 @@ export default function Events() {
                   <TabsTrigger value="automation">Automation</TabsTrigger>
                   <TabsTrigger value="attendees">Attendees</TabsTrigger>
                   <TabsTrigger value="results">Post-event stats</TabsTrigger>
+                  <TabsTrigger value="documents">
+                    Documents
+                    {(selected.documents ?? []).length > 0
+                      ? ` (${(selected.documents ?? []).length})`
+                      : ""}
+                  </TabsTrigger>
                   <TabsTrigger value="activity">Activity</TabsTrigger>
                 </TabsList>
 
@@ -1060,6 +1099,9 @@ export default function Events() {
                 </TabsContent>
                 <TabsContent value="results">
                   <ResultsPanel event={selected} />
+                </TabsContent>
+                <TabsContent value="documents">
+                  <EventDocumentsPanel event={selected} />
                 </TabsContent>
                 <TabsContent value="activity">
                   <ActivityPanel event={selected} />
@@ -1103,7 +1145,7 @@ export default function Events() {
                       <span className="text-muted-foreground">Time zone:</span>{" "}
                       {selected.timezone || "Africa/Kigali"}
                     </div>
-                    {selected.mode === "External" && (
+                    {hasExternalGuests(selected.mode) && (
                       <>
                         <div>
                           <span className="text-muted-foreground">
@@ -1139,7 +1181,9 @@ export default function Events() {
                     <p className="text-xs text-muted-foreground">
                       {selected.mode === "External"
                         ? "Each invited contact gets their own personal registration link — submitting it is their attendance record. For people who aren't contacts yet, share the public link below."
-                        : "Each invitee acknowledges attendance from their own portal — that's their attendance record."}
+                        : selected.mode === "Both"
+                          ? "Contacts get their own personal registration link (or use the public link below); clients, board members and employees acknowledge from their own portal. Either way, that's their attendance record."
+                          : "Each invitee acknowledges attendance from their own portal — that's their attendance record."}
                     </p>
                     <Button size="sm" onClick={openInvites}>
                       <Send className="h-3.5 w-3.5 mr-1" /> Invite{" "}
@@ -1274,6 +1318,29 @@ export default function Events() {
               )}
             </DialogDescription>
           </DialogHeader>
+          {selected?.mode === "Both" && (
+            <div className="flex gap-1 rounded-md bg-muted p-1 text-sm">
+              {(
+                [
+                  ["external", "As an external guest"],
+                  ["internal", "As an internal guest"],
+                ] as const
+              ).map(([k, label]) => (
+                <button
+                  key={k}
+                  type="button"
+                  onClick={() => setPreviewAudience(k)}
+                  className={`flex-1 rounded px-3 py-1.5 font-medium ${
+                    (previewAudience || "external") === k
+                      ? "bg-background shadow-sm"
+                      : "text-muted-foreground"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
           <div className="flex-1 min-h-0 rounded-md border bg-muted/30">
             {loadingInvitePreview || !invitePreview ? (
               <p className="p-6 text-sm text-muted-foreground">Loading…</p>
@@ -1318,7 +1385,9 @@ export default function Events() {
             <DialogDescription>
               {selected?.mode === "External"
                 ? "Select CRM contacts — each gets their own personal registration link by email."
-                : "Select clients, board members and/or employees — each is notified to acknowledge attendance on their own portal."}
+                : selected?.mode === "Both"
+                  ? "Pick from every audience — contacts get a registration link; clients, board members and employees acknowledge on their own portal."
+                  : "Select clients, board members and/or employees — each is notified to acknowledge attendance on their own portal."}
             </DialogDescription>
           </DialogHeader>
           <div className="relative">
@@ -1331,59 +1400,81 @@ export default function Events() {
             />
           </div>
 
-          {selected?.mode === "External" ? (
-            <ScrollArea className="h-72">
-              <div className="space-y-1">
-                {filteredContacts.length === 0 && (
-                  <p className="text-sm text-muted-foreground py-6 text-center">
-                    No contacts with an email address found.
-                  </p>
-                )}
-                {filteredContacts.map((c) => {
-                  const already = alreadyInvitedKeys.has(`Contact:${c._id}`);
-                  const unsubscribed = unsubEmails.has(c.email.toLowerCase());
-                  return (
-                    <label
-                      key={c._id}
-                      className="flex items-center gap-3 rounded-md border p-2.5 cursor-pointer hover:bg-muted/50"
-                    >
-                      <Checkbox
-                        disabled={already}
-                        checked={already || isChecked("Contact", c._id)}
-                        onCheckedChange={() => toggleInvitee("Contact", c._id)}
-                      />
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium truncate">
-                          {c.name}
-                          {already && (
-                            <span className="text-xs text-muted-foreground">
-                              {" "}
-                              (already invited)
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-xs text-muted-foreground truncate">
-                          {c.organisation} · {c.email}
-                        </div>
-                        {unsubscribed && (
-                          <div className="text-xs text-warning">
-                            Unsubscribed from your emails — can be added to the
-                            guest list but won't be emailed the invitation.
-                          </div>
-                        )}
-                      </div>
-                    </label>
-                  );
-                })}
-              </div>
-            </ScrollArea>
-          ) : (
-            <Tabs defaultValue="clients">
+          {selected && (
+            <Tabs
+              defaultValue={
+                hasExternalGuests(selected.mode) ? "contacts" : "clients"
+              }
+              key={selected._id}
+            >
               <TabsList className="flex-wrap">
-                <TabsTrigger value="clients">Clients</TabsTrigger>
-                <TabsTrigger value="board">Board members</TabsTrigger>
-                <TabsTrigger value="employees">Employees</TabsTrigger>
+                {hasExternalGuests(selected.mode) && (
+                  <TabsTrigger value="contacts">Contacts</TabsTrigger>
+                )}
+                {hasInternalGuests(selected.mode) && (
+                  <>
+                    <TabsTrigger value="clients">Clients</TabsTrigger>
+                    <TabsTrigger value="board">Board members</TabsTrigger>
+                    <TabsTrigger value="employees">Employees</TabsTrigger>
+                  </>
+                )}
               </TabsList>
+              {hasExternalGuests(selected.mode) && (
+                <TabsContent value="contacts">
+                  <ScrollArea className="h-64">
+                    <div className="space-y-1">
+                      {filteredContacts.length === 0 && (
+                        <p className="text-sm text-muted-foreground py-6 text-center">
+                          No contacts with an email address found.
+                        </p>
+                      )}
+                      {filteredContacts.map((c) => {
+                        const already = alreadyInvitedKeys.has(
+                          `Contact:${c._id}`,
+                        );
+                        const unsubscribed = unsubEmails.has(
+                          c.email.toLowerCase(),
+                        );
+                        return (
+                          <label
+                            key={c._id}
+                            className="flex items-center gap-3 rounded-md border p-2.5 cursor-pointer hover:bg-muted/50"
+                          >
+                            <Checkbox
+                              disabled={already}
+                              checked={already || isChecked("Contact", c._id)}
+                              onCheckedChange={() =>
+                                toggleInvitee("Contact", c._id)
+                              }
+                            />
+                            <div className="flex-1 min-w-0">
+                              <div className="text-sm font-medium truncate">
+                                {c.name}
+                                {already && (
+                                  <span className="text-xs text-muted-foreground">
+                                    {" "}
+                                    (already invited)
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-xs text-muted-foreground truncate">
+                                {c.organisation} · {c.email}
+                              </div>
+                              {unsubscribed && (
+                                <div className="text-xs text-warning">
+                                  Unsubscribed from your emails — can be added
+                                  to the guest list but won't be emailed the
+                                  invitation.
+                                </div>
+                              )}
+                            </div>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </ScrollArea>
+                </TabsContent>
+              )}
               <TabsContent value="clients">
                 <ScrollArea className="h-64">
                   <div className="space-y-1">

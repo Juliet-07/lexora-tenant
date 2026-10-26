@@ -134,10 +134,11 @@ const PIPE_STYLE: Record<PipelineState, string> = {
 export function EventKpis({ event }: { event: CrmEvent }) {
   const s = event.lifecycle?.stats;
   if (!s) return null;
-  const external = event.mode === "External";
+  const external = event.mode !== "InHouse";
+  const mixed = event.mode === "Both";
   const items = [
     {
-      label: external ? "Registered" : "Acknowledged",
+      label: mixed ? "Responded" : external ? "Registered" : "Acknowledged",
       value: s.responded,
       sub: event.capacity > 0 && external ? `of ${event.capacity}` : undefined,
     },
@@ -256,7 +257,8 @@ export function AutomationPanel({ event }: { event: CrmEvent }) {
   if (!a || !lc) return null;
   const cancelled = event.status === "Cancelled";
   const editable = !cancelled;
-  const external = event.mode === "External";
+  const external = event.mode !== "InHouse";
+  const mixed = event.mode === "Both";
 
   const toggle = (
     label: string,
@@ -560,7 +562,8 @@ export function AttendeesPanel({ event }: { event: CrmEvent }) {
     event.status === "Completed" ||
     (event.status === "Published" &&
       (lc?.phase === "During" || lc?.phase === "Post-event"));
-  const external = event.mode === "External";
+  const external = event.mode !== "InHouse";
+  const mixed = event.mode === "Both";
   const rows: EventInvite[] = event.invites;
 
   const effective = (i: EventInvite) =>
@@ -575,7 +578,7 @@ export function AttendeesPanel({ event }: { event: CrmEvent }) {
           "Email",
           "Audience",
           "Organisation",
-          external ? "Registered" : "Acknowledged",
+          mixed ? "Responded" : external ? "Registered" : "Acknowledged",
           "Attended",
           "Feedback rating",
           "Feedback comment",
@@ -626,7 +629,8 @@ export function AttendeesPanel({ event }: { event: CrmEvent }) {
             onClick={() => markMut.mutate({ markAllRespondedAttended: true })}
           >
             <UserCheck className="mr-1 h-3.5 w-3.5" /> Mark all{" "}
-            {external ? "registered" : "acknowledged"} as attended
+            {mixed ? "responded" : external ? "registered" : "acknowledged"} as
+            attended
           </Button>
         </div>
       )}
@@ -681,7 +685,11 @@ export function AttendeesPanel({ event }: { event: CrmEvent }) {
               <TableRow>
                 <TableHead>Name</TableHead>
                 <TableHead>
-                  {external ? "Registered" : "Acknowledged"}
+                  {mixed
+                    ? "Responded"
+                    : external
+                      ? "Registered"
+                      : "Acknowledged"}
                 </TableHead>
                 <TableHead>Attended</TableHead>
                 <TableHead>Feedback</TableHead>
@@ -771,7 +779,11 @@ export function AttendeesPanel({ event }: { event: CrmEvent }) {
                           {!explicit && present && (
                             <span className="text-[10px] text-muted-foreground">
                               from{" "}
-                              {external ? "registration" : "acknowledgement"}
+                              {mixed
+                                ? "response"
+                                : external
+                                  ? "registration"
+                                  : "acknowledgement"}
                             </span>
                           )}
                         </div>

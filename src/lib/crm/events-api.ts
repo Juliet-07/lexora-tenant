@@ -24,7 +24,30 @@ export const EVENT_TYPES: EventType[] = [
   "Client briefing",
 ];
 
-export type EventMode = "InHouse" | "External";
+export type EventMode = "InHouse" | "External" | "Both";
+
+// Does the event have guests who register through a link / people who
+// confirm from their portal?
+export const hasExternalGuests = (m: EventMode) =>
+  m === "External" || m === "Both";
+export const hasInternalGuests = (m: EventMode) =>
+  m === "InHouse" || m === "Both";
+export const EVENT_MODE_LABEL: Record<EventMode, string> = {
+  InHouse: "In-house",
+  External: "External",
+  Both: "Internal & external",
+};
+
+// A file attached to an event (slides, PDF, …).
+export interface EventFile {
+  id: string;
+  name: string;
+  description?: string;
+  url: string;
+  mimeType?: string;
+  size: number;
+  uploadedAt: string;
+}
 export type EventStatus = "Draft" | "Published" | "Completed" | "Cancelled";
 export type EventAudienceType =
   | "Client"
@@ -184,6 +207,7 @@ export interface CrmEvent {
   host: string;
   agenda: string;
   agendaItems?: EventAgendaItem[];
+  documents?: EventFile[];
   // Invitation email extras (the rest of the email is built from the event).
   inviteMessage?: string;
   inviteImageUrl?: string;
@@ -328,6 +352,7 @@ export interface PublicEventView {
   meetingLink: string;
   agenda: string;
   agendaItems?: EventAgendaItem[];
+  documents?: EventFile[];
   host: string;
   capacity: number;
   registrationDeadline: string | null;
@@ -414,6 +439,7 @@ export interface MyPortalEvent {
   timezone?: string;
   inviteMessage?: string;
   inviteImageUrl?: string;
+  documents?: EventFile[];
   myStatus: EventInviteStatus | null;
   myRespondedAt?: string | null;
 }
@@ -458,5 +484,31 @@ export const submitEventFeedback = async (
 // nothing is sent).
 export const previewEventInvitation = async (
   id: string,
+  audience?: "internal" | "external",
 ): Promise<{ subject: string; html: string }> =>
-  unwrap(await api.get(`/tools/events/${id}/invitation-preview`));
+  unwrap(
+    await api.get(`/tools/events/${id}/invitation-preview`, {
+      params: audience ? { audience } : undefined,
+    }),
+  );
+
+// Slides / PDFs shared after the event.
+export const uploadEventDocument = async (
+  id: string,
+  file: File,
+  description?: string,
+): Promise<CrmEvent> => {
+  const form = new FormData();
+  form.append("file", file);
+  if (description) form.append("description", description);
+  return unwrap(
+    await api.post(`/tools/events/${id}/documents`, form, {
+      headers: { "Content-Type": "multipart/form-data" },
+    }),
+  );
+};
+export const deleteEventDocument = async (
+  id: string,
+  docId: string,
+): Promise<CrmEvent> =>
+  unwrap(await api.delete(`/tools/events/${id}/documents/${docId}`));

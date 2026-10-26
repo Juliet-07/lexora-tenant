@@ -12,6 +12,8 @@ import {
   CheckCircle2,
   ChevronRight,
   Clock,
+  Download,
+  FileText,
   MapPin,
   Video,
 } from "lucide-react";
@@ -47,6 +49,13 @@ export interface PortalEventView {
   timezone?: string;
   inviteMessage?: string;
   inviteImageUrl?: string;
+  documents?: {
+    id: string;
+    name: string;
+    description?: string;
+    url: string;
+    size?: number;
+  }[];
   myStatus: string | null;
   myRespondedAt?: string | null;
 }
@@ -172,6 +181,13 @@ export function calendarLink(e: PortalEventView, includeMeetingLink: boolean) {
   return `https://calendar.google.com/calendar/render?${q.toString()}`;
 }
 
+const fmtSize = (n?: number) =>
+  !n
+    ? ""
+    : n >= 1024 * 1024
+      ? `${(n / 1024 / 1024).toFixed(1)} MB`
+      : `${Math.max(1, Math.round(n / 1024))} KB`;
+
 function DateBadge({ date }: { date: string }) {
   const b = badgeOf(date);
   return (
@@ -263,6 +279,12 @@ export function PortalEventCard({
             <Badge variant="outline">{e.status}</Badge>
           )}
           <span className="inline-flex items-center text-xs font-medium text-primary">
+            {(e.documents ?? []).length > 0 && (
+              <span className="mr-2 inline-flex items-center gap-1 text-muted-foreground">
+                <FileText className="h-3.5 w-3.5" />
+                {(e.documents ?? []).length}
+              </span>
+            )}
             View details
             <ChevronRight className="ml-0.5 h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
           </span>
@@ -372,6 +394,41 @@ export function PortalEventDialog({
                           </span>
                         )}
                         <span className="text-foreground/80">{r.label}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {(ev.documents ?? []).length > 0 && (
+                <div>
+                  <p className="mb-1.5 text-[10.5px] uppercase tracking-wider text-muted-foreground">
+                    Documents
+                  </p>
+                  <ul className="divide-y rounded-lg border">
+                    {(ev.documents ?? []).map((d) => (
+                      <li key={d.id}>
+                        <a
+                          href={d.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex items-center gap-3 px-4 py-3 text-sm hover:bg-muted/40"
+                        >
+                          <FileText className="h-5 w-5 shrink-0 text-primary" />
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate font-medium">
+                              {d.name}
+                            </span>
+                            {(d.description || d.size) && (
+                              <span className="block truncate text-xs text-muted-foreground">
+                                {[d.description, fmtSize(d.size)]
+                                  .filter(Boolean)
+                                  .join(" · ")}
+                              </span>
+                            )}
+                          </span>
+                          <Download className="h-4 w-4 shrink-0 text-muted-foreground" />
+                        </a>
                       </li>
                     ))}
                   </ul>

@@ -64,7 +64,7 @@ export function EventOpenLink({ event }: { event: CrmEvent }) {
     onError: onErr("Couldn't replace the link"),
   });
 
-  if (event.mode !== "External") return null;
+  if (event.mode === "InHouse") return null;
   if (event.status === "Completed" || event.status === "Cancelled") return null;
 
   const token = event.openRegistration?.token ?? null;

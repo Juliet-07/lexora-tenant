@@ -250,7 +250,7 @@ function InsightArticle({ slug }: { slug: string }) {
           />
         )}
         <div
-          className="prose prose-invert mt-10 max-w-none leading-7 text-intro-muted"
+          className="prose prose-invert mt-10 max-w-none leading-7 text-intro-muted prose-img:mx-auto prose-img:my-6 prose-img:w-full prose-img:rounded-lg prose-figure:my-8 prose-figcaption:mt-2 prose-figcaption:text-center prose-figcaption:text-sm prose-hr:my-10 prose-blockquote:border-l-4 prose-blockquote:pl-5 prose-blockquote:italic"
           // Rich-text content, authored exclusively by Super Admin.
           dangerouslySetInnerHTML={{ __html: article.content ?? "" }}
         />
