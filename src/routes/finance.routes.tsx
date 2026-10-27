@@ -1,4 +1,4 @@
-import { Route } from "react-router-dom";
+import { Navigate, Route } from "react-router-dom";
 import { layout, RouteContext } from "./_helpers";
 import { ModulePlaceholder } from "@/components/layout/ModulePlaceholder";
 import Invoicing from "@/pages/finance/Invoicing";
@@ -9,16 +9,15 @@ import Banking from "@/pages/finance/Banking";
 import TaxPage from "@/pages/finance/Tax";
 import Accounting from "@/pages/finance/Accounting";
 import AssetRegister from "@/pages/finance/AssetRegister";
-import Financials from "@/pages/finance/Financials";
+import Report from "@/pages/finance/Report";
 import FundAccounting from "@/pages/finance/FundAccounting";
-import ManagementReporting from "@/pages/finance/ManagementReporting";
 
 /**
  * Finance — Module 5.
  * Everything that used to live in the CRM "Finance" dropdown, now a
- * module in its own right, plus Management Reporting (dummy data —
- * no API yet). Pages are shared with the legacy /crm/* routes so
- * existing links keep working.
+ * module in its own right. Financials and Management Reporting are
+ * now a single "Report" page; the old URLs redirect to it so saved
+ * bookmarks keep working.
  */
 export const financeRoutes = ({ isAdmin, accessibleModules }: RouteContext) => {
   const canAccess =
@@ -30,14 +29,19 @@ export const financeRoutes = ({ isAdmin, accessibleModules }: RouteContext) => {
 
   return [
     <Route
+      key="fin-report"
+      path="/finance/report"
+      element={layout(<Report />)}
+    />,
+    <Route
       key="fin-financials"
       path="/finance/financials"
-      element={layout(<Financials />)}
+      element={<Navigate to="/finance/report" replace />}
     />,
     <Route
       key="fin-reporting"
       path="/finance/reporting"
-      element={layout(<ManagementReporting />)}
+      element={<Navigate to="/finance/report" replace />}
     />,
     <Route key="fin-sales" path="/finance/sales" element={layout(<Sales />)} />,
     <Route

@@ -108,8 +108,7 @@ const MODULE_VISUALS: Record<
     color: "from-amber-500 to-yellow-600",
     shortName: "Lexora Finance",
     name: "Lexora Finance",
-    scope:
-      "Sales, Purchases, Banking, Tax, Accounting, Funds and Management Reporting",
+    scope: "Sales, Purchases, Banking, Tax, Accounting, Funds and Reports",
   },
   // Legacy key variants
   "kyc/aml": {

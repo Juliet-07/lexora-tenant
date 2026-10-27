@@ -344,10 +344,6 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
       children: [
         { title: "Accounting", url: "/finance/accounting" },
         { title: "Asset Register", url: "/finance/assets" },
-        {
-          title: "Financials",
-          url: "/finance/financials",
-        },
       ],
     },
     {
@@ -360,8 +356,8 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
       ],
     },
     {
-      title: "Management Reporting",
-      url: "/finance/reporting",
+      title: "Report",
+      url: "/finance/report",
       icon: FileBarChart,
       adminOnly: true,
     },

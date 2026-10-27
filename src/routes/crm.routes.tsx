@@ -1,4 +1,4 @@
-import { Route } from "react-router-dom";
+import { Navigate, Route } from "react-router-dom";
 import { layout, RouteContext } from "./_helpers";
 import { ModulePlaceholder } from "@/components/layout/ModulePlaceholder";
 import CrmOverview from "@/pages/crm/Overview";
@@ -22,7 +22,6 @@ import Banking from "@/pages/finance/Banking";
 import TaxPage from "@/pages/finance/Tax";
 import Accounting from "@/pages/finance/Accounting";
 import AssetRegister from "@/pages/finance/AssetRegister";
-import Financials from "@/pages/finance/Financials";
 import FundAccounting from "@/pages/finance/FundAccounting";
 import Contracts from "@/pages/crm/tools/Contracts";
 import ContractDetail from "@/pages/crm/tools/ContractDetail";
@@ -153,7 +152,7 @@ export const crmRoutes = ({ isAdmin, accessibleModules }: RouteContext) => {
       <Route
         key="crm-financials"
         path="/crm/financials"
-        element={layout(<Financials />)}
+        element={<Navigate to="/finance/report" replace />}
       />,
       <Route
         key="crm-funds"
