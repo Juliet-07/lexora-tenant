@@ -1041,7 +1041,13 @@ export const respondToContractComment = async (
 
 export const editContractBody = async (
   id: string,
-  dto: { renderedBody: string; changeNote?: string },
+  dto: {
+    renderedBody: string;
+    changeNote?: string;
+    // Values changed in the editor's Merge fields panel, keyed by field
+    // name — written back to the contract's saved details.
+    mergeFieldValues?: Record<string, string>;
+  },
 ): Promise<SignableContract> =>
   unwrap(await api.patch(`/tools/contracts/${id}/body`, dto));
 

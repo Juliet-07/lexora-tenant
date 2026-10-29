@@ -1,4 +1,6 @@
 import { useMemo, useState } from "react";
+import { MergeFieldsPanel } from "@/components/crm/MergeFieldsPanel";
+import { hasBareTokens } from "@/lib/crm/merge-fields";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -217,9 +219,20 @@ export default function ContractDetail() {
     onError: onErr("Could not send"),
   });
   const editBodyMut = useMutation({
-    mutationFn: (body: string) => editContractBody(id, { renderedBody: body }),
+    mutationFn: (vars: { body: string; values?: Record<string, string> }) => {
+      const changed = Object.keys(vars.values ?? {});
+      return editContractBody(id, {
+        renderedBody: vars.body,
+        mergeFieldValues: changed.length ? vars.values : undefined,
+        changeNote: changed.length
+          ? `Merge fields updated: ${changed.join(", ")}`
+          : undefined,
+      });
+    },
     onSuccess: () => {
       setEditing(false);
+      setPendingBody(null);
+      setFieldEdits({});
       ok("Draft saved")();
     },
     onError: onErr("Could not save draft"),
@@ -387,6 +400,12 @@ export default function ContractDetail() {
   // ── Local state ─────────────────────────────────────────
   const [editing, setEditing] = useState(false);
   const [bodyDraft, setBodyDraft] = useState("");
+  // Merge-field panel edits made while NOT in "Edit content" mode: the
+  // document shows them straight away, but they are only kept on "Save
+  // fields". fieldEdits remembers which fields were touched so the
+  // contract's saved details can be updated to match.
+  const [pendingBody, setPendingBody] = useState<string | null>(null);
+  const [fieldEdits, setFieldEdits] = useState<Record<string, string>>({});
   const [trackChanges, setTrackChanges] = useState(true);
   const [signerName, setSignerName] = useState("");
   const [countersignOpen, setCountersignOpen] = useState(false);
@@ -485,9 +504,14 @@ export default function ContractDetail() {
   // in the rendered body, which is exactly what renderContractBody
   // leaves behind on the backend for a field it doesn't have a value
   // for (see resyncContractMergeFields's doc comment).
-  const hasUnresolvedMergeFields = /\{\{\w+\}\}/.test(
-    contract.renderedBody ?? "",
-  );
+  // Only a bare {{token}} counts: a field the engine tagged but couldn't
+  // fill is handled by the Merge fields panel, not by a resync.
+  const hasUnresolvedMergeFields = hasBareTokens(contract.renderedBody ?? "");
+  // What the document shows right now: the draft while editing, otherwise
+  // the saved body with any unsaved Merge-fields-panel changes on top.
+  const liveBody = editing
+    ? bodyDraft
+    : (pendingBody ?? contract.renderedBody ?? "");
   // Real version history, derived from the template used at
   // generation and each real amendment since — no separate
   // versioning backend needed, this is just the amendment log read
@@ -920,31 +944,44 @@ export default function ContractDetail() {
               <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 pb-3">
                 <SectionTitle icon={FileText}>Document</SectionTitle>
                 <div className="flex items-center gap-2">
-                  {canEditBody && !editing && hasUnresolvedMergeFields && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={resyncMut.isPending}
-                      onClick={() => resyncMut.mutate()}
-                      title="This document still shows a raw {{field}} placeholder — fill it in from this contract's own saved details"
-                    >
-                      <RefreshCw className="mr-2 h-4 w-4" /> Resync merge fields
-                    </Button>
-                  )}
+                  {canEditBody &&
+                    !editing &&
+                    !pendingBody &&
+                    hasUnresolvedMergeFields && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={resyncMut.isPending}
+                        onClick={() => resyncMut.mutate()}
+                        title="This document still shows a raw {{field}} placeholder — fill it in from this contract's own saved details"
+                      >
+                        <RefreshCw className="mr-2 h-4 w-4" /> Resync merge
+                        fields
+                      </Button>
+                    )}
                   {canEditBody ? (
                     editing ? (
                       <>
                         <Button
                           size="sm"
                           disabled={editBodyMut.isPending}
-                          onClick={() => editBodyMut.mutate(bodyDraft)}
+                          onClick={() =>
+                            editBodyMut.mutate({
+                              body: bodyDraft,
+                              values: fieldEdits,
+                            })
+                          }
                         >
                           Save draft
                         </Button>
                         <Button
                           size="sm"
                           variant="ghost"
-                          onClick={() => setEditing(false)}
+                          onClick={() => {
+                            setEditing(false);
+                            setPendingBody(null);
+                            setFieldEdits({});
+                          }}
                         >
                           Cancel
                         </Button>
@@ -954,7 +991,8 @@ export default function ContractDetail() {
                         size="sm"
                         variant="outline"
                         onClick={() => {
-                          setBodyDraft(contract.renderedBody ?? "");
+                          setBodyDraft(liveBody);
+                          setPendingBody(null);
                           setEditing(true);
                         }}
                       >
@@ -973,15 +1011,17 @@ export default function ContractDetail() {
               </CardHeader>
               <CardContent>
                 {canEditBody && editing ? (
-                  <RichTextEditor
-                    value={bodyDraft}
-                    onChange={setBodyDraft}
-                    minHeight={420}
-                  />
-                ) : contract.renderedBody ? (
+                  <div className="contract-doc">
+                    <RichTextEditor
+                      value={bodyDraft}
+                      onChange={setBodyDraft}
+                      minHeight={420}
+                    />
+                  </div>
+                ) : liveBody ? (
                   <div
-                    className="prose prose-sm max-w-none rounded-md border bg-card p-6 text-sm leading-relaxed"
-                    dangerouslySetInnerHTML={{ __html: contract.renderedBody }}
+                    className="contract-doc prose prose-sm max-w-none rounded-md border bg-card p-6 text-sm leading-relaxed"
+                    dangerouslySetInnerHTML={{ __html: liveBody }}
                   />
                 ) : (
                   <p className="py-16 text-center text-sm text-muted-foreground">
@@ -994,6 +1034,26 @@ export default function ContractDetail() {
 
             {/* Side panel */}
             <div className="space-y-4">
+              <MergeFieldsPanel
+                body={liveBody}
+                locked={!canEditBody}
+                editing={editing}
+                dirty={pendingBody !== null}
+                saving={editBodyMut.isPending}
+                onChange={(next, key, value) => {
+                  setFieldEdits((e) => ({ ...e, [key]: value }));
+                  if (editing) setBodyDraft(next);
+                  else setPendingBody(next);
+                }}
+                onSave={() =>
+                  pendingBody !== null &&
+                  editBodyMut.mutate({ body: pendingBody, values: fieldEdits })
+                }
+                onDiscard={() => {
+                  setPendingBody(null);
+                  setFieldEdits({});
+                }}
+              />
               <Card>
                 <CardContent className="flex items-center justify-between gap-2 p-3">
                   <span className="text-sm font-medium">Track changes</span>
@@ -1036,8 +1096,8 @@ export default function ContractDetail() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-2 pt-0">
-                  {versions.map((v) => (
-                    <div key={v.label} className="text-xs">
+                  {versions.map((v, i) => (
+                    <div key={`${v.label}-${i}`} className="text-xs">
                       <p className="font-semibold">
                         {v.label} · {v.title}
                       </p>

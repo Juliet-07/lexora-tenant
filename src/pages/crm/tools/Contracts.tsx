@@ -46,6 +46,8 @@ import {
   X,
   Sparkles,
   Folder,
+  Search,
+  ArrowRight,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { CommentThread } from "@/components/crm/CommentThread";
@@ -79,6 +81,9 @@ import {
   type ObligationType,
   type AvailableTemplate,
 } from "@/lib/crm/tools-api";
+
+// Select value of the "More templates" row at the end of the template dropdown.
+const MORE_TEMPLATES = "__more_templates__";
 
 const money = (n: number, c = "USD") =>
   (n ?? 0).toLocaleString(undefined, {
@@ -116,6 +121,7 @@ export default function Contracts() {
     });
 
   const [stageFilter, setStageFilter] = useState("all");
+  const [tab, setTab] = useState("register");
 
   const { data: list = [] } = useQuery({
     queryKey: ["contracts"],
@@ -285,9 +291,36 @@ export default function Contracts() {
   };
   const [generateDraft, setGenerateDraft] = useState(emptyGenerateDraft);
 
-  const openGenerate = () => {
-    setGenerateDraft(emptyGenerateDraft);
+  // How many templates the dropdown lists before pointing the tenant to
+  // the Templates tab — a library can run to dozens of templates, far too
+  // many to scroll in a dropdown.
+  const TEMPLATE_DROPDOWN_LIMIT = 10;
+  // True while the tenant has left the form for the Templates tab to pick
+  // a template ("More…"): choosing one there returns to the form with
+  // everything they already typed still in place.
+  const [pickingTemplate, setPickingTemplate] = useState(false);
+  const [templateSearch, setTemplateSearch] = useState("");
+
+  const openGenerate = (template?: AvailableTemplate) => {
+    if (template) {
+      setGenerateDraft((d) => ({
+        ...(pickingTemplate ? d : emptyGenerateDraft),
+        templateId: template._id,
+        templateSource: template.source ?? "tenant",
+      }));
+    } else {
+      setGenerateDraft(emptyGenerateDraft);
+    }
+    setPickingTemplate(false);
     setOpenGenerateDialog(true);
+  };
+  const browseAllTemplates = () => {
+    setOpenGenerateDialog(false);
+    setPreviewTemplate(null);
+    setPickingTemplate(true);
+    setActiveFolder("all");
+    setTemplateSearch("");
+    setTab("templates");
   };
   const generateMut = useMutation({
     mutationFn: () =>
@@ -342,6 +375,17 @@ export default function Contracts() {
     onError: onErr("Failed to generate contract"),
   });
 
+  // The first few templates, plus whichever one is currently chosen even
+  // if it sits further down the library (picked on the Templates tab) so
+  // the dropdown can always display it.
+  const dropdownTemplates = (() => {
+    const first = availableTemplates.slice(0, TEMPLATE_DROPDOWN_LIMIT);
+    const chosen = availableTemplates.find(
+      (t) => t._id === generateDraft.templateId,
+    );
+    return chosen && !first.includes(chosen) ? [chosen, ...first] : first;
+  })();
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -353,7 +397,7 @@ export default function Contracts() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={openGenerate}>
+          <Button variant="outline" onClick={() => openGenerate()}>
             <Sparkles className="mr-2 h-4 w-4" /> Generate from template
           </Button>
           <Button onClick={() => setOpenNew(true)}>
@@ -381,7 +425,7 @@ export default function Contracts() {
         ))}
       </div>
 
-      <Tabs defaultValue="register">
+      <Tabs value={tab} onValueChange={setTab}>
         <TabsList className="flex-wrap">
           <TabsTrigger value="register">Register</TabsTrigger>
           <TabsTrigger value="lifecycle">Lifecycle board</TabsTrigger>
@@ -696,7 +740,7 @@ export default function Contracts() {
                   ]
                 : []),
             ];
-            const shown =
+            const inFolder =
               activeFolder === "all"
                 ? availableTemplates
                 : activeFolder === "uncategorized"
@@ -704,6 +748,15 @@ export default function Contracts() {
                   : availableTemplates.filter(
                       (t) => t.folderId === activeFolder,
                     );
+            const q = templateSearch.trim().toLowerCase();
+            const shown = q
+              ? inFolder.filter(
+                  (t) =>
+                    t.title.toLowerCase().includes(q) ||
+                    (t.description ?? "").toLowerCase().includes(q) ||
+                    (t.jurisdiction ?? "").toLowerCase().includes(q),
+                )
+              : inFolder;
             const activeName =
               activeFolder === "all"
                 ? "All templates — platform-published and my own"
@@ -711,101 +764,154 @@ export default function Contracts() {
                   "All templates";
 
             return (
-              <div className="grid gap-4 md:grid-cols-[260px_1fr]">
-                <Card className="h-fit">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="flex items-center gap-2 text-sm">
-                      <Folder className="h-4 w-4 fill-amber-400 text-amber-500" />
-                      Categories
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-1 p-2">
-                    <CategoryRow
-                      label="All templates"
-                      count={availableTemplates.length}
-                      active={activeFolder === "all"}
-                      onClick={() => setActiveFolder("all")}
-                    />
-                    {cats.map((c) => (
+              <div className="space-y-3">
+                {pickingTemplate && (
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-primary/30 bg-primary/5 px-4 py-3 text-sm">
+                    <span>
+                      <Sparkles className="mr-2 inline h-4 w-4 text-primary" />
+                      Choose a template for your new contract, then press{" "}
+                      <b>Generate contract</b>. What you've already filled in is
+                      kept.
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        setPickingTemplate(false);
+                        setOpenGenerateDialog(true);
+                      }}
+                    >
+                      Back to the form
+                    </Button>
+                  </div>
+                )}
+                <div className="grid gap-4 md:grid-cols-[260px_1fr]">
+                  <Card className="h-fit">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="flex items-center gap-2 text-sm">
+                        <Folder className="h-4 w-4 fill-amber-400 text-amber-500" />
+                        Categories
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-1 p-2">
                       <CategoryRow
-                        key={c.id}
-                        label={c.name}
-                        count={c.count}
-                        active={activeFolder === c.id}
-                        onClick={() => setActiveFolder(c.id)}
+                        label="All templates"
+                        count={availableTemplates.length}
+                        active={activeFolder === "all"}
+                        onClick={() => setActiveFolder("all")}
                       />
-                    ))}
-                  </CardContent>
-                </Card>
+                      {cats.map((c) => (
+                        <CategoryRow
+                          key={c.id}
+                          label={c.name}
+                          count={c.count}
+                          active={activeFolder === c.id}
+                          onClick={() => setActiveFolder(c.id)}
+                        />
+                      ))}
+                    </CardContent>
+                  </Card>
 
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm">{activeName}</CardTitle>
-                  </CardHeader>
-                  <CardContent className="p-0">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Template</TableHead>
-                          <TableHead>Source</TableHead>
-                          <TableHead>Category</TableHead>
-                          <TableHead>Jurisdiction</TableHead>
-                          <TableHead className="w-10" />
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {shown.map((t) => (
-                          <TableRow key={t._id}>
-                            <TableCell>
-                              <div className="flex items-center gap-1.5">
-                                {t.sourceType === "uploaded" && (
-                                  <FileUp className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                                )}
-                                <p className="text-sm font-medium">{t.title}</p>
-                              </div>
-                              <p className="line-clamp-1 text-xs text-muted-foreground">
-                                {t.description}
-                              </p>
-                            </TableCell>
-                            <TableCell>
-                              <Badge
-                                variant="outline"
-                                className="bg-primary/10 text-primary border-primary/20 text-[10px] capitalize"
-                              >
-                                {t.source}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-sm text-muted-foreground">
-                              {folderName(t.folderId)}
-                            </TableCell>
-                            <TableCell className="text-sm text-muted-foreground">
-                              {t.jurisdiction || "—"}
-                            </TableCell>
-                            <TableCell>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => setPreviewTemplate(t)}
-                              >
-                                <Eye className="h-4 w-4" />
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                        {!shown.length && (
+                  <Card>
+                    <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 pb-2">
+                      <CardTitle className="text-sm">
+                        {activeName}{" "}
+                        <span className="font-normal text-muted-foreground">
+                          ({shown.length})
+                        </span>
+                      </CardTitle>
+                      <div className="relative w-full sm:w-64">
+                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          className="h-9 pl-8"
+                          placeholder="Search templates…"
+                          value={templateSearch}
+                          onChange={(e) => setTemplateSearch(e.target.value)}
+                        />
+                      </div>
+                    </CardHeader>
+                    <CardContent className="p-0">
+                      <Table>
+                        <TableHeader>
                           <TableRow>
-                            <TableCell
-                              colSpan={5}
-                              className="py-8 text-center text-sm text-muted-foreground"
-                            >
-                              No templates in this category yet.
-                            </TableCell>
+                            <TableHead>Template</TableHead>
+                            <TableHead>Source</TableHead>
+                            <TableHead>Category</TableHead>
+                            <TableHead>Jurisdiction</TableHead>
+                            <TableHead className="w-44" />
                           </TableRow>
-                        )}
-                      </TableBody>
-                    </Table>
-                  </CardContent>
-                </Card>
+                        </TableHeader>
+                        <TableBody>
+                          {shown.map((t) => (
+                            <TableRow key={t._id}>
+                              <TableCell>
+                                <div className="flex items-center gap-1.5">
+                                  {t.sourceType === "uploaded" && (
+                                    <FileUp className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                                  )}
+                                  <p className="text-sm font-medium">
+                                    {t.title}
+                                  </p>
+                                </div>
+                                <p className="line-clamp-1 text-xs text-muted-foreground">
+                                  {t.description}
+                                </p>
+                              </TableCell>
+                              <TableCell>
+                                <Badge
+                                  variant="outline"
+                                  className="bg-primary/10 text-primary border-primary/20 text-[10px] capitalize"
+                                >
+                                  {t.source}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-sm text-muted-foreground">
+                                {folderName(t.folderId)}
+                              </TableCell>
+                              <TableCell className="text-sm text-muted-foreground">
+                                {t.jurisdiction || "—"}
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex items-center justify-end gap-1">
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    title="View template"
+                                    onClick={() => setPreviewTemplate(t)}
+                                  >
+                                    <Eye className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant={
+                                      pickingTemplate ? "default" : "outline"
+                                    }
+                                    onClick={() => openGenerate(t)}
+                                  >
+                                    <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+                                    Generate
+                                  </Button>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                          {!shown.length && (
+                            <TableRow>
+                              <TableCell
+                                colSpan={5}
+                                className="py-8 text-center text-sm text-muted-foreground"
+                              >
+                                {q
+                                  ? "No templates match your search."
+                                  : "No templates in this category yet."}
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </TableBody>
+                      </Table>
+                    </CardContent>
+                  </Card>
+                </div>
               </div>
             );
           })()}
@@ -1020,6 +1126,10 @@ export default function Contracts() {
               <Select
                 value={generateDraft.templateId}
                 onValueChange={(v) => {
+                  if (v === MORE_TEMPLATES) {
+                    browseAllTemplates();
+                    return;
+                  }
                   const t = availableTemplates.find((at) => at._id === v);
                   setGenerateDraft({
                     ...generateDraft,
@@ -1032,13 +1142,24 @@ export default function Contracts() {
                   <SelectValue placeholder="Pick a template" />
                 </SelectTrigger>
                 <SelectContent>
-                  {availableTemplates.map((t) => (
+                  {dropdownTemplates.map((t) => (
                     <SelectItem key={`${t.source}-${t._id}`} value={t._id}>
                       {t.sourceType === "uploaded" ? "📄 " : ""}
                       {t.title}{" "}
                       {t.source === "platform" ? "(Platform)" : "(My own)"}
                     </SelectItem>
                   ))}
+                  {availableTemplates.length > TEMPLATE_DROPDOWN_LIMIT && (
+                    <SelectItem
+                      value={MORE_TEMPLATES}
+                      className="font-medium text-primary"
+                    >
+                      <span className="flex items-center gap-1.5">
+                        More templates — browse all {availableTemplates.length}
+                        <ArrowRight className="h-3.5 w-3.5" />
+                      </span>
+                    </SelectItem>
+                  )}
                 </SelectContent>
               </Select>
               {!availableTemplates.length && (
@@ -1456,6 +1577,18 @@ export default function Contracts() {
                     "<p class='text-muted-foreground'>No content</p>",
                 }}
               />
+              <div className="flex justify-end border-t pt-3">
+                <Button
+                  onClick={() => {
+                    const t = previewTemplate;
+                    setPreviewTemplate(null);
+                    openGenerate(t);
+                  }}
+                >
+                  <Sparkles className="mr-2 h-4 w-4" /> Generate contract from
+                  this template
+                </Button>
+              </div>
             </div>
           )}
         </DialogContent>
