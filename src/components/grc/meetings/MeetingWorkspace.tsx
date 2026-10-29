@@ -767,7 +767,10 @@ export function MeetingWorkspace({
 
   const date = new Date(meeting.date);
   const held = meeting.status === "Held";
-  const quorumNeeded = Math.floor(meeting.attendees.length / 2) + 1;
+  const quorumNeeded =
+    meeting.attendees.length === 0
+      ? 0
+      : Math.floor(meeting.attendees.length / 2) + 1;
   const acknowledgments = meeting.acknowledgments ?? [];
   const actionItems = meeting.actionItems ?? [];
   const checklistDone = Object.keys(preparation.completed).length;
@@ -1292,16 +1295,21 @@ export function MeetingWorkspace({
                         colSpan={5}
                         className="text-center text-muted-foreground py-6"
                       >
-                        No attendees yet.
+                        {meeting.type === "Executive" ||
+                        meeting.type === "Ad-hoc"
+                          ? "No attendees yet — add them below."
+                          : "No attendees yet."}
                       </TableCell>
                     </TableRow>
                   )}
                 </TableBody>
               </Table>
+              <div className="mt-4">
+                <AttendeesEditor meeting={meeting} />
+              </div>
               <AttendanceSection meeting={meeting} />
             </CardContent>
           </Card>
-          <AttendeesEditor meeting={meeting} />
         </TabsContent>
 
         {/* MINUTES */}

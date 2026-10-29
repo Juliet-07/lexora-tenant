@@ -37,6 +37,7 @@ import {
   Send,
   Trash2,
   Upload,
+  UserPlus,
   Users2,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
@@ -334,12 +335,15 @@ export function AgendaAddRow({ meeting }: { meeting: Meeting }) {
   );
 }
 
-/** Manual attendee list editor — only Executive / Ad-hoc meetings. */
+/** Manual attendee list editor — only Executive / Ad-hoc meetings. Sits
+ * inside the Attendance register so the tenant can build the list right
+ * where they record who attended. */
 export function AttendeesEditor({ meeting }: { meeting: Meeting }) {
   const { invalidate, onError, id } = useActions(meeting);
   const [att, setAtt] = useState({ name: "", email: "", role: "" });
   const addMut = useMutation({
-    mutationFn: () => addAttendee(id, att),
+    mutationFn: (a: { name: string; email: string; role: string }) =>
+      addAttendee(id, a),
     onSuccess: () => {
       invalidate();
       setAtt({ name: "", email: "", role: "" });
@@ -352,46 +356,118 @@ export function AttendeesEditor({ meeting }: { meeting: Meeting }) {
     onError: onError("Failed to remove attendee"),
   });
   if (meeting.type !== "Executive" && meeting.type !== "Ad-hoc") return null;
+
+  const submit = () => {
+    const name = att.name.trim();
+    const email = att.email.trim().toLowerCase();
+    if (!name || !email) {
+      toast({
+        title: "Enter both a name and an email",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      toast({
+        title: `"${email}" isn't a valid email`,
+        variant: "destructive",
+      });
+      return;
+    }
+    if (meeting.attendees.some((a) => a.email.toLowerCase() === email)) {
+      toast({
+        title: `${email} is already on the attendee list`,
+        variant: "destructive",
+      });
+      return;
+    }
+    addMut.mutate({ name, email, role: att.role.trim() });
+  };
+  // Attendance is stored by position in the list, so once it has been
+  // recorded the server no longer lets anyone be removed.
+  const locked = !!meeting.attendanceRecordedAt;
+  const noticeSent = !!meeting.notice?.dispatchedAt;
+
   return (
     <div className="space-y-2 border rounded-lg p-4">
       <div className="text-sm font-medium flex items-center gap-2">
         <Users2 className="h-4 w-4" /> Manage attendees
       </div>
+      <p className="text-xs text-muted-foreground">
+        This is an {meeting.type} meeting, so you write the attendee list
+        yourself. The notice, board pack and minutes are sent to these emails.
+      </p>
+      {noticeSent && (
+        <p className="rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-xs text-amber-800">
+          The notice has already been sent. Anyone added now is listed as
+          pending — use "Resend to non-respondents" on the Notice tab to send it
+          to them.
+        </p>
+      )}
       {meeting.attendees.map((a, i) => (
         <div
-          key={i}
+          key={a.email}
           className="flex justify-between items-center text-xs border rounded px-2 py-1"
         >
           <span>
             {a.name} <span className="text-muted-foreground">{a.email}</span>
+            {a.role && (
+              <span className="text-muted-foreground"> · {a.role}</span>
+            )}
           </span>
-          <button onClick={() => rmMut.mutate(i)} aria-label="Remove attendee">
-            <Trash2 className="h-3 w-3 text-muted-foreground" />
-          </button>
+          {!locked && (
+            <button
+              onClick={() => rmMut.mutate(i)}
+              disabled={rmMut.isPending}
+              aria-label={`Remove ${a.name}`}
+            >
+              <Trash2 className="h-3 w-3 text-muted-foreground" />
+            </button>
+          )}
         </div>
       ))}
-      <div className="grid grid-cols-4 gap-2">
+      {locked && meeting.attendees.length > 0 && (
+        <p className="text-xs text-muted-foreground">
+          Attendance has been recorded, so existing attendees can't be removed.
+          You can still add more.
+        </p>
+      )}
+      <div
+        className="grid grid-cols-1 sm:grid-cols-4 gap-2"
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            submit();
+          }
+        }}
+      >
         <Input
           placeholder="Name"
           value={att.name}
           onChange={(e) => setAtt({ ...att, name: e.target.value })}
         />
         <Input
+          type="email"
           placeholder="Email"
           value={att.email}
           onChange={(e) => setAtt({ ...att, email: e.target.value })}
         />
         <Input
-          placeholder="Role"
+          placeholder="Role (optional)"
           value={att.role}
           onChange={(e) => setAtt({ ...att, role: e.target.value })}
         />
         <Button
           variant="outline"
-          disabled={!att.name || !att.email || addMut.isPending}
-          onClick={() => addMut.mutate()}
+          disabled={!att.name.trim() || !att.email.trim() || addMut.isPending}
+          onClick={submit}
         >
-          Add
+          {addMut.isPending ? (
+            <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+          ) : (
+            <UserPlus className="h-4 w-4 mr-1.5" />
+          )}
+          Add attendee
         </Button>
       </div>
     </div>
