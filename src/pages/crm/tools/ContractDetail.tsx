@@ -313,10 +313,11 @@ export default function ContractDetail() {
     onError: onErr("Could not update change"),
   });
   const amendMut = useMutation({
-    mutationFn: () => addAmendment(id, amendForm),
+    // The engine assigns the reference (AMD-01, AMD-02, …) and the date.
+    mutationFn: () => addAmendment(id, { summary: amendForm.summary.trim() }),
     onSuccess: () => {
       setAmendOpen(false);
-      setAmendForm({ ref: "", at: today(), summary: "" });
+      setAmendForm({ summary: "" });
       ok("Amendment added")();
     },
     onError: onErr("Could not add amendment"),
@@ -421,11 +422,7 @@ export default function ContractDetail() {
   });
   const [roundChanges, setRoundChanges] = useState([{ ...emptyChangeRow }]);
   const [amendOpen, setAmendOpen] = useState(false);
-  const [amendForm, setAmendForm] = useState({
-    ref: "",
-    at: today(),
-    summary: "",
-  });
+  const [amendForm, setAmendForm] = useState({ summary: "" });
   const [obOpen, setObOpen] = useState(false);
   const [obForm, setObForm] = useState<{
     label: string;
@@ -491,6 +488,14 @@ export default function ContractDetail() {
   );
   const stageIndex = CONTRACT_STAGES.indexOf(contract.stage);
   const currentVersion = contract.amendments.length + 1;
+  // Matches the engine (addAmendment): a contract can only be amended while
+  // it is in force. Earlier stages are edited directly / negotiated; after
+  // expiry or termination there is nothing left to vary.
+  const canAmend = contract.stage === "Active" || contract.stage === "Renewal";
+  const amendBlockedReason =
+    contract.stage === "Expiry / Termination"
+      ? "This contract has expired or been terminated, so it can no longer be amended."
+      : "Amendments apply once the contract is executed and Active. Until then, change it in the Editor or log a negotiation round.";
   // Matches the backend's own guard exactly (editRenderedBody):
   // editable while Not Sent or Sent, locked once Signed,
   // Countersigned, or Declined — real recipients may already have
@@ -1726,10 +1731,20 @@ export default function ContractDetail() {
                 Formal changes to the executed contract.
               </p>
             </div>
-            <Button size="sm" onClick={() => setAmendOpen(true)}>
+            <Button
+              size="sm"
+              disabled={!canAmend}
+              title={canAmend ? undefined : amendBlockedReason}
+              onClick={() => setAmendOpen(true)}
+            >
               <Plus className="mr-2 h-4 w-4" /> New amendment
             </Button>
           </div>
+          {!canAmend && (
+            <p className="rounded-md border border-dashed bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+              {amendBlockedReason}
+            </p>
+          )}
           {contract.amendments.length ? (
             <div className="space-y-2">
               {contract.amendments.map((a) => (
@@ -1749,8 +1764,9 @@ export default function ContractDetail() {
           ) : (
             <Card className="border-dashed">
               <CardContent className="p-8 text-center text-sm text-muted-foreground">
-                No amendments yet. Amendments become meaningful once the
-                contract is executed.
+                {canAmend
+                  ? "No amendments yet."
+                  : "No amendments. They can be added once the contract is Active."}
               </CardContent>
             </Card>
           )}
@@ -2053,28 +2069,15 @@ export default function ContractDetail() {
             <DialogTitle>New amendment</DialogTitle>
           </DialogHeader>
           <div className="grid gap-3">
+            <p className="text-xs text-muted-foreground">
+              Recorded as{" "}
+              <b>
+                AMD-{String(contract.amendments.length + 1).padStart(2, "0")}
+              </b>{" "}
+              and dated today.
+            </p>
             <div>
-              <Label>Reference</Label>
-              <Input
-                value={amendForm.ref}
-                placeholder="AMD-001"
-                onChange={(e) =>
-                  setAmendForm({ ...amendForm, ref: e.target.value })
-                }
-              />
-            </div>
-            <div>
-              <Label>Date</Label>
-              <Input
-                type="date"
-                value={amendForm.at}
-                onChange={(e) =>
-                  setAmendForm({ ...amendForm, at: e.target.value })
-                }
-              />
-            </div>
-            <div>
-              <Label>Summary</Label>
+              <Label>What is being changed, and why</Label>
               <Textarea
                 rows={3}
                 value={amendForm.summary}
@@ -2086,9 +2089,7 @@ export default function ContractDetail() {
           </div>
           <DialogFooter>
             <Button
-              disabled={
-                !amendForm.ref || !amendForm.summary || amendMut.isPending
-              }
+              disabled={!amendForm.summary.trim() || amendMut.isPending}
               onClick={() => amendMut.mutate()}
             >
               Add amendment
