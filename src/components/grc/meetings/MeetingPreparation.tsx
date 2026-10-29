@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -14,7 +14,16 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Check, Download, Loader2, Mail, RefreshCw, Send } from "lucide-react";
+import {
+  Check,
+  Copy,
+  Download,
+  Link2,
+  Loader2,
+  Mail,
+  RefreshCw,
+  Send,
+} from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import {
   MEETING_CHECKLIST_ITEMS,
@@ -22,6 +31,7 @@ import {
   updateMeetingNotice,
   dispatchMeetingNotice,
   resendNotice,
+  fetchNoticeRsvpLinks,
   downloadNoticePdf,
   type Meeting,
 } from "@/lib/grc/governance-api";
@@ -213,6 +223,26 @@ export function MeetingNotice({
     meeting.attendees.map((a) => [a.email.toLowerCase(), a.role]),
   );
 
+  // Manual-attendee meetings (Ad-hoc / Executive / AGM / EGM): attendees
+  // cannot sign in, so each one RSVPs through a personal public link.
+  const publicRsvp = !["Board", "Committee"].includes(meeting.type);
+  const { data: rsvpLinks = [], isLoading: linksLoading } = useQuery({
+    queryKey: ["meeting-rsvp-links", meeting._id, notice.recipients.length],
+    queryFn: () => fetchNoticeRsvpLinks(meeting._id),
+    enabled: dispatched,
+  });
+  const linkByEmail = new Map(
+    rsvpLinks.map((l) => [l.email.toLowerCase(), l.link]),
+  );
+  const copyLink = async (link: string) => {
+    try {
+      await navigator.clipboard.writeText(link);
+      toast({ title: "RSVP link copied" });
+    } catch {
+      toast({ title: "Could not copy the link", variant: "destructive" });
+    }
+  };
+
   const downloadPdf = async () => {
     setDownloadingPdf(true);
     try {
@@ -316,6 +346,14 @@ export function MeetingNotice({
               Sent {new Date(notice.dispatchedAt!).toLocaleString()}
             </div>
           )}
+          {publicRsvp && (
+            <p className="text-xs text-muted-foreground flex items-start gap-1.5">
+              <Link2 className="h-3 w-3 mt-0.5 shrink-0" />
+              Attendees do not need an account. Each one receives a personal
+              RSVP link in the notice email and can confirm or send apologies
+              without signing in.
+            </p>
+          )}
           {meeting.attendees.length === 0 && !dispatched && (
             <p className="text-xs text-muted-foreground">
               This meeting has no attendees yet.
@@ -373,6 +411,7 @@ export function MeetingNotice({
                     <TableHead>Dispatched</TableHead>
                     <TableHead>Opened</TableHead>
                     <TableHead>RSVP</TableHead>
+                    <TableHead>RSVP link</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -420,12 +459,31 @@ export function MeetingNotice({
                           </div>
                         )}
                       </TableCell>
+                      <TableCell>
+                        {linkByEmail.get(r.email.toLowerCase()) ? (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 px-2 text-xs"
+                            onClick={() =>
+                              copyLink(linkByEmail.get(r.email.toLowerCase())!)
+                            }
+                          >
+                            <Copy className="h-3 w-3 mr-1" />
+                            Copy link
+                          </Button>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">
+                            {linksLoading ? "…" : "Board portal"}
+                          </span>
+                        )}
+                      </TableCell>
                     </TableRow>
                   ))}
                   {notice.recipients.length === 0 && (
                     <TableRow>
                       <TableCell
-                        colSpan={6}
+                        colSpan={7}
                         className="text-center text-muted-foreground py-6"
                       >
                         No recipients.

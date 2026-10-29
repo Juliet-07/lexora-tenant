@@ -48,6 +48,7 @@ const PUBLIC_ROUTE_PATTERNS = [
   /^\/sign-contract\/[^/]+$/,
   /^\/sign-tool-contract\/[^/]+$/,
   /^\/meeting-ack\/[^/]+$/,
+  /^\/meeting-notice\/[^/]+$/,
   /^\/minutes-review\/[^/]+$/,
   /^\/minutes-chair-review\/[^/]+$/,
   /^\/policy-ack\/[^/]+$/,

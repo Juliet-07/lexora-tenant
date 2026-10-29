@@ -2237,6 +2237,15 @@ export const resendNotice = async (
   return res.data?.data ?? res.data;
 };
 
+// Per-recipient public RSVP links (no sign-in needed). `link` is null for
+// board members on Board/Committee meetings, who RSVP in the board portal.
+export const fetchNoticeRsvpLinks = async (
+  id: string,
+): Promise<{ email: string; link: string | null }[]> => {
+  const res = await api.get(`/grc/governance/meetings/${id}/notice/rsvp-links`);
+  return res.data?.data ?? res.data;
+};
+
 export const downloadNoticePdf = async (
   id: string,
   meetingTitle: string,
