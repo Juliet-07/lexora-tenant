@@ -406,7 +406,6 @@ export default function ContractDetail() {
   // contract's saved details can be updated to match.
   const [pendingBody, setPendingBody] = useState<string | null>(null);
   const [fieldEdits, setFieldEdits] = useState<Record<string, string>>({});
-  const [trackChanges, setTrackChanges] = useState(true);
   const [signerName, setSignerName] = useState("");
   const [countersignOpen, setCountersignOpen] = useState(false);
   const [executeOpen, setExecuteOpen] = useState(false);
@@ -1054,15 +1053,6 @@ export default function ContractDetail() {
                   setFieldEdits({});
                 }}
               />
-              <Card>
-                <CardContent className="flex items-center justify-between gap-2 p-3">
-                  <span className="text-sm font-medium">Track changes</span>
-                  <Switch
-                    checked={trackChanges}
-                    onCheckedChange={setTrackChanges}
-                  />
-                </CardContent>
-              </Card>
               <Card>
                 <CardHeader className="pb-2">
                   <CardTitle className="text-xs uppercase tracking-wide text-muted-foreground">
