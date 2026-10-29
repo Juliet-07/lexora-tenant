@@ -17,8 +17,9 @@ import {
   todayStr,
 } from "@/lib/grc/compliance-api";
 import { fetchPolicies } from "@/lib/grc/policy-api";
+import { fetchIpOverview } from "@/lib/grc/ownership-api";
 
-type Kind = "Obligation" | "Certification" | "Policy" | "Audit";
+type Kind = "Obligation" | "Certification" | "Policy" | "Audit" | "IP";
 
 interface CalEvent {
   id: string;
@@ -46,6 +47,10 @@ const KIND_STYLE: Record<Kind, { dot: string; chip: string }> = {
     dot: "bg-violet-500",
     chip: "bg-violet-500/10 text-violet-700 border-violet-500/30",
   },
+  IP: {
+    dot: "bg-cyan-500",
+    chip: "bg-cyan-500/10 text-cyan-700 border-cyan-500/30",
+  },
 };
 
 const REMINDERS = [90, 60, 30, 14, 7];
@@ -67,6 +72,13 @@ export default function ComplianceCalendar() {
     queryKey: ["grc-policies"],
     queryFn: fetchPolicies,
   });
+  // Intellectual-property renewals and custom deadlines come straight
+  // from the IP register (Organisation Structure → Intellectual
+  // Property), so a renewal recorded there moves here with it.
+  const { data: ip } = useQuery({
+    queryKey: ["ip-overview"],
+    queryFn: fetchIpOverview,
+  });
 
   const [cursor, setCursor] = useState(() => {
     const d = new Date();
@@ -77,6 +89,7 @@ export default function ComplianceCalendar() {
     "Certification",
     "Policy",
     "Audit",
+    "IP",
   ]);
 
   const events: CalEvent[] = useMemo(() => {
@@ -115,8 +128,21 @@ export default function ComplianceCalendar() {
           done: false,
         }),
       );
+    (ip?.renewals ?? []).forEach((r) =>
+      out.push({
+        id: r.key,
+        date: r.dueDate.slice(0, 10),
+        title:
+          r.kind === "expiry"
+            ? `IP renewal — ${r.assetName} (${r.assetType})`
+            : `IP deadline — ${r.label} — ${r.assetName}`,
+        kind: "IP",
+        detail: `${r.action}${r.jurisdiction ? ` · ${r.jurisdiction}` : ""}`,
+        done: false,
+      }),
+    );
     return out.filter((e) => !!e.date);
-  }, [obligations, filings, policies]);
+  }, [obligations, filings, policies, ip]);
 
   const visible = events.filter((e) => kinds.includes(e.kind));
 
@@ -146,7 +172,8 @@ export default function ComplianceCalendar() {
         <h1 className="text-2xl font-bold">Compliance Calendar</h1>
         <p className="text-sm text-muted-foreground">
           Read-only aggregation of every deadline — regulatory filings,
-          certification renewals, policy reviews and audit milestones.
+          certification renewals, policy reviews, intellectual-property renewals
+          and audit milestones.
         </p>
       </div>
 
@@ -267,6 +294,7 @@ export default function ComplianceCalendar() {
               <Legend className="bg-amber-500" label="Regulatory deadline" />
               <Legend className="bg-sky-500" label="Policy review" />
               <Legend className="bg-violet-500" label="Audit" />
+              <Legend className="bg-cyan-500" label="IP renewal / deadline" />
               <Legend
                 className="bg-emerald-500"
                 label="Completed / certification"

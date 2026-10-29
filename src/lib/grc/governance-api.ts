@@ -2503,7 +2503,12 @@ export type OrgStructureNodeType =
 
 export interface OrgStructureNode {
   id: string;
+  // Primary role (always types[0]).
   type: OrgStructureNodeType;
+  // Every role this node holds — one person can be a shareholder AND a
+  // board member (Oct 2026).
+  types: OrgStructureNodeType[];
+  email: string | null;
   name: string;
   subtitle: string | null;
   // Every parent this node is connected to (Oct 2026: "make it
@@ -2534,7 +2539,8 @@ export const fetchOrgStructure = async (): Promise<OrgStructureTree> => {
 };
 
 export const createOrgStructureNode = async (payload: {
-  type: OrgStructureNodeType;
+  types: OrgStructureNodeType[];
+  email?: string;
   name: string;
   subtitle?: string;
   parentIds?: string[];
@@ -2546,7 +2552,8 @@ export const createOrgStructureNode = async (payload: {
 export const updateOrgStructureNode = async (
   id: string,
   payload: Partial<{
-    type: OrgStructureNodeType;
+    types: OrgStructureNodeType[];
+    email: string | null;
     name: string;
     subtitle: string | null;
     parentIds: string[];

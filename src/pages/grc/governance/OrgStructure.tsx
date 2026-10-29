@@ -24,6 +24,9 @@ import {
   Trash2,
   ChevronUp,
   ChevronDown,
+  PieChart,
+  Lightbulb,
+  Landmark,
 } from "lucide-react";
 import {
   Card,
@@ -75,6 +78,10 @@ import {
   type OrgStructureNodeType,
 } from "@/lib/grc/governance-api";
 import { getOrganogramImageLayout } from "@/lib/grc/organogramImageLayout";
+import { CapTableTab } from "@/components/grc/ownership/CapTableTab";
+import { IpTab } from "@/components/grc/ownership/IpTab";
+import { ChargesTab } from "@/components/grc/ownership/ChargesTab";
+import { rolesOf } from "@/components/grc/ownership/shared";
 
 // ─────────────────────────────────────────────────────────────
 // Organisation Structure (Oct 2026 rework) — previously a read-only
@@ -86,6 +93,11 @@ import { getOrganogramImageLayout } from "@/lib/grc/organogramImageLayout";
 // what, edit or remove anything, and download the result as an image.
 // Nothing here is derived from HR or any other module — every node is
 // one the tenant explicitly created.
+//
+// Oct 2026 expansion: one node can hold several roles (a person who is
+// both a shareholder and a board member), and three more tabs hang off
+// the same structure — Cap Table & Share Register, Intellectual
+// Property and Register of Charges.
 // ─────────────────────────────────────────────────────────────
 
 const TYPE_OPTIONS: OrgStructureNodeType[] = [
@@ -166,13 +178,24 @@ function NodeCard({
 }) {
   return (
     <Card
-      className={`inline-block w-60 border ${TYPE_STYLES[node.type]} shadow-sm`}
+      // ReactFlow gives a non-draggable, non-selectable node
+      // pointer-events:none, which its buttons inherit — re-enable it
+      // here so Add / Edit / Remove / Move actually receive clicks.
+      className={`pointer-events-auto inline-block w-60 border ${TYPE_STYLES[node.type]} shadow-sm`}
     >
       <CardContent className="p-3 space-y-1.5">
-        <div className="flex items-center justify-between gap-1">
-          <Badge variant="outline" className="text-[10px]">
-            {node.type}
-          </Badge>
+        <div className="flex items-start justify-between gap-1">
+          <div className="flex flex-wrap gap-1">
+            {rolesOf(node).map((t) => (
+              <Badge
+                key={t}
+                variant="outline"
+                className={`text-[10px] ${TYPE_STYLES[t as OrgStructureNodeType]}`}
+              >
+                {t}
+              </Badge>
+            ))}
+          </div>
           <div className="flex items-center gap-0.5">
             <Button
               size="icon"
@@ -249,7 +272,7 @@ function NodeCard({
 // anchored to each box's measured edge, so the result stays centered
 // and cleanly connected regardless of how lopsided the tree is.
 const ORG_NODE_WIDTH = 240; // matches NodeCard's `w-60`
-const ORG_NODE_HEIGHT = 150; // generous estimate — a 2-line name + subtitle + both button rows
+const ORG_NODE_HEIGHT = 170; // generous estimate — wrapped role badges + a 2-line name + subtitle + both button rows
 const ROOT_NODE_WIDTH = 224; // matches the root card's `w-56`
 const ROOT_NODE_HEIGHT = 104;
 
@@ -432,6 +455,11 @@ export default function OrgStructure() {
   // `.react-flow__viewport` element for downloadAsImage below.
   const chartWrapperRef = useRef<HTMLDivElement>(null);
   const [downloading, setDownloading] = useState(false);
+  const [mainTab, setMainTab] = useState("chart");
+  // "" = the tenant's base currency. Shared by the three ownership tabs
+  // so switching tabs doesn't reset the choice.
+  const [displayCurrency, setDisplayCurrency] = useState("");
+  const isStructureView = mainTab === "chart" || mainTab === "list";
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["org-structure"],
@@ -450,7 +478,12 @@ export default function OrgStructure() {
   const [formOpen, setFormOpen] = useState(false);
   const [formMode, setFormMode] = useState<"create" | "edit">("create");
   const [formId, setFormId] = useState<string | null>(null);
-  const [formType, setFormType] = useState<OrgStructureNodeType>("Department");
+  // Every role the node holds, in the order they were ticked — the
+  // first is its primary role (drives the card colour on the chart).
+  const [formTypes, setFormTypes] = useState<OrgStructureNodeType[]>([
+    "Department",
+  ]);
+  const [formEmail, setFormEmail] = useState("");
   const [formName, setFormName] = useState("");
   const [formSubtitle, setFormSubtitle] = useState("");
   // Oct 2026: "make it possible that in the reports to/sits under
@@ -464,7 +497,8 @@ export default function OrgStructure() {
   const openCreate = (parent: OrgStructureNode | null) => {
     setFormMode("create");
     setFormId(null);
-    setFormType(parent ? "Role" : "Department");
+    setFormTypes([parent ? "Role" : "Department"]);
+    setFormEmail("");
     setFormName("");
     setFormSubtitle("");
     setFormParentIds(parent ? [parent.id] : []);
@@ -475,7 +509,8 @@ export default function OrgStructure() {
   const openEdit = (node: OrgStructureNode) => {
     setFormMode("edit");
     setFormId(node.id);
-    setFormType(node.type);
+    setFormTypes(rolesOf(node) as OrgStructureNodeType[]);
+    setFormEmail(node.email ?? "");
     setFormName(node.name);
     setFormSubtitle(node.subtitle ?? "");
     setFormParentIds(node.parentIds ?? []);
@@ -488,6 +523,7 @@ export default function OrgStructure() {
     mutationFn: createOrgStructureNode,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["org-structure"] });
+      qc.invalidateQueries({ queryKey: ["cap-table"] });
       toast({ title: "Node added" });
       setFormOpen(false);
     },
@@ -504,6 +540,7 @@ export default function OrgStructure() {
       updateOrgStructureNode(id, payload),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["org-structure"] });
+      qc.invalidateQueries({ queryKey: ["cap-table"] });
       toast({ title: "Node updated" });
       setFormOpen(false);
     },
@@ -539,6 +576,7 @@ export default function OrgStructure() {
       deleteOrgStructureNode(id, cascade),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["org-structure"] });
+      qc.invalidateQueries({ queryKey: ["cap-table"] });
       toast({ title: "Removed" });
       setDeleteTarget(null);
     },
@@ -555,14 +593,23 @@ export default function OrgStructure() {
       toast({ title: "Give the node a name first", variant: "destructive" });
       return;
     }
+    if (formTypes.length === 0) {
+      toast({ title: "Pick at least one role", variant: "destructive" });
+      return;
+    }
     const payload = {
-      type: formType,
+      types: formTypes,
+      email: formEmail.trim() || null,
       name: formName.trim(),
       subtitle: formSubtitle.trim() || null,
       parentIds: formParentIds,
     };
     if (formMode === "create") {
-      createMut.mutate(payload as any);
+      createMut.mutate({
+        ...payload,
+        email: payload.email ?? undefined,
+        subtitle: payload.subtitle ?? undefined,
+      });
     } else if (formId) {
       updateMut.mutate({ id: formId, payload });
     }
@@ -613,11 +660,15 @@ export default function OrgStructure() {
     try {
       const { toPng } = await import("html-to-image");
       const bounds = getNodesBounds(flowNodes);
-      const { width: imageWidth, height: imageHeight, transform } =
-        getOrganogramImageLayout(bounds);
+      const {
+        width: imageWidth,
+        height: imageHeight,
+        transform,
+      } = getOrganogramImageLayout(bounds);
       await document.fonts.ready;
       const dataUrl = await toPng(viewportEl, {
-        backgroundColor: getComputedStyle(chartWrapperRef.current ?? viewportEl).backgroundColor,
+        backgroundColor: getComputedStyle(chartWrapperRef.current ?? viewportEl)
+          .backgroundColor,
         width: imageWidth,
         height: imageHeight,
         pixelRatio: 2,
@@ -673,53 +724,67 @@ export default function OrgStructure() {
           </h1>
           <p className="text-muted-foreground text-sm mt-1">
             Build your company's real structure — shareholders, board,
-            departments and roles — and download it as an image.
+            departments and roles — and track who owns it, the IP it holds and
+            the charges over it.
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => openCreate(null)}>
-            <Plus className="h-4 w-4 mr-2" />
-            Add node
-          </Button>
-          <Button
-            onClick={downloadAsImage}
-            disabled={downloading || totalNodes === 0}
-          >
-            {downloading ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <Download className="h-4 w-4 mr-2" />
-            )}
-            Download as image
-          </Button>
+        {isStructureView && (
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => openCreate(null)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Add node
+            </Button>
+            <Button
+              onClick={downloadAsImage}
+              disabled={downloading || totalNodes === 0}
+            >
+              {downloading ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Download className="h-4 w-4 mr-2" />
+              )}
+              Download as image
+            </Button>
+          </div>
+        )}
+      </div>
+
+      {/* Type counts — a node holding two roles counts under each */}
+      {isStructureView && (
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          {[
+            { label: "Total nodes", value: stats.totalNodes },
+            { label: "Shareholders", value: stats.Shareholder ?? 0 },
+            { label: "Board", value: stats.Board ?? 0 },
+            { label: "Departments", value: stats.Department ?? 0 },
+            { label: "Roles", value: stats.Role ?? 0 },
+          ].map((k) => (
+            <Card key={k.label}>
+              <CardContent className="p-4">
+                <p className="text-xs text-muted-foreground">{k.label}</p>
+                <p className="text-2xl font-bold mt-1">{k.value}</p>
+              </CardContent>
+            </Card>
+          ))}
         </div>
-      </div>
+      )}
 
-      {/* Type counts */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        {[
-          { label: "Total nodes", value: stats.totalNodes },
-          { label: "Shareholders", value: stats.Shareholder ?? 0 },
-          { label: "Board", value: stats.Board ?? 0 },
-          { label: "Departments", value: stats.Department ?? 0 },
-          { label: "Roles", value: stats.Role ?? 0 },
-        ].map((k) => (
-          <Card key={k.label}>
-            <CardContent className="p-4">
-              <p className="text-xs text-muted-foreground">{k.label}</p>
-              <p className="text-2xl font-bold mt-1">{k.value}</p>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      <Tabs defaultValue="chart">
+      <Tabs value={mainTab} onValueChange={setMainTab}>
         <TabsList>
           <TabsTrigger value="chart" className="gap-2">
             <Network className="h-4 w-4" /> Org Chart
           </TabsTrigger>
           <TabsTrigger value="list" className="gap-2">
             <ListTree className="h-4 w-4" /> All Nodes
+          </TabsTrigger>
+          <TabsTrigger value="cap" className="gap-2">
+            <PieChart className="h-4 w-4" /> Cap Table &amp; Share Register
+          </TabsTrigger>
+          <TabsTrigger value="ip" className="gap-2">
+            <Lightbulb className="h-4 w-4" /> Intellectual Property
+          </TabsTrigger>
+          <TabsTrigger value="charges" className="gap-2">
+            <Landmark className="h-4 w-4" /> Register of Charges
           </TabsTrigger>
         </TabsList>
 
@@ -796,12 +861,15 @@ export default function OrgStructure() {
                     >
                       <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />
                       <span className="font-medium text-sm">{node.name}</span>
-                      <Badge
-                        variant="outline"
-                        className={`text-[10px] ${TYPE_STYLES[node.type]}`}
-                      >
-                        {node.type}
-                      </Badge>
+                      {rolesOf(node).map((t) => (
+                        <Badge
+                          key={t}
+                          variant="outline"
+                          className={`text-[10px] ${TYPE_STYLES[t as OrgStructureNodeType]}`}
+                        >
+                          {t}
+                        </Badge>
+                      ))}
                       {node.subtitle && (
                         <span className="text-xs text-muted-foreground hidden md:inline">
                           · {node.subtitle}
@@ -843,11 +911,30 @@ export default function OrgStructure() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        <TabsContent value="cap" className="mt-4">
+          <CapTableTab
+            displayCurrency={displayCurrency}
+            onDisplayCurrencyChange={setDisplayCurrency}
+          />
+        </TabsContent>
+        <TabsContent value="ip" className="mt-4">
+          <IpTab
+            displayCurrency={displayCurrency}
+            onDisplayCurrencyChange={setDisplayCurrency}
+          />
+        </TabsContent>
+        <TabsContent value="charges" className="mt-4">
+          <ChargesTab
+            displayCurrency={displayCurrency}
+            onDisplayCurrencyChange={setDisplayCurrency}
+          />
+        </TabsContent>
       </Tabs>
 
       {/* Add / Edit dialog */}
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {formMode === "create" ? "Add node" : "Edit node"}
@@ -860,22 +947,34 @@ export default function OrgStructure() {
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-1.5">
-              <Label>Type</Label>
-              <Select
-                value={formType}
-                onValueChange={(v) => setFormType(v as OrgStructureNodeType)}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {TYPE_OPTIONS.map((t) => (
-                    <SelectItem key={t} value={t}>
-                      {t}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label>Roles</Label>
+              <p className="text-xs text-muted-foreground">
+                Tick everything this is — a person can be a shareholder and a
+                board member at once. The first one ticked sets the colour on
+                the chart.
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                {TYPE_OPTIONS.map((t) => (
+                  <label
+                    key={t}
+                    className="flex items-center gap-2 rounded-md border p-2 text-sm cursor-pointer hover:bg-muted/50"
+                  >
+                    <Checkbox
+                      checked={formTypes.includes(t)}
+                      onCheckedChange={(v) =>
+                        setFormTypes((cur) =>
+                          v
+                            ? cur.includes(t)
+                              ? cur
+                              : [...cur, t]
+                            : cur.filter((x) => x !== t),
+                        )
+                      }
+                    />
+                    {t}
+                  </label>
+                ))}
+              </div>
             </div>
             <div className="space-y-1.5">
               <Label>Name</Label>
@@ -883,6 +982,15 @@ export default function OrgStructure() {
                 placeholder="e.g. Jane Doe, or Marketing Department"
                 value={formName}
                 onChange={(e) => setFormName(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Email (optional)</Label>
+              <Input
+                type="email"
+                placeholder="e.g. jane@company.com"
+                value={formEmail}
+                onChange={(e) => setFormEmail(e.target.value)}
               />
             </div>
             <div className="space-y-1.5">
@@ -926,9 +1034,17 @@ export default function OrgStructure() {
                         }
                       />
                       <span className="flex-1">{node.name}</span>
-                      <Badge variant="outline" className="text-[10px]">
-                        {node.type}
-                      </Badge>
+                      <span className="flex gap-1">
+                        {rolesOf(node).map((t) => (
+                          <Badge
+                            key={t}
+                            variant="outline"
+                            className="text-[10px]"
+                          >
+                            {t}
+                          </Badge>
+                        ))}
+                      </span>
                     </label>
                   ))}
               </div>
