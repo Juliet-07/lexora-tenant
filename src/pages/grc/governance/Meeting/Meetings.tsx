@@ -41,6 +41,8 @@ import {
   Link2,
   MessageSquare,
   CheckCircle2,
+  UserPlus,
+  X,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { RichTextEditor } from "@/components/RichTextEditor";
@@ -437,6 +439,48 @@ function NewMeetingDialog({ open, onOpenChange }: any) {
     notes: "",
     committeeId: undefined as string | undefined,
   });
+  // Ad-hoc meetings: the attendee list written here is saved with the
+  // meeting and is who the notice, board pack and minutes go to.
+  const [attendees, setAttendees] = useState<
+    { name: string; email: string; role: string }[]
+  >([]);
+  const [draft, setDraft] = useState({ name: "", email: "", role: "" });
+
+  const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  // Validates the row being typed and returns it ready to add, or null
+  // after telling the user what's wrong.
+  const readDraft = () => {
+    const name = draft.name.trim();
+    const email = draft.email.trim().toLowerCase();
+    if (!name || !email) {
+      toast({
+        title: "Enter both a name and an email for the attendee",
+        variant: "destructive",
+      });
+      return null;
+    }
+    if (!EMAIL_RE.test(email)) {
+      toast({
+        title: `"${email}" isn't a valid email`,
+        variant: "destructive",
+      });
+      return null;
+    }
+    if (attendees.some((a) => a.email === email)) {
+      toast({
+        title: `${email} is already on the list`,
+        variant: "destructive",
+      });
+      return null;
+    }
+    return { name, email, role: draft.role.trim() };
+  };
+  const addDraft = () => {
+    const row = readDraft();
+    if (!row) return;
+    setAttendees((list) => [...list, row]);
+    setDraft({ name: "", email: "", role: "" });
+  };
 
   const setType = (v: MeetingAudienceType) => {
     let chair = "";
@@ -449,10 +493,16 @@ function NewMeetingDialog({ open, onOpenChange }: any) {
   };
 
   const mutation = useMutation({
-    mutationFn: () => createMeeting(f),
+    mutationFn: (list: { name: string; email: string; role: string }[]) =>
+      createMeeting({
+        ...f,
+        ...(f.type === "Ad-hoc" ? { attendees: list } : {}),
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["grc-meetings"] });
       toast({ title: "Meeting created" });
+      setAttendees([]);
+      setDraft({ name: "", email: "", role: "" });
       onOpenChange(false);
     },
     onError: (err: any) =>
@@ -473,12 +523,22 @@ function NewMeetingDialog({ open, onOpenChange }: any) {
         title: "Platform & meeting link required",
         variant: "destructive",
       });
-    mutation.mutate();
+    let list = attendees;
+    if (f.type === "Ad-hoc") {
+      // A row that's been typed but not yet added still counts — nobody
+      // should lose an attendee by pressing Create first.
+      if (draft.name.trim() || draft.email.trim()) {
+        const row = readDraft();
+        if (!row) return;
+        list = [...attendees, row];
+      }
+    }
+    mutation.mutate(list);
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>New meeting</DialogTitle>
         </DialogHeader>
@@ -569,6 +629,89 @@ function NewMeetingDialog({ open, onOpenChange }: any) {
             <p className="text-xs text-muted-foreground">
               Attendees are automatically every active board member.
             </p>
+          )}
+          {f.type === "Ad-hoc" && (
+            <div className="space-y-2 rounded-lg border p-3">
+              <div className="flex items-center justify-between">
+                <Label className="flex items-center gap-1.5">
+                  <Users2 className="h-4 w-4" /> Attendees
+                </Label>
+                <span className="text-xs text-muted-foreground">
+                  {attendees.length} added
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Add everyone who should be invited — the meeting notice, board
+                pack and minutes are sent to these emails.
+              </p>
+              {attendees.map((a) => (
+                <div
+                  key={a.email}
+                  className="flex items-center justify-between gap-2 rounded border px-2 py-1 text-xs"
+                >
+                  <span className="min-w-0 truncate">
+                    <span className="font-medium">{a.name}</span>{" "}
+                    <span className="text-muted-foreground">{a.email}</span>
+                    {a.role && (
+                      <span className="text-muted-foreground"> · {a.role}</span>
+                    )}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label={`Remove ${a.name}`}
+                    onClick={() =>
+                      setAttendees((list) =>
+                        list.filter((x) => x.email !== a.email),
+                      )
+                    }
+                  >
+                    <X className="h-3.5 w-3.5 text-muted-foreground" />
+                  </button>
+                </div>
+              ))}
+              {f.chair.trim() &&
+                !attendees.some(
+                  (a) =>
+                    a.name.trim().toLowerCase() ===
+                    f.chair.trim().toLowerCase(),
+                ) && (
+                  <p className="rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-xs text-amber-800">
+                    The chair, "{f.chair.trim()}", isn't on this list. Add them
+                    here with the same name so they can review the minutes.
+                  </p>
+                )}
+              <div
+                className="grid grid-cols-[1fr_1fr] gap-2"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    addDraft();
+                  }
+                }}
+              >
+                <Input
+                  placeholder="Name"
+                  value={draft.name}
+                  onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+                />
+                <Input
+                  type="email"
+                  placeholder="Email"
+                  value={draft.email}
+                  onChange={(e) =>
+                    setDraft({ ...draft, email: e.target.value })
+                  }
+                />
+                <Input
+                  placeholder="Role (optional)"
+                  value={draft.role}
+                  onChange={(e) => setDraft({ ...draft, role: e.target.value })}
+                />
+                <Button type="button" variant="outline" onClick={addDraft}>
+                  <UserPlus className="h-4 w-4 mr-1.5" /> Add attendee
+                </Button>
+              </div>
+            </div>
           )}
           <div>
             <Label>Meeting mode</Label>

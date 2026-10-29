@@ -1695,6 +1695,9 @@ export const createMeeting = async (dto: {
   platform?: MeetingPlatform;
   chair: string;
   notes?: string;
+  // Ad-hoc meetings only — the attendee list the tenant writes while
+  // creating the meeting (Board/Committee attendees are automatic).
+  attendees?: { name: string; email: string; role?: string }[];
 }): Promise<Meeting> => {
   const res = await api.post("/grc/governance/meetings", dto);
   return res.data?.data ?? res.data;
