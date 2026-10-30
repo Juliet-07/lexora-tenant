@@ -286,7 +286,6 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
         { title: "My Cases", url: "/crm/my-cases", employeeOnly: true },
         { title: "Litigation", url: "/crm/litigation" },
         { title: "PMO", url: "/crm/pmo" },
-        { title: "Contracts", url: "/crm/contracts" },
       ],
     },
     {
@@ -294,9 +293,7 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
       icon: Cog,
       adminOnly: true,
       children: [
-        // { title: "Documents", url: "/crm/documents" },
-        // { title: "Contracts", url: "/crm/contracts" },
-        // { title: "Forms & Workflows", url: "/crm/forms" },
+        { title: "Contracts", url: "/crm/contracts" },
         { title: "Calendar", url: "/crm/calendar" },
         { title: "Newsletter", url: "/crm/newsletter" },
         { title: "Event Management", url: "/crm/events" },
@@ -356,7 +353,7 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
       ],
     },
     {
-      title: "Report",
+      title: "Reporting",
       url: "/finance/report",
       icon: FileBarChart,
       adminOnly: true,

@@ -2173,7 +2173,7 @@ export default function FundAccounting() {
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
                   <CardTitle className="text-base">
-                    Key persons (LPA cl. 16)
+                    Key persons
                   </CardTitle>
                   <Button
                     size="sm"
@@ -2326,7 +2326,7 @@ export default function FundAccounting() {
                 <Card>
                   <CardHeader className="pb-2">
                     <CardTitle className="text-base">
-                      Investment restriction monitoring (LPA cl. 7)
+                      Investment restriction monitoring
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
