@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -26,9 +27,14 @@ import {
   BookOpen,
   Eye,
   Loader2,
+  Sparkles,
+  ExternalLink,
 } from "lucide-react";
 import { toast } from "sonner";
 import { RichTextEditor } from "@/components/RichTextEditor";
+import { useAuth } from "@/contexts/AuthContext";
+import { GenerateDealContractDialog } from "@/components/grc/GenerateDealContractDialog";
+import { fetchDealTemplateContracts } from "@/lib/grc/deal-contracts-api";
 import {
   Sheet,
   SheetContent,
@@ -107,12 +113,19 @@ function ContractList({
   });
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
+      <TemplateContracts deal={deal} />
+
       <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">
-          A deal can hold multiple contracts — e.g. a Share Purchase Agreement
-          and a separate Non-Compete Agreement.
-        </p>
+        <div>
+          <h3 className="text-sm font-semibold">
+            Drafts built from the clause library
+          </h3>
+          <p className="text-sm text-muted-foreground">
+            Assemble a contract clause by clause — e.g. a Share Purchase
+            Agreement and a separate Non-Compete Agreement.
+          </p>
+        </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
             <Button size="sm">
@@ -175,6 +188,108 @@ function ContractList({
         )}
       </div>
     </div>
+  );
+}
+
+const SIGNATURE_LABEL: Record<string, string> = {
+  not_sent: "Not sent",
+  sent: "Sent for signature",
+  signed: "Signed by counterparty",
+  countersigned: "Fully signed",
+  declined: "Declined",
+};
+
+// Contracts generated inside this deal from a template the platform admin
+// published. They are ordinary Contract Management contracts (CRM) — this
+// section is the deal's window onto them.
+function TemplateContracts({ deal }: { deal: Deal }) {
+  const { user, isAdmin } = useAuth();
+  const [generateOpen, setGenerateOpen] = useState(false);
+  // Opening a contract needs the Contract Management (CRM) module.
+  const canOpen = !!isAdmin && !!user?.accessibleModules?.includes("crm");
+  const { data: contracts = [], isLoading } = useQuery({
+    queryKey: ["deal-template-contracts", deal._id],
+    queryFn: () => fetchDealTemplateContracts(deal._id),
+  });
+
+  return (
+    <Card>
+      <CardHeader className="flex-row items-start justify-between space-y-0 gap-3">
+        <div>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Sparkles className="h-4 w-4 text-primary" />
+            Contracts from templates
+          </CardTitle>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Generated from templates your platform admin publishes, filled in
+            from this deal, and managed in Contract Management — send for
+            signature, negotiate and amend there.
+          </p>
+        </div>
+        <Button size="sm" onClick={() => setGenerateOpen(true)}>
+          <Plus className="mr-1 h-4 w-4" />
+          Generate from template
+        </Button>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {isLoading && (
+          <p className="py-4 text-center text-sm text-muted-foreground">
+            Loading…
+          </p>
+        )}
+        {contracts.map((c) => (
+          <div
+            key={c._id}
+            className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3"
+          >
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs font-mono text-muted-foreground">
+                  {c.ref}
+                </span>
+                <span className="font-medium">{c.title}</span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {c.templateName ? `${c.templateName} · ` : ""}
+                {c.counterparty} · created{" "}
+                {new Date(c.createdAt).toLocaleDateString()}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Badge variant="outline">{c.stage}</Badge>
+              <Badge variant="secondary">
+                {SIGNATURE_LABEL[c.signatureStatus] ?? c.signatureStatus}
+              </Badge>
+              {canOpen && (
+                <Button asChild size="sm" variant="outline">
+                  <Link to={`/crm/contracts/${c._id}`}>
+                    <ExternalLink className="mr-1 h-3.5 w-3.5" />
+                    Open in Contract Management
+                  </Link>
+                </Button>
+              )}
+            </div>
+          </div>
+        ))}
+        {!isLoading && !contracts.length && (
+          <p className="py-4 text-center text-sm text-muted-foreground">
+            No template-based contracts on this deal yet.
+          </p>
+        )}
+        {!canOpen && contracts.length > 0 && (
+          <p className="text-xs text-muted-foreground">
+            Contract Management isn't enabled for your workspace, so these
+            contracts can only be tracked here.
+          </p>
+        )}
+      </CardContent>
+      <GenerateDealContractDialog
+        deal={deal}
+        open={generateOpen}
+        onOpenChange={setGenerateOpen}
+        canOpenContractManagement={canOpen}
+      />
+    </Card>
   );
 }
 

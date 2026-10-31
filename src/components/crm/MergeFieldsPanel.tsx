@@ -13,11 +13,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  MERGE_GROUP_ORDER,
   metaFor,
+  orderGroups,
   readMergeFields,
   setMergeFieldValue,
 } from "@/lib/crm/merge-fields";
+import { useMergeFieldRegistry } from "@/hooks/use-merge-field-registry";
 
 const CURRENCIES = [
   "USD",
@@ -81,7 +82,11 @@ export function MergeFieldsPanel({
   onSave,
   onDiscard,
 }: Props) {
-  const fields = useMemo(() => readMergeFields(body), [body]);
+  // Labels for deal / term-sheet fields come from the engine's registry;
+  // re-render once it has loaded.
+  const { data: registry } = useMergeFieldRegistry();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const fields = useMemo(() => readMergeFields(body), [body, registry]);
   const [vals, setVals] = useState<Record<string, string>>({});
   const [unfilledOnly, setUnfilledOnly] = useState(false);
 
@@ -113,12 +118,14 @@ export function MergeFieldsPanel({
     onChange(setMergeFieldValue(body, key, value), key, value);
   };
 
-  const groups = MERGE_GROUP_ORDER.map((g) => ({
-    group: g,
-    items: fields.filter(
-      (f) => metaFor(f.key).group === g && (!unfilledOnly || !f.filled),
-    ),
-  })).filter((g) => g.items.length);
+  const groups = orderGroups(fields.map((f) => metaFor(f.key).group))
+    .map((g) => ({
+      group: g,
+      items: fields.filter(
+        (f) => metaFor(f.key).group === g && (!unfilledOnly || !f.filled),
+      ),
+    }))
+    .filter((g) => g.items.length);
 
   return (
     <Card>

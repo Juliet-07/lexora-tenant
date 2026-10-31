@@ -48,6 +48,7 @@ import {
   Folder,
   Search,
   ArrowRight,
+  Handshake,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { CommentThread } from "@/components/crm/CommentThread";
@@ -473,6 +474,15 @@ export default function Contracts() {
                         <p className="text-xs text-muted-foreground">
                           {c.counterparty}
                         </p>
+                        {c.dealId && (
+                          <Badge
+                            variant="secondary"
+                            className="mt-1 gap-1 text-[10px]"
+                          >
+                            <Handshake className="h-3 w-3" />
+                            Deal{c.dealName ? `: ${c.dealName}` : ""}
+                          </Badge>
+                        )}
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline">{c.type}</Badge>

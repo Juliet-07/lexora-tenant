@@ -14,11 +14,9 @@
 // filled in such a contract are plain text and can't be traced back.
 // ─────────────────────────────────────────────────────────────
 
-export type MergeFieldGroup =
-  | "Parties"
-  | "Engagement"
-  | "Commercial"
-  | "Clause-specific";
+// Groups come from the field registry the engine serves, so a new group
+// (Deal, Term sheet, Signing…) needs no change here.
+export type MergeFieldGroup = string;
 
 export type MergeFieldInput = "text" | "date" | "textarea" | "currency";
 
@@ -30,10 +28,25 @@ export interface MergeFieldMeta {
 
 export const MERGE_GROUP_ORDER: MergeFieldGroup[] = [
   "Parties",
+  "Deal",
   "Engagement",
+  "Dates",
   "Commercial",
+  "Term sheet",
+  "Signing",
+  "Contract",
+  "Person",
+  "Letter",
   "Clause-specific",
 ];
+
+/** Groups present in a set of fields, in the display order above. */
+export const orderGroups = (groups: MergeFieldGroup[]): MergeFieldGroup[] =>
+  Array.from(new Set(groups)).sort((a, b) => {
+    const ia = MERGE_GROUP_ORDER.indexOf(a);
+    const ib = MERGE_GROUP_ORDER.indexOf(b);
+    return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib);
+  });
 
 // Mirrors CONTRACT_MERGE_FIELDS in the engine
 // (src/modules/crm/tools/schemas/contract.schema.ts). A token that is not
@@ -140,8 +153,32 @@ const humanize = (key: string) =>
     .trim()
     .replace(/^\w/, (c) => c.toUpperCase());
 
+// Labels/groups for fields the static table above doesn't list (the deal
+// fields, term-sheet sections…), filled from the engine's registry
+// (see useMergeFieldRegistry). The static table wins where both have a
+// field, so the CRM panel's existing grouping does not shift.
+const REGISTRY_META: Record<string, MergeFieldMeta> = {};
+
+export interface RegistryField {
+  token: string;
+  label: string;
+  group: string;
+  input: "text" | "textarea" | "date" | "currency" | "number";
+}
+
+export const registerMergeMeta = (fields: RegistryField[]) => {
+  for (const f of fields) {
+    REGISTRY_META[f.token] = {
+      label: f.label,
+      group: f.group,
+      input: f.input === "number" ? "text" : f.input,
+    };
+  }
+};
+
 export const metaFor = (key: string): MergeFieldMeta =>
-  META[key] ?? {
+  META[key] ??
+  REGISTRY_META[key] ?? {
     label: humanize(key),
     group: "Clause-specific",
     input: "text",
@@ -149,7 +186,11 @@ export const metaFor = (key: string): MergeFieldMeta =>
 
 // Fields whose value is a block of HTML (a list) rather than a line of
 // text — the engine wraps these in a <div>, not a <span>.
-const LIST_FIELDS = new Set(["scopeOfWork"]);
+const LIST_FIELDS = new Set(["scopeOfWork", "partiesList", "signatoriesList"]);
+
+// Free text that can run to several lines (the deal term-sheet sections):
+// the engine renders the line breaks as <br> inside a <span>.
+const isMultiline = (key: string) => key.startsWith("termSheet");
 
 const TOKEN = /^\s*\{\{(\w+)\}\}\s*$/;
 const TOKEN_G = /\{\{(\w+)\}\}/g;
@@ -213,6 +254,12 @@ const readValue = (el: Element, key: string): string => {
     );
     if (items.length) return items.join("\n");
   }
+  if (isMultiline(key)) {
+    // <br> is what carries the line breaks — textContent would drop them.
+    const clone = el.cloneNode(true) as Element;
+    clone.querySelectorAll("br").forEach((br) => br.replaceWith("\n"));
+    return (clone.textContent ?? "").trim();
+  }
   return (el.textContent ?? "").trim();
 };
 
@@ -268,6 +315,15 @@ export function setMergeFieldValue(
         ol.append(li);
       });
       el.replaceChildren(ol);
+    } else if (isMultiline(key)) {
+      const lines = value.split(/\r?\n/);
+      el.replaceChildren(
+        ...lines.flatMap((line, i) =>
+          i < lines.length - 1
+            ? [doc.createTextNode(line), doc.createElement("br")]
+            : [doc.createTextNode(line)],
+        ),
+      );
     } else {
       el.textContent = value;
     }
