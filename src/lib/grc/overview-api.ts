@@ -358,25 +358,8 @@ export interface Deal {
   dd: DDItem[];
   cps: CP[];
 }
-export interface Clause {
-  _id: string;
-  title: string;
-  category: string;
-  jurisdiction: string;
-  approved: boolean;
-  version: number;
-}
-export interface Precedent {
-  _id: string;
-  name: string;
-  type: string;
-  jurisdiction: string;
-  fileName: string;
-}
 export interface DealsData {
   deals: Deal[];
-  clauses: Clause[];
-  precedents: Precedent[];
 }
 
 // ── Deal Intelligence ────────────────────────────────────────

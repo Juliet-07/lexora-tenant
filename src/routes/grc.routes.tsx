@@ -28,8 +28,6 @@ import BoardMessaging from "@/pages/grc/governance/Board/BoardMessaging";
 import GrcReporting from "@/pages/grc/Reporting";
 import DealPipeline from "@/pages/grc/deals/Pipeline";
 import DealDetail from "@/pages/grc/deals/DealDetail";
-import ClauseLibrary from "@/pages/grc/deals/ClauseLibrary";
-import PrecedentTemplates from "@/pages/grc/deals/PrecedentTemplates";
 import LegalKnowledge from "@/pages/grc/LegalKnowledge";
 import ComplianceObligations from "@/pages/grc/compliance/Obligations";
 import ComplianceCalendar from "@/pages/grc/compliance/Calendar";
@@ -65,16 +63,6 @@ export const grcRoutes = ({ isAdmin, accessibleModules }: RouteContext) => {
         key="grc-deals-pipeline"
         path="/grc/deals/pipeline"
         element={layout(<DealPipeline />)}
-      />,
-      <Route
-        key="grc-deals-clauses"
-        path="/grc/deals/clauses"
-        element={layout(<ClauseLibrary />)}
-      />,
-      <Route
-        key="grc-deals-precedents"
-        path="/grc/deals/precedents"
-        element={layout(<PrecedentTemplates />)}
       />,
       <Route
         key="grc-legal-knowledge"

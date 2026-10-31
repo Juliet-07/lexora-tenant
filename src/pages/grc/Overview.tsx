@@ -658,9 +658,13 @@ export default function GrcOverview() {
             tone="from-emerald-500 to-lime-500"
           />
           <Kpi
-            to="/grc/deals/clauses"
-            label="Clause library"
-            value={deals.clauses.length}
+            to="/grc/deals/pipeline"
+            label="Open conditions precedent"
+            value={activeDeals.reduce(
+              (n, d) =>
+                n + d.cps.filter((c) => c.status !== "Satisfied").length,
+              0,
+            )}
             icon={Scale}
             tone="from-blue-500 to-cyan-500"
           />

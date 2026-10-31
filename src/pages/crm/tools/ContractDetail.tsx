@@ -75,7 +75,6 @@ import {
   downloadContractPdf,
   previewContractPdf,
   updateContractGovernance,
-  fetchClauseLibrary,
   addConditionPrecedent,
   setConditionPrecedentSatisfied,
   setApprovalChain,
@@ -176,10 +175,6 @@ export default function ContractDetail() {
     queryKey: ["contract", id],
     queryFn: () => fetchContract(id),
     enabled: !!id,
-  });
-  const { data: clauseLibrary = [] } = useQuery({
-    queryKey: ["clause-library"],
-    queryFn: fetchClauseLibrary,
   });
   const { data: employeesPage } = useQuery({
     queryKey: ["hr-employees-all"],
@@ -888,7 +883,7 @@ export default function ContractDetail() {
         {/* ══ EDITOR ══ */}
         <TabsContent value="editor" className="pt-4">
           <div className="grid gap-4 xl:grid-cols-[220px_minmax(0,1fr)_320px]">
-            {/* Contents + clause library */}
+            {/* Contents */}
             <div className="space-y-4">
               <Card>
                 <CardHeader className="pb-2">
@@ -911,32 +906,6 @@ export default function ContractDetail() {
                   ) : (
                     <p className="text-xs text-muted-foreground">
                       Numbered clauses appear here as the document is drafted.
-                    </p>
-                  )}
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-xs uppercase tracking-wide text-muted-foreground">
-                    Clause library ({clauseLibrary.length})
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2 pt-0">
-                  {clauseLibrary.slice(0, 8).map((c) => (
-                    <div
-                      key={c._id}
-                      className="rounded-md border bg-muted/40 px-2 py-1.5 text-xs"
-                    >
-                      <p className="font-medium">{c.title}</p>
-                      <p className="text-[11px] text-muted-foreground">
-                        {c.category}
-                        {c.approved && " · Approved"}
-                      </p>
-                    </div>
-                  ))}
-                  {!clauseLibrary.length && (
-                    <p className="text-xs text-muted-foreground">
-                      No clauses in the library yet.
                     </p>
                   )}
                 </CardContent>

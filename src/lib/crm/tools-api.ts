@@ -272,23 +272,6 @@ export const updateContractGovernance = async (
 ): Promise<Contract> =>
   unwrap(await api.patch(`/tools/contracts/${id}/governance`, dto));
 
-export interface ClauseLibraryEntry {
-  _id: string;
-  title: string;
-  category: string;
-  jurisdiction: string;
-  body: string;
-  approved: boolean;
-  version: number;
-}
-// Real clause library — the same tenant-scoped collection Deals &
-// Transactions manages, exposed here under a CRM-gated route.
-export const fetchClauseLibrary = async (): Promise<ClauseLibraryEntry[]> => {
-  const res = await api.get("/tools/contracts/clause-library");
-  const d = unwrap(res);
-  return Array.isArray(d) ? d : [];
-};
-
 // ── Conditions precedent ────────────────────────────────────────
 export const addConditionPrecedent = async (
   id: string,

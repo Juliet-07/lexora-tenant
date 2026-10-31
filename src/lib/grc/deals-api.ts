@@ -12,37 +12,6 @@ export const resolveDealFileUrl = (
   return `${new URL(DEALS_API_BASE).origin}${url}`;
 };
 
-export type ClauseCategory =
-  | "Confidentiality"
-  | "Consideration"
-  | "Conditions Precedent"
-  | "Warranties"
-  | "Indemnities"
-  | "Boilerplate"
-  | "Dispute Resolution"
-  | "Governance";
-
-export const CLAUSE_CATEGORIES: ClauseCategory[] = [
-  "Confidentiality",
-  "Consideration",
-  "Conditions Precedent",
-  "Warranties",
-  "Indemnities",
-  "Boilerplate",
-  "Dispute Resolution",
-  "Governance",
-];
-
-export interface Clause {
-  _id: string;
-  title: string;
-  category: ClauseCategory;
-  jurisdiction: string;
-  body: string;
-  approved: boolean;
-  version: number;
-}
-
 export type DealType =
   | "M&A"
   | "JV"
@@ -50,25 +19,6 @@ export type DealType =
   | "Capital Raise"
   | "Disposal"
   | "Spin-off";
-
-export interface PrecedentSection {
-  clauseId: string | null;
-  title: string;
-  body: string;
-}
-
-export interface Precedent {
-  _id: string;
-  name: string;
-  type: DealType;
-  jurisdiction: string;
-  folderId: string;
-  fileName: string;
-  fileUrl: string | null;
-  mimeType: string | null;
-  size: number;
-  content: string;
-}
 
 export const DEAL_STAGES = [
   "Origination",
@@ -188,8 +138,6 @@ export interface ContractComment {
   createdAt: string;
 }
 export interface ContractSection {
-  /** Only set on older contracts assembled from the clause library. */
-  clauseId?: string | null;
   title: string;
   /** The stored text — merge fields are still {{token}} here. */
   body: string;
@@ -320,22 +268,6 @@ export interface Deal {
   createdAt: string;
 }
 
-export const fetchClauses = async (): Promise<Clause[]> => {
-  const res = await api.get("/deals/clauses");
-  const d = res.data?.data ?? res.data;
-  return Array.isArray(d) ? d : [];
-};
-
-export const createClause = async (dto: {
-  title: string;
-  category: ClauseCategory;
-  jurisdiction?: string;
-  body: string;
-}): Promise<Clause> => {
-  const res = await api.post("/deals/clauses", dto);
-  return res.data?.data ?? res.data;
-};
-
 export const addParty = async (
   dealId: string,
   dto: {
@@ -373,83 +305,6 @@ export const removeParty = async (
 ): Promise<Deal> => {
   const res = await api.delete(`/deals/${dealId}/parties/${index}`);
   return res.data?.data ?? res.data;
-};
-
-export const updateClause = async (
-  id: string,
-  dto: Partial<{
-    title: string;
-    category: ClauseCategory;
-    jurisdiction: string;
-    body: string;
-  }>,
-): Promise<Clause> => {
-  const res = await api.patch(`/deals/clauses/${id}`, dto);
-  return res.data?.data ?? res.data;
-};
-
-export const toggleClauseApproved = async (id: string): Promise<Clause> => {
-  const res = await api.patch(`/deals/clauses/${id}/toggle-approved`, {});
-  return res.data?.data ?? res.data;
-};
-
-export const newClauseVersion = async (id: string): Promise<Clause> => {
-  const res = await api.post(`/deals/clauses/${id}/new-version`, {});
-  return res.data?.data ?? res.data;
-};
-
-export const deleteClause = async (id: string): Promise<void> => {
-  await api.delete(`/deals/clauses/${id}`);
-};
-
-export const fetchPrecedents = async (): Promise<Precedent[]> => {
-  const res = await api.get("/deals/precedents");
-  const d = res.data?.data ?? res.data;
-  return Array.isArray(d) ? d : [];
-};
-
-export const fetchPrecedent = async (id: string): Promise<Precedent> => {
-  const res = await api.get(`/deals/precedents/${id}`);
-  return res.data?.data ?? res.data;
-};
-
-export const createPrecedent = async (dto: {
-  name: string;
-  type: DealType;
-  jurisdiction?: string;
-  folderId: string;
-  file: File;
-}): Promise<Precedent> => {
-  const form = new FormData();
-  form.append("name", dto.name);
-  form.append("type", dto.type);
-  if (dto.jurisdiction) form.append("jurisdiction", dto.jurisdiction);
-  form.append("folderId", dto.folderId);
-  form.append("file", dto.file);
-  const res = await api.post("/deals/precedents", form);
-  return res.data?.data ?? res.data;
-};
-
-export const updatePrecedentContent = async (
-  id: string,
-  content: string,
-): Promise<Precedent> => {
-  const res = await api.patch(`/deals/precedents/${id}/content`, { content });
-  return res.data?.data ?? res.data;
-};
-
-export const replacePrecedentDocument = async (
-  id: string,
-  file: File,
-): Promise<Precedent> => {
-  const form = new FormData();
-  form.append("file", file);
-  const res = await api.post(`/deals/precedents/${id}/replace-document`, form);
-  return res.data?.data ?? res.data;
-};
-
-export const deletePrecedent = async (id: string): Promise<void> => {
-  await api.delete(`/deals/precedents/${id}`);
 };
 
 export const fetchDeals = async (): Promise<Deal[]> => {
@@ -701,28 +556,6 @@ export const submitReview = async (
 ): Promise<{ success: boolean }> => {
   const res = await api.post(`/deals/review/${kind}/${token}`, dto);
   return res.data?.data ?? res.data;
-};
-
-export interface PrecedentFolder {
-  _id: string;
-  name: string;
-}
-
-export const fetchPrecedentFolders = async (): Promise<PrecedentFolder[]> => {
-  const res = await api.get("/deals/precedents/folders");
-  const d = res.data?.data ?? res.data;
-  return Array.isArray(d) ? d : [];
-};
-
-export const createPrecedentFolder = async (
-  name: string,
-): Promise<PrecedentFolder> => {
-  const res = await api.post("/deals/precedents/folders", { name });
-  return res.data?.data ?? res.data;
-};
-
-export const deletePrecedentFolder = async (id: string): Promise<void> => {
-  await api.delete(`/deals/precedents/folders/${id}`);
 };
 
 export const renameContract = async (

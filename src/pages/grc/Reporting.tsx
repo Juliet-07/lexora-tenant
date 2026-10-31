@@ -706,7 +706,7 @@ export default function GrcReporting() {
     entries.push({
       domain: "Deals & Transactions",
       description:
-        "Pipeline, due diligence progress, conditions precedent and clause library.",
+        "Pipeline, due diligence progress, conditions precedent and contracts.",
       icon: Handshake,
       tone: "from-emerald-500 to-teal-500",
       def: {
@@ -719,8 +719,6 @@ export default function GrcReporting() {
             label: "Active",
             value: deals.deals.filter((d) => d.status === "Active").length,
           },
-          { label: "Clause library", value: deals.clauses.length },
-          { label: "Precedents", value: deals.precedents.length },
         ],
         sections: [
           {
@@ -763,23 +761,6 @@ export default function GrcReporting() {
               d.dd.filter((i) => i.status === "Complete").length,
               d.cps.length,
               d.cps.filter((c) => c.status === "Satisfied").length,
-            ]),
-          },
-          {
-            heading: "Clause library",
-            columns: [
-              "Clause",
-              "Category",
-              "Jurisdiction",
-              "Approved",
-              "Version",
-            ],
-            rows: deals.clauses.map((c) => [
-              c.title,
-              c.category,
-              c.jurisdiction,
-              c.approved ? "Yes" : "No",
-              c.version,
             ]),
           },
         ],
