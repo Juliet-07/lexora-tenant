@@ -1,9 +1,9 @@
 import { api } from "@/lib/api";
-import type { ContractType } from "@/lib/crm/tools-api";
 
 // Contracts drafted inside a deal from templates the Super Admin publishes
-// (module GRC, area "Deals"). A generated contract is a real Contract
-// Management contract linked back to the deal — see the engine's
+// (module GRC, area "Deals"). A generated contract belongs to the deal
+// (deal.contracts) and is edited, redlined, reviewed and executed there —
+// it is not a Contract Management (CRM) contract. See the engine's
 // DealContractService.
 
 export interface DealContractTemplate {
@@ -20,17 +20,18 @@ export interface DealContractTemplate {
 }
 
 export type DealFieldSource =
-  | "deal" // read from the deal record
-  | "auto" // filled by the system (our company, today's date)
+  | "deal" // supplied by the deal, our company profile or the system
   | "form" // typed on the generate form
-  | "unavailable" // a real field, but not one a deal contract can fill
+  | "clause" // a clause-level detail, completed on the contract itself
   | "unknown"; // not a known field at all — stays as literal {{token}} text
 
 export interface DealTemplateField {
   token: string;
   label: string;
+  /** One of the fields every module shares. */
+  common: boolean;
   source: DealFieldSource;
-  /** The deal's value for a "deal" field (blank if the deal has none). */
+  /** The value the deal / company profile already supplies (may be blank). */
   value: string;
   filled: boolean;
 }
@@ -38,43 +39,44 @@ export interface DealTemplateField {
 export interface DealContractDraft {
   suggested: {
     title: string;
-    type: ContractType;
     value: number;
     currency: string;
+    governingLaw: string;
     expiresOn: string;
-    owner: string;
+  };
+  /** Our own company — the default Party A. */
+  ourCompany: {
+    name: string;
+    address: string;
+    email: string;
+    representative: string;
+    representativeTitle: string;
   };
   parties: { side: string; name: string; title: string; email: string }[];
   template: { _id: string; title: string } | null;
   fields: DealTemplateField[];
 }
 
-export interface DealContractLink {
-  _id: string;
-  ref: string;
-  title: string;
-  type: ContractType;
-  stage: string;
-  value: number;
-  currency: string;
-  counterparty: string;
-  counterpartyEmail: string;
-  templateName: string | null;
-  signatureStatus: string;
-  expiresOn: string;
-  createdAt: string;
+export interface ContractPartyInput {
+  name: string;
+  email?: string;
+  address?: string;
+  representative?: string;
+  representativeTitle?: string;
 }
 
 export interface GenerateDealContractInput {
   templateId: string;
   title: string;
-  counterparty: string;
-  counterpartyEmail: string;
+  /** Omit to use our own company as Party A. */
+  partyA?: ContractPartyInput;
+  partyB: ContractPartyInput;
   value?: number;
   currency?: string;
+  governingLaw?: string;
   scopeOfWork?: string;
-  expiresOn: string;
-  owner?: string;
+  effectiveDate?: string;
+  expiresOn?: string;
 }
 
 const unwrap = <T>(res: { data: any }): T => res.data?.data ?? res.data;
@@ -98,17 +100,8 @@ export const fetchDealContractDraft = async (
     }),
   );
 
-export const fetchDealTemplateContracts = async (
-  dealId: string,
-): Promise<DealContractLink[]> => {
-  const d = unwrap<DealContractLink[]>(
-    await api.get(`/deals/${dealId}/template-contracts`),
-  );
-  return Array.isArray(d) ? d : [];
-};
-
 export const generateDealContract = async (
   dealId: string,
   dto: GenerateDealContractInput,
-): Promise<{ _id: string; ref: string; title: string }> =>
+): Promise<{ contractId: string }> =>
   unwrap(await api.post(`/deals/${dealId}/template-contracts`, dto));

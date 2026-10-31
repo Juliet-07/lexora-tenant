@@ -27,17 +27,35 @@ export interface MergeFieldMeta {
 }
 
 export const MERGE_GROUP_ORDER: MergeFieldGroup[] = [
+  // Common fields — in every module (Agreement, Parties, Our company…)
+  "Agreement",
   "Parties",
-  "Deal",
-  "Engagement",
+  "Our company",
   "Dates",
+  "Value",
+  // Module-specific
+  "Engagement",
   "Commercial",
+  "Deal",
+  "Deal parties",
+  "Deal dates",
   "Term sheet",
   "Signing",
   "Contract",
   "Person",
+  "Employment",
+  "Pay",
   "Letter",
   "Clause-specific",
+];
+
+/** The groups every module shares (see the engine's common fields). */
+export const COMMON_GROUPS: MergeFieldGroup[] = [
+  "Agreement",
+  "Parties",
+  "Our company",
+  "Dates",
+  "Value",
 ];
 
 /** Groups present in a set of fields, in the display order above. */

@@ -188,13 +188,33 @@ export interface ContractComment {
   createdAt: string;
 }
 export interface ContractSection {
-  clauseId: string | null;
+  /** Only set on older contracts assembled from the clause library. */
+  clauseId?: string | null;
   title: string;
+  /** The stored text — merge fields are still {{token}} here. */
   body: string;
+  /** The text with merge fields resolved (what readers and the PDF see). */
+  renderedBody?: string;
   comments: ContractComment[];
-  /** Optional line-split body used by the redline reviewer. */
+  /** Resolved body split into paragraphs — what a redline anchors to. */
   lines?: string[];
   redlines?: Redline[];
+}
+
+/** One merge field a contract's text uses, with its current value. */
+export interface ContractField {
+  token: string;
+  label: string;
+  group: string;
+  /** One of the fields every module shares (title, Party A/B, dates…). */
+  common: boolean;
+  input: "text" | "textarea" | "date" | "currency" | "number" | string;
+  /** Plain text; a list is one item per line. */
+  value: string;
+  filled: boolean;
+  editable: boolean;
+  /** A custom token that isn't in the field registry. */
+  unknown: boolean;
 }
 export type ReviewToken = ReviewLoopToken;
 export type ReviewResponse = ReviewLoopResponse;
@@ -202,7 +222,13 @@ export type ReviewResponse = ReviewLoopResponse;
 export interface Contract {
   _id: string;
   name: string;
+  /** The template this contract was generated from (none on older ones). */
+  templateId?: string | null;
+  templateName?: string;
+  reference?: string;
   sections: ContractSection[];
+  /** Merge fields the text uses, with their values — see ContractField. */
+  fields?: ContractField[];
   variables: Record<string, string>;
   reviewLoop: ReviewLoop;
   pdfUrl: string | null;
@@ -699,13 +725,6 @@ export const deletePrecedentFolder = async (id: string): Promise<void> => {
   await api.delete(`/deals/precedents/folders/${id}`);
 };
 
-export const createContract = async (
-  dealId: string,
-  name: string,
-): Promise<Deal> => {
-  const res = await api.post(`/deals/${dealId}/contracts`, { name });
-  return res.data?.data ?? res.data;
-};
 export const renameContract = async (
   dealId: string,
   contractId: string,
@@ -721,17 +740,6 @@ export const deleteContract = async (
   contractId: string,
 ): Promise<Deal> => {
   const res = await api.delete(`/deals/${dealId}/contracts/${contractId}`);
-  return res.data?.data ?? res.data;
-};
-export const addContractSection = async (
-  dealId: string,
-  contractId: string,
-  clauseId: string,
-): Promise<Deal> => {
-  const res = await api.post(
-    `/deals/${dealId}/contracts/${contractId}/sections`,
-    { clauseId },
-  );
   return res.data?.data ?? res.data;
 };
 export const removeContractSection = async (
@@ -870,17 +878,6 @@ export const submitContractReview = async (
   },
 ): Promise<{ success: boolean }> => {
   const res = await api.post(`/deals/review/contract/${token}`, dto);
-  return res.data?.data ?? res.data;
-};
-export const addContractSectionFromPrecedent = async (
-  dealId: string,
-  contractId: string,
-  precedentId: string,
-): Promise<Deal> => {
-  const res = await api.post(
-    `/deals/${dealId}/contracts/${contractId}/sections/from-precedent`,
-    { precedentId },
-  );
   return res.data?.data ?? res.data;
 };
 export const fetchContractPdfBlob = async (

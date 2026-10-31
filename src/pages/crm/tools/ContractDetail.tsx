@@ -40,7 +40,6 @@ import {
   FileText,
   Flag,
   GitCompare,
-  Handshake,
   Loader2,
   Lock,
   MessageSquare,
@@ -568,15 +567,6 @@ export default function ContractDetail() {
         <span className="font-medium text-foreground">
           {contract.ref} · {contract.counterparty} · {contract.type}
         </span>
-        {contract.dealId && (
-          <Link
-            to={`/grc/deals/${contract.dealId}`}
-            className="ml-auto inline-flex items-center gap-1 rounded-full border bg-primary/5 px-2.5 py-0.5 text-xs font-medium text-primary hover:bg-primary/10"
-          >
-            <Handshake className="h-3 w-3" />
-            Deal: {contract.dealName || "View deal"}
-          </Link>
-        )}
       </div>
 
       {/* ── Header ── */}

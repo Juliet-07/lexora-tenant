@@ -187,7 +187,7 @@ export function PipelineStrip({ event }: { event: CrmEvent }) {
           {fmtInZone(lc.endsAt, event.timezone)} ({event.timezone})
         </span>
       </div>
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
         {lc.pipeline.map((p) => (
           <div
             key={p.key}

@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -38,6 +37,8 @@ import {
   fetchDealContractDraft,
   fetchDealContractTemplates,
   generateDealContract,
+  type ContractPartyInput,
+  type DealContractDraft,
   type DealContractTemplate,
   type DealTemplateField,
 } from "@/lib/grc/deal-contracts-api";
@@ -62,6 +63,23 @@ const CURRENCIES = [
   "INR",
 ];
 
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+interface PartyForm {
+  name: string;
+  email: string;
+  address: string;
+  representative: string;
+  representativeTitle: string;
+}
+const emptyParty = (): PartyForm => ({
+  name: "",
+  email: "",
+  address: "",
+  representative: "",
+  representativeTitle: "",
+});
+
 // Which deal tab to point at when a field the deal should supply is empty.
 function whereToFill(token: string): string {
   if (token.startsWith("termSheet")) return "the Term Sheet tab";
@@ -69,34 +87,59 @@ function whereToFill(token: string): string {
     return "the deal's parties (Overview tab)";
   if (token.startsWith("signing") || token === "signatoriesList")
     return "the Signing tab";
+  if (token.startsWith("tenantCompany") || token === "tenantRegisteredAddress")
+    return "your company profile";
   return "the deal's details";
 }
 
-// Fields the form itself supplies, and what feeds each.
-function formHasValue(
-  token: string,
-  f: {
-    title: string;
-    counterparty: string;
-    email: string;
-    value: string;
-    currency: string;
-    expiresOn: string;
-    scope: string;
-  },
-): boolean {
+const partyValue = (p: PartyForm | null, key: keyof PartyForm) =>
+  (p?.[key] ?? "").trim();
+
+interface FormState {
+  title: string;
+  partyA: PartyForm | null; // null = our own company
+  partyB: PartyForm;
+  value: string;
+  currency: string;
+  governingLaw: string;
+  effectiveDate: string;
+  expiresOn: string;
+  scope: string;
+}
+
+// Does the form itself supply this field? (Fields that come from the form.)
+function formHasValue(token: string, f: FormState): boolean {
   switch (token) {
     case "title":
       return !!f.title.trim();
+    case "partyBName":
     case "counterpartyName":
     case "recipientName":
-      return !!f.counterparty.trim();
+      return !!partyValue(f.partyB, "name");
+    case "partyBEmail":
     case "recipientEmail":
-      return !!f.email.trim();
+      return !!partyValue(f.partyB, "email");
+    case "partyBAddress":
+    case "clientRegisteredAddress":
+      return !!partyValue(f.partyB, "address");
+    case "partyBRepresentative":
+    case "clientRepresentativeName":
+      return !!partyValue(f.partyB, "representative");
+    case "partyBRepresentativeTitle":
+    case "clientRepresentativeTitle":
+      return !!partyValue(f.partyB, "representativeTitle");
+    case "partyARepresentative":
+    case "leadProfessionalName":
+      return !!partyValue(f.partyA, "representative");
+    case "partyARepresentativeTitle":
+    case "leadProfessionalTitle":
+      return !!partyValue(f.partyA, "representativeTitle");
     case "contractValue":
       return f.value.trim() !== "";
     case "contractCurrency":
       return !!f.currency;
+    case "governingLaw":
+      return !!f.governingLaw.trim();
     case "expiryDate":
       return !!f.expiresOn;
     case "scopeOfWork":
@@ -106,30 +149,37 @@ function formHasValue(
   }
 }
 
-const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const toPartyInput = (p: PartyForm): ContractPartyInput => ({
+  name: p.name.trim(),
+  email: p.email.trim() || undefined,
+  address: p.address.trim() || undefined,
+  representative: p.representative.trim() || undefined,
+  representativeTitle: p.representativeTitle.trim() || undefined,
+});
 
 export function GenerateDealContractDialog({
   deal,
   open,
   onOpenChange,
-  canOpenContractManagement,
+  onGenerated,
 }: {
   deal: Deal;
   open: boolean;
   onOpenChange: (o: boolean) => void;
-  /** The workspace has the CRM module, so the new contract can be opened. */
-  canOpenContractManagement: boolean;
+  /** Called with the new contract's id so the caller can open it. */
+  onGenerated: (contractId: string) => void;
 }) {
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [template, setTemplate] = useState<DealContractTemplate | null>(null);
   const [search, setSearch] = useState("");
 
   const [title, setTitle] = useState("");
-  const [counterparty, setCounterparty] = useState("");
-  const [email, setEmail] = useState("");
+  const [partyA, setPartyA] = useState<PartyForm | null>(null);
+  const [partyB, setPartyB] = useState<PartyForm>(emptyParty());
   const [value, setValue] = useState("");
   const [currency, setCurrency] = useState("USD");
+  const [governingLaw, setGoverningLaw] = useState("");
+  const [effectiveDate, setEffectiveDate] = useState("");
   const [expiresOn, setExpiresOn] = useState("");
   const [scope, setScope] = useState("");
 
@@ -139,6 +189,8 @@ export function GenerateDealContractDialog({
       setTemplate(null);
       setSearch("");
       setScope("");
+      setPartyA(null);
+      setEffectiveDate("");
     }
   }, [open]);
 
@@ -160,14 +212,14 @@ export function GenerateDealContractDialog({
     setTitle(draft.suggested.title);
     setValue(draft.suggested.value ? String(draft.suggested.value) : "");
     setCurrency(draft.suggested.currency || "USD");
+    setGoverningLaw(draft.suggested.governingLaw || "");
     setExpiresOn(draft.suggested.expiresOn || "");
     // With exactly one party on the deal there is nobody else to pick.
     if (draft.parties.length === 1) {
-      setCounterparty(draft.parties[0].name);
-      setEmail(draft.parties[0].email);
+      const p = draft.parties[0];
+      setPartyB({ ...emptyParty(), name: p.name, email: p.email });
     } else {
-      setCounterparty("");
-      setEmail("");
+      setPartyB(emptyParty());
     }
   }, [draft, template]);
 
@@ -181,12 +233,14 @@ export function GenerateDealContractDialog({
     );
   }, [templates, search]);
 
-  const form = {
+  const form: FormState = {
     title,
-    counterparty,
-    email,
+    partyA,
+    partyB,
     value,
     currency,
+    governingLaw,
+    effectiveDate,
     expiresOn,
     scope,
   };
@@ -195,19 +249,30 @@ export function GenerateDealContractDialog({
   const fields = draft?.fields ?? [];
   const classified = useMemo(() => {
     const ready: DealTemplateField[] = [];
-    const needsDeal: DealTemplateField[] = [];
     const needsForm: DealTemplateField[] = [];
-    const cannot: DealTemplateField[] = [];
+    const needsDeal: DealTemplateField[] = [];
+    const later: DealTemplateField[] = [];
+    const unknown: DealTemplateField[] = [];
     for (const f of fields) {
-      if (f.source === "auto") ready.push(f);
-      else if (f.source === "deal") (f.filled ? ready : needsDeal).push(f);
-      else if (f.source === "form")
-        (formHasValue(f.token, form) ? ready : needsForm).push(f);
-      else cannot.push(f);
+      if (f.source === "unknown") unknown.push(f);
+      else if (f.source === "clause") later.push(f);
+      else if (formHasValue(f.token, form) || f.filled) ready.push(f);
+      else if (f.source === "deal") needsDeal.push(f);
+      else needsForm.push(f);
     }
-    return { ready, needsDeal, needsForm, cannot };
+    return { ready, needsForm, needsDeal, later, unknown };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fields, title, counterparty, email, value, currency, expiresOn, scope]);
+  }, [
+    fields,
+    title,
+    partyA,
+    partyB,
+    value,
+    currency,
+    governingLaw,
+    expiresOn,
+    scope,
+  ]);
 
   const total = fields.length;
   const readyPct = total
@@ -215,47 +280,36 @@ export function GenerateDealContractDialog({
     : 100;
   const usesScope = fields.some((f) => f.token === "scopeOfWork");
 
-  const emailOk = EMAIL.test(email.trim());
+  const emailBad = !!partyB.email.trim() && !EMAIL.test(partyB.email.trim());
   const canSubmit =
-    !!template &&
-    !!title.trim() &&
-    !!counterparty.trim() &&
-    emailOk &&
-    !!expiresOn;
+    !!template && !!title.trim() && !!partyB.name.trim() && !emailBad;
 
   const generateMut = useMutation({
     mutationFn: () =>
       generateDealContract(deal._id, {
         templateId: template!._id,
         title: title.trim(),
-        counterparty: counterparty.trim(),
-        counterpartyEmail: email.trim(),
+        partyA: partyA?.name.trim() ? toPartyInput(partyA) : undefined,
+        partyB: toPartyInput(partyB),
         value: value.trim() === "" ? undefined : Number(value),
         currency,
+        governingLaw: governingLaw.trim() || undefined,
         scopeOfWork: scope.trim() || undefined,
-        expiresOn,
+        effectiveDate: effectiveDate || undefined,
+        expiresOn: expiresOn || undefined,
       }),
-    onSuccess: (c) => {
-      queryClient.invalidateQueries({
-        queryKey: ["deal-template-contracts", deal._id],
-      });
+    onSuccess: async ({ contractId }) => {
+      // Wait for the deal to reload so the new contract is there to open.
+      await queryClient.invalidateQueries({ queryKey: ["deal", deal._id] });
       onOpenChange(false);
-      toast.success(`Contract ${c.ref} created from the template`);
-      if (canOpenContractManagement) navigate(`/crm/contracts/${c._id}`);
+      toast.success("Contract created from the template");
+      onGenerated(contractId);
     },
     onError: (err: any) =>
       toast.error(
         err?.response?.data?.message ?? "Failed to generate the contract",
       ),
   });
-
-  const pickParty = (i: string) => {
-    const p = draft?.parties[Number(i)];
-    if (p) {
-      setCounterparty(p.name);
-      setEmail(p.email);
-    }
-  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -267,8 +321,8 @@ export function GenerateDealContractDialog({
           </DialogTitle>
           <DialogDescription>
             {template
-              ? `${deal.name} — the deal's details fill the template for you. You can finish any gaps in Contract Management afterwards.`
-              : "Pick a template. It is filled in from this deal and then managed in Contract Management."}
+              ? `${deal.name} — the deal and your company profile fill the template for you. Anything left over can be completed in the contract's Fields tab.`
+              : "Pick a template. It is filled in from this deal and opens here, ready to review, edit and send."}
           </DialogDescription>
         </DialogHeader>
 
@@ -373,56 +427,22 @@ export function GenerateDealContractDialog({
                 />
               </div>
 
-              <div className="space-y-2 rounded-lg border p-3">
-                <div className="flex items-center justify-between gap-2">
-                  <Label>Who is it with, and who signs?</Label>
-                  {!!draft?.parties.length && (
-                    <Select onValueChange={pickParty}>
-                      <SelectTrigger className="h-8 w-[240px] text-xs">
-                        <SelectValue placeholder="Fill from a deal party…" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {draft.parties.map((p, i) => (
-                          <SelectItem key={i} value={String(i)}>
-                            {p.name} — {p.side}
-                            {p.title ? ` · ${p.title}` : ""}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
-                </div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="dc-cp" className="text-xs">
-                      Name
-                    </Label>
-                    <Input
-                      id="dc-cp"
-                      value={counterparty}
-                      onChange={(e) => setCounterparty(e.target.value)}
-                      placeholder="Full name or company"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="dc-email" className="text-xs">
-                      Email (the signing link is sent here)
-                    </Label>
-                    <Input
-                      id="dc-email"
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="name@company.com"
-                    />
-                    {!!email && !emailOk && (
-                      <p className="text-[11px] text-destructive">
-                        That doesn't look like a valid email address.
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </div>
+              <PartyBlock
+                label="Party A"
+                hint="Your company by default"
+                draft={draft}
+                value={partyA}
+                onChange={setPartyA}
+                usOption
+              />
+              <PartyBlock
+                label="Party B"
+                hint="The other side of the contract"
+                draft={draft}
+                value={partyB}
+                onChange={(p) => setPartyB(p ?? emptyParty())}
+                emailError={emailBad}
+              />
 
               <div className="grid gap-3 sm:grid-cols-3">
                 <div className="space-y-1.5">
@@ -456,7 +476,32 @@ export function GenerateDealContractDialog({
                   </Select>
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="dc-exp">Expires on</Label>
+                  <Label htmlFor="dc-law">Governing law</Label>
+                  <Input
+                    id="dc-law"
+                    value={governingLaw}
+                    onChange={(e) => setGoverningLaw(e.target.value)}
+                    placeholder="e.g. Rwanda"
+                  />
+                </div>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="dc-eff">
+                    Effective date{" "}
+                    <span className="font-normal text-muted-foreground">
+                      — today if left empty
+                    </span>
+                  </Label>
+                  <Input
+                    id="dc-eff"
+                    type="date"
+                    value={effectiveDate}
+                    onChange={(e) => setEffectiveDate(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="dc-exp">Expiry date</Label>
                   <Input
                     id="dc-exp"
                     type="date"
@@ -466,8 +511,8 @@ export function GenerateDealContractDialog({
                 </div>
               </div>
               <p className="-mt-2 text-[11px] text-muted-foreground">
-                Value and currency start from the deal; expiry starts at the
-                deal's longstop date.
+                Value, currency, governing law and expiry start from the deal
+                (jurisdiction and longstop date).
               </p>
 
               {usesScope && (
@@ -516,27 +561,31 @@ export function GenerateDealContractDialog({
                       tone="warn"
                       title="Complete in this form"
                       items={classified.needsForm}
-                      note={() => "needs a value above"}
+                      note={() => "needs a value on the left"}
                     />
                   )}
                   {classified.needsDeal.length > 0 && (
                     <FieldGroup
                       tone="warn"
-                      title="The deal has no value yet"
+                      title="Not on the deal yet"
                       items={classified.needsDeal}
                       note={(f) => `add it in ${whereToFill(f.token)}`}
                     />
                   )}
-                  {classified.cannot.length > 0 && (
+                  {classified.later.length > 0 && (
+                    <FieldGroup
+                      tone="warn"
+                      title="Complete on the contract"
+                      items={classified.later}
+                      note={() => "a detail of the clause itself"}
+                    />
+                  )}
+                  {classified.unknown.length > 0 && (
                     <FieldGroup
                       tone="bad"
-                      title="Can't be filled on a deal contract"
-                      items={classified.cannot}
-                      note={(f) =>
-                        f.source === "unknown"
-                          ? "not a recognised field — stays as text"
-                          : "belongs to another module's contracts"
-                      }
+                      title="Not recognised"
+                      items={classified.unknown}
+                      note={() => "not a known field — stays as text"}
                     />
                   )}
                   {classified.ready.length > 0 && (
@@ -544,15 +593,14 @@ export function GenerateDealContractDialog({
                       tone="ok"
                       title="Ready"
                       items={classified.ready}
-                      note={(f) =>
-                        f.source === "deal"
-                          ? f.value.length > 36
-                            ? `${f.value.slice(0, 36)}…`
-                            : f.value.replace(/<[^>]*>/g, "")
-                          : f.source === "auto"
-                            ? "filled automatically"
-                            : "from this form"
-                      }
+                      note={(f) => {
+                        const v = f.value.replace(/<[^>]*>/g, "");
+                        return v
+                          ? v.length > 36
+                            ? `${v.slice(0, 36)}…`
+                            : v
+                          : "from this form";
+                      }}
                     />
                   )}
                   {!total && (
@@ -570,9 +618,7 @@ export function GenerateDealContractDialog({
         <DialogFooter className="shrink-0 items-center border-t px-6 py-3 sm:justify-between">
           <p className="text-xs text-muted-foreground">
             {template
-              ? canOpenContractManagement
-                ? "You'll land in Contract Management to review, send for signature and negotiate."
-                : "Contract Management isn't enabled for this workspace — the contract will be listed on this deal."
+              ? "The contract opens here, where you can edit it, redline it and send it for review."
               : ""}
           </p>
           <div className="flex gap-2">
@@ -592,6 +638,135 @@ export function GenerateDealContractDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// One side of the contract. Party A (usOption) is our own company until
+// someone else is chosen; Party B is always filled in. Either can be
+// filled from a party on the deal.
+function PartyBlock({
+  label,
+  hint,
+  draft,
+  value,
+  onChange,
+  usOption,
+  emailError,
+}: {
+  label: string;
+  hint: string;
+  draft: DealContractDraft | undefined;
+  value: PartyForm | null;
+  onChange: (p: PartyForm | null) => void;
+  usOption?: boolean;
+  emailError?: boolean;
+}) {
+  const us = usOption && value === null;
+  const set = (patch: Partial<PartyForm>) =>
+    onChange({ ...(value ?? emptyParty()), ...patch });
+  const pick = (v: string) => {
+    if (v === "us") return onChange(null);
+    if (v === "other") return onChange(emptyParty());
+    const p = draft?.parties[Number(v)];
+    if (p) onChange({ ...emptyParty(), name: p.name, email: p.email });
+  };
+
+  return (
+    <div className="space-y-2 rounded-lg border p-3">
+      <div className="flex items-center justify-between gap-2">
+        <Label>
+          {label}{" "}
+          <span className="font-normal text-muted-foreground">— {hint}</span>
+        </Label>
+        <Select onValueChange={pick} value={us ? "us" : undefined}>
+          <SelectTrigger className="h-8 w-[240px] text-xs">
+            <SelectValue placeholder="Fill from a deal party…" />
+          </SelectTrigger>
+          <SelectContent>
+            {usOption && (
+              <SelectItem value="us">
+                Our company{draft ? ` — ${draft.ourCompany.name}` : ""}
+              </SelectItem>
+            )}
+            {(draft?.parties ?? []).map((p, i) => (
+              <SelectItem key={i} value={String(i)}>
+                {p.name} — {p.side}
+                {p.title ? ` · ${p.title}` : ""}
+              </SelectItem>
+            ))}
+            <SelectItem value="other">Someone else…</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {us ? (
+        <p className="text-xs text-muted-foreground">
+          {draft?.ourCompany.name ?? "Your company"}
+          {draft?.ourCompany.representative
+            ? ` · signed by ${draft.ourCompany.representative}${
+                draft.ourCompany.representativeTitle
+                  ? `, ${draft.ourCompany.representativeTitle}`
+                  : ""
+              }`
+            : ""}{" "}
+          — taken from your company profile.
+        </p>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label className="text-xs">Name</Label>
+            <Input
+              value={value?.name ?? ""}
+              onChange={(e) => set({ name: e.target.value })}
+              placeholder="Company or full name"
+              aria-label={`${label} name`}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Email</Label>
+            <Input
+              type="email"
+              value={value?.email ?? ""}
+              onChange={(e) => set({ email: e.target.value })}
+              placeholder="name@company.com"
+              aria-label={`${label} email`}
+            />
+            {emailError && (
+              <p className="text-[11px] text-destructive">
+                That doesn't look like a valid email address.
+              </p>
+            )}
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Signatory</Label>
+            <Input
+              value={value?.representative ?? ""}
+              onChange={(e) => set({ representative: e.target.value })}
+              placeholder="Who signs"
+              aria-label={`${label} signatory`}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Signatory title</Label>
+            <Input
+              value={value?.representativeTitle ?? ""}
+              onChange={(e) => set({ representativeTitle: e.target.value })}
+              placeholder="e.g. Managing Director"
+              aria-label={`${label} signatory title`}
+            />
+          </div>
+          <div className="space-y-1.5 sm:col-span-2">
+            <Label className="text-xs">Address</Label>
+            <Input
+              value={value?.address ?? ""}
+              onChange={(e) => set({ address: e.target.value })}
+              placeholder="Registered address"
+              aria-label={`${label} address`}
+            />
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 

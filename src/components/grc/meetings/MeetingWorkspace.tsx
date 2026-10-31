@@ -920,8 +920,8 @@ export function MeetingWorkspace({
                 <Package className="h-4 w-4 mr-1" />
               )}
               {meeting.sentAt
-                ? "Re-dispatch board pack"
-                : "Dispatch board pack"}
+                ? "Re-dispatch meeting pack"
+                : "Dispatch meeting pack"}
             </Button>
           </div>
           {!meeting.sentAt && !checklistComplete && (

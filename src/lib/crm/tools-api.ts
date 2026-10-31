@@ -6,13 +6,7 @@ const unwrap = (res: any) => res.data?.data ?? res.data;
 // Contracts
 // ══════════════════════════════════════════════════════════════
 
-export type ContractType =
-  | "MSA"
-  | "SOW"
-  | "NDA"
-  | "Lease"
-  | "Supplier"
-  | "Deal agreement";
+export type ContractType = "MSA" | "SOW" | "NDA" | "Lease" | "Supplier";
 export type ContractStage =
   | "Draft"
   | "Internal review"
@@ -108,13 +102,10 @@ export interface Contract {
   // Real marker set at generation time — distinguishes a contract
   // issued as part of KYC onboarding or vendor management from an
   // ordinary CRM contract.
-  origin?: "crm" | "kyc_onboarding" | "vendor" | "grc_deal";
+  origin?: "crm" | "kyc_onboarding" | "vendor";
   // Real link back to the vendor this contract is with — set only
   // by the vendor-management flow.
   vendorId?: string | null;
-  // Set only for a contract drafted inside a GRC deal (origin "grc_deal").
-  dealId?: string | null;
-  dealName?: string;
   mandateId: string | null;
   mandateName: string;
   rounds: NegotiationRound[];
