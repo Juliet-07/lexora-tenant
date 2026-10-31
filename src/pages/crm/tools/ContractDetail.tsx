@@ -54,7 +54,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { CommentThread } from "@/components/crm/CommentThread";
-import { RichTextEditor } from "@/components/RichTextEditor";
+import { StructuredBodyEditor } from "@/components/crm/StructuredBodyEditor";
 import { fetchEmployees } from "@/lib/hr/hr-api";
 import {
   fetchContract,
@@ -985,7 +985,7 @@ export default function ContractDetail() {
               <CardContent>
                 {canEditBody && editing ? (
                   <div className="contract-doc">
-                    <RichTextEditor
+                    <StructuredBodyEditor
                       value={bodyDraft}
                       onChange={setBodyDraft}
                       minHeight={420}

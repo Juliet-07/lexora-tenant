@@ -9,7 +9,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Loader2, Save, Send, X, Pencil, Eye } from "lucide-react";
-import { RichTextEditor } from "@/components/RichTextEditor";
+import { StructuredBodyEditor } from "@/components/crm/StructuredBodyEditor";
 
 interface DocumentEditorDialogProps {
   open: boolean;
@@ -95,10 +95,14 @@ export function DocumentEditorDialog({
 
         <div className="flex-1 overflow-y-auto">
           {mode === "edit" ? (
-            <RichTextEditor value={draft} onChange={setDraft} minHeight={420} />
+            <StructuredBodyEditor
+              value={draft}
+              onChange={setDraft}
+              minHeight={420}
+            />
           ) : (
             <div
-              className="prose prose-sm max-w-none rounded-md border bg-card p-6 text-sm leading-relaxed min-h-[420px]"
+              className="contract-doc prose prose-sm max-w-none rounded-md border bg-card p-6 text-sm leading-relaxed min-h-[420px]"
               dangerouslySetInnerHTML={{ __html: draft }}
             />
           )}

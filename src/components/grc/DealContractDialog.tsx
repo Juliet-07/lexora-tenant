@@ -343,6 +343,11 @@ function PreviewTab({
   onPdf: () => void;
   pdfLoading: boolean;
 }) {
+  // A contract made from a template with a cover page and/or a contents page
+  // reads in that order: cover, contents, then the body — each on its own page.
+  const hasCover = !!contract.cover?.replace(/<[^>]*>/g, "").trim();
+  const tocEntries = contract.toc?.enabled ? contract.toc.entries : [];
+  const structured = hasCover || tocEntries.length > 0;
   return (
     <div className="mx-auto max-w-3xl space-y-3">
       {missing > 0 && (
@@ -367,10 +372,49 @@ function PreviewTab({
           Open PDF preview
         </Button>
       </div>
-      <article className="space-y-6 rounded-lg border bg-background px-10 py-10 shadow-sm">
-        <h2 className="text-center text-xl font-semibold uppercase tracking-wide">
-          {contract.name}
-        </h2>
+      {hasCover && (
+        <article
+          aria-label="Cover page"
+          className="flex min-h-[460px] flex-col items-center justify-center rounded-lg border bg-background px-10 py-10 text-center shadow-sm"
+        >
+          <div
+            className={DOC_CLASSES}
+            dangerouslySetInnerHTML={{
+              __html: highlightMissing(contract.cover ?? "", labels),
+            }}
+          />
+        </article>
+      )}
+      {tocEntries.length > 0 && (
+        <article
+          aria-label="Table of contents"
+          className="min-h-[460px] rounded-lg border bg-background px-10 py-10 shadow-sm"
+        >
+          <h2 className="mb-5 text-xl font-semibold">
+            {contract.toc?.title || "Table of Contents"}
+          </h2>
+          <ul className="space-y-1.5 text-sm">
+            {tocEntries.map((e, i) => (
+              <li
+                key={i}
+                style={{ paddingLeft: `${(e.level - 1) * 20}px` }}
+                className={e.level === 1 ? "font-semibold" : ""}
+              >
+                {e.title}
+              </li>
+            ))}
+          </ul>
+        </article>
+      )}
+      <article
+        aria-label="Body"
+        className="space-y-6 rounded-lg border bg-background px-10 py-10 shadow-sm"
+      >
+        {!structured && (
+          <h2 className="text-center text-xl font-semibold uppercase tracking-wide">
+            {contract.name}
+          </h2>
+        )}
         {contract.sections.map((s, i) => (
           <section key={i} className="space-y-1">
             <h3 className="text-sm font-semibold">{s.title}</h3>

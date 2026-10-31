@@ -53,6 +53,8 @@ interface Props {
   saving: boolean;
   onSave: () => void;
   onDiscard: () => void;
+  /** Where the field labels come from — HR contracts use their own route. */
+  registry?: "crm" | "hr";
 }
 
 const sameValue = (a: string, b: string, multiline: boolean) =>
@@ -81,10 +83,11 @@ export function MergeFieldsPanel({
   saving,
   onSave,
   onDiscard,
+  registry: registrySource = "crm",
 }: Props) {
   // Labels for deal / term-sheet fields come from the engine's registry;
   // re-render once it has loaded.
-  const { data: registry } = useMergeFieldRegistry();
+  const { data: registry } = useMergeFieldRegistry(registrySource);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const fields = useMemo(() => readMergeFields(body), [body, registry]);
   const [vals, setVals] = useState<Record<string, string>>({});

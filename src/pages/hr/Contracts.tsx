@@ -83,7 +83,9 @@ import {
   generateContractForEmployee,
 } from "@/lib/hr/hr-contracts-api";
 import { PublishedTemplatesPanel } from "@/components/hr/PublishedTemplatesPanel";
-import { RichTextEditor } from "@/components/RichTextEditor";
+import { StructuredBodyEditor } from "@/components/crm/StructuredBodyEditor";
+import { MergeFieldsPanel } from "@/components/crm/MergeFieldsPanel";
+import { readMergeFields } from "@/lib/crm/merge-fields";
 import { fetchEmployees } from "@/lib/hr/hr-api";
 import {
   Popover,
@@ -151,6 +153,10 @@ const INTERACTION_LABEL: Record<InteractionType, string> = {
 // generating a document and sending/issuing it, which matters most
 // for a one-way letter: it never reaches "sent" at all, so Draft is
 // the only chance to review and correct it before it's issued.
+// Merge fields in a document that still show a {{placeholder}}.
+const unfilledFieldCount = (html: string) =>
+  readMergeFields(html).filter((f) => !f.filled).length;
+
 const canEditBody = (c: Contract) =>
   c.status === "draft" || c.status === "sent";
 
@@ -603,8 +609,32 @@ export default function HRContracts() {
                       )}
                     </div>
 
+                    {/* Fields still waiting for a value are flagged here, with a
+                        way straight into the panel that fills them. */}
+                    {canEditBody(selected) &&
+                      unfilledFieldCount(selected.renderedBody) > 0 && (
+                        <div className="flex items-center justify-between gap-2 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs">
+                          <span>
+                            {unfilledFieldCount(selected.renderedBody)} merge
+                            field
+                            {unfilledFieldCount(selected.renderedBody) === 1
+                              ? ""
+                              : "s"}{" "}
+                            still need a value.
+                          </span>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7"
+                            onClick={() => setEditDialogOpen(true)}
+                          >
+                            Fill in fields
+                          </Button>
+                        </div>
+                      )}
+
                     <div
-                      className="prose prose-sm max-w-none text-sm rounded-md border bg-card p-4 leading-relaxed [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5"
+                      className="contract-doc prose prose-sm max-w-none text-sm rounded-md border bg-card p-4 leading-relaxed [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5"
                       dangerouslySetInnerHTML={{
                         __html: selected.renderedBody,
                       }}
@@ -816,7 +846,7 @@ function EditContractBodyDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="flex max-w-3xl flex-col gap-0 p-0 h-[85vh]">
+      <DialogContent className="flex max-w-6xl flex-col gap-0 p-0 h-[88vh]">
         <DialogHeader className="shrink-0 border-b px-6 py-4">
           <DialogTitle>Edit Document</DialogTitle>
           <DialogDescription>
@@ -842,15 +872,37 @@ function EditContractBodyDialog({
           </Tabs>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-6 py-4">
-          {mode === "edit" ? (
-            <RichTextEditor value={body} onChange={setBody} minHeight={420} />
-          ) : (
-            <div
-              className="prose prose-sm max-w-none text-sm rounded-md border bg-card p-4 leading-relaxed [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5"
-              dangerouslySetInnerHTML={{ __html: body }}
+        <div className="grid min-h-0 flex-1 gap-4 overflow-hidden px-6 py-4 lg:grid-cols-[minmax(0,1fr)_300px]">
+          <div className="contract-doc min-h-0 overflow-y-auto">
+            {mode === "edit" ? (
+              <StructuredBodyEditor
+                value={body}
+                onChange={setBody}
+                minHeight={420}
+              />
+            ) : (
+              <div
+                className="prose prose-sm max-w-none text-sm rounded-md border bg-card p-4 leading-relaxed [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5"
+                dangerouslySetInnerHTML={{ __html: body }}
+              />
+            )}
+          </div>
+          {/* Every merge field in the document with one input each — typing
+              in one rewrites it everywhere it appears, so the contract is
+              filled in here instead of by scrolling for it. */}
+          <div className="min-h-0 overflow-y-auto">
+            <MergeFieldsPanel
+              registry="hr"
+              body={body}
+              locked={false}
+              editing
+              dirty={false}
+              saving={false}
+              onChange={(next) => setBody(next)}
+              onSave={() => undefined}
+              onDiscard={() => undefined}
             />
-          )}
+          </div>
         </div>
 
         <div className="shrink-0 border-t bg-background px-6 py-4 space-y-3">

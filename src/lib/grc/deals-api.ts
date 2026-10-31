@@ -137,7 +137,14 @@ export interface ContractComment {
   resolved: boolean;
   createdAt: string;
 }
+/** One line of a contract's table of contents. */
+export interface ContractTocEntry {
+  level: number;
+  title: string;
+}
 export interface ContractSection {
+  /** Heading depth (1–3) in the template — indents the contents page. */
+  level?: number;
   title: string;
   /** The stored text — merge fields are still {{token}} here. */
   body: string;
@@ -175,6 +182,10 @@ export interface Contract {
   templateName?: string;
   reference?: string;
   sections: ContractSection[];
+  /** The cover page, merge fields filled in (empty = no cover page). */
+  cover?: string;
+  /** The contents page, built from the sections as they now stand. */
+  toc?: { enabled: boolean; title: string; entries: ContractTocEntry[] };
   /** Merge fields the text uses, with their values — see ContractField. */
   fields?: ContractField[];
   variables: Record<string, string>;
