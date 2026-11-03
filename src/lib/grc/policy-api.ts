@@ -298,6 +298,20 @@ export const updatePolicySection = async (
   return res.data?.data ?? res.data;
 };
 
+/**
+ * The Merge Fields panel: sets the value of each field everywhere it appears
+ * in the policy, across all sections.
+ */
+export const setPolicyMergeFields = async (
+  id: string,
+  values: Record<string, string>,
+): Promise<Policy> => {
+  const res = await api.patch(`/grc/compliance/policies/${id}/merge-fields`, {
+    values,
+  });
+  return res.data?.data ?? res.data;
+};
+
 export const deletePolicySection = async (
   id: string,
   sectionId: string,

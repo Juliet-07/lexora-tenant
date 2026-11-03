@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import jsPDF from "jspdf";
@@ -44,8 +44,11 @@ import {
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { RichTextEditor } from "@/components/RichTextEditor";
+import { MergeFieldsPanel } from "@/components/crm/MergeFieldsPanel";
+import { readMergeFields, setMergeFieldValue } from "@/lib/crm/merge-fields";
 import {
   fetchPolicy,
+  setPolicyMergeFields,
   updatePolicyProperties,
   addPolicySection,
   updatePolicySection,
@@ -349,6 +352,9 @@ function EditorTab({
   onErr: (t: string) => (e: any) => void;
 }) {
   const [activeId, setActiveId] = useState(policy.sections[0]?.id ?? null);
+  // Bumped when the Merge Fields panel rewrites the sections on the server,
+  // so the open section editor reloads what it now says.
+  const [fieldsVersion, setFieldsVersion] = useState(0);
   useEffect(() => {
     if (!policy.sections.find((s) => s.id === activeId)) {
       setActiveId(policy.sections[0]?.id ?? null);
@@ -435,7 +441,7 @@ function EditorTab({
 
         {active ? (
           <SectionEditor
-            key={active.id}
+            key={`${active.id}:${fieldsVersion}`}
             policyId={policy._id}
             section={active}
             invalidate={invalidate}
@@ -449,11 +455,19 @@ function EditorTab({
           </Card>
         )}
 
-        <PropertiesSidebar
-          policy={policy}
-          invalidate={invalidate}
-          onErr={onErr}
-        />
+        <div className="space-y-4">
+          <PropertiesSidebar
+            policy={policy}
+            invalidate={invalidate}
+            onErr={onErr}
+          />
+          <PolicyFieldsPanel
+            policy={policy}
+            invalidate={invalidate}
+            onErr={onErr}
+            onApplied={() => setFieldsVersion((v) => v + 1)}
+          />
+        </div>
       </div>
 
       <PolicyPreviewDialog
@@ -628,6 +642,65 @@ async function exportPolicyPdf(policy: Policy): Promise<void> {
   }
 }
 
+// The Merge Fields panel for a policy: every {{field}} the sections use, with
+// one input each. Typing queues the change; "Save fields" writes it to every
+// section at once (the engine rewrites the marked fields, leaving the text
+// around them alone). Only shown when the policy has fields — a policy
+// written from scratch has none.
+function PolicyFieldsPanel({
+  policy,
+  invalidate,
+  onErr,
+  onApplied,
+}: {
+  policy: Policy;
+  invalidate: () => void;
+  onErr: (t: string) => (e: any) => void;
+  onApplied: () => void;
+}) {
+  const [edits, setEdits] = useState<Record<string, string>>({});
+  const base = useMemo(
+    () => policy.sections.map((s) => s.content || "").join("\n"),
+    [policy.sections],
+  );
+  const hasFields = useMemo(() => readMergeFields(base).length > 0, [base]);
+  const body = useMemo(
+    () =>
+      Object.entries(edits).reduce(
+        (html, [key, value]) => setMergeFieldValue(html, key, value),
+        base,
+      ),
+    [base, edits],
+  );
+  const saveMut = useMutation({
+    mutationFn: () => setPolicyMergeFields(policy._id, edits),
+    onSuccess: () => {
+      setEdits({});
+      invalidate();
+      onApplied();
+      toast({ title: "Fields saved across the policy" });
+    },
+    onError: onErr("Failed to save the fields"),
+  });
+
+  if (!hasFields) return null;
+  return (
+    <MergeFieldsPanel
+      registry="policy"
+      body={body}
+      locked={false}
+      editing={false}
+      dirty={Object.keys(edits).length > 0}
+      saving={saveMut.isPending}
+      onChange={(_next, key, value) =>
+        setEdits((e) => ({ ...e, [key]: value }))
+      }
+      onSave={() => saveMut.mutate()}
+      onDiscard={() => setEdits({})}
+    />
+  );
+}
+
 // Section content editing uses the same shared RichTextEditor as the
 // rest of the app (contracts, resolutions, codes, meeting notices,
 // …) instead of a policy-only toolbar — one editor, uniform
@@ -686,12 +759,14 @@ function SectionEditor({
                 : ""}
           </span>
         </div>
-        <RichTextEditor
-          value={content}
-          onChange={handleContentChange}
-          minHeight={300}
-          placeholder="Start writing this section…"
-        />
+        <div className="contract-doc">
+          <RichTextEditor
+            value={content}
+            onChange={handleContentChange}
+            minHeight={300}
+            placeholder="Start writing this section…"
+          />
+        </div>
       </CardContent>
     </Card>
   );

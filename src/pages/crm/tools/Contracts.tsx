@@ -1,4 +1,10 @@
 import { useState } from "react";
+import {
+  ContractPartyFields,
+  emptyParty,
+  partyPayload,
+  partyReady,
+} from "@/components/crm/ContractPartyFields";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,7 +13,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -121,6 +126,9 @@ export default function Contracts() {
     });
 
   const [stageFilter, setStageFilter] = useState("all");
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [clientFilter, setClientFilter] = useState("all");
+  const [vendorFilter, setVendorFilter] = useState("all");
   const [tab, setTab] = useState("register");
 
   const { data: list = [] } = useQuery({
@@ -157,28 +165,63 @@ export default function Contracts() {
     queryFn: fetchMyLetterhead,
   });
 
+  const clientOptions = clients.map((c) => ({
+    id: c._id,
+    label: displayName(c),
+  }));
+  const mandateOptions = mandates.map((m: any) => ({
+    id: m._id,
+    name: m.name,
+  }));
+
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["contracts"] });
     queryClient.invalidateQueries({ queryKey: ["contracts-expiring"] });
     queryClient.invalidateQueries({ queryKey: ["obligations-due"] });
   };
 
+  // Register filters. The client and vendor lists are built from the
+  // contracts themselves (the contract already carries the party's name), so
+  // every option leads to at least one contract.
+  const partyOptions = (key: "clientId" | "vendorId") => {
+    const byId = new Map<string, string>();
+    for (const c of list) {
+      const id = c[key];
+      if (id && !byId.has(id)) byId.set(id, c.counterparty || id);
+    }
+    return Array.from(byId, ([id, label]) => ({ id, label })).sort((a, b) =>
+      a.label.localeCompare(b.label),
+    );
+  };
+  const clientFilterOptions = partyOptions("clientId");
+  const vendorFilterOptions = partyOptions("vendorId");
+  const filtersActive = [
+    stageFilter,
+    typeFilter,
+    clientFilter,
+    vendorFilter,
+  ].some((f) => f !== "all");
+  const clearFilters = () => {
+    setStageFilter("all");
+    setTypeFilter("all");
+    setClientFilter("all");
+    setVendorFilter("all");
+  };
   const filtered = list.filter(
-    (c) => stageFilter === "all" || c.stage === stageFilter,
+    (c) =>
+      (stageFilter === "all" || c.stage === stageFilter) &&
+      (typeFilter === "all" || c.type === typeFilter) &&
+      (clientFilter === "all" || c.clientId === clientFilter) &&
+      (vendorFilter === "all" || c.vendorId === vendorFilter),
   );
 
   // ── New contract ─────────────────────────────────────────
   const [openNew, setOpenNew] = useState(false);
+  // Just the essentials — value, currency, jurisdiction, dates and the rest
+  // are filled in the document itself with the Merge Fields panel.
   const emptyForm = {
+    ...emptyParty,
     title: "",
-    partyMode: "client" as "client" | "external",
-    clientId: "",
-    mandateId: "",
-    counterparty: "",
-    counterpartyEmail: "",
-    type: "MSA" as ContractType,
-    value: 0,
-    currency: "USD",
     expiresOn: today(),
     content: "",
   };
@@ -187,17 +230,9 @@ export default function Contracts() {
     mutationFn: () =>
       createContract({
         title: form.title,
-        type: form.type,
-        value: form.value,
-        currency: form.currency,
         expiresOn: form.expiresOn,
         content: form.content,
-        ...(form.partyMode === "client"
-          ? { clientId: form.clientId, mandateId: form.mandateId || undefined }
-          : {
-              counterparty: form.counterparty,
-              counterpartyEmail: form.counterpartyEmail,
-            }),
+        ...partyPayload(form),
       }),
     onSuccess: (c) => {
       invalidate();
@@ -263,30 +298,13 @@ export default function Contracts() {
 
   // ── Generate from template ─────────────────────────────────
   const [openGenerateDialog, setOpenGenerateDialog] = useState(false);
+  // Template, who it is for, title and expiry — nothing else. The rest of
+  // the contract's details are filled in the Merge Fields panel afterwards.
   const emptyGenerateDraft = {
+    ...emptyParty,
     templateId: "",
     templateSource: "tenant" as "platform" | "tenant",
     title: "",
-    type: "MSA" as ContractType,
-    partyMode: "client" as "client" | "external",
-    clientId: "",
-    mandateId: "",
-    counterparty: "",
-    counterpartyEmail: "",
-    value: "",
-    currency: "USD",
-    scopeOfWork: "",
-    tenantCompanyJurisdiction: "",
-    clientJurisdiction: "",
-    leadProfessionalName: "",
-    leadProfessionalTitle: "",
-    clientRepresentativeName: "",
-    clientRepresentativeTitle: "",
-    commencementDate: "",
-    engagementDuration: "",
-    tenantRegisteredAddress: "",
-    clientRegisteredAddress: "",
-    serviceCategory: "",
     expiresOn: "",
   };
   const [generateDraft, setGenerateDraft] = useState(emptyGenerateDraft);
@@ -328,40 +346,8 @@ export default function Contracts() {
         templateId: generateDraft.templateId,
         templateSource: generateDraft.templateSource,
         title: generateDraft.title,
-        type: generateDraft.type,
-        value: generateDraft.value ? Number(generateDraft.value) : undefined,
-        currency: generateDraft.currency,
-        scopeOfWork: generateDraft.scopeOfWork.trim() || undefined,
-        tenantCompanyJurisdiction:
-          generateDraft.tenantCompanyJurisdiction.trim() || undefined,
-        clientJurisdiction:
-          generateDraft.clientJurisdiction.trim() || undefined,
-        leadProfessionalName:
-          generateDraft.leadProfessionalName.trim() || undefined,
-        leadProfessionalTitle:
-          generateDraft.leadProfessionalTitle.trim() || undefined,
-        clientRepresentativeName:
-          generateDraft.clientRepresentativeName.trim() || undefined,
-        clientRepresentativeTitle:
-          generateDraft.clientRepresentativeTitle.trim() || undefined,
-        commencementDate: generateDraft.commencementDate || undefined,
-        engagementDuration:
-          generateDraft.engagementDuration.trim() || undefined,
-        tenantRegisteredAddress:
-          generateDraft.tenantRegisteredAddress.trim() || undefined,
-        clientRegisteredAddress:
-          generateDraft.clientRegisteredAddress.trim() || undefined,
-        serviceCategory: generateDraft.serviceCategory.trim() || undefined,
         expiresOn: generateDraft.expiresOn,
-        ...(generateDraft.partyMode === "client"
-          ? {
-              clientId: generateDraft.clientId,
-              mandateId: generateDraft.mandateId || undefined,
-            }
-          : {
-              counterparty: generateDraft.counterparty,
-              counterpartyEmail: generateDraft.counterpartyEmail,
-            }),
+        ...partyPayload(generateDraft),
       }),
     onSuccess: (c) => {
       invalidate();
@@ -435,19 +421,69 @@ export default function Contracts() {
         </TabsList>
 
         <TabsContent value="register" className="space-y-3 pt-4">
-          <Select value={stageFilter} onValueChange={setStageFilter}>
-            <SelectTrigger className="w-56">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All stages</SelectItem>
-              {CONTRACT_STAGES.map((s) => (
-                <SelectItem key={s} value={s}>
-                  {s}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="flex flex-wrap items-center gap-2">
+            <Select value={stageFilter} onValueChange={setStageFilter}>
+              <SelectTrigger className="w-48">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All stages</SelectItem>
+                {CONTRACT_STAGES.map((s) => (
+                  <SelectItem key={s} value={s}>
+                    {s}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={typeFilter} onValueChange={setTypeFilter}>
+              <SelectTrigger className="w-44">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All types</SelectItem>
+                {CONTRACT_TYPES.map((t) => (
+                  <SelectItem key={t} value={t}>
+                    {t}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={clientFilter} onValueChange={setClientFilter}>
+              <SelectTrigger className="w-52">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All clients</SelectItem>
+                {clientFilterOptions.map((o) => (
+                  <SelectItem key={o.id} value={o.id}>
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={vendorFilter} onValueChange={setVendorFilter}>
+              <SelectTrigger className="w-52">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All vendors</SelectItem>
+                {vendorFilterOptions.map((o) => (
+                  <SelectItem key={o.id} value={o.id}>
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {filtersActive && (
+              <Button variant="ghost" size="sm" onClick={clearFilters}>
+                Clear filters
+              </Button>
+            )}
+            <span className="ml-auto text-xs text-muted-foreground">
+              {filtered.length} of {list.length} contract
+              {list.length === 1 ? "" : "s"}
+            </span>
+          </div>
           <Card>
             <CardContent className="p-0">
               <Table>
@@ -501,7 +537,9 @@ export default function Contracts() {
                         colSpan={6}
                         className="py-8 text-center text-sm text-muted-foreground"
                       >
-                        No contracts yet.
+                        {list.length
+                          ? "No contracts match these filters."
+                          : "No contracts yet."}
                       </TableCell>
                     </TableRow>
                   )}
@@ -925,131 +963,19 @@ export default function Contracts() {
             <DialogTitle>New contract</DialogTitle>
           </DialogHeader>
           <div className="grid gap-3">
-            <div>
-              <Label>Title</Label>
-              <Input
-                value={form.title}
-                onChange={(e) => setForm({ ...form, title: e.target.value })}
-              />
-            </div>
-            <div>
-              <Label>Who is this contract for?</Label>
-              <div className="mt-1 flex gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={form.partyMode === "client" ? "default" : "outline"}
-                  onClick={() => setForm({ ...form, partyMode: "client" })}
-                >
-                  Client
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={
-                    form.partyMode === "external" ? "default" : "outline"
-                  }
-                  onClick={() => setForm({ ...form, partyMode: "external" })}
-                >
-                  Vendor / consultant
-                </Button>
-              </div>
-            </div>
-            {form.partyMode === "client" ? (
-              <>
-                <div>
-                  <Label>Client</Label>
-                  <Select
-                    value={form.clientId}
-                    onValueChange={(v) => setForm({ ...form, clientId: v })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Pick a registered client" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {clients.map((c) => (
-                        <SelectItem key={c._id} value={c._id}>
-                          {displayName(c)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Emailed to this client and also appears on their
-                    client-portal dashboard, where they can sign or leave
-                    feedback.
-                  </p>
-                </div>
-                <div>
-                  <Label>Linked mandate (optional)</Label>
-                  <Select
-                    value={form.mandateId || "none"}
-                    onValueChange={(v) =>
-                      setForm({ ...form, mandateId: v === "none" ? "" : v })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="None" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">None</SelectItem>
-                      {mandates.map((m: any) => (
-                        <SelectItem key={m._id} value={m._id}>
-                          {m.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </>
-            ) : (
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label>Name</Label>
-                  <Input
-                    value={form.counterparty}
-                    onChange={(e) =>
-                      setForm({ ...form, counterparty: e.target.value })
-                    }
-                    placeholder="e.g. Jane Doe Consulting"
-                  />
-                </div>
-                <div>
-                  <Label>Email</Label>
-                  <Input
-                    type="email"
-                    value={form.counterpartyEmail}
-                    onChange={(e) =>
-                      setForm({ ...form, counterpartyEmail: e.target.value })
-                    }
-                  />
-                </div>
-                <p className="col-span-2 text-xs text-muted-foreground">
-                  Sent via a real, public signing link — no client-portal
-                  account needed.
-                </p>
-              </div>
-            )}
+            <ContractPartyFields
+              value={form}
+              onChange={(party) => setForm({ ...form, ...party })}
+              clients={clientOptions}
+              mandates={mandateOptions}
+            />
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label>Type</Label>
-                <Select
-                  value={form.type}
-                  onValueChange={(v) =>
-                    setForm({ ...form, type: v as ContractType })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {CONTRACT_TYPES.map((t) => (
-                      <SelectItem key={t} value={t}>
-                        {t}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label>Title</Label>
+                <Input
+                  value={form.title}
+                  onChange={(e) => setForm({ ...form, title: e.target.value })}
+                />
               </div>
               <div>
                 <Label>Expires on</Label>
@@ -1062,33 +988,13 @@ export default function Contracts() {
                 />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label>Value</Label>
-                <Input
-                  type="number"
-                  value={form.value}
-                  onChange={(e) =>
-                    setForm({ ...form, value: Number(e.target.value) })
-                  }
-                />
-              </div>
-              <div>
-                <Label>Currency</Label>
-                <Input
-                  value={form.currency}
-                  onChange={(e) =>
-                    setForm({ ...form, currency: e.target.value })
-                  }
-                />
-              </div>
-            </div>
             <div>
               <Label>Content</Label>
               <p className="mb-1 text-xs text-muted-foreground">
-                Type the contract text directly — no template needed. You can
-                also generate from a template instead, using the button next to
-                "New contract".
+                Type the contract text directly — no template needed. Value,
+                dates and the other details can be filled in afterwards with the
+                Merge Fields panel. You can also generate from a template
+                instead, using the button next to "New contract".
               </p>
               <RichTextEditor
                 value={form.content}
@@ -1100,10 +1006,9 @@ export default function Contracts() {
           <DialogFooter>
             <Button
               disabled={
-                !form.title ||
-                (form.partyMode === "client"
-                  ? !form.clientId
-                  : !form.counterparty || !form.counterpartyEmail) ||
+                !form.title.trim() ||
+                !form.expiresOn ||
+                !partyReady(form) ||
                 createMut.isPending
               }
               onClick={() => createMut.mutate()}
@@ -1169,125 +1074,14 @@ export default function Contracts() {
                 </p>
               )}
             </div>
-            <div>
-              <Label>Who is this contract for?</Label>
-              <div className="mt-1 flex gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={
-                    generateDraft.partyMode === "client" ? "default" : "outline"
-                  }
-                  onClick={() =>
-                    setGenerateDraft({ ...generateDraft, partyMode: "client" })
-                  }
-                >
-                  Client
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={
-                    generateDraft.partyMode === "external"
-                      ? "default"
-                      : "outline"
-                  }
-                  onClick={() =>
-                    setGenerateDraft({
-                      ...generateDraft,
-                      partyMode: "external",
-                    })
-                  }
-                >
-                  Vendor / consultant
-                </Button>
-              </div>
-            </div>
-            {generateDraft.partyMode === "client" ? (
-              <>
-                <div>
-                  <Label>Client</Label>
-                  <Select
-                    value={generateDraft.clientId}
-                    onValueChange={(v) =>
-                      setGenerateDraft({ ...generateDraft, clientId: v })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Pick a registered client" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {clients.map((c) => (
-                        <SelectItem key={c._id} value={c._id}>
-                          {displayName(c)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Emailed to this client and also appears on their
-                    client-portal dashboard.
-                  </p>
-                </div>
-                <div>
-                  <Label>Linked mandate (optional)</Label>
-                  <Select
-                    value={generateDraft.mandateId || "none"}
-                    onValueChange={(v) =>
-                      setGenerateDraft({
-                        ...generateDraft,
-                        mandateId: v === "none" ? "" : v,
-                      })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="None" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">None</SelectItem>
-                      {mandates.map((m: any) => (
-                        <SelectItem key={m._id} value={m._id}>
-                          {m.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </>
-            ) : (
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label>Name</Label>
-                  <Input
-                    value={generateDraft.counterparty}
-                    onChange={(e) =>
-                      setGenerateDraft({
-                        ...generateDraft,
-                        counterparty: e.target.value,
-                      })
-                    }
-                    placeholder="e.g. Jane Doe Consulting"
-                  />
-                </div>
-                <div>
-                  <Label>Email</Label>
-                  <Input
-                    type="email"
-                    value={generateDraft.counterpartyEmail}
-                    onChange={(e) =>
-                      setGenerateDraft({
-                        ...generateDraft,
-                        counterpartyEmail: e.target.value,
-                      })
-                    }
-                  />
-                </div>
-                <p className="col-span-2 text-xs text-muted-foreground">
-                  Sent via a real, public signing link — no client-portal
-                  account needed.
-                </p>
-              </div>
-            )}
+            <ContractPartyFields
+              value={generateDraft}
+              onChange={(party) =>
+                setGenerateDraft({ ...generateDraft, ...party })
+              }
+              clients={clientOptions}
+              mandates={mandateOptions}
+            />
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label>Title</Label>
@@ -1297,56 +1091,6 @@ export default function Contracts() {
                     setGenerateDraft({
                       ...generateDraft,
                       title: e.target.value,
-                    })
-                  }
-                />
-              </div>
-              <div>
-                <Label>Type</Label>
-                <Select
-                  value={generateDraft.type}
-                  onValueChange={(v) =>
-                    setGenerateDraft({
-                      ...generateDraft,
-                      type: v as ContractType,
-                    })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {CONTRACT_TYPES.map((t) => (
-                      <SelectItem key={t} value={t}>
-                        {t}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="grid grid-cols-3 gap-3">
-              <div>
-                <Label>Value</Label>
-                <Input
-                  type="number"
-                  value={generateDraft.value}
-                  onChange={(e) =>
-                    setGenerateDraft({
-                      ...generateDraft,
-                      value: e.target.value,
-                    })
-                  }
-                />
-              </div>
-              <div>
-                <Label>Currency</Label>
-                <Input
-                  value={generateDraft.currency}
-                  onChange={(e) =>
-                    setGenerateDraft({
-                      ...generateDraft,
-                      currency: e.target.value,
                     })
                   }
                 />
@@ -1365,180 +1109,17 @@ export default function Contracts() {
                 />
               </div>
             </div>
-            <div>
-              <Label>Scope of work (optional)</Label>
-              <Textarea
-                value={generateDraft.scopeOfWork}
-                onChange={(e) =>
-                  setGenerateDraft({
-                    ...generateDraft,
-                    scopeOfWork: e.target.value,
-                  })
-                }
-                placeholder={
-                  "One item per line, e.g.\nIncorporation and registration\nOngoing compliance advisory\nAnnual filings"
-                }
-                rows={3}
-              />
-              <p className="mt-1 text-xs text-muted-foreground">
-                One line per item — each becomes its own numbered point wherever
-                the template references it.
-              </p>
-            </div>
-            <div className="space-y-2">
-              <p className="text-xs font-medium text-muted-foreground">
-                Additional details (optional — only used if this template
-                references them)
-              </p>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label>Your registered address</Label>
-                  <Input
-                    value={generateDraft.tenantRegisteredAddress}
-                    onChange={(e) =>
-                      setGenerateDraft({
-                        ...generateDraft,
-                        tenantRegisteredAddress: e.target.value,
-                      })
-                    }
-                  />
-                </div>
-                <div>
-                  <Label>Client's registered address</Label>
-                  <Input
-                    value={generateDraft.clientRegisteredAddress}
-                    onChange={(e) =>
-                      setGenerateDraft({
-                        ...generateDraft,
-                        clientRegisteredAddress: e.target.value,
-                      })
-                    }
-                  />
-                </div>
-                <div>
-                  <Label>Your jurisdiction</Label>
-                  <Input
-                    value={generateDraft.tenantCompanyJurisdiction}
-                    onChange={(e) =>
-                      setGenerateDraft({
-                        ...generateDraft,
-                        tenantCompanyJurisdiction: e.target.value,
-                      })
-                    }
-                    placeholder="e.g. the Republic of Rwanda"
-                  />
-                </div>
-                <div>
-                  <Label>Client's jurisdiction</Label>
-                  <Input
-                    value={generateDraft.clientJurisdiction}
-                    onChange={(e) =>
-                      setGenerateDraft({
-                        ...generateDraft,
-                        clientJurisdiction: e.target.value,
-                      })
-                    }
-                  />
-                </div>
-                <div>
-                  <Label>Service category</Label>
-                  <Input
-                    value={generateDraft.serviceCategory}
-                    onChange={(e) =>
-                      setGenerateDraft({
-                        ...generateDraft,
-                        serviceCategory: e.target.value,
-                      })
-                    }
-                    placeholder="e.g. company secretarial"
-                  />
-                </div>
-                <div>
-                  <Label>Lead professional — name</Label>
-                  <Input
-                    value={generateDraft.leadProfessionalName}
-                    onChange={(e) =>
-                      setGenerateDraft({
-                        ...generateDraft,
-                        leadProfessionalName: e.target.value,
-                      })
-                    }
-                  />
-                </div>
-                <div>
-                  <Label>Lead professional — title</Label>
-                  <Input
-                    value={generateDraft.leadProfessionalTitle}
-                    onChange={(e) =>
-                      setGenerateDraft({
-                        ...generateDraft,
-                        leadProfessionalTitle: e.target.value,
-                      })
-                    }
-                  />
-                </div>
-                <div>
-                  <Label>Client representative — name</Label>
-                  <Input
-                    value={generateDraft.clientRepresentativeName}
-                    onChange={(e) =>
-                      setGenerateDraft({
-                        ...generateDraft,
-                        clientRepresentativeName: e.target.value,
-                      })
-                    }
-                  />
-                </div>
-                <div>
-                  <Label>Client representative — title</Label>
-                  <Input
-                    value={generateDraft.clientRepresentativeTitle}
-                    onChange={(e) =>
-                      setGenerateDraft({
-                        ...generateDraft,
-                        clientRepresentativeTitle: e.target.value,
-                      })
-                    }
-                  />
-                </div>
-                <div>
-                  <Label>Commencement date</Label>
-                  <Input
-                    type="date"
-                    value={generateDraft.commencementDate}
-                    onChange={(e) =>
-                      setGenerateDraft({
-                        ...generateDraft,
-                        commencementDate: e.target.value,
-                      })
-                    }
-                  />
-                </div>
-                <div>
-                  <Label>Engagement duration</Label>
-                  <Input
-                    value={generateDraft.engagementDuration}
-                    onChange={(e) =>
-                      setGenerateDraft({
-                        ...generateDraft,
-                        engagementDuration: e.target.value,
-                      })
-                    }
-                    placeholder="e.g. 12 months"
-                  />
-                </div>
-              </div>
-            </div>
+            <p className="text-xs text-muted-foreground">
+              Everything else — value, jurisdiction, dates, scope of work — is
+              filled in on the contract itself with the Merge Fields panel.
+            </p>
           </div>
           <DialogFooter>
             <Button
               disabled={
                 !generateDraft.templateId ||
                 !generateDraft.title.trim() ||
-                (generateDraft.partyMode === "client"
-                  ? !generateDraft.clientId
-                  : !generateDraft.counterparty.trim() ||
-                    !generateDraft.counterpartyEmail.trim()) ||
+                !partyReady(generateDraft) ||
                 !generateDraft.expiresOn ||
                 generateMut.isPending
               }

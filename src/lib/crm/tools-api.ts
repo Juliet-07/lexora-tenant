@@ -190,9 +190,12 @@ export const createContract = async (dto: {
   // party — the backend enforces this and derives name/email from
   // the real client record server-side when clientId is set.
   clientId?: string;
+  // A registered, approved vendor from the vendor register.
+  vendorId?: string;
   counterparty?: string;
   counterpartyEmail?: string;
-  type: ContractType;
+  // Worked out by the engine when left out.
+  type?: ContractType;
   value?: number;
   currency?: string;
   expiresOn: string;
@@ -963,7 +966,9 @@ export const generateContractFromTemplate = async (dto: {
   templateId: string;
   templateSource: "platform" | "tenant";
   title: string;
-  type: ContractType;
+  // No longer asked on the form — the engine works it out from the template
+  // and the party when it is left out.
+  type?: ContractType;
   clientId?: string;
   vendorId?: string;
   counterparty?: string;

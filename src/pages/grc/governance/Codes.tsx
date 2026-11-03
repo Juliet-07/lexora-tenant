@@ -54,6 +54,8 @@ import {
 import { toast } from "@/hooks/use-toast";
 import { printGrcReport } from "@/lib/grc/printReport";
 import { RichTextEditor } from "@/components/RichTextEditor";
+import { MergeFieldsPanel } from "@/components/crm/MergeFieldsPanel";
+import { readMergeFields } from "@/lib/crm/merge-fields";
 import { usePersistentState, fmtDate } from "@/lib/grc/usePersistentState";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -846,6 +848,9 @@ function CodeEditor({
     .slice(1)
     .filter((s) => !s.includes("[Draft this section]")).length;
   const locked = row.meta.stage === "Published";
+  // Fields from the template ({{tenantCompanyName}}, {{dpoName}}…) — listed
+  // in the Merge Fields panel so they can be filled in without hunting.
+  const hasFields = useMemo(() => readMergeFields(body).length > 0, [body]);
 
   const save = async (silent = false) => {
     setSaving(true);
@@ -1005,6 +1010,19 @@ function CodeEditor({
               ))}
             </CardContent>
           </Card>
+          {hasFields && (
+            <MergeFieldsPanel
+              registry="policy"
+              body={body}
+              locked={locked}
+              editing
+              dirty={false}
+              saving={false}
+              onChange={(next) => setBody(next)}
+              onSave={() => undefined}
+              onDiscard={() => undefined}
+            />
+          )}
           {!locked && (
             <Card>
               <CardHeader className="pb-2">
@@ -1038,7 +1056,13 @@ function CodeEditor({
                 dangerouslySetInnerHTML={{ __html: body }}
               />
             ) : (
-              <RichTextEditor value={body} onChange={setBody} minHeight={520} />
+              <div className="contract-doc">
+                <RichTextEditor
+                  value={body}
+                  onChange={setBody}
+                  minHeight={520}
+                />
+              </div>
             )}
             <div className="text-xs text-muted-foreground mt-2">
               {drafted} of {sections.length} sections drafted

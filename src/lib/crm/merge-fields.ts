@@ -46,7 +46,11 @@ export const MERGE_GROUP_ORDER: MergeFieldGroup[] = [
   "Employment",
   "Pay",
   "Letter",
-  "Clause-specific",
+  // Policies
+  "Policy",
+  "Contacts",
+  "Policy terms",
+  "Other fields",
 ];
 
 /** The groups every module shares (see the engine's common fields). */
@@ -184,21 +188,53 @@ export interface RegistryField {
   input: "text" | "textarea" | "date" | "currency" | "number";
 }
 
+/** Heading for fields that belong to no common/module group. */
+export const OTHER_FIELDS_GROUP = "Other fields";
+
+/**
+ * The engine files clause-level fields under the area they came from
+ * ("AML & KYC clauses", "Dispute resolution & ADR clauses"…) — useful for
+ * the Super Admin picking fields, noise for a tenant filling a contract in.
+ * Here they all read as one plain group.
+ */
+export const displayGroup = (group: string | undefined | null): string =>
+  !group || group === "Clause-specific" || /\bclauses$/i.test(group)
+    ? OTHER_FIELDS_GROUP
+    : group;
+
 export const registerMergeMeta = (fields: RegistryField[]) => {
   for (const f of fields) {
     REGISTRY_META[f.token] = {
       label: f.label,
-      group: f.group,
+      group: displayGroup(f.group),
       input: f.input === "number" ? "text" : f.input,
     };
   }
 };
 
-export const metaFor = (key: string): MergeFieldMeta =>
+// Policy fields have their own labels and groups — several tokens they share
+// with contracts (tenantCompanyName, effectiveDate…) read differently there.
+const POLICY_META: Record<string, MergeFieldMeta> = {};
+
+export const registerPolicyMeta = (fields: RegistryField[]) => {
+  for (const f of fields) {
+    POLICY_META[f.token] = {
+      label: f.label,
+      group: displayGroup(f.group),
+      input: f.input === "number" ? "text" : f.input,
+    };
+  }
+};
+
+export const metaFor = (
+  key: string,
+  source: "crm" | "hr" | "policy" = "crm",
+): MergeFieldMeta =>
+  (source === "policy" ? POLICY_META[key] : undefined) ??
   META[key] ??
   REGISTRY_META[key] ?? {
     label: humanize(key),
-    group: "Clause-specific",
+    group: OTHER_FIELDS_GROUP,
     input: "text",
   };
 

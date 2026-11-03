@@ -54,7 +54,7 @@ interface Props {
   onSave: () => void;
   onDiscard: () => void;
   /** Where the field labels come from — HR contracts use their own route. */
-  registry?: "crm" | "hr";
+  registry?: "crm" | "hr" | "policy";
 }
 
 const sameValue = (a: string, b: string, multiline: boolean) =>
@@ -103,7 +103,7 @@ export function MergeFieldsPanel({
       const next = { ...prev };
       let changed = false;
       for (const f of fields) {
-        const multiline = metaFor(f.key).input === "textarea";
+        const multiline = metaFor(f.key, registrySource).input === "textarea";
         if (!(f.key in next) || !sameValue(next[f.key], f.value, multiline)) {
           next[f.key] = f.value;
           changed = true;
@@ -121,11 +121,15 @@ export function MergeFieldsPanel({
     onChange(setMergeFieldValue(body, key, value), key, value);
   };
 
-  const groups = orderGroups(fields.map((f) => metaFor(f.key).group))
+  const groups = orderGroups(
+    fields.map((f) => metaFor(f.key, registrySource).group),
+  )
     .map((g) => ({
       group: g,
       items: fields.filter(
-        (f) => metaFor(f.key).group === g && (!unfilledOnly || !f.filled),
+        (f) =>
+          metaFor(f.key, registrySource).group === g &&
+          (!unfilledOnly || !f.filled),
       ),
     }))
     .filter((g) => g.items.length);
@@ -177,12 +181,10 @@ export function MergeFieldsPanel({
               {groups.map(({ group, items }) => (
                 <div key={group} className="space-y-2">
                   <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                    {group === "Clause-specific"
-                      ? "Clause-specific fields"
-                      : group}
+                    {group}
                   </p>
                   {items.map((f) => {
-                    const meta = metaFor(f.key);
+                    const meta = metaFor(f.key, registrySource);
                     const v = vals[f.key] ?? f.value;
                     const id = `mf-${f.key}`;
                     return (

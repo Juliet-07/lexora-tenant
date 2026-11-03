@@ -634,6 +634,29 @@ export default function ServiceDesk() {
                 </p>
               </SheetHeader>
               <div className="mt-4 space-y-4">
+                {selected.rating && (
+                  <div className="flex items-start gap-2 rounded-md border border-warning/30 bg-warning/5 px-3 py-2 text-sm">
+                    <div className="flex shrink-0 items-center gap-0.5 pt-0.5">
+                      {[1, 2, 3, 4, 5].map((n) => (
+                        <Star
+                          key={n}
+                          className={`h-4 w-4 ${n <= (selected.rating ?? 0) ? "fill-warning text-warning" : "text-muted-foreground/40"}`}
+                        />
+                      ))}
+                    </div>
+                    <p className="min-w-0">
+                      <span className="font-medium">
+                        {selected.rating}/5 customer rating
+                      </span>
+                      {selected.ratingComment ? (
+                        <span className="text-muted-foreground">
+                          {" "}
+                          — {selected.ratingComment}
+                        </span>
+                      ) : null}
+                    </p>
+                  </div>
+                )}
                 <p className="text-sm">{selected.description}</p>
 
                 <div className="grid grid-cols-2 gap-3">
@@ -791,16 +814,6 @@ export default function ServiceDesk() {
                     </Button>
                   </div>
                 </div>
-
-                {selected.rating && (
-                  <p className="flex items-center gap-2 text-sm">
-                    <Star className="h-4 w-4 text-warning" /> {selected.rating}
-                    /5
-                    {selected.ratingComment
-                      ? ` — ${selected.ratingComment}`
-                      : ""}
-                  </p>
-                )}
               </div>
             </>
           )}

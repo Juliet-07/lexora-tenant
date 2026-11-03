@@ -1,6 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import { registerMergeMeta, type RegistryField } from "@/lib/crm/merge-fields";
+import {
+  registerMergeMeta,
+  registerPolicyMeta,
+  type RegistryField,
+} from "@/lib/crm/merge-fields";
 
 // Loads the engine's merge-field registry once and teaches metaFor() the
 // labels/groups of fields the static table doesn't list (deal fields,
@@ -10,16 +14,18 @@ import { registerMergeMeta, type RegistryField } from "@/lib/crm/merge-fields";
 const REGISTRY_ENDPOINT = {
   crm: "/tools/contract-templates/merge-fields",
   hr: "/hr/contracts/templates/merge-fields",
+  policy: "/grc/compliance/policy-templates/merge-fields",
 } as const;
 
-export function useMergeFieldRegistry(source: "crm" | "hr" = "crm") {
+export function useMergeFieldRegistry(source: "crm" | "hr" | "policy" = "crm") {
   return useQuery({
     queryKey: ["merge-field-registry", source],
     queryFn: async () => {
       const res = await api.get(REGISTRY_ENDPOINT[source]);
       const fields: RegistryField[] = res.data?.data ?? res.data ?? [];
       const list = Array.isArray(fields) ? fields : [];
-      registerMergeMeta(list);
+      if (source === "policy") registerPolicyMeta(list);
+      else registerMergeMeta(list);
       return list;
     },
     staleTime: Infinity,

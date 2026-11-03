@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { displayGroup, OTHER_FIELDS_GROUP } from "@/lib/crm/merge-fields";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -904,11 +905,17 @@ function FieldsTab({
     );
     const byGroup = new Map<string, ContractField[]>();
     for (const f of shown) {
-      byGroup.set(f.group, [...(byGroup.get(f.group) ?? []), f]);
+      const g = displayGroup(f.group);
+      byGroup.set(g, [...(byGroup.get(g) ?? []), f]);
     }
     const names = Array.from(byGroup.keys());
     const common = COMMON_GROUP_ORDER.filter((g) => byGroup.has(g));
-    const rest = names.filter((g) => !COMMON_GROUP_ORDER.includes(g));
+    const rest = names
+      .filter((g) => !COMMON_GROUP_ORDER.includes(g))
+      .sort(
+        (a, b) =>
+          Number(a === OTHER_FIELDS_GROUP) - Number(b === OTHER_FIELDS_GROUP),
+      );
     return {
       common: common.map((g) => ({ name: g, items: byGroup.get(g)! })),
       rest: rest.map((g) => ({ name: g, items: byGroup.get(g)! })),
