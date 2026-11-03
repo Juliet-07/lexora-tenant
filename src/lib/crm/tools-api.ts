@@ -99,6 +99,9 @@ export interface Contract {
   autoRenew: boolean;
   owner: string;
   clientId: string | null;
+  // Who the contract is with. Set by the engine when listing contracts:
+  // clientId can point at a client or at a board member.
+  partyKind?: "client" | "board_member" | "external";
   // Real marker set at generation time — distinguishes a contract
   // issued as part of KYC onboarding or vendor management from an
   // ordinary CRM contract.

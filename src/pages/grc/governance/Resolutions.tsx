@@ -77,6 +77,7 @@ import {
   type WrittenStatus,
   type ShareholderSubType,
 } from "@/lib/grc/governance-api";
+import { nowLocalInput } from "@/lib/datetime";
 
 const TYPE_COLORS: Record<ResolutionType, string> = {
   Board: "bg-blue-100 text-blue-700 border-blue-200",
@@ -436,9 +437,7 @@ function CreateResolutionDialog({
     new Date().toISOString().slice(0, 10),
   );
   const [subType, setSubType] = useState<ShareholderSubType>("Ordinary");
-  const [deadline, setDeadline] = useState(
-    new Date(Date.now() + 5 * 86400000).toISOString().slice(0, 16),
-  );
+  const [deadline, setDeadline] = useState(nowLocalInput(5 * 86400000));
 
   // Fetch a real suggested reference the moment the dialog opens —
   // the tenant can still freely overwrite it before submitting.

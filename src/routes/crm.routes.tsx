@@ -13,7 +13,6 @@ import GanttPlanning from "@/pages/crm/projects/GanttPlanning";
 import TimeTracking from "@/pages/crm/projects/time-tracking";
 import ServiceDesk from "@/pages/crm/projects/ServiceDesk";
 import Adr from "@/pages/crm/projects/Adr";
-import Resources from "@/pages/crm/Resources";
 import Invoicing from "@/pages/finance/Invoicing";
 import TrustAccounting from "@/pages/finance/TrustAccounting";
 import Sales from "@/pages/finance/Sales";
@@ -197,11 +196,6 @@ export const crmRoutes = ({ isAdmin, accessibleModules }: RouteContext) => {
         element={layout(<Reports />)}
       />,
       <Route key="crm-pmo" path="/crm/pmo" element={layout(<Pmo />)} />,
-      <Route
-        key="crm-resources"
-        path="/crm/resources"
-        element={layout(<Resources />)}
-      />,
       <Route key="billing" path="/billing" element={layout(<Billing />)} />,
     );
   }

@@ -93,6 +93,7 @@ import {
   LoadingRow,
   EmptyCard,
 } from "./shared";
+import { toLocalInput } from "@/lib/datetime";
 
 // ─── Offboarding tab content ───────────────────────────────────
 
@@ -778,7 +779,7 @@ export function OffboardingDetailPanel({
     if (o) {
       setExitForm({
         formDeadline: o.exitFormDeadline?.slice(0, 10) ?? "",
-        scheduledAt: o.exitScheduledAt?.slice(0, 16) ?? "",
+        scheduledAt: toLocalInput(o.exitScheduledAt),
         interviewer: o.exitInterviewer ?? "",
         location: o.exitLocation ?? "",
         reasonCategory: o.exitReasonCategory ?? "",

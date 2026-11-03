@@ -90,6 +90,7 @@ import {
   SheetDescription,
 } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { nowLocalInput } from "@/lib/datetime";
 
 // UI-only type — "report" and "disciplinary" both narrow to real
 // backend DisputeType values the employee is actually allowed to
@@ -1443,7 +1444,7 @@ function LogDisputeDialog({
                 <Label className="text-xs">Date & time of incident *</Label>
                 <Input
                   type="datetime-local"
-                  max={new Date().toISOString().slice(0, 16)}
+                  max={nowLocalInput()}
                   value={incidentAt}
                   onChange={(e) => setIncidentAt(e.target.value)}
                 />

@@ -86,6 +86,7 @@ import {
   useMinutesReviews,
 } from "@/lib/grcGovernanceLocal";
 import { MeetingWorkspace } from "@/components/grc/meetings/MeetingWorkspace";
+import { nowLocalInput, zonedToUtcIso } from "@/lib/datetime";
 
 export default function GrcMeetings() {
   const [newOpen, setNewOpen] = useState(false);
@@ -385,6 +386,7 @@ export default function GrcMeetings() {
 // timezone is always included (and defaulted to) even if not in this list.
 const COMMON_TIMEZONES = [
   "UTC",
+  "Africa/Kigali",
   "Africa/Lagos",
   "Africa/Johannesburg",
   "Africa/Nairobi",
@@ -429,7 +431,7 @@ function NewMeetingDialog({ open, onOpenChange }: any) {
   const [f, setF] = useState({
     title: "",
     type: "Board" as MeetingAudienceType,
-    date: new Date().toISOString().slice(0, 16),
+    date: nowLocalInput(),
     timezone: detectTimezone(),
     mode: "Physical" as MeetingMode,
     venue: "",
@@ -496,6 +498,9 @@ function NewMeetingDialog({ open, onOpenChange }: any) {
     mutationFn: (list: { name: string; email: string; role: string }[]) =>
       createMeeting({
         ...f,
+        // The picker value is wall-clock time *in the chosen timezone*,
+        // so resolve it against that zone rather than the browser's.
+        date: zonedToUtcIso(f.date, f.timezone),
         ...(f.type === "Ad-hoc" ? { attendees: list } : {}),
       }),
     onSuccess: () => {

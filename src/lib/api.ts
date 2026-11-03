@@ -1,4 +1,5 @@
 import axios from "axios";
+import { normaliseNaiveDateTimes } from "@/lib/datetime";
 
 export const api = axios.create({
   baseURL: import.meta.env.VITE_REACT_APP_BASE_URL,
@@ -7,6 +8,12 @@ export const api = axios.create({
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem("tenantToken");
   if (token) config.headers.Authorization = `Bearer ${token}`;
+  // A datetime-local input yields a zone-less "YYYY-MM-DDTHH:mm". Left as
+  // is, the server reads it as UTC and every time a user picks lands
+  // hours off. Turn them into real instants before they leave the browser.
+  if (config.data && typeof config.data === "object") {
+    config.data = normaliseNaiveDateTimes(config.data);
+  }
   return config;
 });
 

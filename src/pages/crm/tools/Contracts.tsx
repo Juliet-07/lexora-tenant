@@ -129,6 +129,7 @@ export default function Contracts() {
   const [typeFilter, setTypeFilter] = useState("all");
   const [clientFilter, setClientFilter] = useState("all");
   const [vendorFilter, setVendorFilter] = useState("all");
+  const [boardFilter, setBoardFilter] = useState("all");
   const [tab, setTab] = useState("register");
 
   const { data: list = [] } = useQuery({
@@ -180,12 +181,18 @@ export default function Contracts() {
     queryClient.invalidateQueries({ queryKey: ["obligations-due"] });
   };
 
-  // Register filters. The client and vendor lists are built from the
-  // contracts themselves (the contract already carries the party's name), so
-  // every option leads to at least one contract.
-  const partyOptions = (key: "clientId" | "vendorId") => {
+  // Register filters. The client, board member and vendor lists are built
+  // from the contracts themselves (the contract already carries the party's
+  // name), so every option leads to at least one contract. A contract's
+  // clientId can belong to a client or a board member, so the two are kept
+  // apart by the party kind the engine sends with each contract.
+  const partyOptions = (
+    key: "clientId" | "vendorId",
+    kind?: "client" | "board_member",
+  ) => {
     const byId = new Map<string, string>();
     for (const c of list) {
+      if (kind && c.partyKind !== kind) continue;
       const id = c[key];
       if (id && !byId.has(id)) byId.set(id, c.counterparty || id);
     }
@@ -193,18 +200,21 @@ export default function Contracts() {
       a.label.localeCompare(b.label),
     );
   };
-  const clientFilterOptions = partyOptions("clientId");
+  const clientFilterOptions = partyOptions("clientId", "client");
+  const boardFilterOptions = partyOptions("clientId", "board_member");
   const vendorFilterOptions = partyOptions("vendorId");
   const filtersActive = [
     stageFilter,
     typeFilter,
     clientFilter,
+    boardFilter,
     vendorFilter,
   ].some((f) => f !== "all");
   const clearFilters = () => {
     setStageFilter("all");
     setTypeFilter("all");
     setClientFilter("all");
+    setBoardFilter("all");
     setVendorFilter("all");
   };
   const filtered = list.filter(
@@ -212,6 +222,7 @@ export default function Contracts() {
       (stageFilter === "all" || c.stage === stageFilter) &&
       (typeFilter === "all" || c.type === typeFilter) &&
       (clientFilter === "all" || c.clientId === clientFilter) &&
+      (boardFilter === "all" || c.clientId === boardFilter) &&
       (vendorFilter === "all" || c.vendorId === vendorFilter),
   );
 
@@ -455,6 +466,19 @@ export default function Contracts() {
               <SelectContent>
                 <SelectItem value="all">All clients</SelectItem>
                 {clientFilterOptions.map((o) => (
+                  <SelectItem key={o.id} value={o.id}>
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={boardFilter} onValueChange={setBoardFilter}>
+              <SelectTrigger className="w-52">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All board members</SelectItem>
+                {boardFilterOptions.map((o) => (
                   <SelectItem key={o.id} value={o.id}>
                     {o.label}
                   </SelectItem>

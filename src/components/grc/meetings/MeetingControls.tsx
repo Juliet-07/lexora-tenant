@@ -60,6 +60,7 @@ import {
 } from "@/lib/grc/governance-api";
 import { fetchEmployees, type Employee } from "@/lib/hr/hr-api";
 import { MinutesReviewsSection } from "./MeetingSections";
+import { zonedToUtcIso } from "@/lib/datetime";
 
 function useActions(meeting: Meeting) {
   const qc = useQueryClient();
@@ -98,7 +99,7 @@ export function MeetingHeaderControls({
       postponeMeeting(
         id,
         reason,
-        newDate ? new Date(newDate).toISOString() : undefined,
+        newDate ? zonedToUtcIso(newDate, meeting.timezone) : undefined,
       ),
     onSuccess: () => {
       invalidate();
