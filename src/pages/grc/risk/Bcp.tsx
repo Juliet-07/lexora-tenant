@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -78,7 +79,6 @@ import {
   markVendorResilienceAttested,
   fetchBcpIncidents,
   declareBcpIncident,
-  resolveBcpIncident,
   fetchBcpReports,
   createBcpReport,
   fetchBcpFindings,
@@ -96,7 +96,9 @@ import {
   type Severity,
   type BcpPlan as ApiBcpPlan,
   type BiaProcess as ApiBiaProcess,
+  BCP_INCIDENT_TYPES,
   type BcpIncident as ApiBcpIncident,
+  type BcpIncidentInput,
   type BcpReport as ApiBcpReport,
   type BcpTestFinding as ApiBcpTestFinding,
   type CrisisContact,
@@ -113,6 +115,11 @@ import {
 } from "@/lib/crm/vendor-api";
 import { fetchCommittees, type Committee } from "@/lib/grc/governance-api";
 import { useAuth } from "@/contexts/AuthContext";
+import { StakeholderComms } from "@/components/grc/bcp-comms/StakeholderComms";
+import {
+  EditIncidentDialog,
+  ResolveIncidentDialog,
+} from "@/components/grc/bcp-comms/incidentDialogs";
 
 // ─── Types (BIA, Plans, DR systems, Tests, Vendor resilience, Incidents,
 // Reports and the Crisis Management Team roster are all real,
@@ -193,6 +200,9 @@ interface Incident {
   code: string;
   date: string; // raw ISO declaredAt
   description: string;
+  title?: string;
+  type?: string;
+  spokesperson?: string;
   severity: BcpIncidentSeverity;
   status: "Active" | "Resolved";
   resolvedAt: string | null;
@@ -473,7 +483,27 @@ function Kpi({
 export default function GrcBcp() {
   const qc = useQueryClient();
   const { user } = useAuth();
-  const [tab, setTab] = useState("overview");
+  const [params, setParams] = useSearchParams();
+  const [tab, setTab] = useState(
+    params.get("tab") === "comms" ? "comms" : "overview",
+  );
+  // Alert links open ?tab=comms&incident=<id>.
+  const [commsIncident, setCommsIncident] = useState<string | null>(
+    params.get("incident"),
+  );
+  useEffect(() => {
+    if (params.get("tab") === "comms") {
+      setTab("comms");
+      setCommsIncident(params.get("incident"));
+      const next = new URLSearchParams(params);
+      next.delete("tab");
+      next.delete("incident");
+      setParams(next, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params]);
+  const [editIncident, setEditIncident] = useState<ApiBcpIncident | null>(null);
+  const [resolveFor, setResolveFor] = useState<ApiBcpIncident | null>(null);
   const [detail, setDetail] = useState<Detail | null>(null);
   const [dialog, setDialog] = useState<
     | null
@@ -662,6 +692,9 @@ export default function GrcBcp() {
         code: i.code,
         date: i.declaredAt,
         description: i.description,
+        title: i.title,
+        type: i.type,
+        spokesperson: i.spokespersonName,
         severity: i.severity,
         status: i.status,
         resolvedAt: i.resolvedAt,
@@ -970,19 +1003,6 @@ td.empty{color:#94a3b8;font-style:italic;border-bottom:none}
         variant: "destructive",
       }),
   });
-  const resolveMut = useMutation({
-    mutationFn: (id: string) => resolveBcpIncident(id),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["grc-bcp-incidents"] });
-      toast({ title: "Incident resolved" });
-    },
-    onError: (e: any) =>
-      toast({
-        title: "Couldn't save",
-        description: e?.response?.data?.message,
-        variant: "destructive",
-      }),
-  });
   const resolveFindingMut = useMutation({
     mutationFn: (id: string) => resolveBcpFinding(id),
     onSuccess: () => {
@@ -1109,6 +1129,7 @@ td.empty{color:#94a3b8;font-style:italic;border-bottom:none}
           </TabsTrigger>
           <TabsTrigger value="crisis">Crisis Management</TabsTrigger>
           <TabsTrigger value="incidents">Incident Response</TabsTrigger>
+          <TabsTrigger value="comms">Stakeholder Communications</TabsTrigger>
           <TabsTrigger value="reporting">Reporting</TabsTrigger>
         </TabsList>
 
@@ -2431,17 +2452,32 @@ td.empty{color:#94a3b8;font-style:italic;border-bottom:none}
                 <Siren className="h-5 w-5 text-destructive" />
                 <div className="flex-1">
                   <div className="font-semibold text-sm">
-                    {i.code} — {i.description}
+                    {i.code} — {i.title || i.description}
                   </div>
                   <div className="text-xs text-muted-foreground">
                     Declared {fmtD(i.date)} · Severity {i.severity}
+                    {i.type ? ` · ${i.type}` : ""}
+                    {i.spokesperson ? ` · Spokesperson ${i.spokesperson}` : ""}
                   </div>
                 </div>
                 <Button
                   size="sm"
                   variant="outline"
-                  disabled={resolveMut.isPending}
-                  onClick={() => resolveMut.mutate(i.id)}
+                  onClick={() => {
+                    setCommsIncident(i.id);
+                    setTab("comms");
+                  }}
+                >
+                  Stakeholder comms
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() =>
+                    setResolveFor(
+                      apiIncidents.find((x) => x._id === i.id) ?? null,
+                    )
+                  }
                 >
                   Mark resolved
                 </Button>
@@ -2486,6 +2522,7 @@ td.empty{color:#94a3b8;font-style:italic;border-bottom:none}
                       <TableHead>ID</TableHead>
                       <TableHead>Date</TableHead>
                       <TableHead>Description</TableHead>
+                      <TableHead>Type</TableHead>
                       <TableHead>Severity</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>MTTR</TableHead>
@@ -2499,6 +2536,9 @@ td.empty{color:#94a3b8;font-style:italic;border-bottom:none}
                         </TableCell>
                         <TableCell>{fmtD(i.date)}</TableCell>
                         <TableCell>{i.description}</TableCell>
+                        <TableCell className="text-xs">
+                          {i.type || "—"}
+                        </TableCell>
                         <TableCell>
                           <Pill s={i.severity} />
                         </TableCell>
@@ -2511,7 +2551,7 @@ td.empty{color:#94a3b8;font-style:italic;border-bottom:none}
                     {incidents.length === 0 && (
                       <TableRow>
                         <TableCell
-                          colSpan={6}
+                          colSpan={7}
                           className="text-center text-sm text-muted-foreground py-8"
                         >
                           No incidents declared yet.
@@ -2555,6 +2595,16 @@ td.empty{color:#94a3b8;font-style:italic;border-bottom:none}
         </TabsContent>
 
         {/* REPORTING */}
+        <TabsContent value="comms" className="mt-4">
+          <StakeholderComms
+            incidents={apiIncidents}
+            initialIncidentId={commsIncident}
+            onDeclare={() => setDialog("incident")}
+            onEdit={setEditIncident}
+            onResolve={setResolveFor}
+          />
+        </TabsContent>
+
         <TabsContent value="reporting" className="space-y-4 mt-4">
           <div className="flex justify-between items-center">
             <h2 className="font-semibold">Reporting</h2>
@@ -2803,6 +2853,14 @@ td.empty{color:#94a3b8;font-style:italic;border-bottom:none}
         invalidate={(k) => qc.invalidateQueries({ queryKey: [k] })}
         previewReport={previewReport}
         goToIncidents={() => setTab("incidents")}
+      />
+      <EditIncidentDialog
+        incident={editIncident}
+        onClose={() => setEditIncident(null)}
+      />
+      <ResolveIncidentDialog
+        incident={resolveFor}
+        onClose={() => setResolveFor(null)}
       />
       <RecordActualDialog
         system={actualFor}
@@ -3062,7 +3120,7 @@ function BcpDialogs({
   const { data: employeesPage } = useQuery({
     queryKey: ["employees-for-bcp-contacts"],
     queryFn: () => fetchEmployees({ limit: 500 }),
-    enabled: kind === "contact",
+    enabled: kind === "contact" || kind === "incident",
     retry: 1,
   });
   const employees: Employee[] = employeesPage?.items ?? [];
@@ -3380,12 +3438,15 @@ function BcpDialogs({
     onError: err,
   });
   const incidentMut = useMutation({
-    mutationFn: (vars: {
-      description: string;
-      severity: BcpIncidentSeverity;
-    }) => declareBcpIncident(vars),
+    mutationFn: (
+      vars: {
+        description: string;
+        severity: BcpIncidentSeverity;
+      } & BcpIncidentInput,
+    ) => declareBcpIncident(vars),
     onSuccess: (data) => {
       invalidate("grc-bcp-incidents");
+      invalidate("grc-bcp-comms");
       toast({
         title: `${data.code} declared`,
         description: "Follow the escalation matrix for this severity.",
@@ -3961,9 +4022,24 @@ function BcpDialogs({
         incidentMut.mutate({
           description: f.description,
           severity: (f.sev || "L2") as BcpIncidentSeverity,
+          ...(f.incTitle?.trim() ? { title: f.incTitle.trim() } : {}),
+          ...(f.incType && f.incType !== "none" ? { type: f.incType } : {}),
+          clientImpact: f.incClient === "1",
+          mediaInterest: f.incMedia === "1",
+          ...(f.incSpokes && f.incSpokes !== "none"
+            ? { spokespersonEmployeeId: f.incSpokes }
+            : {}),
+          ...(f.incNext
+            ? { nextUpdateAt: new Date(f.incNext).toISOString() }
+            : {}),
         }),
       body: (
         <>
+          {Field({
+            k: "incTitle",
+            label: "Title",
+            placeholder: "Short name used in stakeholder notices",
+          })}
           <div>
             <Label>What happened?</Label>
             <Textarea
@@ -3972,11 +4048,78 @@ function BcpDialogs({
               onChange={set("description")}
             />
           </div>
-          {Pick({
-            k: "sev",
-            label: "Severity",
-            opts: ["L2", "L1", "L3", "L4"],
-          })}
+          <div className="grid grid-cols-2 gap-3">
+            {Pick({
+              k: "sev",
+              label: "Severity",
+              opts: ["L2", "L1", "L3", "L4"],
+            })}
+            <div>
+              <Label>Type</Label>
+              <Select
+                value={f.incType ?? "none"}
+                onValueChange={sel("incType")}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Not classified</SelectItem>
+                  {BCP_INCIDENT_TYPES.map((t) => (
+                    <SelectItem key={t} value={t}>
+                      {t}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-x-6 gap-y-2">
+            <label className="flex items-center gap-2 text-sm">
+              <Checkbox
+                checked={f.incClient === "1"}
+                onCheckedChange={(v) =>
+                  setF((p) => ({ ...p, incClient: v ? "1" : "" }))
+                }
+              />
+              Clients are affected
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <Checkbox
+                checked={f.incMedia === "1"}
+                onCheckedChange={(v) =>
+                  setF((p) => ({ ...p, incMedia: v ? "1" : "" }))
+                }
+              />
+              Media or public interest
+            </label>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>Spokesperson</Label>
+              <Select
+                value={f.incSpokes ?? "none"}
+                onValueChange={sel("incSpokes")}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Not assigned</SelectItem>
+                  {employees.map((e) => (
+                    <SelectItem key={e._id} value={e._id}>
+                      {e.firstName} {e.lastName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {Field({
+              k: "incNext",
+              label: "Next update due",
+              type: "datetime-local",
+            })}
+          </div>
         </>
       ),
     },

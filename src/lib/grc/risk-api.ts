@@ -301,6 +301,16 @@ export interface VendorResilience {
   lastReviewDate: string;
   nextReviewDate: string | null;
 }
+export const BCP_INCIDENT_TYPES = [
+  "System outage",
+  "Data breach",
+  "Cyber attack",
+  "Fraud",
+  "Regulatory breach",
+  "Facilities and natural disaster",
+  "Key person loss",
+  "Reputational",
+] as const;
 export interface BcpIncident {
   _id: string;
   code: string;
@@ -309,6 +319,17 @@ export interface BcpIncident {
   status: BcpIncidentStatus;
   declaredAt: string;
   resolvedAt: string | null;
+  // Stakeholder-communication inputs. Absent on incidents declared
+  // before these existed, so always read them with a fallback.
+  title?: string;
+  type?: string;
+  clientImpact?: boolean;
+  mediaInterest?: boolean;
+  spokespersonEmployeeId?: string | null;
+  spokespersonName?: string;
+  nextUpdateAt?: string | null;
+  closureNote?: string;
+  declaredByName?: string;
 }
 export interface BcpReport {
   _id: string;
@@ -1079,16 +1100,44 @@ export const fetchBcpIncidents = async (): Promise<BcpIncident[]> => {
   return Array.isArray(d) ? d : [];
 };
 
-export const declareBcpIncident = async (dto: {
-  description: string;
-  severity: BcpIncidentSeverity;
-}): Promise<BcpIncident> => {
+export interface BcpIncidentInput {
+  title?: string;
+  type?: string;
+  clientImpact?: boolean;
+  mediaInterest?: boolean;
+  // Empty string clears it.
+  spokespersonEmployeeId?: string;
+  nextUpdateAt?: string;
+}
+
+export const declareBcpIncident = async (
+  dto: {
+    description: string;
+    severity: BcpIncidentSeverity;
+  } & BcpIncidentInput,
+): Promise<BcpIncident> => {
   const res = await api.post("/grc/risk/bcp/incidents", dto);
   return res.data?.data ?? res.data;
 };
 
-export const resolveBcpIncident = async (id: string): Promise<BcpIncident> => {
-  const res = await api.patch(`/grc/risk/bcp/incidents/${id}/resolve`, {});
+export const updateBcpIncident = async (
+  id: string,
+  dto: {
+    description?: string;
+    severity?: BcpIncidentSeverity;
+  } & BcpIncidentInput,
+): Promise<BcpIncident> => {
+  const res = await api.patch(`/grc/risk/bcp/incidents/${id}`, dto);
+  return res.data?.data ?? res.data;
+};
+
+export const resolveBcpIncident = async (
+  id: string,
+  closureNote?: string,
+): Promise<BcpIncident> => {
+  const res = await api.patch(`/grc/risk/bcp/incidents/${id}/resolve`, {
+    ...(closureNote !== undefined ? { closureNote } : {}),
+  });
   return res.data?.data ?? res.data;
 };
 
