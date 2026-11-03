@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { QuickClockCard } from "@/components/hr/QuickClockCard";
+import { NoticeDashboardLine } from "@/components/dashboard/NoticeDashboardLine";
 import { fetchMyTasks, fetchMyMandates } from "@/lib/crm/mandates-api";
 import { fetchClients, displayName, toneFor } from "@/lib/client/clients-api";
 
@@ -123,7 +124,8 @@ export default function TeamMemberDashboard() {
       {/* Greeting */}
       <div>
         <h1 className="text-2xl font-bold">Welcome back, {user?.firstName}</h1>
-        <p className="text-muted-foreground text-sm">{today}</p>
+        <NoticeDashboardLine />
+        <p className="text-muted-foreground text-sm mt-1">{today}</p>
         {user?.businessName && (
           <p className="text-xs text-muted-foreground mt-0.5">
             {user.businessName}

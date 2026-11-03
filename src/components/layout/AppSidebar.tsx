@@ -40,6 +40,7 @@ import {
   Leaf,
   FileBarChart,
   Bell,
+  Megaphone,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
@@ -425,6 +426,12 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
       adminOnly: true,
     },
     {
+      title: "Notices & Comms",
+      url: "/hr/notices",
+      icon: Megaphone,
+      adminOnly: true,
+    },
+    {
       title: "Reports",
       url: "/hr/reports",
       icon: BarChart3,
@@ -483,6 +490,7 @@ export function AppSidebar() {
         { title: "Learning", url: "/my/learning" },
         { title: "Dispute", url: "/my/disputes" },
         { title: "Requisition", url: "/my/requisitions" },
+        { title: "Announcements", url: "/my/announcements" },
         { title: "Notices", url: "/my/notices" },
       ],
     },

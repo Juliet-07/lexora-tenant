@@ -14,6 +14,7 @@ import HRDisputes from "@/pages/hr/Disputes";
 import HRReports from "@/pages/hr/Reports";
 import HROverview from "@/pages/hr/Overview";
 import HRProbation from "@/pages/hr/Probation";
+import HRNotices from "@/pages/hr/Notices";
 
 /** HR & People Management — most admin-gated, attendance/leave/learning open. */
 export const hrRoutes = ({ isAdmin, accessibleModules }: RouteContext) => {
@@ -77,6 +78,11 @@ export const hrRoutes = ({ isAdmin, accessibleModules }: RouteContext) => {
         key="disputes"
         path="/hr/disputes"
         element={layout(<HRDisputes />)}
+      />,
+      <Route
+        key="notices"
+        path="/hr/notices"
+        element={layout(<HRNotices />)}
       />,
       <Route
         key="reports"
