@@ -1,10 +1,11 @@
 import { api } from "@/lib/api";
 
-// Contracts drafted inside a deal from templates the Super Admin publishes
-// (module GRC, area "Deals"). A generated contract belongs to the deal
-// (deal.contracts) and is edited, redlined, reviewed and executed there —
-// it is not a Contract Management (CRM) contract. See the engine's
-// DealContractService.
+// Contracts and term sheets drafted inside a deal from templates the Super
+// Admin publishes (module GRC, area "Deals" for contracts and "Term sheets"
+// for term sheets). A generated document belongs to the deal
+// (deal.contracts, told apart by `kind`) and is edited, redlined, reviewed
+// and executed there — it is not a Contract Management (CRM) contract. See
+// the engine's DealContractService.
 
 export interface DealContractTemplate {
   _id: string;
@@ -105,3 +106,67 @@ export const generateDealContract = async (
   dto: GenerateDealContractInput,
 ): Promise<{ contractId: string }> =>
   unwrap(await api.post(`/deals/${dealId}/template-contracts`, dto));
+
+// ── Term sheets ──────────────────────────────────────────────
+// Generated like a contract, but from a "Term sheets" template, with two
+// parties (the deal's client and counterparty by default) and their own
+// reference. They live on the deal's Term Sheet tab, never in Contracts.
+
+export interface TermSheetPartyInput {
+  name: string;
+  entityType?: string;
+  jurisdiction?: string;
+  registrationNumber?: string;
+  address?: string;
+  email?: string;
+  signatory?: string;
+  signatoryTitle?: string;
+}
+
+export interface TermSheetDraft {
+  suggested: {
+    title: string;
+    governingLaw: string;
+    effectiveDate: string;
+  };
+  partyA: TermSheetPartyInput;
+  partyB: TermSheetPartyInput;
+  /** People already on the deal, to pick a party from. */
+  dealParties: { side: string; name: string; title: string; email: string }[];
+  template: { _id: string; title: string } | null;
+  fields: DealTemplateField[];
+}
+
+export interface GenerateTermSheetInput {
+  templateId: string;
+  title: string;
+  partyA?: TermSheetPartyInput;
+  partyB?: TermSheetPartyInput;
+  effectiveDate?: string;
+  governingLaw?: string;
+}
+
+export const fetchTermSheetTemplates = async (
+  dealId: string,
+): Promise<DealContractTemplate[]> => {
+  const d = unwrap<DealContractTemplate[]>(
+    await api.get(`/deals/${dealId}/term-sheet-templates`),
+  );
+  return Array.isArray(d) ? d : [];
+};
+
+export const fetchTermSheetDraft = async (
+  dealId: string,
+  templateId?: string,
+): Promise<TermSheetDraft> =>
+  unwrap(
+    await api.get(`/deals/${dealId}/term-sheet-draft`, {
+      params: templateId ? { templateId } : undefined,
+    }),
+  );
+
+export const generateTermSheet = async (
+  dealId: string,
+  dto: GenerateTermSheetInput,
+): Promise<{ termSheetId: string }> =>
+  unwrap(await api.post(`/deals/${dealId}/term-sheets`, dto));

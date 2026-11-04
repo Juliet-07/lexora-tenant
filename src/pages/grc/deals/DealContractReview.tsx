@@ -84,6 +84,9 @@ export default function DealContractReviewPage() {
         <InvalidCard />
       </Shell>
     );
+  // A term sheet is reviewed on the same page as a contract; only the
+  // wording changes.
+  const docName = snap.kind === "term_sheet" ? "term sheet" : "contract";
   if (
     snap.alreadyResponded &&
     snap.previousDecision === "Approved" &&
@@ -93,7 +96,7 @@ export default function DealContractReviewPage() {
       <Shell>
         <DoneCard
           title="Already approved"
-          body={`You have already approved the contract for "${snap.dealName}".`}
+          body={`You have already approved the ${docName} for "${snap.dealName}".`}
         />
       </Shell>
     );
@@ -122,7 +125,9 @@ export default function DealContractReviewPage() {
           <div className="bg-gradient-to-r from-primary to-primary/70 text-primary-foreground p-6">
             <div className="flex items-center gap-2 text-xs uppercase tracking-wide opacity-90">
               <ShieldCheck className="h-4 w-4" />
-              Contract review
+              {docName === "term sheet"
+                ? "Term sheet review"
+                : "Contract review"}
             </div>
             <h1 className="text-2xl font-bold mt-2">{snap.dealName}</h1>
           </div>

@@ -107,12 +107,22 @@ export function DealContractDialog({
   onOpenChange: (o: boolean) => void;
 }) {
   const contract = (deal.contracts ?? []).find((c) => c._id === contractId);
+  // A term sheet opens in the same editor as a contract; only the wording
+  // (and which document it is) differs.
+  const isTermSheet = contract?.kind === "term_sheet";
+  const docName = isTermSheet ? "term sheet" : "contract";
   const queryClient = useQueryClient();
   const [tab, setTab] = useState("preview");
   const [confirmDelete, setConfirmDelete] = useState(false);
 
+  // A freshly generated term sheet is mostly terms still to be agreed, so it
+  // opens on the Fields tab; a contract opens on its preview.
   useEffect(() => {
-    if (open) setTab("preview");
+    if (!open) return;
+    const unfilled = (contract?.fields ?? []).some((f) => !f.filled);
+    const fresh = !(contract?.reviewLoop?.tokens?.length ?? 0);
+    setTab(isTermSheet && unfilled && fresh ? "fields" : "preview");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, contractId]);
 
   const invalidate = () =>
@@ -135,7 +145,7 @@ export function DealContractDialog({
       invalidate();
       setConfirmDelete(false);
       onOpenChange(false);
-      toast.success("Contract deleted");
+      toast.success(isTermSheet ? "Term sheet deleted" : "Contract deleted");
     },
     onError: (err: any) =>
       toast.error(err?.response?.data?.message ?? "Failed to delete"),
@@ -161,8 +171,8 @@ export function DealContractDialog({
         <DialogContent className="flex h-[92vh] max-w-6xl flex-col gap-0 p-0">
           {!contract ? (
             <div className="p-10 text-center text-sm text-muted-foreground">
-              <DialogTitle className="sr-only">Contract</DialogTitle>
-              This contract is no longer available.
+              <DialogTitle className="sr-only">Document</DialogTitle>
+              This document is no longer available.
             </div>
           ) : (
             <Tabs
@@ -224,7 +234,9 @@ export function DealContractDialog({
                         downloadContractPdf(deal._id, contract._id)
                       }
                     >
-                      Export Execution Version
+                      {isTermSheet
+                        ? "Export Term Sheet"
+                        : "Export Execution Version"}
                     </Button>
                     <Button
                       size="sm"
@@ -238,7 +250,7 @@ export function DealContractDialog({
                     <Button
                       size="icon"
                       variant="ghost"
-                      aria-label="Delete contract"
+                      aria-label={`Delete ${docName}`}
                       onClick={() => setConfirmDelete(true)}
                     >
                       <Trash2 className="h-4 w-4 text-destructive" />
@@ -295,7 +307,7 @@ export function DealContractDialog({
                   />
                 </TabsContent>
                 <TabsContent value="review" className="m-0 p-6">
-                  <ReviewTab contract={contract} />
+                  <ReviewTab contract={contract} docName={docName} />
                 </TabsContent>
               </div>
             </Tabs>
@@ -306,7 +318,7 @@ export function DealContractDialog({
       <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete this contract?</AlertDialogTitle>
+            <AlertDialogTitle>Delete this {docName}?</AlertDialogTitle>
             <AlertDialogDescription>
               “{contract?.name}” and its comments, redlines and review responses
               will be removed from the deal. This can't be undone.
@@ -429,7 +441,7 @@ function PreviewTab({
         ))}
         {contract.sections.length === 0 && (
           <p className="text-center text-sm text-muted-foreground">
-            This contract has no sections.
+            This document has no sections.
           </p>
         )}
       </article>
@@ -760,7 +772,7 @@ function EditTab({
       ))}
       {contract.sections.length === 0 && (
         <div className="py-10 text-center text-sm text-muted-foreground">
-          This contract has no sections.
+          This document has no sections.
         </div>
       )}
 
@@ -925,7 +937,7 @@ function FieldsTab({
   if (!fields.length) {
     return (
       <p className="py-10 text-center text-sm text-muted-foreground">
-        This contract's text has no merge fields.
+        This document's text has no merge fields.
       </p>
     );
   }
@@ -974,7 +986,7 @@ function FieldsTab({
         </label>
       </div>
       {section("Common fields", groups.common)}
-      {section("This contract's fields", groups.rest)}
+      {section("This document's fields", groups.rest)}
       {!groups.common.length && !groups.rest.length && (
         <p className="py-8 text-center text-sm text-muted-foreground">
           {onlyEmpty && !q
@@ -988,15 +1000,22 @@ function FieldsTab({
 
 // ── Review ──────────────────────────────────────────────────
 
-function ReviewTab({ contract }: { contract: Contract }) {
+function ReviewTab({
+  contract,
+  docName,
+}: {
+  contract: Contract;
+  docName: string;
+}) {
   const responses = contract.reviewLoop?.responses ?? [];
   const sent = contract.reviewLoop?.tokens ?? [];
   return (
     <div className="mx-auto max-w-3xl space-y-4">
       <p className="rounded-md border bg-background px-3 py-2 text-xs text-muted-foreground">
         <b>Send for review</b> emails a secure link to each party on the deal
-        who has contract-review access. They can comment, redline and approve or
-        request changes — their answers appear here.
+        who has {docName === "term sheet" ? "offer" : "contract"}-review access.
+        They can comment, redline and approve or request changes — their answers
+        appear here.
       </p>
       {sent.length > 0 && (
         <div className="rounded-lg border bg-background p-4">

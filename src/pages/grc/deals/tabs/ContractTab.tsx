@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { FileStack, Sparkles, AlertTriangle } from "lucide-react";
 import { GenerateDealContractDialog } from "@/components/grc/GenerateDealContractDialog";
 import { DealContractDialog } from "@/components/grc/DealContractDialog";
+import { DocReviewBadge } from "@/components/grc/DocReviewBadge";
 import type { Deal } from "@/lib/grc/deals-api";
 
 // A deal's contracts. They are created only from templates the platform
@@ -14,7 +15,10 @@ import type { Deal } from "@/lib/grc/deals-api";
 export default function ContractTab({ deal }: { deal: Deal }) {
   const [generateOpen, setGenerateOpen] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
-  const contracts = deal.contracts ?? [];
+  // Term sheets are kept in the deal's documents too, but have their own tab.
+  const contracts = (deal.contracts ?? []).filter(
+    (c) => (c.kind ?? "contract") === "contract",
+  );
 
   return (
     <div className="space-y-4">
@@ -27,7 +31,8 @@ export default function ContractTab({ deal }: { deal: Deal }) {
           <p className="text-sm text-muted-foreground">
             Generated from the templates your platform admin publishes, filled
             in from this deal and your company profile. Open one to preview,
-            edit, redline and send it for review.
+            edit, redline and send it for review. Term sheets are kept on the{" "}
+            <b>Term Sheet</b> tab.
           </p>
         </div>
         <Button size="sm" onClick={() => setGenerateOpen(true)}>
@@ -69,6 +74,7 @@ export default function ContractTab({ deal }: { deal: Deal }) {
                   created {new Date(c.createdAt).toLocaleDateString()}
                 </p>
                 <div className="flex flex-wrap gap-1.5">
+                  <DocReviewBadge review={c.review} />
                   {missing > 0 && (
                     <Badge
                       variant="outline"

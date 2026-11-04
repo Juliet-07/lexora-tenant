@@ -25,6 +25,11 @@ import { fetchGrcOverview, bandTone, zoneTone } from "@/lib/grc/overview-api";
 import { formatMoney } from "@/lib/grc/deals-api";
 import { fetchDashboard } from "@/lib/grc/esg-api";
 import { NavLink } from "react-router-dom";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import HealthScorePanel, {
+  useHealthScore,
+} from "@/components/grc/health-score/HealthScorePanel";
+import { TONE_TEXT, fmtScore, scoreTone } from "@/lib/grc/health-score-api";
 
 const RISK_CATEGORIES = [
   "Strategic",
@@ -44,6 +49,8 @@ export default function GrcOverview() {
     queryKey: ["esgDashboard"],
     queryFn: fetchDashboard,
   });
+  const hsQuery = useHealthScore();
+  const hs = hsQuery.data;
   const today = new Date().toISOString().slice(0, 10);
 
   if (isLoading || !overview) {
@@ -62,7 +69,6 @@ export default function GrcOverview() {
     compliance: comp,
     deals,
     dealIntelligence: intel,
-    healthScore: health,
   } = overview;
 
   // ── Risk
@@ -173,605 +179,660 @@ export default function GrcOverview() {
             <div className="text-xs text-muted-foreground">
               GRC Health Score
             </div>
-            <div className="text-4xl font-bold mt-1">
-              {health}
+            <div className="mt-1 flex items-baseline gap-2">
+              <span
+                className={`text-4xl font-bold ${TONE_TEXT[scoreTone(hs?.composite)]}`}
+              >
+                {fmtScore(hs?.composite)}
+              </span>
               <span className="text-lg text-muted-foreground">/100</span>
+              {hs?.grade && (
+                <Badge variant="outline" className="ml-auto font-bold">
+                  {hs.grade}
+                </Badge>
+              )}
             </div>
-            <div className="mt-2 h-2 rounded bg-muted overflow-hidden">
-              <div
-                className={`h-full ${health >= 75 ? "bg-emerald-500" : health >= 50 ? "bg-amber-500" : "bg-rose-500"}`}
-                style={{ width: `${health}%` }}
-              />
+            <div className="mt-2 text-xs text-muted-foreground">
+              {hs
+                ? `${hs.coverage.measured} of ${hs.coverage.total} indicators measured`
+                : hsQuery.isError
+                  ? "Could not load the score"
+                  : "Calculating…"}
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* ── GOVERNANCE ─────────────────────────────────────────── */}
-      <Section
-        title="Governance"
-        icon={Gavel}
-        accent="from-indigo-500 to-violet-500"
-      >
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-          <Kpi
-            to="/grc/governance/meetings"
-            label="Upcoming meetings"
-            value={upcomingMeetings}
-            icon={CalendarClock}
-            tone="from-indigo-500 to-blue-500"
-          />
-          <Kpi
-            to="/grc/governance/meetings"
-            label="Draft meetings"
-            value={draftMeetings}
-            icon={FileText}
-            tone="from-slate-500 to-slate-700"
-          />
-          <Kpi
-            to="/grc/governance/committees"
-            label="Committees"
-            value={committees}
-            icon={Users}
-            tone="from-violet-500 to-purple-500"
-          />
-          <Kpi
-            to="/grc/governance/committees"
-            label="Open comm. tasks"
-            value={openCommitteeTasks}
-            icon={ClipboardCheck}
-            tone="from-fuchsia-500 to-pink-500"
-          />
-          <Kpi
-            to="/grc/governance/board"
-            label="Board directors"
-            value={directors}
-            icon={Users}
-            tone="from-blue-500 to-cyan-500"
-          />
-          <Kpi
-            to="/grc/governance/codes"
-            label="Published codes"
-            value={publishedCodes}
-            icon={BookOpen}
-            tone="from-emerald-500 to-teal-500"
-          />
-          <Kpi
-            to="/grc/governance/resolutions"
-            label="Open resolutions"
-            value={openResolutions}
+      <Tabs defaultValue="health" className="space-y-6">
+        <TabsList>
+          <TabsTrigger value="health">Health Score</TabsTrigger>
+          <TabsTrigger value="metrics">Detailed metrics</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="health" className="mt-0">
+          {hs ? (
+            <HealthScorePanel hs={hs} />
+          ) : hsQuery.isError ? (
+            <Card>
+              <CardContent className="py-10 text-center text-sm text-muted-foreground">
+                The health score could not be loaded.{" "}
+                <button
+                  type="button"
+                  className="text-primary underline"
+                  onClick={() => hsQuery.refetch()}
+                >
+                  Try again
+                </button>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="py-16 text-center text-sm text-muted-foreground">
+              Calculating the health score from your records…
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="metrics" className="mt-0 space-y-8">
+          {/* ── GOVERNANCE ─────────────────────────────────────────── */}
+          <Section
+            title="Governance"
             icon={Gavel}
-            tone="from-amber-500 to-orange-500"
-          />
-        </div>
-        {expiringTerms > 0 && (
-          <div className="mt-3 text-xs text-amber-700 dark:text-amber-400">
-            {expiringTerms} director term{expiringTerms !== 1 ? "s" : ""} ending
-            within 180 days — plan succession.
-          </div>
-        )}
-      </Section>
+            accent="from-indigo-500 to-violet-500"
+          >
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+              <Kpi
+                to="/grc/governance/meetings"
+                label="Upcoming meetings"
+                value={upcomingMeetings}
+                icon={CalendarClock}
+                tone="from-indigo-500 to-blue-500"
+              />
+              <Kpi
+                to="/grc/governance/meetings"
+                label="Draft meetings"
+                value={draftMeetings}
+                icon={FileText}
+                tone="from-slate-500 to-slate-700"
+              />
+              <Kpi
+                to="/grc/governance/committees"
+                label="Committees"
+                value={committees}
+                icon={Users}
+                tone="from-violet-500 to-purple-500"
+              />
+              <Kpi
+                to="/grc/governance/committees"
+                label="Open comm. tasks"
+                value={openCommitteeTasks}
+                icon={ClipboardCheck}
+                tone="from-fuchsia-500 to-pink-500"
+              />
+              <Kpi
+                to="/grc/governance/board"
+                label="Board directors"
+                value={directors}
+                icon={Users}
+                tone="from-blue-500 to-cyan-500"
+              />
+              <Kpi
+                to="/grc/governance/codes"
+                label="Published codes"
+                value={publishedCodes}
+                icon={BookOpen}
+                tone="from-emerald-500 to-teal-500"
+              />
+              <Kpi
+                to="/grc/governance/resolutions"
+                label="Open resolutions"
+                value={openResolutions}
+                icon={Gavel}
+                tone="from-amber-500 to-orange-500"
+              />
+            </div>
+            {expiringTerms > 0 && (
+              <div className="mt-3 text-xs text-amber-700 dark:text-amber-400">
+                {expiringTerms} director term{expiringTerms !== 1 ? "s" : ""}{" "}
+                ending within 180 days — plan succession.
+              </div>
+            )}
+          </Section>
 
-      {/* ── RISK ───────────────────────────────────────────────── */}
-      <Section
-        title="Risk"
-        icon={AlertTriangle}
-        accent="from-rose-500 to-orange-500"
-      >
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-          <Kpi
-            to="/grc/risk/register"
-            label="Open risks"
-            value={openRisks.length}
+          {/* ── RISK ───────────────────────────────────────────────── */}
+          <Section
+            title="Risk"
             icon={AlertTriangle}
-            tone="from-rose-500 to-orange-500"
-          />
-          <Kpi
-            to="/grc/risk/register"
-            label="Extreme / High"
-            value={extremeHigh}
-            icon={AlertTriangle}
-            tone="from-orange-500 to-amber-500"
-          />
-          <Kpi
-            to="/grc/risk/controls"
-            label="Open deficiencies"
-            value={openDeficiencies}
-            icon={ClipboardCheck}
-            tone="from-blue-500 to-cyan-500"
-          />
-          <Kpi
-            to="/grc/risk/treatment"
-            label="Treatment plans"
-            value={r.treatmentPlans.length}
-            icon={ShieldCheck}
-            tone="from-emerald-500 to-teal-500"
-          />
-          <Kpi
-            to="/grc/risk/emerging"
-            label="Emerging risks watched"
-            value={watchListed}
-            icon={TrendingUp}
-            tone="from-fuchsia-500 to-pink-500"
-          />
-          <Kpi
-            to="/grc/risk/controls"
-            label="Control tests outstanding"
-            value={testsDue}
-            icon={ClipboardCheck}
-            tone="from-indigo-500 to-blue-500"
-          />
-        </div>
+            accent="from-rose-500 to-orange-500"
+          >
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+              <Kpi
+                to="/grc/risk/register"
+                label="Open risks"
+                value={openRisks.length}
+                icon={AlertTriangle}
+                tone="from-rose-500 to-orange-500"
+              />
+              <Kpi
+                to="/grc/risk/register"
+                label="Extreme / High"
+                value={extremeHigh}
+                icon={AlertTriangle}
+                tone="from-orange-500 to-amber-500"
+              />
+              <Kpi
+                to="/grc/risk/controls"
+                label="Open deficiencies"
+                value={openDeficiencies}
+                icon={ClipboardCheck}
+                tone="from-blue-500 to-cyan-500"
+              />
+              <Kpi
+                to="/grc/risk/treatment"
+                label="Treatment plans"
+                value={r.treatmentPlans.length}
+                icon={ShieldCheck}
+                tone="from-emerald-500 to-teal-500"
+              />
+              <Kpi
+                to="/grc/risk/emerging"
+                label="Emerging risks watched"
+                value={watchListed}
+                icon={TrendingUp}
+                tone="from-fuchsia-500 to-pink-500"
+              />
+              <Kpi
+                to="/grc/risk/controls"
+                label="Control tests outstanding"
+                value={testsDue}
+                icon={ClipboardCheck}
+                tone="from-indigo-500 to-blue-500"
+              />
+            </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">
-                Risk heatmap (likelihood × impact)
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-6 gap-1 text-xs">
-                <div />
-                {[1, 2, 3, 4, 5].map((i) => (
-                  <div
-                    key={"h" + i}
-                    className="text-center text-muted-foreground"
-                  >
-                    I{i}
-                  </div>
-                ))}
-                {[5, 4, 3, 2, 1].map((l) => (
-                  <div key={"row" + l} className="contents">
-                    <div className="text-right pr-1 text-muted-foreground">
-                      L{l}
-                    </div>
-                    {[1, 2, 3, 4, 5].map((i) => {
-                      const count = cells[`${l}-${i}`] || 0;
-                      const score = l * i;
-                      const band =
-                        score >= 17
-                          ? "Extreme"
-                          : score >= 10
-                            ? "High"
-                            : score >= 5
-                              ? "Medium"
-                              : "Low";
-                      const bg =
-                        band === "Extreme"
-                          ? "bg-rose-500/70"
-                          : band === "High"
-                            ? "bg-orange-500/60"
-                            : band === "Medium"
-                              ? "bg-amber-500/50"
-                              : "bg-emerald-500/40";
-                      return (
-                        <div
-                          key={`c${l}${i}`}
-                          className={`h-12 rounded ${bg} flex items-center justify-center font-semibold text-white`}
-                        >
-                          {count > 0 ? count : ""}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">
+                    Risk heatmap (likelihood × impact)
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-6 gap-1 text-xs">
+                    <div />
+                    {[1, 2, 3, 4, 5].map((i) => (
+                      <div
+                        key={"h" + i}
+                        className="text-center text-muted-foreground"
+                      >
+                        I{i}
+                      </div>
+                    ))}
+                    {[5, 4, 3, 2, 1].map((l) => (
+                      <div key={"row" + l} className="contents">
+                        <div className="text-right pr-1 text-muted-foreground">
+                          L{l}
                         </div>
-                      );
-                    })}
+                        {[1, 2, 3, 4, 5].map((i) => {
+                          const count = cells[`${l}-${i}`] || 0;
+                          const score = l * i;
+                          const band =
+                            score >= 17
+                              ? "Extreme"
+                              : score >= 10
+                                ? "High"
+                                : score >= 5
+                                  ? "Medium"
+                                  : "Low";
+                          const bg =
+                            band === "Extreme"
+                              ? "bg-rose-500/70"
+                              : band === "High"
+                                ? "bg-orange-500/60"
+                                : band === "Medium"
+                                  ? "bg-amber-500/50"
+                                  : "bg-emerald-500/40";
+                          return (
+                            <div
+                              key={`c${l}${i}`}
+                              className={`h-12 rounded ${bg} flex items-center justify-center font-semibold text-white`}
+                            >
+                              {count > 0 ? count : ""}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+                </CardContent>
+              </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Appetite vs. actual</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {RISK_CATEGORIES.map((c) => {
-                const catRisks = openRisks.filter((x) => x.category === c);
-                const worst = catRisks.reduce<"Green" | "Amber" | "Red">(
-                  (acc, x) => {
-                    if (acc === "Red" || x.zone === "Red") return "Red";
-                    if (acc === "Amber" || x.zone === "Amber") return "Amber";
-                    return "Green";
-                  },
-                  "Green",
-                );
-                return (
-                  <div
-                    key={c}
-                    className="flex items-center justify-between border rounded px-3 py-2 text-sm"
-                  >
-                    <span>{c}</span>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-muted-foreground">
-                        {catRisks.length} risks
-                      </span>
-                      <Badge variant="outline" className={zoneTone(worst)}>
-                        {worst}
-                      </Badge>
-                    </div>
-                  </div>
-                );
-              })}
-            </CardContent>
-          </Card>
-        </div>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">
+                    Appetite vs. actual
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {RISK_CATEGORIES.map((c) => {
+                    const catRisks = openRisks.filter((x) => x.category === c);
+                    const worst = catRisks.reduce<"Green" | "Amber" | "Red">(
+                      (acc, x) => {
+                        if (acc === "Red" || x.zone === "Red") return "Red";
+                        if (acc === "Amber" || x.zone === "Amber")
+                          return "Amber";
+                        return "Green";
+                      },
+                      "Green",
+                    );
+                    return (
+                      <div
+                        key={c}
+                        className="flex items-center justify-between border rounded px-3 py-2 text-sm"
+                      >
+                        <span>{c}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-muted-foreground">
+                            {catRisks.length} risks
+                          </span>
+                          <Badge variant="outline" className={zoneTone(worst)}>
+                            {worst}
+                          </Badge>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </CardContent>
+              </Card>
+            </div>
 
-        <Card className="mt-4">
-          <CardHeader>
-            <CardTitle className="text-base">
-              Top open risks (by residual)
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {openRisks
-              .slice()
-              .sort((a, b) => b.residualScore - a.residualScore)
-              .slice(0, 5)
-              .map((x) => (
-                <NavLink
-                  key={x._id}
-                  to="/grc/risk/register"
-                  className="flex items-center justify-between border rounded px-3 py-2 text-sm hover:bg-muted/50"
-                >
-                  <div className="min-w-0">
-                    <div className="font-medium truncate">{x.title}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {x.category} · owner: {x.owner}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs">Score {x.residualScore}</span>
-                    <Badge
-                      variant="outline"
-                      className={bandTone(x.residualBand)}
+            <Card className="mt-4">
+              <CardHeader>
+                <CardTitle className="text-base">
+                  Top open risks (by residual)
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {openRisks
+                  .slice()
+                  .sort((a, b) => b.residualScore - a.residualScore)
+                  .slice(0, 5)
+                  .map((x) => (
+                    <NavLink
+                      key={x._id}
+                      to="/grc/risk/register"
+                      className="flex items-center justify-between border rounded px-3 py-2 text-sm hover:bg-muted/50"
                     >
-                      {x.residualBand}
-                    </Badge>
+                      <div className="min-w-0">
+                        <div className="font-medium truncate">{x.title}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {x.category} · owner: {x.owner}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs">Score {x.residualScore}</span>
+                        <Badge
+                          variant="outline"
+                          className={bandTone(x.residualBand)}
+                        >
+                          {x.residualBand}
+                        </Badge>
+                      </div>
+                    </NavLink>
+                  ))}
+                {openRisks.length === 0 && (
+                  <div className="text-sm text-muted-foreground">
+                    No open risks.
                   </div>
-                </NavLink>
-              ))}
-            {openRisks.length === 0 && (
-              <div className="text-sm text-muted-foreground">
-                No open risks.
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </Section>
+                )}
+              </CardContent>
+            </Card>
+          </Section>
 
-      {/* ── COMPLIANCE ─────────────────────────────────────────── */}
-      <Section
-        title="Compliance"
-        icon={ShieldCheck}
-        accent="from-amber-500 to-yellow-500"
-      >
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-          <Kpi
-            to="/grc/compliance/obligations"
-            label="Overdue obligations"
-            value={overdueObligations}
-            icon={AlertTriangle}
-            tone="from-rose-500 to-orange-500"
-          />
-          <Kpi
-            to="/grc/compliance/calendar"
-            label="Due obligations"
-            value={upcomingObligations}
-            icon={CalendarClock}
-            tone="from-amber-500 to-yellow-500"
-          />
-          <Kpi
-            to="/grc/compliance/obligations"
-            label="Regulatory updates"
-            value={regUpdates}
-            icon={FileText}
-            tone="from-blue-500 to-cyan-500"
-          />
-          <Kpi
-            to="/grc/compliance/policies"
-            label="Policy acknowledgments"
-            value={totalAcknowledgments}
-            icon={ClipboardCheck}
-            tone="from-emerald-500 to-teal-500"
-          />
-          <Kpi
-            to="/grc/compliance/certifications"
-            label="Certs expiring ≤90d"
-            value={certsExpiring}
-            icon={BadgeCheck}
-            tone="from-violet-500 to-purple-500"
-          />
-          <Kpi
-            to="/grc/compliance/regulatory-change"
-            label="Change assessments open"
-            value={openRegChanges}
-            icon={Scale}
-            tone="from-cyan-500 to-blue-500"
-          />
-        </div>
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Upcoming obligations</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {comp.obligations
-              .filter(
-                (o) =>
-                  o.status !== "Compliant" && o.status !== "Not Applicable",
-              )
-              .sort((a, b) => (a.nextDueDate < b.nextDueDate ? -1 : 1))
-              .slice(0, 5)
-              .map((o) => (
-                <NavLink
-                  key={o._id}
-                  to="/grc/compliance/obligations"
-                  className="flex items-center justify-between border rounded px-3 py-2 text-sm hover:bg-muted/50"
-                >
-                  <div className="min-w-0">
-                    <div className="font-medium truncate">{o.title}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {o.regulator} · owner: {o.owner}
-                    </div>
+          {/* ── COMPLIANCE ─────────────────────────────────────────── */}
+          <Section
+            title="Compliance"
+            icon={ShieldCheck}
+            accent="from-amber-500 to-yellow-500"
+          >
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+              <Kpi
+                to="/grc/compliance/obligations"
+                label="Overdue obligations"
+                value={overdueObligations}
+                icon={AlertTriangle}
+                tone="from-rose-500 to-orange-500"
+              />
+              <Kpi
+                to="/grc/compliance/calendar"
+                label="Due obligations"
+                value={upcomingObligations}
+                icon={CalendarClock}
+                tone="from-amber-500 to-yellow-500"
+              />
+              <Kpi
+                to="/grc/compliance/obligations"
+                label="Regulatory updates"
+                value={regUpdates}
+                icon={FileText}
+                tone="from-blue-500 to-cyan-500"
+              />
+              <Kpi
+                to="/grc/compliance/policies"
+                label="Policy acknowledgments"
+                value={totalAcknowledgments}
+                icon={ClipboardCheck}
+                tone="from-emerald-500 to-teal-500"
+              />
+              <Kpi
+                to="/grc/compliance/certifications"
+                label="Certs expiring ≤90d"
+                value={certsExpiring}
+                icon={BadgeCheck}
+                tone="from-violet-500 to-purple-500"
+              />
+              <Kpi
+                to="/grc/compliance/regulatory-change"
+                label="Change assessments open"
+                value={openRegChanges}
+                icon={Scale}
+                tone="from-cyan-500 to-blue-500"
+              />
+            </div>
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">
+                  Upcoming obligations
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {comp.obligations
+                  .filter(
+                    (o) =>
+                      o.status !== "Compliant" && o.status !== "Not Applicable",
+                  )
+                  .sort((a, b) => (a.nextDueDate < b.nextDueDate ? -1 : 1))
+                  .slice(0, 5)
+                  .map((o) => (
+                    <NavLink
+                      key={o._id}
+                      to="/grc/compliance/obligations"
+                      className="flex items-center justify-between border rounded px-3 py-2 text-sm hover:bg-muted/50"
+                    >
+                      <div className="min-w-0">
+                        <div className="font-medium truncate">{o.title}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {o.regulator} · owner: {o.owner}
+                        </div>
+                      </div>
+                      <Badge
+                        variant="outline"
+                        className={
+                          o.status === "Overdue"
+                            ? "text-rose-600 border-rose-200"
+                            : ""
+                        }
+                      >
+                        {new Date(o.nextDueDate).toLocaleDateString()}
+                      </Badge>
+                    </NavLink>
+                  ))}
+                {comp.obligations.length === 0 && (
+                  <div className="text-sm text-muted-foreground">
+                    No obligations tracked.
                   </div>
-                  <Badge
-                    variant="outline"
-                    className={
-                      o.status === "Overdue"
-                        ? "text-rose-600 border-rose-200"
-                        : ""
-                    }
-                  >
-                    {new Date(o.nextDueDate).toLocaleDateString()}
-                  </Badge>
-                </NavLink>
-              ))}
-            {comp.obligations.length === 0 && (
-              <div className="text-sm text-muted-foreground">
-                No obligations tracked.
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </Section>
+                )}
+              </CardContent>
+            </Card>
+          </Section>
 
-      {/* ── OPERATIONS ─────────────────────────────────────────── */}
-      <Section
-        title="Operations"
-        icon={Activity}
-        accent="from-violet-500 to-purple-500"
-      >
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-          <Kpi
-            to="/grc/risk/incidents"
-            label="Open incidents"
-            value={openIncidents}
-            icon={FileWarning}
-            tone="from-red-500 to-rose-500"
-          />
-          <Kpi
-            to="/grc/compliance/audits"
-            label="Active audits"
-            value={activeAudits}
-            icon={ClipboardCheck}
-            tone="from-indigo-500 to-blue-500"
-          />
-          <Kpi
-            to="/grc/compliance/audits"
-            label="Open findings"
-            value={openFindings}
+          {/* ── OPERATIONS ─────────────────────────────────────────── */}
+          <Section
+            title="Operations"
             icon={Activity}
-            tone="from-violet-500 to-purple-500"
-          />
-        </div>
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Recent incidents</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {ops.incidents.slice(0, 5).map((i) => (
-              <NavLink
-                key={i._id}
+            accent="from-violet-500 to-purple-500"
+          >
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+              <Kpi
                 to="/grc/risk/incidents"
-                className="flex items-center justify-between border rounded px-3 py-2 text-sm hover:bg-muted/50"
-              >
-                <div className="min-w-0">
-                  <div className="font-medium truncate">{i.title}</div>
-                  <div className="text-xs text-muted-foreground">
-                    {i.category} · {new Date(i.reportedAt).toLocaleDateString()}
-                  </div>
-                </div>
-                <Badge variant="outline" className={bandTone(i.severity)}>
-                  {i.severity}
-                </Badge>
-              </NavLink>
-            ))}
-            {ops.incidents.length === 0 && (
-              <div className="text-sm text-muted-foreground">No incidents.</div>
-            )}
-          </CardContent>
-        </Card>
-      </Section>
-
-      {/* ── BCP / DR ───────────────────────────────────────────── */}
-      <Section
-        title="Business Continuity & DR"
-        icon={LifeBuoy}
-        accent="from-emerald-500 to-teal-500"
-      >
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-          <Kpi
-            to="/grc/risk/bcp"
-            label="BCP plans"
-            value={bcpPlans}
-            icon={FileText}
-            tone="from-emerald-500 to-teal-500"
-          />
-          <Kpi
-            to="/grc/risk/bcp"
-            label="Tier-1 systems"
-            value={tier1Systems}
-            icon={ServerCog}
-            tone="from-blue-500 to-cyan-500"
-          />
-          <Kpi
-            to="/grc/risk/bcp"
-            label="Crisis contacts"
-            value={tp.crisisContacts.length}
-            icon={Users}
-            tone="from-violet-500 to-purple-500"
-          />
-          <Kpi
-            to="/grc/risk/bcp"
-            label="Last test"
-            value={lastBcpTest ? lastBcpTest.outcome : "—"}
-            icon={ClipboardCheck}
-            tone="from-amber-500 to-yellow-500"
-          />
-        </div>
-        {lastBcpTest && (
-          <div className="text-xs text-muted-foreground">
-            Last exercise: {new Date(lastBcpTest.testedAt).toLocaleDateString()}{" "}
-            · {lastBcpTest.notes}
-          </div>
-        )}
-      </Section>
-
-      {/* ── DEALS & TRANSACTIONS ───────────────────────────────── */}
-      <Section
-        title="Deals & Transactions"
-        icon={Handshake}
-        accent="from-teal-500 to-emerald-500"
-      >
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-          <Kpi
-            to="/grc/deals/pipeline"
-            label="Active deals"
-            value={activeDeals.length}
-            icon={Handshake}
-            tone="from-teal-500 to-emerald-500"
-          />
-          <Kpi
-            to="/grc/deals/pipeline"
-            label="Pipeline value"
-            value={formatMoney(pipelineValue)}
-            icon={TrendingUp}
-            tone="from-emerald-500 to-lime-500"
-          />
-          <Kpi
-            to="/grc/deals/pipeline"
-            label="Open conditions precedent"
-            value={activeDeals.reduce(
-              (n, d) =>
-                n + d.cps.filter((c) => c.status !== "Satisfied").length,
-              0,
-            )}
-            icon={Scale}
-            tone="from-blue-500 to-cyan-500"
-          />
-          <Kpi
-            to="/grc/intelligence/investor-readiness"
-            label="Readiness assessments"
-            value={intel.readiness.length}
-            icon={ClipboardCheck}
-            tone="from-indigo-500 to-violet-500"
-          />
-        </div>
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Deals nearing close</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {activeDeals
-              .slice()
-              .sort((a, b) => (a.targetClose < b.targetClose ? -1 : 1))
-              .slice(0, 5)
-              .map((d) => (
-                <NavLink
-                  key={d._id}
-                  to={`/grc/deals/${d._id}`}
-                  className="flex items-center justify-between border rounded px-3 py-2 text-sm hover:bg-muted/50"
-                >
-                  <div className="min-w-0">
-                    <div className="font-medium truncate">{d.name}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {d.type} · {d.client} · lead {d.leadPartner}
+                label="Open incidents"
+                value={openIncidents}
+                icon={FileWarning}
+                tone="from-red-500 to-rose-500"
+              />
+              <Kpi
+                to="/grc/compliance/audits"
+                label="Active audits"
+                value={activeAudits}
+                icon={ClipboardCheck}
+                tone="from-indigo-500 to-blue-500"
+              />
+              <Kpi
+                to="/grc/compliance/audits"
+                label="Open findings"
+                value={openFindings}
+                icon={Activity}
+                tone="from-violet-500 to-purple-500"
+              />
+            </div>
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Recent incidents</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {ops.incidents.slice(0, 5).map((i) => (
+                  <NavLink
+                    key={i._id}
+                    to="/grc/risk/incidents"
+                    className="flex items-center justify-between border rounded px-3 py-2 text-sm hover:bg-muted/50"
+                  >
+                    <div className="min-w-0">
+                      <div className="font-medium truncate">{i.title}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {i.category} ·{" "}
+                        {new Date(i.reportedAt).toLocaleDateString()}
+                      </div>
                     </div>
+                    <Badge variant="outline" className={bandTone(i.severity)}>
+                      {i.severity}
+                    </Badge>
+                  </NavLink>
+                ))}
+                {ops.incidents.length === 0 && (
+                  <div className="text-sm text-muted-foreground">
+                    No incidents.
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className="text-xs">
-                      {formatMoney(d.value, d.currency)}
-                    </span>
-                    <Badge variant="outline">{d.stage}</Badge>
-                  </div>
-                </NavLink>
-              ))}
-            {activeDeals.length === 0 && (
-              <div className="text-sm text-muted-foreground">
-                No active deals.
+                )}
+              </CardContent>
+            </Card>
+          </Section>
+
+          {/* ── BCP / DR ───────────────────────────────────────────── */}
+          <Section
+            title="Business Continuity & DR"
+            icon={LifeBuoy}
+            accent="from-emerald-500 to-teal-500"
+          >
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+              <Kpi
+                to="/grc/risk/bcp"
+                label="BCP plans"
+                value={bcpPlans}
+                icon={FileText}
+                tone="from-emerald-500 to-teal-500"
+              />
+              <Kpi
+                to="/grc/risk/bcp"
+                label="Tier-1 systems"
+                value={tier1Systems}
+                icon={ServerCog}
+                tone="from-blue-500 to-cyan-500"
+              />
+              <Kpi
+                to="/grc/risk/bcp"
+                label="Crisis contacts"
+                value={tp.crisisContacts.length}
+                icon={Users}
+                tone="from-violet-500 to-purple-500"
+              />
+              <Kpi
+                to="/grc/risk/bcp"
+                label="Last test"
+                value={lastBcpTest ? lastBcpTest.outcome : "—"}
+                icon={ClipboardCheck}
+                tone="from-amber-500 to-yellow-500"
+              />
+            </div>
+            {lastBcpTest && (
+              <div className="text-xs text-muted-foreground">
+                Last exercise:{" "}
+                {new Date(lastBcpTest.testedAt).toLocaleDateString()} ·{" "}
+                {lastBcpTest.notes}
               </div>
             )}
-          </CardContent>
-        </Card>
-      </Section>
+          </Section>
 
-      {/* ── ESG ────────────────────────────────────────────────── */}
-      <Section title="ESG" icon={Leaf} accent="from-lime-500 to-emerald-500">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-          <Kpi
-            to="/grc/esg/dashboard"
-            label={`ESG score (${dash?.grade ?? "—"})`}
-            value={esgTotal}
+          {/* ── DEALS & TRANSACTIONS ───────────────────────────────── */}
+          <Section
+            title="Deals & Transactions"
+            icon={Handshake}
+            accent="from-teal-500 to-emerald-500"
+          >
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+              <Kpi
+                to="/grc/deals/pipeline"
+                label="Active deals"
+                value={activeDeals.length}
+                icon={Handshake}
+                tone="from-teal-500 to-emerald-500"
+              />
+              <Kpi
+                to="/grc/deals/pipeline"
+                label="Pipeline value"
+                value={formatMoney(pipelineValue)}
+                icon={TrendingUp}
+                tone="from-emerald-500 to-lime-500"
+              />
+              <Kpi
+                to="/grc/deals/pipeline"
+                label="Open conditions precedent"
+                value={activeDeals.reduce(
+                  (n, d) =>
+                    n + d.cps.filter((c) => c.status !== "Satisfied").length,
+                  0,
+                )}
+                icon={Scale}
+                tone="from-blue-500 to-cyan-500"
+              />
+              <Kpi
+                to="/grc/intelligence/investor-readiness"
+                label="Readiness assessments"
+                value={intel.readiness.length}
+                icon={ClipboardCheck}
+                tone="from-indigo-500 to-violet-500"
+              />
+            </div>
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Deals nearing close</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {activeDeals
+                  .slice()
+                  .sort((a, b) => (a.targetClose < b.targetClose ? -1 : 1))
+                  .slice(0, 5)
+                  .map((d) => (
+                    <NavLink
+                      key={d._id}
+                      to={`/grc/deals/${d._id}`}
+                      className="flex items-center justify-between border rounded px-3 py-2 text-sm hover:bg-muted/50"
+                    >
+                      <div className="min-w-0">
+                        <div className="font-medium truncate">{d.name}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {d.type} · {d.client} · lead {d.leadPartner}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-xs">
+                          {formatMoney(d.value, d.currency)}
+                        </span>
+                        <Badge variant="outline">{d.stage}</Badge>
+                      </div>
+                    </NavLink>
+                  ))}
+                {activeDeals.length === 0 && (
+                  <div className="text-sm text-muted-foreground">
+                    No active deals.
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </Section>
+
+          {/* ── ESG ────────────────────────────────────────────────── */}
+          <Section
+            title="ESG"
             icon={Leaf}
-            tone="from-lime-500 to-emerald-500"
-          />
-          <Kpi
-            to="/grc/esg/environmental"
-            label="Environmental"
-            value={esgE}
-            icon={Leaf}
-            tone="from-emerald-500 to-teal-500"
-          />
-          <Kpi
-            to="/grc/esg/social"
-            label="Social"
-            value={esgS}
-            icon={Users}
-            tone="from-sky-500 to-blue-500"
-          />
-          <Kpi
-            to="/grc/esg/materiality"
-            label="Material topics"
-            value={materialTopics}
-            icon={Grid3x3}
-            tone="from-amber-500 to-orange-500"
-          />
-        </div>
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Framework alignment</CardTitle>
-          </CardHeader>
-          <CardContent className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-            {frameworkAlignment.map((f) => (
-              <NavLink
-                key={f.frameworkId}
-                to="/grc/esg/reporting"
-                className="border rounded p-3 hover:bg-muted/50"
-              >
-                <div className="text-sm font-medium">{f.framework}</div>
-                <div className="text-xl font-bold">{f.pct}%</div>
-                <div className="text-xs text-muted-foreground">
-                  {f.signedOff}/{f.total}
-                </div>
-              </NavLink>
-            ))}
-            {!frameworkAlignment.length && (
-              <p className="col-span-full text-sm text-muted-foreground text-center py-4">
-                No frameworks configured yet.
-              </p>
-            )}
-          </CardContent>
-        </Card>
-      </Section>
+            accent="from-lime-500 to-emerald-500"
+          >
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+              <Kpi
+                to="/grc/esg/dashboard"
+                label={`ESG score (${dash?.grade ?? "—"})`}
+                value={esgTotal}
+                icon={Leaf}
+                tone="from-lime-500 to-emerald-500"
+              />
+              <Kpi
+                to="/grc/esg/environmental"
+                label="Environmental"
+                value={esgE}
+                icon={Leaf}
+                tone="from-emerald-500 to-teal-500"
+              />
+              <Kpi
+                to="/grc/esg/social"
+                label="Social"
+                value={esgS}
+                icon={Users}
+                tone="from-sky-500 to-blue-500"
+              />
+              <Kpi
+                to="/grc/esg/materiality"
+                label="Material topics"
+                value={materialTopics}
+                icon={Grid3x3}
+                tone="from-amber-500 to-orange-500"
+              />
+            </div>
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Framework alignment</CardTitle>
+              </CardHeader>
+              <CardContent className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                {frameworkAlignment.map((f) => (
+                  <NavLink
+                    key={f.frameworkId}
+                    to="/grc/esg/reporting"
+                    className="border rounded p-3 hover:bg-muted/50"
+                  >
+                    <div className="text-sm font-medium">{f.framework}</div>
+                    <div className="text-xl font-bold">{f.pct}%</div>
+                    <div className="text-xs text-muted-foreground">
+                      {f.signedOff}/{f.total}
+                    </div>
+                  </NavLink>
+                ))}
+                {!frameworkAlignment.length && (
+                  <p className="col-span-full text-sm text-muted-foreground text-center py-4">
+                    No frameworks configured yet.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          </Section>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

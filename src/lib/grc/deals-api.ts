@@ -109,6 +109,8 @@ export interface ContractReviewSnapshot {
   alreadyResponded: boolean;
   previousDecision: string | null;
   sections?: ContractReviewSection[];
+  /** A term sheet is reviewed with different wording from a contract. */
+  kind?: DealDocKind;
 }
 
 export interface DataRoomFile {
@@ -174,8 +176,25 @@ export interface ContractField {
 export type ReviewToken = ReviewLoopToken;
 export type ReviewResponse = ReviewLoopResponse;
 
+/** Everything in a deal's documents is a contract or a term sheet. */
+export type DealDocKind = "contract" | "term_sheet";
+
+export interface DealDocReview {
+  /** draft → in_review → changes_requested / approved */
+  status: "draft" | "in_review" | "changes_requested" | "approved";
+  sent: number;
+  approved: number;
+  changesRequested: number;
+  lastSentAt: string | null;
+  approvedAt: string | null;
+}
+
 export interface Contract {
   _id: string;
+  /** Absent on documents created before term sheets existed (= contract). */
+  kind?: DealDocKind;
+  /** Where the document stands with the parties it was sent to. */
+  review?: DealDocReview;
   name: string;
   /** The template this contract was generated from (none on older ones). */
   templateId?: string | null;

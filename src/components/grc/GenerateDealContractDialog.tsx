@@ -82,7 +82,6 @@ const emptyParty = (): PartyForm => ({
 
 // Which deal tab to point at when a field the deal should supply is empty.
 function whereToFill(token: string): string {
-  if (token.startsWith("termSheet")) return "the Term Sheet tab";
   if (/^(buyer|seller)/.test(token) || token === "partiesList")
     return "the deal's parties (Overview tab)";
   if (token.startsWith("signing") || token === "signatoriesList")
