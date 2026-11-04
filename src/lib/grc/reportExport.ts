@@ -1,6 +1,14 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import * as XLSX from "xlsx";
+import {
+  REPORT_COLORS,
+  REPORT_MARGIN,
+  REPORT_TOP,
+  drawReportFooters,
+  drawReportHeader,
+  tenantCompanyName,
+} from "@/lib/reportPdf";
 
 // ─────────────────────────────────────────────────────────────
 // Shared report export helpers for the GRC module.
@@ -29,23 +37,30 @@ const stamp = () => new Date().toLocaleString();
 const fileStamp = () => new Date().toISOString().slice(0, 10);
 
 const slug = (s: string) =>
-  s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+  s
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
 
 export function exportReportPdf(def: ReportDefinition) {
   const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
-  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const subtitle = def.subtitle ?? "Governance, Risk & Compliance";
+  const generatedAt = stamp();
+  const company = tenantCompanyName();
+  // The same band is painted on every page, so a page torn out of the
+  // middle of a long report still says whose report it is.
+  const header = () =>
+    drawReportHeader(doc, { company, title: def.title, subtitle, generatedAt });
+  const margin = {
+    top: REPORT_TOP,
+    left: REPORT_MARGIN,
+    right: REPORT_MARGIN,
+    bottom: 50,
+  };
 
-  doc.setFillColor(37, 43, 94);
-  doc.rect(0, 0, pageWidth, 64, "F");
-  doc.setTextColor(255, 255, 255);
-  doc.setFontSize(16);
-  doc.text(def.title, 40, 30);
-  doc.setFontSize(9);
-  doc.text(def.subtitle ?? "Governance, Risk & Compliance", 40, 46);
-  doc.text(`Generated ${stamp()}`, pageWidth - 40, 46, { align: "right" });
-
-  let cursor = 88;
-  doc.setTextColor(30, 30, 30);
+  header();
+  let cursor = REPORT_TOP;
 
   if (def.summary?.length) {
     autoTable(doc, {
@@ -54,24 +69,27 @@ export function exportReportPdf(def: ReportDefinition) {
       body: [def.summary.map((s) => String(s.value))],
       theme: "grid",
       styles: { fontSize: 9, cellPadding: 6 },
-      headStyles: { fillColor: [99, 102, 241], textColor: 255 },
-      margin: { left: 40, right: 40 },
+      headStyles: { fillColor: REPORT_COLORS.summaryHead, textColor: 255 },
+      margin,
+      didDrawPage: header,
     });
     cursor = (doc as any).lastAutoTable.finalY + 24;
   }
 
   def.sections.forEach((section) => {
-    if (cursor > doc.internal.pageSize.getHeight() - 120) {
+    if (cursor > pageHeight - 120) {
       doc.addPage();
-      cursor = 60;
+      header();
+      cursor = REPORT_TOP;
     }
     doc.setFontSize(11);
-    doc.text(section.heading, 40, cursor);
+    doc.setTextColor(...REPORT_COLORS.body);
+    doc.text(section.heading, REPORT_MARGIN, cursor);
     if (section.note) {
       doc.setFontSize(8);
       doc.setTextColor(120);
-      doc.text(section.note, 40, cursor + 12);
-      doc.setTextColor(30);
+      doc.text(section.note, REPORT_MARGIN, cursor + 12);
+      doc.setTextColor(...REPORT_COLORS.body);
       cursor += 10;
     }
     autoTable(doc, {
@@ -82,24 +100,14 @@ export function exportReportPdf(def: ReportDefinition) {
         : [section.columns.map((_, i) => (i === 0 ? "No records" : ""))],
       theme: "striped",
       styles: { fontSize: 8, cellPadding: 5, overflow: "linebreak" },
-      headStyles: { fillColor: [63, 63, 110], textColor: 255 },
-      margin: { left: 40, right: 40 },
+      headStyles: { fillColor: REPORT_COLORS.sectionHead, textColor: 255 },
+      margin,
+      didDrawPage: header,
     });
     cursor = (doc as any).lastAutoTable.finalY + 28;
   });
 
-  const total = doc.getNumberOfPages();
-  for (let i = 1; i <= total; i++) {
-    doc.setPage(i);
-    doc.setFontSize(8);
-    doc.setTextColor(140);
-    doc.text(
-      `Page ${i} of ${total}`,
-      pageWidth - 40,
-      doc.internal.pageSize.getHeight() - 20,
-      { align: "right" },
-    );
-  }
+  drawReportFooters(doc);
 
   doc.save(`${slug(def.title)}-${fileStamp()}.pdf`);
 }
@@ -107,7 +115,9 @@ export function exportReportPdf(def: ReportDefinition) {
 export function exportReportExcel(def: ReportDefinition) {
   const wb = XLSX.utils.book_new();
 
+  const company = tenantCompanyName();
   const cover: (string | number)[][] = [
+    ...(company ? [[company]] : []),
     [def.title],
     [def.subtitle ?? "Governance, Risk & Compliance"],
     [`Generated ${stamp()}`],
@@ -120,7 +130,9 @@ export function exportReportExcel(def: ReportDefinition) {
 
   const used = new Set<string>(["Summary"]);
   def.sections.forEach((section, idx) => {
-    let name = section.heading.replace(/[\\/?*[\]:]/g, "").slice(0, 28) || `Sheet ${idx + 1}`;
+    let name =
+      section.heading.replace(/[\\/?*[\]:]/g, "").slice(0, 28) ||
+      `Sheet ${idx + 1}`;
     while (used.has(name)) name = `${name.slice(0, 26)}_${idx}`;
     used.add(name);
 

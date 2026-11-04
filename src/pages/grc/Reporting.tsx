@@ -1,3 +1,4 @@
+import { fmtScore } from "@/lib/grc/health-score-api";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -892,7 +893,9 @@ export default function GrcReporting() {
     return entries;
   }, [overview, dash, esgMetrics]);
 
-  const health = overview?.healthScore ?? 0;
+  // The GRC Health Score — the same figure as the GRC Overview and the
+  // main dashboard (the engine reads it from one calculation).
+  const health = overview?.healthScore ?? null;
   const esgTotal = dash?.total ?? 0;
   const openRisksCount =
     overview?.risk.risks.filter((r) => r.status !== "Closed").length ?? 0;
@@ -914,7 +917,7 @@ export default function GrcReporting() {
     title: "GRC Executive Pack",
     subtitle: "Consolidated board pack across every GRC domain",
     summary: [
-      { label: "GRC health score", value: `${health}/100` },
+      { label: "GRC health score", value: `${fmtScore(health)}/100` },
       { label: "Open risks", value: openRisksCount },
       { label: "Overdue obligations", value: overdueObligationsList.length },
       { label: "Open incidents", value: openIncidentsCount },
@@ -985,7 +988,7 @@ export default function GrcReporting() {
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         <Kpi
           label="GRC health"
-          value={`${health}/100`}
+          value={`${fmtScore(health)}/100`}
           icon={ShieldCheck}
           tone="from-primary to-violet-500"
         />

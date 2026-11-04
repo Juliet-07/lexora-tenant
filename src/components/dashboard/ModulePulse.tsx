@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { ArrowUpRight } from "lucide-react";
+import { fmtScore } from "@/lib/grc/health-score-api";
 import type { ModulePulseCard } from "./useCrossModuleMetrics";
 
 const toneClass: Record<string, string> = {
@@ -38,19 +39,19 @@ export function ModulePulse({ cards }: { cards: ModulePulseCard[] }) {
 
             <div>
               <p className="text-3xl font-bold tracking-tight">{c.headline}</p>
-              <p className="text-xs text-muted-foreground">
-                {c.headlineLabel}
-              </p>
+              <p className="text-xs text-muted-foreground">{c.headlineLabel}</p>
             </div>
 
             <div>
               <div className="mb-1 flex items-center justify-between text-[11px] text-muted-foreground">
                 <span>Module health</span>
                 <span className="font-semibold text-foreground">
-                  {c.score}%
+                  {c.score === null
+                    ? "Not measured"
+                    : `${fmtScore(c.score)} / 100`}
                 </span>
               </div>
-              <Progress value={c.score} className="h-1.5" />
+              <Progress value={c.score ?? 0} className="h-1.5" />
             </div>
 
             <div className="grid grid-cols-3 gap-2 border-t pt-3 text-center">

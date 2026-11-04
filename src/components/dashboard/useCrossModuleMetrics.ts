@@ -1,3 +1,5 @@
+import { fmtScore } from "@/lib/grc/health-score-api";
+
 export interface AttentionItem {
   id: string;
   module: "AML/KYC" | "HR" | "CRM" | "GRC";
@@ -5,6 +7,14 @@ export interface AttentionItem {
   detail: string;
   severity: "critical" | "warning" | "info";
   to: string;
+}
+
+export interface DashboardHealthScore {
+  composite: number | null;
+  grade: string | null;
+  gradeLabel: string | null;
+  coverage: { measured: number; total: number; pct: number };
+  periodLabel: string;
 }
 
 export interface ModuleMetric {
@@ -20,7 +30,8 @@ export interface ModulePulseCard {
   to: string;
   headline: string;
   headlineLabel: string;
-  score: number;
+  /** From the GRC Health Score; null when nothing in the module is measured yet. */
+  score: number | null;
   metrics: ModuleMetric[];
 }
 
@@ -65,18 +76,23 @@ export function useCrossModuleMetrics(dashboardData: any) {
     pendingLeave: 0,
     score: 0,
   };
-  const finance = dashboardData?.finance ?? {
+  const finance = {
     cashPosition: 0,
     receivables: crm.receivables,
     overdueInvoices: crm.overdueInvoices,
     monthlyRevenue: 0,
     openBills: 0,
-    score: 0,
+    score: null as number | null,
+    ...(dashboardData?.finance ?? {}),
   };
   const attention: AttentionItem[] = dashboardData?.attention ?? [];
   const wins: { label: string; value: string | number; hint: string }[] =
     dashboardData?.wins ?? [];
-  const overallScore: number = dashboardData?.overallScore ?? 0;
+  // Every score here is read from the GRC Health Score, the one calculation
+  // behind GRC Overview and GRC Reporting — none is worked out on this page.
+  const overallScore: number | null = dashboardData?.overallScore ?? null;
+  const healthScore: DashboardHealthScore | null =
+    dashboardData?.healthScore ?? null;
 
   const cards: ModulePulseCard[] = [
     {
@@ -106,8 +122,8 @@ export function useCrossModuleMetrics(dashboardData: any) {
       name: "Governance, Risk & Compliance",
       accent: "from-violet-500 to-purple-600",
       to: "/grc/overview",
-      headline: `${grc.score}%`,
-      headlineLabel: "Compliance health",
+      headline: fmtScore(grc.score),
+      headlineLabel: "GRC score out of 100",
       score: grc.score,
       metrics: [
         {
@@ -204,6 +220,7 @@ export function useCrossModuleMetrics(dashboardData: any) {
     attention,
     wins,
     overallScore,
+    healthScore,
     counts: {
       openTickets: crm.openTickets,
       employees: hr.totalEmployees,

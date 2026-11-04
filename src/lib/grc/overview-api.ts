@@ -388,7 +388,8 @@ export interface DealIntelligenceData {
 
 // ── Root ─────────────────────────────────────────────────────
 export interface GrcOverview {
-  healthScore: number;
+  /** The GRC Health Score composite (one calculation shared with the dashboard); null until something can be measured. */
+  healthScore: number | null;
   governance: GovernanceData;
   risk: RiskData;
   operations: OperationsData;

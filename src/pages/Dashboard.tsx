@@ -25,6 +25,7 @@ import { quickLinksFor } from "@/components/dashboard/moduleQuickLinks";
 import { useCrossModuleMetrics } from "@/components/dashboard/useCrossModuleMetrics";
 import { ModulePulse } from "@/components/dashboard/ModulePulse";
 import { AttentionFeed } from "@/components/dashboard/AttentionFeed";
+import { TONE_TEXT, fmtScore, scoreTone } from "@/lib/grc/health-score-api";
 
 // ─── Trial banner ─────────────────────────────────────────────
 function TrialBanner({
@@ -61,20 +62,29 @@ function TrialBanner({
 }
 
 // ─── Organisation health ring ─────────────────────────────────
-function HealthRing({ score }: { score: number }) {
+function HealthRing({
+  score,
+  grade,
+}: {
+  score: number | null;
+  grade: string | null;
+}) {
   const R = 52;
   const C = 2 * Math.PI * R;
-  const filled = (score / 100) * C;
-  const tone =
-    score >= 75
-      ? "stroke-success text-success"
-      : score >= 50
-        ? "stroke-warning text-warning"
-        : "stroke-destructive text-destructive";
-  const [strokeClass, textClass] = tone.split(" ");
+  const filled = ((score ?? 0) / 100) * C;
+  // Same colour bands as the GRC Health Score screens: 80+ green, 60+ amber.
+  const tone = TONE_TEXT[scoreTone(score)];
+  const stroke =
+    scoreTone(score) === "good"
+      ? "stroke-success"
+      : scoreTone(score) === "fair"
+        ? "stroke-warning"
+        : scoreTone(score) === "poor"
+          ? "stroke-destructive"
+          : "stroke-muted-foreground/30";
 
   return (
-    <div className="relative h-36 w-36">
+    <div className="relative h-36 w-36 shrink-0">
       <svg viewBox="0 0 120 120" className="h-full w-full -rotate-90">
         <circle
           cx="60"
@@ -92,13 +102,13 @@ function HealthRing({ score }: { score: number }) {
           strokeWidth="10"
           strokeLinecap="round"
           strokeDasharray={`${filled} ${C}`}
-          className={`${strokeClass} transition-all duration-700`}
+          className={`${stroke} transition-all duration-700`}
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className={`text-3xl font-bold ${textClass}`}>{score}%</span>
+        <span className={`text-3xl font-bold ${tone}`}>{fmtScore(score)}</span>
         <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-          Org health
+          {grade ? `Grade ${grade}` : "Health score"}
         </span>
       </div>
     </div>
@@ -115,7 +125,7 @@ export default function Dashboard() {
     modules,
     currentModule,
   } = useModule();
-  const { cards, attention, wins, overallScore, counts } =
+  const { cards, attention, wins, overallScore, healthScore, counts } =
     useCrossModuleMetrics(dashboardData);
 
   const now = new Date();
@@ -162,7 +172,10 @@ export default function Dashboard() {
   }[] = dashboardData?.recentActivity ?? [];
 
   return (
-    <div className="space-y-6" style={{ fontFamily: "'Inter', system-ui, sans-serif" }}>
+    <div
+      className="space-y-6"
+      style={{ fontFamily: "'Inter', system-ui, sans-serif" }}
+    >
       {/* Hero */}
       <section className="relative overflow-hidden rounded-2xl border bg-gradient-to-br from-primary/10 via-card to-secondary/10 p-6">
         <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-primary/10 blur-3xl" />
@@ -236,12 +249,24 @@ export default function Dashboard() {
         <Card className="relative overflow-hidden">
           <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-primary to-secondary" />
           <CardContent className="flex items-center gap-5 p-5">
-            <HealthRing score={overallScore} />
+            <HealthRing
+              score={overallScore}
+              grade={healthScore?.grade ?? null}
+            />
             <div className="space-y-3">
               <div>
                 <p className="text-sm font-semibold">Business pulse</p>
                 <p className="text-xs text-muted-foreground">
-                  Blended score across AML/KYC, GRC, CRM and HR
+                  {healthScore?.gradeLabel
+                    ? `${healthScore.gradeLabel} · `
+                    : ""}
+                  GRC Health Score, as on GRC Overview and Reporting.{" "}
+                  <Link
+                    to="/grc/overview"
+                    className="text-primary underline-offset-2 hover:underline"
+                  >
+                    How it is calculated
+                  </Link>
                 </p>
               </div>
               <div className="space-y-1.5 text-xs">
