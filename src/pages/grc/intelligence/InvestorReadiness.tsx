@@ -376,10 +376,11 @@ function ReadinessWorkspace({
         <TabsContent value="scoring" className="space-y-3 pt-4">
           <div className="flex items-start justify-between gap-2 flex-wrap">
             <p className="text-sm text-muted-foreground max-w-2xl">
-              All 8 dimensions are auto-scored, for real, from live data across
-              Governance, Compliance, HR, Accounting, CRM, ESG and the Deal
-              pipeline. Underlying source data can only be edited in its own
-              module; use a documented override to adjust a score here.
+              All 8 dimensions are auto-scored from live data: GRC (governance,
+              compliance, ESG, data room), HR, CRM (mandates) and Finance
+              (accounting, reconciliation, tax and invoicing). Underlying source
+              data can only be edited in its own module; use a documented
+              override to adjust a score here.
             </p>
             <Button
               size="sm"
@@ -905,8 +906,8 @@ function Header({ onNew }: { onNew: () => void }) {
       <div>
         <h1 className="text-2xl font-bold">Investor Readiness Assessment</h1>
         <p className="text-sm text-muted-foreground">
-          Scores your business across 8 dimensions — 4 from live module data, 4
-          manual — then tracks remediation of every gap.
+          Scores your business across 8 dimensions, all drawn from live data in
+          GRC, HR, CRM and Finance, then tracks remediation of every gap.
         </p>
       </div>
       <Button onClick={onNew}>

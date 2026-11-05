@@ -105,8 +105,18 @@ export default function OnboardingContractEditor({
   };
 
   const saveMutation = useMutation({
-    mutationFn: (html: string) =>
-      editContractBody(contractId!, { renderedBody: html }),
+    mutationFn: ({
+      html,
+      values,
+    }: {
+      html: string;
+      values?: Record<string, string>;
+    }) =>
+      editContractBody(contractId!, {
+        renderedBody: html,
+        mergeFieldValues:
+          values && Object.keys(values).length ? values : undefined,
+      }),
     onSuccess: (updated) => {
       invalidate(updated);
       setEditorOpen(false);
@@ -446,8 +456,9 @@ export default function OnboardingContractEditor({
           subtitle={`For ${contract.counterparty}`}
           value={contract.renderedBody}
           onClose={() => setEditorOpen(false)}
-          onSave={(html) => saveMutation.mutate(html)}
+          onSave={(html, values) => saveMutation.mutate({ html, values })}
           saving={saveMutation.isPending}
+          mergeFields
         />
       )}
     </>

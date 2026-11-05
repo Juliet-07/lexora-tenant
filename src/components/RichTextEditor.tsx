@@ -6,6 +6,7 @@ import {
   AlignLeft,
   AlignCenter,
   AlignRight,
+  AlignJustify,
   List,
   ListOrdered,
   Table as TableIcon,
@@ -216,6 +217,15 @@ export function RichTextEditor({
           title="Align right"
         >
           <AlignRight className="h-4 w-4" />
+        </button>
+        <button
+          type="button"
+          className={btn}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => exec("justifyFull")}
+          title="Justify"
+        >
+          <AlignJustify className="h-4 w-4" />
         </button>
         <div className="w-px h-5 bg-border mx-1" />
         <button

@@ -41,6 +41,9 @@ import {
   ShieldCheck,
   Eye,
   FileDown,
+  FileText,
+  ListTree,
+  Reply,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { RichTextEditor } from "@/components/RichTextEditor";
@@ -52,6 +55,7 @@ import {
   updatePolicyProperties,
   addPolicySection,
   updatePolicySection,
+  updatePolicyCover,
   setPolicyStatus,
   publishPolicy,
   addPolicyComment,
@@ -243,7 +247,14 @@ export default function PolicyDetail() {
           <TabsTrigger value="properties">Properties</TabsTrigger>
           <TabsTrigger value="acknowledgements">Acknowledgements</TabsTrigger>
           <TabsTrigger value="history">Version history</TabsTrigger>
-          <TabsTrigger value="comments">Comments</TabsTrigger>
+          <TabsTrigger value="comments">
+            Comments
+            {policy.comments.length > 0 && (
+              <span className="ml-1.5 rounded-full bg-primary/10 px-1.5 text-[11px] font-medium text-primary">
+                {policy.comments.length}
+              </span>
+            )}
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="editor" className="mt-4">
@@ -342,6 +353,29 @@ function BoardApprovalCard({ policy }: { policy: Policy }) {
 
 // ── Editor tab ────────────────────────────────────────────────
 
+const COVER_ID = "__cover";
+const TOC_DEFAULT = "Table of Contents";
+
+// What a reader meets, in order: the cover page, the contents page, then the
+// sections. The contents are read off the section titles every time, so they
+// can't disagree with the policy.
+function policyParts(policy: Policy) {
+  const hasCover =
+    !!policy.coverPage &&
+    (/<img\b/i.test(policy.coverPage) ||
+      !!policy.coverPage.replace(/<[^>]*>/g, "").trim());
+  const sections = [...policy.sections].sort((a, b) => a.order - b.order);
+  const entries = sections.filter((x) => x.title.trim()).map((x) => x.title);
+  return {
+    cover: hasCover ? (policy.coverPage as string) : "",
+    toc:
+      policy.tocEnabled && entries.length
+        ? { title: policy.tocTitle?.trim() || TOC_DEFAULT, entries }
+        : null,
+    sections,
+  };
+}
+
 function EditorTab({
   policy,
   invalidate,
@@ -351,12 +385,17 @@ function EditorTab({
   invalidate: () => void;
   onErr: (t: string) => (e: any) => void;
 }) {
-  const [activeId, setActiveId] = useState(policy.sections[0]?.id ?? null);
+  const [activeId, setActiveId] = useState<string | null>(
+    policy.sections[0]?.id ?? null,
+  );
   // Bumped when the Merge Fields panel rewrites the sections on the server,
   // so the open section editor reloads what it now says.
   const [fieldsVersion, setFieldsVersion] = useState(0);
   useEffect(() => {
-    if (!policy.sections.find((s) => s.id === activeId)) {
+    if (
+      activeId !== COVER_ID &&
+      !policy.sections.find((s) => s.id === activeId)
+    ) {
       setActiveId(policy.sections[0]?.id ?? null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -373,7 +412,10 @@ function EditorTab({
     onError: onErr("Failed to add section"),
   });
 
-  const active = policy.sections.find((s) => s.id === activeId) ?? null;
+  const active =
+    activeId === COVER_ID
+      ? null
+      : (policy.sections.find((s) => s.id === activeId) ?? null);
 
   const [previewOpen, setPreviewOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -385,6 +427,8 @@ function EditorTab({
       setExporting(false);
     }
   };
+
+  const hasCover = !!policyParts(policy).cover;
 
   return (
     <div className="space-y-3">
@@ -407,8 +451,30 @@ function EditorTab({
         </Button>
       </div>
 
-      <div className="grid lg:grid-cols-[200px_1fr_260px] gap-4">
-        <div>
+      {/* Each column scrolls on its own, so the page stays put while the
+          document is read or written. */}
+      <div className="grid gap-4 lg:h-[calc(100vh-15rem)] lg:min-h-[480px] lg:grid-cols-[200px_1fr_260px]">
+        <div className="min-h-0 overflow-y-auto pr-1">
+          <div className="text-xs font-semibold text-muted-foreground mb-2 px-1">
+            DOCUMENT
+          </div>
+          <div className="space-y-0.5 mb-3">
+            <button
+              type="button"
+              onClick={() => setActiveId(COVER_ID)}
+              className={`flex w-full items-center gap-1.5 text-left text-sm px-2 py-1.5 rounded ${
+                activeId === COVER_ID
+                  ? "bg-primary/10 text-primary font-medium"
+                  : "hover:bg-muted"
+              }`}
+            >
+              <FileText className="h-3.5 w-3.5 shrink-0" />
+              Cover &amp; contents
+              <span className="ml-auto text-[10px] font-normal opacity-70">
+                {hasCover || policy.tocEnabled ? "on" : "off"}
+              </span>
+            </button>
+          </div>
           <div className="text-xs font-semibold text-muted-foreground mb-2 px-1">
             SECTIONS
           </div>
@@ -439,23 +505,32 @@ function EditorTab({
           </Button>
         </div>
 
-        {active ? (
-          <SectionEditor
-            key={`${active.id}:${fieldsVersion}`}
-            policyId={policy._id}
-            section={active}
-            invalidate={invalidate}
-            onErr={onErr}
-          />
-        ) : (
-          <Card>
-            <CardContent className="p-10 text-center text-sm text-muted-foreground">
-              No sections yet — add one to start writing.
-            </CardContent>
-          </Card>
-        )}
+        <div className="min-h-0 overflow-y-auto pr-1">
+          {activeId === COVER_ID ? (
+            <CoverEditor
+              key={`cover:${fieldsVersion}`}
+              policy={policy}
+              invalidate={invalidate}
+              onErr={onErr}
+            />
+          ) : active ? (
+            <SectionEditor
+              key={`${active.id}:${fieldsVersion}`}
+              policyId={policy._id}
+              section={active}
+              invalidate={invalidate}
+              onErr={onErr}
+            />
+          ) : (
+            <Card>
+              <CardContent className="p-10 text-center text-sm text-muted-foreground">
+                No sections yet — add one to start writing.
+              </CardContent>
+            </Card>
+          )}
+        </div>
 
-        <div className="space-y-4">
+        <div className="min-h-0 space-y-4 overflow-y-auto pr-1">
           <PropertiesSidebar
             policy={policy}
             invalidate={invalidate}
@@ -479,6 +554,110 @@ function EditorTab({
   );
 }
 
+// The policy's cover page and contents page. Both are optional; a policy
+// started from a template inherits the template's.
+function CoverEditor({
+  policy,
+  invalidate,
+  onErr,
+}: {
+  policy: Policy;
+  invalidate: () => void;
+  onErr: (t: string) => (e: any) => void;
+}) {
+  const [cover, setCover] = useState(policy.coverPage ?? "");
+  const [tocTitle, setTocTitle] = useState(policy.tocTitle || TOC_DEFAULT);
+  const [savedAt, setSavedAt] = useState<Date | null>(null);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const saveMut = useMutation({
+    mutationFn: (dto: Parameters<typeof updatePolicyCover>[1]) =>
+      updatePolicyCover(policy._id, dto),
+    onSuccess: () => {
+      setSavedAt(new Date());
+      invalidate();
+    },
+    onError: onErr("Failed to save"),
+  });
+
+  const onCover = (html: string) => {
+    setCover(html);
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(
+      () => saveMut.mutate({ coverPage: html }),
+      1500,
+    );
+  };
+
+  return (
+    <Card>
+      <CardContent className="p-3 space-y-4">
+        <div className="flex items-center justify-between gap-2">
+          <div className="font-semibold">Cover page &amp; contents</div>
+          <span className="text-[11px] text-muted-foreground shrink-0">
+            {saveMut.isPending
+              ? "Saving…"
+              : savedAt
+                ? `Auto-saved ${savedAt.toLocaleTimeString()}`
+                : ""}
+          </span>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label className="text-xs">Cover page</Label>
+          <p className="text-xs text-muted-foreground">
+            The first page of the policy. It is centred automatically — just
+            write the lines. Leave it empty for no cover page.
+          </p>
+          <div className="contract-doc">
+            <RichTextEditor
+              value={cover}
+              onChange={onCover}
+              minHeight={220}
+              placeholder="Title, company, reference…"
+            />
+          </div>
+        </div>
+
+        <div className="space-y-2 rounded-lg border p-3">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <Label htmlFor="policy-toc" className="text-sm font-medium">
+                Add a table of contents page
+              </Label>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Goes after the cover and is built from the section titles, so it
+                always matches the policy.
+              </p>
+            </div>
+            <Checkbox
+              id="policy-toc"
+              checked={!!policy.tocEnabled}
+              onCheckedChange={(v) =>
+                saveMut.mutate({ tocEnabled: v === true })
+              }
+            />
+          </div>
+          {policy.tocEnabled && (
+            <div className="space-y-1">
+              <Label className="text-xs">Page heading</Label>
+              <Input
+                className="h-8"
+                value={tocTitle}
+                onChange={(e) => setTocTitle(e.target.value)}
+                onBlur={() =>
+                  tocTitle !== (policy.tocTitle || TOC_DEFAULT) &&
+                  saveMut.mutate({ tocTitle })
+                }
+              />
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 // ── Preview dialog + PDF export ──────────────────────────────
 // Both read the policy exactly as it will be seen by an approver or
 // an acknowledging staff member — the full assembled document, not
@@ -493,18 +672,36 @@ function PolicyPreviewDialog({
   open: boolean;
   onOpenChange: (v: boolean) => void;
 }) {
+  const { cover, toc, sections } = policyParts(policy);
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
-        <DialogHeader>
+      {/* The header stays put; only the document scrolls. */}
+      <DialogContent className="flex max-h-[85vh] max-w-3xl flex-col gap-0 p-0">
+        <DialogHeader className="border-b px-6 py-4">
           <DialogTitle>{policy.title}</DialogTitle>
+          <div className="text-xs text-muted-foreground">
+            Version {policy.version} · Owner: {policy.owner || "—"} · Approval:{" "}
+            {policy.approvalAuthority || "—"}
+          </div>
         </DialogHeader>
-        <div className="text-xs text-muted-foreground -mt-2 mb-2">
-          Version {policy.version} · Owner: {policy.owner || "—"} · Approval:{" "}
-          {policy.approvalAuthority || "—"}
-        </div>
-        <div className="space-y-6">
-          {policy.sections.map((s) => (
+        <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-6 py-4">
+          {cover && (
+            <div
+              className="prose prose-sm mx-auto max-w-none rounded-lg border p-10 text-center text-foreground"
+              dangerouslySetInnerHTML={{ __html: cover }}
+            />
+          )}
+          {toc && (
+            <div className="rounded-lg border p-6">
+              <h3 className="mb-3 text-base font-semibold">{toc.title}</h3>
+              <ol className="list-decimal space-y-1 pl-5 text-sm">
+                {toc.entries.map((t, i) => (
+                  <li key={i}>{t}</li>
+                ))}
+              </ol>
+            </div>
+          )}
+          {sections.map((s) => (
             <div key={s.id}>
               <h3 className="text-base font-semibold mb-2">{s.title}</h3>
               <div
@@ -515,7 +712,7 @@ function PolicyPreviewDialog({
               />
             </div>
           ))}
-          {policy.sections.length === 0 && (
+          {sections.length === 0 && (
             <p className="text-sm text-muted-foreground text-center py-8">
               No sections yet.
             </p>
@@ -552,11 +749,106 @@ function escapeHtml(s: string): string {
 async function exportPolicyPdf(policy: Policy): Promise<void> {
   const WIDTH_PX = 700;
   const primary = `hsl(${getComputedStyle(document.documentElement).getPropertyValue("--primary").trim()})`;
-  const container = document.createElement("div");
-  container.style.cssText =
-    `position:absolute;left:0;top:0;width:${WIDTH_PX}px;z-index:-1000;` +
-    "padding:32px;font-family:Georgia,serif;color:#1a1a1a;background:#fff;";
-  container.innerHTML = `
+  const { cover, toc, sections } = policyParts(policy);
+
+  const pdf = new jsPDF({ unit: "pt", format: "a4" });
+  const pageWidth = pdf.internal.pageSize.getWidth();
+  const pageHeight = pdf.internal.pageSize.getHeight();
+  const margin = 40;
+  const usableWidth = pageWidth - margin * 2;
+  const usableHeight = pageHeight - margin * 2;
+  // The height, in the container's own pixels, of exactly one PDF page — so
+  // the cover and contents can each fill a page of their own.
+  const pageCssHeight = Math.floor((WIDTH_PX * usableHeight) / usableWidth) - 4;
+  const html2canvas = (await import("html2canvas")).default;
+  let firstPage = true;
+
+  // Renders one part of the document to a canvas and adds it to the PDF,
+  // slicing it into pages if it is taller than one.
+  const addPart = async (inner: string, opts: { fullPage?: boolean } = {}) => {
+    const container = document.createElement("div");
+    container.style.cssText =
+      `position:absolute;left:0;top:0;width:${WIDTH_PX}px;z-index:-1000;box-sizing:border-box;` +
+      "padding:32px;font-family:Georgia,serif;color:#1a1a1a;background:#fff;" +
+      (opts.fullPage
+        ? `height:${pageCssHeight}px;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;`
+        : "");
+    container.innerHTML = inner;
+    document.body.appendChild(container);
+    try {
+      // Let the browser actually paint the container (fonts, layout)
+      // before capturing it.
+      await new Promise((r) =>
+        requestAnimationFrame(() => requestAnimationFrame(r)),
+      );
+      const canvas = await html2canvas(container, {
+        scale: 2,
+        backgroundColor: "#ffffff",
+        useCORS: true,
+        windowWidth: WIDTH_PX,
+      });
+
+      // pt-per-canvas-px scale, then how many source canvas px make up
+      // one page's worth of vertical space.
+      const ptPerPx = usableWidth / canvas.width;
+      const pagePxHeight = Math.floor(usableHeight / ptPerPx);
+
+      let renderedPx = 0;
+      while (renderedPx < canvas.height) {
+        const sliceHeightPx = Math.min(
+          pagePxHeight,
+          canvas.height - renderedPx,
+        );
+        const sliceCanvas = document.createElement("canvas");
+        sliceCanvas.width = canvas.width;
+        sliceCanvas.height = sliceHeightPx;
+        const ctx = sliceCanvas.getContext("2d")!;
+        ctx.drawImage(
+          canvas,
+          0,
+          renderedPx,
+          canvas.width,
+          sliceHeightPx,
+          0,
+          0,
+          canvas.width,
+          sliceHeightPx,
+        );
+
+        if (!firstPage) pdf.addPage();
+        pdf.addImage(
+          sliceCanvas.toDataURL("image/png"),
+          "PNG",
+          margin,
+          margin,
+          usableWidth,
+          sliceHeightPx * ptPerPx,
+        );
+
+        renderedPx += sliceHeightPx;
+        firstPage = false;
+      }
+    } finally {
+      document.body.removeChild(container);
+    }
+  };
+
+  if (cover) {
+    await addPart(
+      `<style>.pcv h1{font-size:34px;font-weight:700;margin:0 0 18px;line-height:1.2}.pcv h2{font-size:24px;font-weight:700;margin:0 0 14px}.pcv p{margin:0 0 10px}</style>
+       <div class="pcv" style="font-size:16px;line-height:1.7;">${cover}</div>`,
+      { fullPage: true },
+    );
+  }
+  if (toc) {
+    await addPart(
+      `<h1 style="font-size:20px;margin:0 0 20px;border-bottom:2px solid ${primary};padding-bottom:8px;width:100%;text-align:left;">${escapeHtml(toc.title)}</h1>
+       <ol style="font-size:14px;line-height:2;margin:0;padding-left:22px;width:100%;text-align:left;">
+         ${toc.entries.map((t) => `<li>${escapeHtml(t)}</li>`).join("")}
+       </ol>`,
+    );
+  }
+  await addPart(`
     <div style="display:flex;align-items:center;justify-content:space-between;border-bottom:4px solid ${primary};padding-bottom:16px;margin-bottom:24px;">
       <img src="/lexora-logo.png" alt="Lexora" style="max-width:145px;max-height:46px;object-fit:contain;" />
       <span style="font:700 10px Arial,sans-serif;color:${primary};text-transform:uppercase;">Governance · Policy &amp; Procedure</span>
@@ -565,81 +857,16 @@ async function exportPolicyPdf(policy: Policy): Promise<void> {
     <p style="font-size:11px;color:#666;margin:0 0 24px;">
       Version ${escapeHtml(policy.version)} · Owner: ${escapeHtml(policy.owner || "—")} · Approval authority: ${escapeHtml(policy.approvalAuthority || "—")}
     </p>
-    ${policy.sections
+    ${sections
       .map(
         (s) =>
           `<h2 style="font-size:15px;margin:20px 0 8px;border-bottom:1px solid #ddd;padding-bottom:4px;">${escapeHtml(s.title)}</h2>
            <div style="font-size:12px;line-height:1.65;">${s.content || "<p style='color:#999'>No content.</p>"}</div>`,
       )
       .join("")}
-  `;
-  document.body.appendChild(container);
+  `);
 
-  try {
-    // Let the browser actually paint the container (fonts, layout)
-    // before capturing it.
-    await new Promise((r) =>
-      requestAnimationFrame(() => requestAnimationFrame(r)),
-    );
-
-    const html2canvas = (await import("html2canvas")).default;
-    const canvas = await html2canvas(container, {
-      scale: 2,
-      backgroundColor: "#ffffff",
-      useCORS: true,
-      windowWidth: WIDTH_PX,
-    });
-
-    const pdf = new jsPDF({ unit: "pt", format: "a4" });
-    const pageWidth = pdf.internal.pageSize.getWidth();
-    const pageHeight = pdf.internal.pageSize.getHeight();
-    const margin = 40;
-    const usableWidth = pageWidth - margin * 2;
-    const usableHeight = pageHeight - margin * 2;
-
-    // pt-per-canvas-px scale, then how many source canvas px make up
-    // one page's worth of vertical space.
-    const ptPerPx = usableWidth / canvas.width;
-    const pagePxHeight = Math.floor(usableHeight / ptPerPx);
-
-    let renderedPx = 0;
-    let firstPage = true;
-    while (renderedPx < canvas.height) {
-      const sliceHeightPx = Math.min(pagePxHeight, canvas.height - renderedPx);
-      const sliceCanvas = document.createElement("canvas");
-      sliceCanvas.width = canvas.width;
-      sliceCanvas.height = sliceHeightPx;
-      const ctx = sliceCanvas.getContext("2d")!;
-      ctx.drawImage(
-        canvas,
-        0,
-        renderedPx,
-        canvas.width,
-        sliceHeightPx,
-        0,
-        0,
-        canvas.width,
-        sliceHeightPx,
-      );
-
-      if (!firstPage) pdf.addPage();
-      pdf.addImage(
-        sliceCanvas.toDataURL("image/png"),
-        "PNG",
-        margin,
-        margin,
-        usableWidth,
-        sliceHeightPx * ptPerPx,
-      );
-
-      renderedPx += sliceHeightPx;
-      firstPage = false;
-    }
-
-    pdf.save(`${policy.title.replace(/[^a-z0-9]+/gi, "_")}.pdf`);
-  } finally {
-    document.body.removeChild(container);
-  }
+  pdf.save(`${policy.title.replace(/[^a-z0-9]+/gi, "_")}.pdf`);
 }
 
 // The Merge Fields panel for a policy: every {{field}} the sections use, with
@@ -1318,6 +1545,9 @@ function CommentsTab({
   onErr: (t: string) => (e: any) => void;
 }) {
   const [text, setText] = useState("");
+  const [replyTo, setReplyTo] = useState<string | null>(null);
+  const [replyText, setReplyText] = useState("");
+
   const addMut = useMutation({
     mutationFn: () => addPolicyComment(policy._id, { content: text.trim() }),
     onSuccess: () => {
@@ -1325,6 +1555,16 @@ function CommentsTab({
       setText("");
     },
     onError: onErr("Failed to post comment"),
+  });
+  const replyMut = useMutation({
+    mutationFn: (parentId: string) =>
+      addPolicyComment(policy._id, { content: replyText.trim(), parentId }),
+    onSuccess: () => {
+      invalidate();
+      setReplyText("");
+      setReplyTo(null);
+    },
+    onError: onErr("Failed to post reply"),
   });
 
   const roots = policy.comments.filter((c) => !c.parentId);
@@ -1334,14 +1574,60 @@ function CommentsTab({
   return (
     <div className="space-y-3">
       <div className="text-sm font-medium">Review comments</div>
+      <p className="text-xs text-muted-foreground -mt-2">
+        Comments from reviewers and board members appear here. Reply to answer a
+        comment in its own thread.
+      </p>
       {roots.map((c) => (
         <div key={c.id} className="space-y-2">
-          <CommentCard comment={c} />
+          <CommentCard
+            comment={c}
+            action={
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                onClick={() => {
+                  setReplyTo(replyTo === c.id ? null : c.id);
+                  setReplyText("");
+                }}
+              >
+                <Reply className="h-3.5 w-3.5 mr-1" /> Reply
+              </Button>
+            }
+          />
           {repliesOf(c.id).map((r) => (
             <div key={r.id} className="ml-8">
               <CommentCard comment={r} />
             </div>
           ))}
+          {replyTo === c.id && (
+            <div className="ml-8 space-y-2">
+              <Textarea
+                rows={2}
+                autoFocus
+                placeholder={`Reply to ${c.author}…`}
+                value={replyText}
+                onChange={(e) => setReplyText(e.target.value)}
+              />
+              <div className="flex justify-end gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setReplyTo(null)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  disabled={!replyText.trim() || replyMut.isPending}
+                  onClick={() => replyMut.mutate(c.id)}
+                >
+                  Post reply
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       ))}
       {roots.length === 0 && (
@@ -1370,7 +1656,13 @@ function CommentsTab({
   );
 }
 
-function CommentCard({ comment }: { comment: Policy["comments"][number] }) {
+function CommentCard({
+  comment,
+  action,
+}: {
+  comment: Policy["comments"][number];
+  action?: React.ReactNode;
+}) {
   return (
     <div className="border rounded-lg p-3">
       <div className="flex items-baseline gap-2 text-sm">
@@ -1380,8 +1672,9 @@ function CommentCard({ comment }: { comment: Policy["comments"][number] }) {
           {comment.authorRole ? " · " : ""}
           {new Date(comment.date).toLocaleDateString()}
         </span>
+        {action && <span className="ml-auto self-center">{action}</span>}
       </div>
-      <p className="text-sm mt-1">{comment.content}</p>
+      <p className="text-sm mt-1 whitespace-pre-wrap">{comment.content}</p>
     </div>
   );
 }

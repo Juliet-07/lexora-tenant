@@ -882,9 +882,11 @@ export default function ContractDetail() {
 
         {/* ══ EDITOR ══ */}
         <TabsContent value="editor" className="pt-4">
-          <div className="grid gap-4 xl:grid-cols-[220px_minmax(0,1fr)_320px]">
+          {/* On wide screens each column scrolls on its own, so the page stays
+              put while the document is read and the panels stay in view. */}
+          <div className="grid gap-4 xl:h-[calc(100vh-14rem)] xl:min-h-[480px] xl:grid-cols-[220px_minmax(0,1fr)_320px] xl:grid-rows-[minmax(0,1fr)]">
             {/* Contents */}
-            <div className="space-y-4">
+            <div className="space-y-4 xl:min-h-0 xl:overflow-y-auto">
               <Card>
                 <CardHeader className="pb-2">
                   <CardTitle className="text-xs uppercase tracking-wide text-muted-foreground">
@@ -913,7 +915,7 @@ export default function ContractDetail() {
             </div>
 
             {/* Document */}
-            <Card className="min-h-[520px]">
+            <Card className="min-h-[520px] xl:flex xl:min-h-0 xl:flex-col">
               <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 pb-3">
                 <SectionTitle icon={FileText}>Document</SectionTitle>
                 <div className="flex items-center gap-2">
@@ -982,7 +984,7 @@ export default function ContractDetail() {
                   )}
                 </div>
               </CardHeader>
-              <CardContent>
+              <CardContent className="xl:min-h-0 xl:flex-1 xl:overflow-y-auto">
                 {canEditBody && editing ? (
                   <div className="contract-doc">
                     <StructuredBodyEditor
@@ -1006,7 +1008,7 @@ export default function ContractDetail() {
             </Card>
 
             {/* Side panel */}
-            <div className="space-y-4">
+            <div className="space-y-4 xl:min-h-0 xl:overflow-y-auto">
               <MergeFieldsPanel
                 body={liveBody}
                 locked={!canEditBody}

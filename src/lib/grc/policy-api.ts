@@ -146,6 +146,11 @@ export interface Policy {
   nextReviewDue: string | null;
   templateId: string | null;
   sections: PolicySection[];
+  /** Cover page (HTML). Empty = no cover page. */
+  coverPage?: string;
+  /** Contents page, built from the section titles. */
+  tocEnabled?: boolean;
+  tocTitle?: string;
   approvalHistory: PolicyApprovalEntry[];
   comments: PolicyComment[];
   boardApprovalRequired: boolean;
@@ -283,6 +288,14 @@ export const addPolicySection = async (
   dto: { title?: string; content?: string },
 ): Promise<Policy> => {
   const res = await api.post(`/grc/compliance/policies/${id}/sections`, dto);
+  return res.data?.data ?? res.data;
+};
+
+export const updatePolicyCover = async (
+  id: string,
+  dto: { coverPage?: string; tocEnabled?: boolean; tocTitle?: string },
+): Promise<Policy> => {
+  const res = await api.put(`/grc/compliance/policies/${id}/cover`, dto);
   return res.data?.data ?? res.data;
 };
 

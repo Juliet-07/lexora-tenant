@@ -87,6 +87,11 @@ export default function ClientOnboarding() {
   const awaitingSignatureCount = contracts.filter(
     (c) => c.signatureStatus === "sent",
   ).length;
+  // Drafted but never sent — these need the tenant to act, so they get their
+  // own count, the same way Not Started does.
+  const notSentCount = contracts.filter(
+    (c) => c.signatureStatus === "not_sent",
+  ).length;
 
   const loading = pendingLoading || inProgressLoading;
   const refreshing =
@@ -164,8 +169,8 @@ export default function ClientOnboarding() {
             },
             {
               label: "Contracting",
-              value: awaitingSignatureCount,
-              hint: "See the Contracting tab",
+              value: notSentCount + awaitingSignatureCount,
+              hint: `${notSentCount} not sent · ${awaitingSignatureCount} awaiting signature`,
               icon: FileText,
               accent: "text-secondary bg-secondary/10",
             },
@@ -210,8 +215,19 @@ export default function ClientOnboarding() {
           </TabsTrigger>
           <TabsTrigger value="contracting" className="rounded-lg">
             Contracting
+            {notSentCount > 0 && (
+              <span
+                title={`${notSentCount} contract${notSentCount === 1 ? "" : "s"} not sent`}
+                className="ml-2 rounded-full bg-primary/10 text-primary text-xs px-2 py-0.5"
+              >
+                {notSentCount}
+              </span>
+            )}
             {awaitingSignatureCount > 0 && (
-              <span className="ml-2 rounded-full bg-blue-100 text-blue-700 text-xs px-2 py-0.5">
+              <span
+                title={`${awaitingSignatureCount} awaiting signature`}
+                className="ml-1 rounded-full bg-blue-100 text-blue-700 text-xs px-2 py-0.5"
+              >
                 {awaitingSignatureCount}
               </span>
             )}

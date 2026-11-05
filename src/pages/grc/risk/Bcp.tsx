@@ -2373,7 +2373,7 @@ td.empty{color:#94a3b8;font-style:italic;border-bottom:none}
               </CardContent>
             </Card>
           </div>
-          <Card>
+          {/* <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-base">
                 Pre-approved communication templates
@@ -2412,7 +2412,7 @@ td.empty{color:#94a3b8;font-style:italic;border-bottom:none}
                 ))}
               </div>
             </CardContent>
-          </Card>
+          </Card> */}
         </TabsContent>
 
         {/* INCIDENTS */}

@@ -10,6 +10,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Loader2, Save, Send, X, Pencil, Eye } from "lucide-react";
 import { StructuredBodyEditor } from "@/components/crm/StructuredBodyEditor";
+import { MergeFieldsPanel } from "@/components/crm/MergeFieldsPanel";
 
 interface DocumentEditorDialogProps {
   open: boolean;
@@ -18,8 +19,19 @@ interface DocumentEditorDialogProps {
   subtitle?: string;
   value: string;
   onClose: () => void;
-  onSave: (html: string) => void;
+  /**
+   * `mergeFieldValues` holds the fields typed into the Merge Fields panel
+   * (only when `mergeFields` is on), so the caller can save them with the body.
+   */
+  onSave: (html: string, mergeFieldValues?: Record<string, string>) => void;
   saving?: boolean;
+  /**
+   * Show the Merge Fields panel beside the editor: every {{field}} in the
+   * document with one input each. Typing one rewrites it everywhere it appears.
+   */
+  mergeFields?: boolean;
+  /** Where the panel's field labels come from. */
+  mergeRegistry?: "crm" | "hr" | "policy";
   /** Custom label for the save action — defaults to "Save Changes". */
   saveLabel?: string;
   /**
@@ -48,6 +60,8 @@ export function DocumentEditorDialog({
   onClose,
   onSave,
   saving = false,
+  mergeFields = false,
+  mergeRegistry = "crm",
   saveLabel = "Save Changes",
   onSend,
   sending = false,
@@ -55,6 +69,7 @@ export function DocumentEditorDialog({
 }: DocumentEditorDialogProps) {
   const [draft, setDraft] = useState(value);
   const [mode, setMode] = useState<"edit" | "preview">("edit");
+  const [fieldEdits, setFieldEdits] = useState<Record<string, string>>({});
 
   // Reset the draft (and always land back on Edit) each time the
   // dialog opens, so a previous, unsaved edit or a lingering preview
@@ -63,12 +78,15 @@ export function DocumentEditorDialog({
     if (open) {
       setDraft(value);
       setMode("edit");
+      setFieldEdits({});
     }
   }, [open, value]);
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
+      <DialogContent
+        className={`flex max-h-[90vh] flex-col ${mergeFields ? "h-[90vh] max-w-6xl" : "max-w-4xl"}`}
+      >
         <DialogHeader>
           <div className="flex items-center justify-between gap-3 pr-6">
             <div>
@@ -93,18 +111,46 @@ export function DocumentEditorDialog({
           </div>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto">
-          {mode === "edit" ? (
-            <StructuredBodyEditor
-              value={draft}
-              onChange={setDraft}
-              minHeight={420}
-            />
-          ) : (
-            <div
-              className="contract-doc prose prose-sm max-w-none rounded-md border bg-card p-6 text-sm leading-relaxed min-h-[420px]"
-              dangerouslySetInnerHTML={{ __html: draft }}
-            />
+        {/* The document and the Merge Fields panel each scroll on their own,
+            so the title and buttons stay in view while the contract is read. */}
+        <div
+          className={
+            mergeFields
+              ? "grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,1fr)_320px] lg:grid-rows-[minmax(0,1fr)]"
+              : "min-h-0 flex-1"
+          }
+        >
+          <div className="min-h-0 overflow-y-auto">
+            {mode === "edit" ? (
+              <StructuredBodyEditor
+                value={draft}
+                onChange={setDraft}
+                minHeight={420}
+              />
+            ) : (
+              <div
+                className="contract-doc prose prose-sm max-w-none rounded-md border bg-card p-6 text-sm leading-relaxed min-h-[420px]"
+                dangerouslySetInnerHTML={{ __html: draft }}
+              />
+            )}
+          </div>
+          {mergeFields && (
+            <div className="min-h-0 overflow-y-auto">
+              <MergeFieldsPanel
+                registry={mergeRegistry}
+                body={draft}
+                locked={false}
+                editing
+                dirty={false}
+                saving={false}
+                onChange={(next, key, value) => {
+                  setDraft(next);
+                  setFieldEdits((e) => ({ ...e, [key]: value }));
+                }}
+                onSave={() => undefined}
+                onDiscard={() => undefined}
+              />
+            </div>
           )}
         </div>
 
@@ -121,7 +167,7 @@ export function DocumentEditorDialog({
             className={
               onSend ? undefined : "bg-gradient-to-r from-primary to-secondary"
             }
-            onClick={() => onSave(draft)}
+            onClick={() => onSave(draft, mergeFields ? fieldEdits : undefined)}
             disabled={saving || sending}
           >
             {saving ? (
