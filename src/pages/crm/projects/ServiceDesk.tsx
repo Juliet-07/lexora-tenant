@@ -55,6 +55,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { fetchEmployees } from "@/lib/hr/hr-api";
 import { RichTextEditor } from "@/components/RichTextEditor";
+import { EscalationPanel } from "@/components/support/EscalationPanel";
 import {
   fetchTickets,
   assignTicket,
@@ -767,6 +768,19 @@ export default function ServiceDesk() {
                     ticket
                   </Button>
                 </div>
+
+                {/* Portal-access tickets can go up to the platform team. */}
+                <EscalationPanel
+                  ticket={selected}
+                  onShareWithClient={(text) =>
+                    addTicketNote(selected._id, "You", text, false).then(
+                      (t) => {
+                        invalidate();
+                        return t;
+                      },
+                    )
+                  }
+                />
 
                 <div className="space-y-2">
                   <h4 className="flex items-center gap-2 text-sm font-semibold">

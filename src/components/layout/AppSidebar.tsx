@@ -40,6 +40,7 @@ import {
   Leaf,
   FileBarChart,
   Bell,
+  LifeBuoy,
   Megaphone,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
@@ -819,6 +820,18 @@ export function AppSidebar() {
 
       <SidebarFooter className="border-t border-sidebar-border">
         <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild>
+              <NavLink
+                to="/support"
+                className="hover:bg-sidebar-accent/50 text-sidebar-foreground"
+                activeClassName="bg-sidebar-accent text-sidebar-accent-foreground"
+              >
+                <LifeBuoy className="mr-2 h-4 w-4" />
+                {!collapsed && <span>Platform Support</span>}
+              </NavLink>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
           <SidebarMenuItem>
             <SidebarMenuButton asChild>
               <NavLink
