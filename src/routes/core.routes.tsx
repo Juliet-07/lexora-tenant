@@ -11,7 +11,11 @@ import OnboardingDetail from "@/pages/kyc/OnboardingDetail";
 import Settings from "@/pages/settings/Index";
 import MySettings from "@/pages/hr/employee/MySettings";
 import Notifications from "@/pages/Notifications";
-import { MyProjectsList, MyProjectDetail } from "@/pages/crm/projects/employee-project";
+import PlatformSupport from "@/pages/support/PlatformSupport";
+import {
+  MyProjectsList,
+  MyProjectDetail,
+} from "@/pages/crm/projects/employee-project";
 
 /**
  * Core routes shared across modules: dashboard root, client management,
@@ -47,6 +51,12 @@ export const coreRoutes = ({ isAdmin }: RouteContext) => {
       key="notifications"
       path="/notifications"
       element={layout(<Notifications />)}
+    />,
+    // Tickets to the platform team (Super Admin) — available in every module
+    <Route
+      key="platform-support"
+      path="/support"
+      element={layout(<PlatformSupport />)}
     />,
   ];
 

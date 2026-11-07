@@ -85,7 +85,7 @@ export function DocumentEditorDialog({
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent
-        className={`flex max-h-[90vh] flex-col ${mergeFields ? "h-[90vh] max-w-6xl" : "max-w-4xl"}`}
+        className={`flex max-h-[90vh] flex-col ${mergeFields ? "h-[90vh] max-w-[1390px]" : "max-w-4xl"}`}
       >
         <DialogHeader>
           <div className="flex items-center justify-between gap-3 pr-6">

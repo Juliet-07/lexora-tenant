@@ -30,12 +30,22 @@ export interface ModuleDefinition {
   color: string;
 }
 
+export interface SubscriptionExpiryInfo {
+  daysLeft: number;
+  stage: "notice" | "important" | "urgent";
+  expiresAt: string;
+  isTrial: boolean;
+}
+
 export interface SubscriptionInfo {
   plan: string;
   status: string;
   activeModules: string[];
   trialEndsAt: string | null;
   currentPeriodEnd: string | null;
+  // Present only while the subscription is inside the reminder window
+  // (7 / 3 / 1 days — the same stages as the expiry emails).
+  expiry?: SubscriptionExpiryInfo | null;
   // Seat usage against the plan's (or a super-admin override's) user
   // limit — the same number EmployeeService#enforceUserLimit checks
   // server-side. Optional so older cached dashboard responses don't

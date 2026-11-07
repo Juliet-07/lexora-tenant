@@ -28,6 +28,7 @@ import {
   Send,
   Mail,
   Clock,
+  RefreshCw,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { useModule } from "@/contexts/ModuleContext";
@@ -35,6 +36,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   fetchMyTransactions,
   requestUpgrade,
+  requestRenewal,
   markPaymentClaimed,
 } from "@/lib/tenant-payments-api";
 
@@ -123,6 +125,24 @@ export default function PlanTab() {
       }),
   });
 
+  const renewMutation = useMutation({
+    mutationFn: () => requestRenewal(selectedCurrency),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tenant-my-transactions"] });
+      toast({
+        title: "Renewal invoice sent",
+        description:
+          "Check your email for the invoice and payment instructions.",
+      });
+    },
+    onError: (err: any) =>
+      toast({
+        title: "Could not request renewal",
+        description: err?.response?.data?.message ?? "Please try again.",
+        variant: "destructive",
+      }),
+  });
+
   const markPaidMutation = useMutation({
     mutationFn: (transactionId: string) => markPaymentClaimed(transactionId),
     onSuccess: () => {
@@ -151,6 +171,22 @@ export default function PlanTab() {
   const daysLeft = trialEnds
     ? Math.ceil((trialEnds.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
     : null;
+
+  const expiry = subscription?.expiry ?? null;
+  // A paid plan can be renewed at any time (early renewals extend from the
+  // current end date, so nothing is lost). Trials upgrade rather than renew.
+  const canRenew = !!currentPlan && currentPlan !== "free" && !isTrial;
+
+  // Plans a tenant can actually buy: priced and not the trial plan. The
+  // trial plan only shows (as context) when it is the tenant's own plan, and
+  // an unpriced plan (e.g. a placeholder like "Premium" at 0) never shows —
+  // an invoice for it would be rejected anyway.
+  const visiblePlans = plans.filter((p) => {
+    const key = p.plan.toLowerCase();
+    if (key === currentPlan) return true;
+    if (key === "free") return false;
+    return !!p.priceMonthly && p.priceMonthly > 0;
+  });
 
   // ─────────────────────────────────────────────────────────
   return (
@@ -194,6 +230,25 @@ export default function PlanTab() {
             )}
           </div>
 
+          {canRenew && expiry && !isExpired && (
+            <div
+              data-testid="plan-expiry-notice"
+              className={`flex items-center gap-2 p-3 rounded-lg border text-sm ${
+                expiry.stage === "urgent"
+                  ? "bg-destructive/5 border-destructive/20 text-destructive"
+                  : "bg-yellow-50 border-yellow-200 text-yellow-700"
+              }`}
+            >
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+              <span className="font-medium">
+                {expiry.daysLeft <= 0
+                  ? "Your subscription ends today."
+                  : `Your subscription ends in ${expiry.daysLeft} day${expiry.daysLeft === 1 ? "" : "s"}.`}{" "}
+                Renew your plan below to avoid interruption.
+              </span>
+            </div>
+          )}
+
           {isTrial && daysLeft !== null && daysLeft <= 7 && (
             <div className="flex items-center gap-2 p-3 rounded-lg bg-yellow-50 border border-yellow-200 text-sm">
               <AlertTriangle className="h-4 w-4 text-yellow-600 shrink-0" />
@@ -209,8 +264,8 @@ export default function PlanTab() {
             <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/5 border border-destructive/20 text-sm">
               <AlertTriangle className="h-4 w-4 text-destructive shrink-0" />
               <span className="text-destructive font-medium">
-                Your subscription has expired. Select a plan below to reactivate
-                your account.
+                Your subscription has expired. Renew your plan or select another
+                below to reactivate your account.
               </span>
             </div>
           )}
@@ -223,7 +278,10 @@ export default function PlanTab() {
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
               <Clock className="h-4 w-4 text-primary" />
-              Open Invoice — {openInvoice.invoiceNumber}
+              {openInvoice.type === "subscription_renewal"
+                ? "Renewal Invoice"
+                : "Open Invoice"}{" "}
+              — {openInvoice.invoiceNumber}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -343,7 +401,7 @@ export default function PlanTab() {
             </p>
           </CardContent>
         </Card>
-      ) : plans.length === 0 ? (
+      ) : visiblePlans.length === 0 ? (
         <Card>
           <CardContent className="py-10 text-center">
             <p className="text-sm text-muted-foreground">
@@ -353,12 +411,13 @@ export default function PlanTab() {
         </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {plans.map((plan) => {
+          {visiblePlans.map((plan) => {
             const isCurrent = currentPlan === plan.plan.toLowerCase();
             const isFree = plan.plan.toLowerCase() === "free";
             const isRequestingThis =
               requestMutation.isPending &&
               requestMutation.variables === plan.plan;
+            const showRenew = isCurrent && canRenew;
 
             const price =
               selectedCurrency === "RWF" && plan.priceMonthly
@@ -451,40 +510,73 @@ export default function PlanTab() {
                     </ul>
                   )}
 
-                  <Button
-                    className={`w-full ${
-                      !isCurrent && !isFree
-                        ? "bg-gradient-to-r from-primary to-secondary"
-                        : ""
-                    }`}
-                    variant={isCurrent || isFree ? "outline" : "default"}
-                    disabled={
-                      isCurrent ||
-                      isFree ||
-                      !!openInvoice ||
-                      requestMutation.isPending
-                    }
-                    onClick={() => {
-                      if (isCurrent || isFree || openInvoice) return;
-                      requestMutation.mutate(plan.plan);
-                    }}
-                  >
-                    {isCurrent ? (
-                      "Current plan"
-                    ) : isFree ? (
-                      "Contact your administrator"
-                    ) : isRequestingThis ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Sending invoice…
-                      </>
-                    ) : (
-                      <>
-                        <Send className="h-3.5 w-3.5 mr-2" /> Request Upgrade
-                      </>
-                    )}
-                  </Button>
+                  {showRenew ? (
+                    <Button
+                      className="w-full bg-gradient-to-r from-primary to-secondary"
+                      disabled={!!openInvoice || renewMutation.isPending}
+                      onClick={() => {
+                        if (openInvoice) return;
+                        renewMutation.mutate();
+                      }}
+                    >
+                      {renewMutation.isPending ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Sending invoice…
+                        </>
+                      ) : (
+                        <>
+                          <RefreshCw className="h-3.5 w-3.5 mr-2" /> Renew plan
+                        </>
+                      )}
+                    </Button>
+                  ) : (
+                    <Button
+                      className={`w-full ${
+                        !isCurrent && !isFree
+                          ? "bg-gradient-to-r from-primary to-secondary"
+                          : ""
+                      }`}
+                      variant={isCurrent || isFree ? "outline" : "default"}
+                      disabled={
+                        isCurrent ||
+                        isFree ||
+                        !!openInvoice ||
+                        requestMutation.isPending
+                      }
+                      onClick={() => {
+                        if (isCurrent || isFree || openInvoice) return;
+                        requestMutation.mutate(plan.plan);
+                      }}
+                    >
+                      {isCurrent ? (
+                        "Current plan"
+                      ) : isFree ? (
+                        "Contact your administrator"
+                      ) : isRequestingThis ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Sending invoice…
+                        </>
+                      ) : (
+                        <>
+                          <Send className="h-3.5 w-3.5 mr-2" /> Request Upgrade
+                        </>
+                      )}
+                    </Button>
+                  )}
 
+                  {showRenew && !openInvoice && (
+                    <p className="text-[10px] text-muted-foreground text-center">
+                      We'll email you an invoice. A month is added after your
+                      current period ends — renewing early costs you nothing.
+                    </p>
+                  )}
+                  {showRenew && openInvoice && (
+                    <p className="text-[10px] text-muted-foreground text-center">
+                      Resolve your open invoice above before requesting another.
+                    </p>
+                  )}
                   {!isCurrent && !isFree && !openInvoice && (
                     <p className="text-[10px] text-muted-foreground text-center">
                       We'll email you an invoice with payment instructions.

@@ -1,84 +1,212 @@
-import { Route } from "react-router-dom";
+import { Navigate, Route } from "react-router-dom";
 import { layout, RouteContext } from "./_helpers";
 import { ModulePlaceholder } from "@/components/layout/ModulePlaceholder";
-import Dashboard from "@/pages/Dashboard";
-import EmployeeDashboard from "@/pages/EmployeeDashboard";
-import Clients from "@/pages/client/Clients";
-import AssignedClients from "@/pages/hr/employee/AssignedClients";
-import ClientProfile from "@/pages/client/ClientProfile";
-import ClientOnboarding from "@/pages/kyc/ClientOnboarding";
-import OnboardingDetail from "@/pages/kyc/OnboardingDetail";
-import Settings from "@/pages/settings/Index";
-import MySettings from "@/pages/hr/employee/MySettings";
-import Notifications from "@/pages/Notifications";
-import PlatformSupport from "@/pages/support/PlatformSupport";
+import CrmOverview from "@/pages/crm/Overview";
+import Pipeline from "@/pages/crm/crm/Pipeline";
+import Contacts from "@/pages/crm/crm/Contacts";
+import CrmClients from "@/pages/crm/crm/Clients";
+import Sla from "@/pages/crm/crm/Sla";
+import Vendors from "@/pages/crm/crm/Vendors";
+import Mandates from "@/pages/crm/projects/mandate";
+import Tasks from "@/pages/crm/projects/Tasks";
+import GanttPlanning from "@/pages/crm/projects/GanttPlanning";
+import TimeTracking from "@/pages/crm/projects/time-tracking";
+import ServiceDesk from "@/pages/crm/projects/ServiceDesk";
+import Adr from "@/pages/crm/projects/Adr";
+import Invoicing from "@/pages/finance/Invoicing";
+import TrustAccounting from "@/pages/finance/TrustAccounting";
+import Sales from "@/pages/finance/Sales";
+import Purchases from "@/pages/finance/Purchases";
+import Banking from "@/pages/finance/Banking";
+import TaxPage from "@/pages/finance/Tax";
+import Accounting from "@/pages/finance/Accounting";
+import AssetRegister from "@/pages/finance/AssetRegister";
+import FundAccounting from "@/pages/finance/FundAccounting";
+import Contracts from "@/pages/crm/tools/Contracts";
+import ContractDetail from "@/pages/crm/tools/ContractDetail";
+import CrmCalendar from "@/pages/crm/tools/Calendar";
+import Newsletter from "@/pages/crm/tools/Newsletter";
+import Events from "@/pages/crm/tools/Events";
+
+import Reports from "@/pages/crm/Reports";
+import Pmo from "@/pages/crm/projects/Pmo";
+import Billing from "@/pages/Billing";
 import {
   MyProjectsList,
   MyProjectDetail,
 } from "@/pages/crm/projects/employee-project";
+import Litigation from "@/pages/crm/projects/Litigation";
 
 /**
- * Core routes shared across modules: dashboard root, client management,
- * team, settings, and the generic projects fallback.
+ * CRM & Project Management — Module 2.
+ * Sections: Dashboard, CRM, Projects, Finance, Tools, plus the
+ * cross-cutting Notifications centre. Delivery pages (mandates,
+ * tasks, planning, timesheets, service desk) are open to team
+ * members; CRM, Finance and Tools are admin-only.
  */
-export const coreRoutes = ({ isAdmin }: RouteContext) => {
-  const HomeEl = isAdmin ? <Dashboard /> : <EmployeeDashboard />;
-
-  const routes = [
-    <Route key="home" path="/dashboard" element={layout(HomeEl)} />,
+export const crmRoutes = ({ isAdmin, accessibleModules }: RouteContext) => {
+  const routes: JSX.Element[] = [
     <Route
-      key="clients"
-      path="/clients"
-      element={layout(isAdmin ? <Clients /> : <AssignedClients />)}
+      key="crm-overview"
+      path="/crm/overview"
+      element={layout(<CrmOverview />)}
     />,
+    // Delivery — accessible to both, with role-specific project views
     <Route
-      key="projects"
-      path="/projects"
+      key="crm-projects"
+      path="/crm/projects"
       element={layout(isAdmin ? <ModulePlaceholder /> : <MyProjectsList />)}
     />,
     <Route
-      key="project-detail"
-      path="/projects/:id"
+      key="crm-project-detail"
+      path="/crm/projects/:id"
       element={layout(isAdmin ? <ModulePlaceholder /> : <MyProjectDetail />)}
     />,
     <Route
-      key="settings"
-      path="/settings"
-      element={layout(isAdmin ? <Settings /> : <MySettings />)}
+      key="crm-mandates"
+      path="/crm/mandates"
+      element={layout(<Mandates />)}
     />,
-    // Tickets to the platform team (Super Admin)
+    <Route key="crm-tasks" path="/crm/tasks" element={layout(<Tasks />)} />,
     <Route
-      key="platform-support"
-      path="/support"
-      element={layout(<PlatformSupport />)}
+      key="crm-gantt"
+      path="/crm/gantt"
+      element={layout(<GanttPlanning />)}
     />,
-    // Notification centre — standalone, shared across every module
     <Route
-      key="notifications"
-      path="/notifications"
-      element={layout(<Notifications />)}
+      key="crm-time"
+      path="/crm/time"
+      element={layout(<TimeTracking />)}
+    />,
+    <Route
+      key="crm-service-desk"
+      path="/crm/service-desk"
+      element={layout(<ServiceDesk />)}
+    />,
+    <Route key="crm-adr" path="/crm/adr" element={layout(<Adr />)} />,
+    <Route
+      key="crm-litigation"
+      path="/crm/litigation"
+      element={layout(<Litigation />)}
+    />,
+    <Route
+      key="crm-litigation-detail"
+      path="/crm/litigation/:id"
+      element={layout(<Litigation />)}
     />,
   ];
 
-  if (isAdmin) {
+  if (isAdmin && accessibleModules?.includes("crm")) {
     routes.push(
+      // ── CRM ──────────────────────────────────────────────
       <Route
-        key="client-profile"
-        path="/clients/:id"
-        element={layout(<ClientProfile />)}
+        key="crm-pipeline"
+        path="/crm/pipeline"
+        element={layout(<Pipeline />)}
       />,
       <Route
-        key="onboarding"
-        path="/clients/onboarding"
-        element={layout(<ClientOnboarding />)}
+        key="crm-contacts"
+        path="/crm/contacts"
+        element={layout(<Contacts />)}
       />,
       <Route
-        key="onboarding-detail"
-        path="/clients/onboarding/:id"
-        element={layout(<OnboardingDetail />)}
+        key="crm-clients"
+        path="/crm/clients"
+        element={layout(<CrmClients />)}
       />,
+      <Route key="crm-sla" path="/crm/sla" element={layout(<Sla />)} />,
+      <Route
+        key="crm-vendors"
+        path="/crm/vendors"
+        element={layout(<Vendors />)}
+      />,
+      // ── Finance ──────────────────────────────────────────
+      <Route
+        key="crm-invoicing"
+        path="/crm/invoicing"
+        element={layout(<Invoicing />)}
+      />,
+      <Route key="crm-sales" path="/crm/sales" element={layout(<Sales />)} />,
+      <Route
+        key="crm-purchases"
+        path="/crm/purchases"
+        element={layout(<Purchases />)}
+      />,
+      <Route
+        key="crm-banking"
+        path="/crm/banking"
+        element={layout(<Banking />)}
+      />,
+      <Route key="crm-tax" path="/crm/tax" element={layout(<TaxPage />)} />,
+      <Route
+        key="crm-accounting"
+        path="/crm/accounting"
+        element={layout(<Accounting />)}
+      />,
+      <Route
+        key="crm-assets"
+        path="/crm/assets"
+        element={layout(<AssetRegister />)}
+      />,
+      <Route
+        key="crm-financials"
+        path="/crm/financials"
+        element={<Navigate to="/finance/report" replace />}
+      />,
+      <Route
+        key="crm-funds"
+        path="/crm/funds"
+        element={layout(<FundAccounting />)}
+      />,
+      <Route
+        key="crm-trust"
+        path="/crm/trust"
+        element={layout(<TrustAccounting />)}
+      />,
+      // ── Tools ────────────────────────────────────────────
+      <Route
+        key="crm-contracts"
+        path="/crm/contracts"
+        element={layout(<Contracts />)}
+      />,
+      <Route
+        key="crm-contract-detail"
+        path="/crm/contracts/:id"
+        element={layout(<ContractDetail />)}
+      />,
+      <Route
+        key="crm-newsletter"
+        path="/crm/newsletter"
+        element={layout(<Newsletter />)}
+      />,
+      <Route
+        key="crm-events"
+        path="/crm/events"
+        element={layout(<Events />)}
+      />,
+      <Route
+        key="crm-calendar"
+        path="/crm/calendar"
+        element={layout(<CrmCalendar />)}
+      />,
+
+      <Route
+        key="crm-reports"
+        path="/crm/reports"
+        element={layout(<Reports />)}
+      />,
+      <Route key="crm-pmo" path="/crm/pmo" element={layout(<Pmo />)} />,
+      <Route key="billing" path="/billing" element={layout(<Billing />)} />,
     );
   }
+
+  routes.push(
+    <Route
+      key="crm-fallback"
+      path="/crm/*"
+      element={layout(<ModulePlaceholder />)}
+    />,
+  );
 
   return routes;
 };

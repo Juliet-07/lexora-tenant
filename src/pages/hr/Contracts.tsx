@@ -846,18 +846,21 @@ function EditContractBodyDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="flex max-w-6xl flex-col gap-0 p-0 h-[88vh]">
-        <DialogHeader className="shrink-0 border-b px-6 py-4">
-          <DialogTitle>Edit Document</DialogTitle>
-          <DialogDescription>
-            {contract.status === "draft"
-              ? "Not sent yet — these changes are private until you send or issue it."
-              : "The signer's existing link keeps working — they'll see these updated terms next time they open it. No new email is sent automatically."}
-          </DialogDescription>
-        </DialogHeader>
+      <DialogContent className="flex max-w-[1390px] flex-col gap-0 p-0 h-[90vh]">
+        {/* Title + description on the left, Edit/Preview toggle on the right,
+            all on one line. pr-14 keeps the toggle clear of the close (X). */}
+        <DialogHeader className="shrink-0 flex-row items-center justify-between gap-4 space-y-0 border-b py-4 pl-6 pr-14 text-left">
+          <div className="min-w-0 space-y-1">
+            <DialogTitle>Edit Document</DialogTitle>
+            <DialogDescription>
+              {contract.status === "draft"
+                ? "Not sent yet — these changes are private until you send or issue it."
+                : "The signer's existing link keeps working — they'll see these updated terms next time they open it. No new email is sent automatically."}
+            </DialogDescription>
+          </div>
 
-        <div className="shrink-0 px-6 pt-3">
           <Tabs
+            className="shrink-0"
             value={mode}
             onValueChange={(v) => setMode(v as "edit" | "preview")}
           >
@@ -870,7 +873,7 @@ function EditContractBodyDialog({
               </TabsTrigger>
             </TabsList>
           </Tabs>
-        </div>
+        </DialogHeader>
 
         <div className="grid min-h-0 flex-1 gap-4 overflow-hidden px-6 py-4 lg:grid-cols-[minmax(0,1fr)_300px]">
           <div className="contract-doc min-h-0 overflow-y-auto">

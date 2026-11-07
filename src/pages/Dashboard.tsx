@@ -19,7 +19,7 @@ import {
   Zap,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { useModule } from "@/contexts/ModuleContext";
+import { useModule, type SubscriptionInfo } from "@/contexts/ModuleContext";
 import { MotivationalQuote } from "@/components/dashboard/MotivationalQuote";
 import { quickLinksFor } from "@/components/dashboard/moduleQuickLinks";
 import { useCrossModuleMetrics } from "@/components/dashboard/useCrossModuleMetrics";
@@ -27,35 +27,67 @@ import { ModulePulse } from "@/components/dashboard/ModulePulse";
 import { AttentionFeed } from "@/components/dashboard/AttentionFeed";
 import { TONE_TEXT, fmtScore, scoreTone } from "@/lib/grc/health-score-api";
 
-// ─── Trial banner ─────────────────────────────────────────────
-function TrialBanner({
-  trialEndsAt,
-  plan,
+// ─── Subscription expiry banner ───────────────────────────────
+// Shown while the subscription is inside the reminder window — the same
+// 7 / 3 / 1-day stages as the expiry emails (the server decides the stage).
+const EXPIRY_STYLE: Record<string, string> = {
+  notice: "border-warning/30 bg-warning/10 text-warning",
+  important: "border-warning/60 bg-warning/20 text-warning",
+  urgent: "border-destructive/40 bg-destructive/10 text-destructive",
+};
+const EXPIRY_BUTTON: Record<string, string> = {
+  notice: "border-warning/40 text-warning hover:bg-warning/20",
+  important: "border-warning/60 text-warning hover:bg-warning/30",
+  urgent: "border-destructive/40 text-destructive hover:bg-destructive/20",
+};
+
+function SubscriptionExpiryBanner({
+  subscription,
 }: {
-  trialEndsAt: string | null;
-  plan: string;
+  subscription: SubscriptionInfo | null;
 }) {
-  if (!trialEndsAt || plan !== "free") return null;
-  const daysLeft = Math.max(
-    0,
-    Math.ceil(
-      (new Date(trialEndsAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24),
-    ),
-  );
+  const expiry = subscription?.expiry;
+  if (!subscription || !expiry) return null;
+  const { daysLeft, stage, isTrial } = expiry;
+  const when =
+    daysLeft <= 0
+      ? "ends today"
+      : daysLeft === 1
+        ? "ends tomorrow"
+        : `ends in ${daysLeft} days`;
+  const date = new Date(expiry.expiresAt).toLocaleDateString(undefined, {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
   return (
-    <div className="flex flex-wrap items-center gap-3 rounded-xl border border-warning/30 bg-warning/10 p-4 text-sm text-warning">
-      <CalendarClock className="h-5 w-5 shrink-0" />
+    <div
+      role="status"
+      data-testid="subscription-expiry-banner"
+      data-stage={stage}
+      className={`flex flex-wrap items-center gap-3 rounded-xl border p-4 text-sm ${EXPIRY_STYLE[stage]}`}
+    >
+      {stage === "urgent" ? (
+        <AlertTriangle className="h-5 w-5 shrink-0" />
+      ) : (
+        <CalendarClock className="h-5 w-5 shrink-0" />
+      )}
       <span className="min-w-[200px] flex-1">
-        <strong>Free trial</strong> — {daysLeft} day{daysLeft !== 1 ? "s" : ""}{" "}
-        remaining. Upgrade your plan to keep full access.
+        <strong>{isTrial ? "Free trial" : "Your subscription"}</strong> {when} (
+        {date}).{" "}
+        {isTrial
+          ? "Upgrade your plan to keep full access."
+          : "Renew now to avoid losing access."}
       </span>
       <Button
         asChild
         size="sm"
         variant="outline"
-        className="border-warning/40 text-warning hover:bg-warning/20"
+        className={EXPIRY_BUTTON[stage]}
       >
-        <Link to="/settings?tab=plan">Upgrade plan</Link>
+        <Link to="/settings?tab=plan">
+          {isTrial ? "Upgrade plan" : "Renew now"}
+        </Link>
       </Button>
     </div>
   );
@@ -222,10 +254,7 @@ export default function Dashboard() {
         </div>
       </section>
 
-      <TrialBanner
-        trialEndsAt={subscription?.trialEndsAt ?? null}
-        plan={subscription?.plan ?? ""}
-      />
+      <SubscriptionExpiryBanner subscription={subscription} />
 
       {user?.mustChangePassword && (
         <div className="flex flex-wrap items-center gap-3 rounded-lg bg-destructive/10 p-3 text-sm text-destructive">

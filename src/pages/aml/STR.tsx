@@ -839,8 +839,8 @@ export default function STR() {
             Suspicious Transaction Reporting (STR)
           </h1>
           <p className="text-sm text-muted-foreground">
-            Generate and submit required regulatory reports to Rwanda FIC
-            Financial Intelligence Unit
+            Generate and submit required regulatory reports to your Financial
+            Intelligence Unit (FIC)
           </p>
         </div>
         <div className="flex gap-2">

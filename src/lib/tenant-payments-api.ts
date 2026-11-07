@@ -47,6 +47,16 @@ export const requestUpgrade = async (
   return res.data?.data ?? res.data;
 };
 
+// Renew the plan the tenant is already on — same invoice → proof of
+// payment → super-admin confirmation flow. The new month is added after
+// the current period ends, so renewing early never costs days.
+export const requestRenewal = async (
+  currency: "USD" | "RWF",
+): Promise<TenantTransaction> => {
+  const res = await api.post("/tenant/payments/request-renewal", { currency });
+  return res.data?.data ?? res.data;
+};
+
 // The tenant's own "I've made payment" declaration.
 export const markPaymentClaimed = async (
   transactionId: string,
