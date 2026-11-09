@@ -399,7 +399,7 @@ function TemplateFields({
             onChange={(v) => set("ctaLabel", v)}
           />
           <Field
-            label="Button URL"
+            label="Button URL (optional)"
             value={str("ctaUrl")}
             onChange={(v) => set("ctaUrl", v)}
             placeholder="https://…"
@@ -528,10 +528,10 @@ function TemplateFields({
             onChange={(v) => set("ctaLabel", v)}
           />
           <Field
-            label="Button URL *"
+            label="Button URL (optional)"
             value={str("ctaUrl")}
             onChange={(v) => set("ctaUrl", v)}
-            placeholder="https://…"
+            placeholder="https://… (leave empty to hide the button)"
           />
         </div>
         <div className="space-y-1">
@@ -620,7 +620,7 @@ function TemplateFields({
           onChange={(v) => set("ctaLabel", v)}
         />
         <Field
-          label="Button URL"
+          label="Button URL (optional)"
           value={str("ctaUrl")}
           onChange={(v) => set("ctaUrl", v)}
           placeholder="https://…"
@@ -854,7 +854,6 @@ const REQUIRED_LABEL: Record<string, string> = {
   intro: "Intro",
   sections: "At least one section",
   excerpt: "Excerpt",
-  ctaUrl: "Button URL",
   day: "Day",
   month: "Month",
 };

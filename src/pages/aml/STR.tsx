@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -84,6 +84,174 @@ function statusBadge(s: string) {
 }
 
 // ─────────────────────────────────────────────────────────────
+// SUBMIT TO FIC DIALOG — the tenant chooses which address the
+// report is emailed to. The engine only marks the STR submitted
+// once the email has actually gone out.
+// ─────────────────────────────────────────────────────────────
+
+const FIC_EMAIL_KEY = "str.lastFicRecipient";
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function readLastFicEmail(): string {
+  try {
+    return localStorage.getItem(FIC_EMAIL_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+export interface FicTarget {
+  _id: string;
+  strId: string;
+  customerName: string;
+  amount: number;
+  currency: string;
+  ficRecipientEmail?: string | null;
+}
+
+function SubmitToFicDialog({
+  target,
+  onClose,
+  onSubmitted,
+}: {
+  target: FicTarget | null;
+  onClose: () => void;
+  onSubmitted: () => void;
+}) {
+  const { toast } = useToast();
+  const [email, setEmail] = useState("");
+  const [note, setNote] = useState("");
+  const [error, setError] = useState("");
+
+  // Reset whenever a different report is opened.
+  useEffect(() => {
+    if (target) {
+      setEmail(target.ficRecipientEmail || readLastFicEmail());
+      setNote("");
+      setError("");
+    }
+  }, [target?._id]);
+
+  const mutation = useMutation({
+    mutationFn: () =>
+      submitStr(target!._id, {
+        recipientEmail: email.trim(),
+        message: note.trim() || undefined,
+      }),
+    onSuccess: (data) => {
+      try {
+        localStorage.setItem(FIC_EMAIL_KEY, email.trim());
+      } catch {
+        /* storage unavailable — just don't remember it */
+      }
+      toast({ title: "STR submitted", description: data.message });
+      onSubmitted();
+    },
+    onError: (err: any) => {
+      const m = err?.response?.data?.message;
+      setError(
+        (Array.isArray(m) ? m.join(", ") : m) ||
+          "Could not submit the STR. Please try again.",
+      );
+    },
+  });
+
+  const send = () => {
+    if (!EMAIL_RE.test(email.trim())) {
+      setError("Enter a valid email address to send the report to.");
+      return;
+    }
+    setError("");
+    mutation.mutate();
+  };
+
+  return (
+    <Dialog
+      open={!!target}
+      onOpenChange={(o) => {
+        if (!o && !mutation.isPending) onClose();
+      }}
+    >
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Submit to FIC</DialogTitle>
+          <DialogDescription>
+            {target
+              ? `${target.strId} · ${target.customerName} · ${target.currency} ${Number(target.amount).toLocaleString()}`
+              : ""}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="space-y-1">
+            <Label htmlFor="fic-email">Send the report to *</Label>
+            <Input
+              id="fic-email"
+              type="email"
+              autoComplete="off"
+              placeholder="e.g. reports@fic.example"
+              value={email}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                setError("");
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !mutation.isPending) send();
+              }}
+            />
+            <p className="text-xs text-muted-foreground">
+              The email address you want to submit this report to. The goAML XML
+              file is attached to the email.
+            </p>
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="fic-note">Cover note (optional)</Label>
+            <Textarea
+              id="fic-note"
+              rows={3}
+              placeholder="Anything you want the recipient to read first…"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              maxLength={2000}
+            />
+          </div>
+          {error && (
+            <p
+              role="alert"
+              className="flex items-start gap-1.5 rounded-md border border-destructive/30 bg-destructive/10 p-2 text-xs text-destructive"
+            >
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              {error}
+            </p>
+          )}
+        </div>
+        <DialogFooter className="gap-2">
+          <Button
+            variant="outline"
+            disabled={mutation.isPending}
+            onClick={onClose}
+          >
+            Cancel
+          </Button>
+          <Button
+            className="bg-gradient-to-r from-primary to-secondary"
+            disabled={mutation.isPending}
+            onClick={send}
+          >
+            {mutation.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <>
+                <Send className="h-4 w-4 mr-1" /> Send to FIC
+              </>
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
 // NEW / EDIT STR DIALOG
 // ─────────────────────────────────────────────────────────────
 
@@ -132,6 +300,10 @@ function StrFormDialog({
 
   const set = (k: string, v: string) => setForm((p) => ({ ...p, [k]: v }));
 
+  // After "Submit to FIC" the STR is saved and this popup collects the
+  // address to email it to.
+  const [ficTarget, setFicTarget] = useState<FicTarget | null>(null);
+
   const validate = () => {
     if (
       !form.clientId ||
@@ -166,15 +338,23 @@ function StrFormDialog({
         additionalInformation: form.additionalInformation || undefined,
         saveAsDraft,
       }),
-    onSuccess: (_, saveAsDraft) => {
-      toast({
-        title: saveAsDraft ? "Saved as draft" : "STR moved to pending review",
-        description: saveAsDraft
-          ? "You can continue editing and submit later."
-          : "A compliance officer will review before submission.",
-      });
+    onSuccess: (saved, saveAsDraft) => {
       onSaved();
-      onClose();
+      if (saveAsDraft) {
+        toast({
+          title: "Saved as draft",
+          description: "You can continue editing and submit later.",
+        });
+        onClose();
+        return;
+      }
+      setFicTarget({
+        _id: saved._id,
+        strId: saved.strId,
+        customerName: saved.customerName,
+        amount: saved.amount,
+        currency: saved.currency,
+      });
     },
     onError: (err: any) =>
       toast({
@@ -225,7 +405,7 @@ function StrFormDialog({
             {isEdit ? "Edit STR" : "New Suspicious Transaction Report"}
           </DialogTitle>
           <DialogDescription>
-            Submit to Rwanda FIC Financial Intelligence Unit. All starred fields
+            Report to the Financial Intelligence Unit (FIC). All starred fields
             are required.
           </DialogDescription>
         </DialogHeader>
@@ -437,7 +617,7 @@ function StrFormDialog({
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
                   <>
-                    <Send className="h-4 w-4 mr-1" /> Submit to Rwanda FIC
+                    <Send className="h-4 w-4 mr-1" /> Submit to FIC
                   </>
                 )}
               </Button>
@@ -445,6 +625,24 @@ function StrFormDialog({
           )}
         </DialogFooter>
       </DialogContent>
+      <SubmitToFicDialog
+        target={ficTarget}
+        onClose={() => {
+          // The report is already saved; leaving the popup keeps it as
+          // "pending review" so it can be submitted from the list.
+          toast({
+            title: "STR saved — not yet submitted",
+            description: "Use Submit on the list when you're ready to send it.",
+          });
+          setFicTarget(null);
+          onClose();
+        }}
+        onSubmitted={() => {
+          setFicTarget(null);
+          onSaved();
+          onClose();
+        }}
+      />
     </Dialog>
   );
 }
@@ -464,30 +662,7 @@ function ViewStrDialog({
   const [open, setOpen] = useState(false);
   const [ackRef, setAckRef] = useState("");
 
-  const submitMutation = useMutation({
-    mutationFn: () => submitStr(str._id),
-    onSuccess: (data) => {
-      toast({
-        title: "STR submitted",
-        description: data.message,
-      });
-      // Auto-trigger XML download
-      const blob = new Blob([data.xml], { type: "application/xml" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${str.strId}-goAML.xml`;
-      a.click();
-      URL.revokeObjectURL(url);
-      onUpdated();
-    },
-    onError: (err: any) =>
-      toast({
-        title: "Failed",
-        description: err?.response?.data?.message,
-        variant: "destructive",
-      }),
-  });
+  const [ficOpen, setFicOpen] = useState(false);
 
   const ackMutation = useMutation({
     mutationFn: () => acknowledgeStr(str._id, ackRef || undefined),
@@ -671,8 +846,8 @@ function ViewStrDialog({
                   <span className="text-muted-foreground">FIC email:</span>
                   <span>
                     {str.ficEmailSent
-                      ? `Sent ${str.ficEmailSentAt ? new Date(str.ficEmailSentAt).toLocaleString() : ""}`
-                      : "Not sent — FIC email isn't configured"}
+                      ? `Sent${str.ficRecipientEmail ? ` to ${str.ficRecipientEmail}` : ""} ${str.ficEmailSentAt ? new Date(str.ficEmailSentAt).toLocaleString() : ""}`
+                      : "Not emailed — submitted before email sending was set up"}
                   </span>
                 </div>
               )}
@@ -682,7 +857,7 @@ function ViewStrDialog({
             {str.status === "submitted" && (
               <div className="space-y-2 p-3 rounded-lg border border-info/30 bg-info/5">
                 <p className="text-xs font-medium text-info">
-                  Mark as acknowledged by Rwanda FIC
+                  Mark as acknowledged by the FIC
                 </p>
                 <Input
                   placeholder="goAML reference number (optional)"
@@ -711,20 +886,13 @@ function ViewStrDialog({
               Close
             </Button>
 
-            {/* Submit — for pending_review status */}
-            {str.status === "pending_review" && (
+            {/* Submit — drafts and reports pending review */}
+            {(str.status === "pending_review" || str.status === "draft") && (
               <Button
                 className="bg-gradient-to-r from-primary to-secondary"
-                disabled={submitMutation.isPending}
-                onClick={() => submitMutation.mutate()}
+                onClick={() => setFicOpen(true)}
               >
-                {submitMutation.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <>
-                    <Send className="h-4 w-4 mr-1" /> Submit to Rwanda FIC
-                  </>
-                )}
+                <Send className="h-4 w-4 mr-1" /> Submit to FIC
               </Button>
             )}
 
@@ -752,6 +920,16 @@ function ViewStrDialog({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <SubmitToFicDialog
+        target={ficOpen ? str : null}
+        onClose={() => setFicOpen(false)}
+        onSubmitted={() => {
+          setFicOpen(false);
+          setOpen(false);
+          onUpdated();
+        }}
+      />
     </>
   );
 }
@@ -801,32 +979,8 @@ export default function STR() {
     staleTime: 30_000,
   });
 
-  // Submit mutation (from list row — for drafts going to pending)
-  const submitMutation = useMutation({
-    mutationFn: (id: string) => submitStr(id),
-    onSuccess: (data) => {
-      toast({
-        title: data.ficEmailSent
-          ? "STR submitted to Rwanda FIC"
-          : "STR submitted",
-        description: data.message,
-      });
-      const blob = new Blob([data.xml], { type: "application/xml" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${data.strId}-goAML.xml`;
-      a.click();
-      URL.revokeObjectURL(url);
-      invalidate();
-    },
-    onError: (err: any) =>
-      toast({
-        title: "Failed",
-        description: err?.response?.data?.message,
-        variant: "destructive",
-      }),
-  });
+  // Submit to FIC popup (from a list row)
+  const [ficTarget, setFicTarget] = useState<FicTarget | null>(null);
 
   const strs = strList?.items ?? [];
 
@@ -1027,20 +1181,14 @@ export default function STR() {
                             </button>
                           )}
 
-                          {/* Submit — pending_review */}
-                          {r.status === "pending_review" && (
+                          {/* Submit to FIC — drafts and pending review */}
+                          {(r.status === "pending_review" ||
+                            r.status === "draft") && (
                             <button
-                              className="text-primary hover:underline inline-flex items-center gap-1 disabled:opacity-50"
-                              disabled={submitMutation.isPending}
-                              onClick={() => submitMutation.mutate(r._id)}
+                              className="text-primary hover:underline inline-flex items-center gap-1"
+                              onClick={() => setFicTarget(r)}
                             >
-                              {submitMutation.isPending ? (
-                                <Loader2 className="h-3 w-3 animate-spin" />
-                              ) : (
-                                <>
-                                  <Send className="h-3 w-3" /> Submit
-                                </>
-                              )}
+                              <Send className="h-3 w-3" /> Submit to FIC
                             </button>
                           )}
 
@@ -1106,6 +1254,15 @@ export default function STR() {
           prefill={draft}
         />
       )}
+
+      <SubmitToFicDialog
+        target={ficTarget}
+        onClose={() => setFicTarget(null)}
+        onSubmitted={() => {
+          setFicTarget(null);
+          invalidate();
+        }}
+      />
 
       {/* Edit STR Dialog */}
       {editStr && (

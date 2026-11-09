@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { MergeFieldsPanel } from "@/components/crm/MergeFieldsPanel";
+import ContractVariations from "@/components/crm/ContractVariations";
 import { hasBareTokens } from "@/lib/crm/merge-fields";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -64,7 +65,6 @@ import {
   toggleAutoRenew,
   addNegotiationRound,
   updateClauseChangeStatus,
-  addAmendment,
   addObligation,
   setObligationDone,
   sendContractForSignature,
@@ -307,16 +307,6 @@ export default function ContractDetail() {
     onSuccess: invalidate,
     onError: onErr("Could not update change"),
   });
-  const amendMut = useMutation({
-    // The engine assigns the reference (AMD-01, AMD-02, …) and the date.
-    mutationFn: () => addAmendment(id, { summary: amendForm.summary.trim() }),
-    onSuccess: () => {
-      setAmendOpen(false);
-      setAmendForm({ summary: "" });
-      ok("Amendment added")();
-    },
-    onError: onErr("Could not add amendment"),
-  });
   const obligationMut = useMutation({
     mutationFn: () => addObligation(id, obForm),
     onSuccess: () => {
@@ -416,8 +406,6 @@ export default function ContractDetail() {
     summary: "",
   });
   const [roundChanges, setRoundChanges] = useState([{ ...emptyChangeRow }]);
-  const [amendOpen, setAmendOpen] = useState(false);
-  const [amendForm, setAmendForm] = useState({ summary: "" });
   const [obOpen, setObOpen] = useState(false);
   const [obForm, setObForm] = useState<{
     label: string;
@@ -483,13 +471,13 @@ export default function ContractDetail() {
   );
   const stageIndex = CONTRACT_STAGES.indexOf(contract.stage);
   const currentVersion = contract.amendments.length + 1;
-  // Matches the engine (addAmendment): a contract can only be amended while
-  // it is in force. Earlier stages are edited directly / negotiated; after
+  // Matches the engine (createVariation): a contract can only be varied
+  // once it has been executed and is in force. Earlier stages are edited directly / negotiated; after
   // expiry or termination there is nothing left to vary.
   const canAmend = contract.stage === "Active" || contract.stage === "Renewal";
   const amendBlockedReason =
     contract.stage === "Expiry / Termination"
-      ? "This contract has expired or been terminated, so it can no longer be amended."
+      ? "This contract has expired or been terminated, so it can no longer be varied."
       : "Amendments apply once the contract is executed and Active. Until then, change it in the Editor or log a negotiation round.";
   // Matches the backend's own guard exactly (editRenderedBody):
   // editable while Not Sent or Sent, locked once Signed,
@@ -1693,54 +1681,12 @@ export default function ContractDetail() {
 
         {/* ══ AMENDMENTS ══ */}
         <TabsContent value="amendments" className="space-y-4 pt-4">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-semibold">
-                Amendments &amp; variations
-              </h2>
-              <p className="text-sm text-muted-foreground">
-                Formal changes to the executed contract.
-              </p>
-            </div>
-            <Button
-              size="sm"
-              disabled={!canAmend}
-              title={canAmend ? undefined : amendBlockedReason}
-              onClick={() => setAmendOpen(true)}
-            >
-              <Plus className="mr-2 h-4 w-4" /> New amendment
-            </Button>
-          </div>
-          {!canAmend && (
-            <p className="rounded-md border border-dashed bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-              {amendBlockedReason}
-            </p>
-          )}
-          {contract.amendments.length ? (
-            <div className="space-y-2">
-              {contract.amendments.map((a) => (
-                <Card key={a._id}>
-                  <CardContent className="flex flex-wrap items-start justify-between gap-3 p-4">
-                    <div>
-                      <Badge variant="secondary">{a.ref}</Badge>
-                      <p className="mt-1 text-sm font-medium">{a.summary}</p>
-                    </div>
-                    <span className="text-xs text-muted-foreground">
-                      {fmt(a.at)}
-                    </span>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          ) : (
-            <Card className="border-dashed">
-              <CardContent className="p-8 text-center text-sm text-muted-foreground">
-                {canAmend
-                  ? "No amendments yet."
-                  : "No amendments. They can be added once the contract is Active."}
-              </CardContent>
-            </Card>
-          )}
+          <ContractVariations
+            contract={contract}
+            canVary={canAmend}
+            blockedReason={amendBlockedReason}
+            onChanged={invalidate}
+          />
         </TabsContent>
 
         {/* ══ RENEWALS ══ */}
@@ -2029,41 +1975,6 @@ export default function ContractDetail() {
               onClick={() => roundMut.mutate()}
             >
               Log round
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={amendOpen} onOpenChange={setAmendOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>New amendment</DialogTitle>
-          </DialogHeader>
-          <div className="grid gap-3">
-            <p className="text-xs text-muted-foreground">
-              Recorded as{" "}
-              <b>
-                AMD-{String(contract.amendments.length + 1).padStart(2, "0")}
-              </b>{" "}
-              and dated today.
-            </p>
-            <div>
-              <Label>What is being changed, and why</Label>
-              <Textarea
-                rows={3}
-                value={amendForm.summary}
-                onChange={(e) =>
-                  setAmendForm({ ...amendForm, summary: e.target.value })
-                }
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button
-              disabled={!amendForm.summary.trim() || amendMut.isPending}
-              onClick={() => amendMut.mutate()}
-            >
-              Add amendment
             </Button>
           </DialogFooter>
         </DialogContent>

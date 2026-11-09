@@ -63,6 +63,51 @@ export interface ContractAmendment {
   at: string;
   summary: string;
 }
+// ── Variations: amendments, addenda, side letters, waivers, extensions ──
+export type VariationType =
+  | "amendment"
+  | "addendum"
+  | "side_letter"
+  | "waiver"
+  | "extension";
+export type VariationStatus = "draft" | "review" | "approved" | "executed";
+export type VariationAction = "amend" | "clarify" | "waive";
+export interface VariationClause {
+  _id?: string;
+  ref: string;
+  title: string;
+  action: VariationAction;
+  original: string;
+  amended: string;
+}
+export interface VariationAddendumClause {
+  _id?: string;
+  ref: string;
+  title: string;
+  text: string;
+}
+export interface ContractVariation {
+  _id: string;
+  ref: string;
+  type: VariationType;
+  title: string;
+  status: VariationStatus;
+  reason: string;
+  effectiveDate: string | null;
+  clauses: VariationClause[];
+  addendumClauses: VariationAddendumClause[];
+  createdBy: string;
+  approvedBy: string | null;
+  executedBy: string | null;
+  executedDate: string | null;
+  createdAt: string;
+  history: { at: string; user: string; action: string }[];
+}
+export interface ContractClause {
+  ref: string;
+  title: string;
+  text: string;
+}
 export interface ConditionPrecedent {
   _id: string;
   label: string;
@@ -114,6 +159,7 @@ export interface Contract {
   rounds: NegotiationRound[];
   obligations: ContractObligation[];
   amendments: ContractAmendment[];
+  variations: ContractVariation[];
   // ── Governance panel — real, tenant-entered fields ──
   governingLaw: string;
   adrClause: string;
@@ -155,6 +201,7 @@ export const fetchContract = async (id: string): Promise<SignableContract> => {
     interactions: d.interactions ?? [],
     obligations: d.obligations ?? [],
     amendments: d.amendments ?? [],
+    variations: d.variations ?? [],
     approvalChain: d.approvalChain ?? [],
   };
 };
@@ -242,11 +289,47 @@ export const updateClauseChangeStatus = async (
       { status },
     ),
   );
-export const addAmendment = async (
+export const fetchContractClauses = async (
   id: string,
-  dto: { summary: string; newBody?: string },
-): Promise<SignableContract> =>
-  unwrap(await api.post(`/tools/contracts/${id}/amendments`, dto));
+): Promise<{ clauses: ContractClause[]; canVary: boolean }> =>
+  unwrap(await api.get(`/tools/contracts/${id}/clauses`));
+export interface VariationInput {
+  title: string;
+  reason?: string;
+  effectiveDate?: string;
+  clauses?: { ref: string; amended: string }[];
+  addendumClauses?: { ref?: string; title: string; text: string }[];
+}
+export const createVariation = async (
+  id: string,
+  dto: VariationInput & { type: VariationType; submit?: boolean },
+): Promise<ContractVariation> =>
+  unwrap(await api.post(`/tools/contracts/${id}/variations`, dto));
+export const updateVariation = async (
+  id: string,
+  ref: string,
+  dto: Partial<VariationInput>,
+): Promise<ContractVariation> =>
+  unwrap(await api.patch(`/tools/contracts/${id}/variations/${ref}`, dto));
+export const advanceVariation = async (
+  id: string,
+  ref: string,
+  to: VariationStatus,
+): Promise<ContractVariation> =>
+  unwrap(
+    await api.post(`/tools/contracts/${id}/variations/${ref}/advance`, { to }),
+  );
+export const deleteVariation = async (id: string, ref: string) =>
+  unwrap(await api.delete(`/tools/contracts/${id}/variations/${ref}`));
+export const fetchVariationDocument = async (
+  id: string,
+  mode: "current" | "original" | "redline",
+): Promise<{ mode: string; html: string; executedCount: number }> =>
+  unwrap(
+    await api.get(`/tools/contracts/${id}/variations/document`, {
+      params: { mode },
+    }),
+  );
 export const addObligation = async (
   id: string,
   dto: { label: string; due: string; type: ObligationType; leadDays?: number },

@@ -448,6 +448,7 @@ export interface Str {
   behavioralContext: BehavioralProfile | null;
   ficEmailSent: boolean;
   ficEmailSentAt: string | null;
+  ficRecipientEmail?: string | null;
   createdAt: string;
 }
 
@@ -499,16 +500,20 @@ export const updateStr = async (
   return res.data?.data ?? res.data;
 };
 
+// Emails the STR (goAML XML attached) to `recipientEmail` and, only if
+// the email went out, marks it submitted.
 export const submitStr = async (
   strId: string,
+  body: { recipientEmail: string; message?: string },
 ): Promise<{
   success: boolean;
   message: string;
   strId: string;
   ficEmailSent: boolean;
+  recipientEmail: string;
   xml: string;
 }> => {
-  const res = await api.post(`/kyc/str/${strId}/submit`);
+  const res = await api.post(`/kyc/str/${strId}/submit`, body);
   return res.data?.data ?? res.data;
 };
 
