@@ -25,7 +25,7 @@ export default function PartiesSection({ deal }: { deal: Deal }) {
     queryClient.invalidateQueries({ queryKey: ["deal", deal._id] });
   const parties = deal.parties ?? [];
   const [f, setF] = useState({
-    side: "Buyer" as DealPartySide,
+    side: "Party A" as DealPartySide,
     title: "",
     name: "",
     email: "",
@@ -36,7 +36,7 @@ export default function PartiesSection({ deal }: { deal: Deal }) {
     mutationFn: () => addParty(deal._id, f),
     onSuccess: () => {
       invalidate();
-      setF({ side: "Buyer", title: "", name: "", email: "", phone: "" });
+      setF({ side: "Party A", title: "", name: "", email: "", phone: "" });
     },
     onError: (err: any) =>
       toast.error(err?.response?.data?.message ?? "Failed to add party"),
@@ -57,7 +57,7 @@ export default function PartiesSection({ deal }: { deal: Deal }) {
   const SideColumn = ({ side }: { side: DealPartySide }) => (
     <div className="space-y-2">
       <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-        {side} side
+        {side}
       </div>
       {bySide(side).map((p) => (
         <div key={p.index} className="border rounded-md p-2.5 space-y-1.5">
@@ -112,7 +112,7 @@ export default function PartiesSection({ deal }: { deal: Deal }) {
       ))}
       {bySide(side).length === 0 && (
         <div className="text-xs text-muted-foreground">
-          No {side.toLowerCase()}-side parties yet.
+          No {side} parties yet.
         </div>
       )}
     </div>
@@ -121,8 +121,8 @@ export default function PartiesSection({ deal }: { deal: Deal }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <SideColumn side="Buyer" />
-        <SideColumn side="Seller" />
+        <SideColumn side="Party A" />
+        <SideColumn side="Party B" />
       </div>
       <div className="border-t pt-3 grid grid-cols-2 md:grid-cols-6 gap-2 items-end">
         <Select
@@ -133,8 +133,8 @@ export default function PartiesSection({ deal }: { deal: Deal }) {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="Buyer">Buyer</SelectItem>
-            <SelectItem value="Seller">Seller</SelectItem>
+            <SelectItem value="Party A">Party A</SelectItem>
+            <SelectItem value="Party B">Party B</SelectItem>
           </SelectContent>
         </Select>
         <Input

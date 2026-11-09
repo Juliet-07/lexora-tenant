@@ -41,11 +41,14 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { RichTextEditor } from "@/components/RichTextEditor";
 import { useAuth } from "@/contexts/AuthContext";
+import ContractVariations from "@/components/crm/ContractVariations";
+import DealContractRedline from "@/components/grc/DealContractRedline";
 import {
   addContractComment,
   addRedline,
   deleteContract,
   downloadContractPdf,
+  dealVariationApi,
   downloadRedlinedContractPdf,
   fetchContractPdfBlob,
   removeContractSection,
@@ -158,6 +161,29 @@ export function DealContractDialog({
     onError: () => toast.error("Failed to load the PDF preview"),
   });
 
+  const pendingChanges = (contract?.sections ?? []).reduce(
+    (n, s) =>
+      n + (s.changes ?? []).filter((c) => c.status === "pending").length,
+    0,
+  );
+  // The amendments screen is shared with Contract Management; a deal's two
+  // sides are Party A and Party B.
+  const variationApi = useMemo(
+    () => (contract ? dealVariationApi(deal._id, contract._id) : null),
+    [deal._id, contract?._id], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+  const variationSubject = useMemo(
+    () => ({
+      _id: contract?._id ?? "",
+      title: contract?.name ?? "",
+      ref: contract?.reference ?? "",
+      counterparty: "Party B",
+      tenantBusinessName: "Party A",
+      variations: contract?.variations ?? [],
+      amendments: [],
+    }),
+    [contract?._id, contract?.name, contract?.reference, contract?.variations],
+  );
   const fields = useMemo(() => contract?.fields ?? [], [contract?.fields]);
   const missing = fields.filter((f) => !f.filled);
   const labels = useMemo(
@@ -266,6 +292,14 @@ export function DealContractDialog({
                     <PenSquare className="mr-1.5 h-3.5 w-3.5" />
                     Edit ({contract.sections.length})
                   </TabsTrigger>
+                  <TabsTrigger value="redline">
+                    Redline
+                    {pendingChanges > 0 && (
+                      <span className="ml-1.5 rounded-full bg-rose-500/15 px-1.5 text-[11px] text-rose-600">
+                        {pendingChanges}
+                      </span>
+                    )}
+                  </TabsTrigger>
                   <TabsTrigger value="fields">
                     Fields
                     {missing.length > 0 && (
@@ -277,6 +311,11 @@ export function DealContractDialog({
                   <TabsTrigger value="review">
                     Review ({contract.reviewLoop?.responses?.length ?? 0})
                   </TabsTrigger>
+                  {!isTermSheet && (
+                    <TabsTrigger value="amendments">
+                      Amendments ({contract.variations?.length ?? 0})
+                    </TabsTrigger>
+                  )}
                 </TabsList>
               </DialogHeader>
 
@@ -299,6 +338,13 @@ export function DealContractDialog({
                     onChanged={invalidate}
                   />
                 </TabsContent>
+                <TabsContent value="redline" className="m-0 p-6">
+                  <DealContractRedline
+                    deal={deal}
+                    contract={contract}
+                    onChanged={invalidate}
+                  />
+                </TabsContent>
                 <TabsContent value="fields" className="m-0 p-6">
                   <FieldsTab
                     deal={deal}
@@ -309,6 +355,17 @@ export function DealContractDialog({
                 <TabsContent value="review" className="m-0 p-6">
                   <ReviewTab contract={contract} docName={docName} />
                 </TabsContent>
+                {!isTermSheet && (
+                  <TabsContent value="amendments" className="m-0 p-6">
+                    <ContractVariations
+                      contract={variationSubject}
+                      api={variationApi ?? undefined}
+                      canVary={!!contract.executed}
+                      blockedReason="Amendments and other variations apply once the contract has been executed — when every signatory has signed on the Signing tab, or the deal has moved past Signing. Until then, edit the contract itself."
+                      onChanged={invalidate}
+                    />
+                  </TabsContent>
+                )}
               </div>
             </Tabs>
           )}
@@ -537,6 +594,8 @@ function EditTab({
   const [redlineLine, setRedlineLine] = useState<number | null>(null);
   const [redlineText, setRedlineText] = useState("");
   const [removeIdx, setRemoveIdx] = useState<number | null>(null);
+  // Once executed, the text is changed only by a variation.
+  const locked = !!contract.executed;
 
   const bodyMut = useMutation({
     mutationFn: ({ index, body }: { index: number; body: string }) =>
@@ -596,6 +655,12 @@ function EditTab({
 
   return (
     <div className="mx-auto max-w-4xl space-y-3">
+      {locked && (
+        <p className="rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs">
+          This contract has been executed, so its text can no longer be edited
+          directly. Use the <b>Amendments</b> tab to vary it.
+        </p>
+      )}
       <p className="rounded-md border bg-background px-3 py-2 text-xs text-muted-foreground">
         Merge fields appear as <code>{"{{field}}"}</code> while you edit and are
         filled in from the <b>Fields</b> tab — change a value there and it
@@ -625,6 +690,7 @@ function EditTab({
               <Button
                 size="icon"
                 variant="ghost"
+                disabled={locked}
                 aria-label={`Remove section ${s.title}`}
                 onClick={() => setRemoveIdx(i)}
               >
@@ -633,10 +699,17 @@ function EditTab({
             </div>
           </div>
 
-          <SectionBody
-            value={s.body}
-            onSave={(body) => bodyMut.mutateAsync({ index: i, body })}
-          />
+          {locked ? (
+            <div
+              className={DOC_CLASSES}
+              dangerouslySetInnerHTML={{ __html: s.renderedBody ?? s.body }}
+            />
+          ) : (
+            <SectionBody
+              value={s.body}
+              onSave={(body) => bodyMut.mutateAsync({ index: i, body })}
+            />
+          )}
 
           <div className="mt-1 border-t pt-2">
             <p className="mb-1 text-xs font-medium text-muted-foreground">

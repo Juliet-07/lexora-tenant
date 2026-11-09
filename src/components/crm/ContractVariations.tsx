@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -49,17 +49,66 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
-  advanceVariation,
-  createVariation,
-  deleteVariation,
-  fetchContractClauses,
-  fetchVariationDocument,
-  updateVariation,
+  advanceVariation as crmAdvance,
+  createVariation as crmCreate,
+  deleteVariation as crmDelete,
+  fetchContractClauses as crmClauses,
+  fetchVariationDocument as crmDocument,
+  updateVariation as crmUpdate,
+  type ContractAmendment,
+  type ContractClause,
   type ContractVariation,
   type SignableContract,
+  type VariationInput,
   type VariationStatus,
   type VariationType,
 } from "@/lib/crm/tools-api";
+
+// What the screen needs to know about the contract being varied. A CRM
+// contract (SignableContract) fits this, and so does a contract inside a
+// deal — which is why the same screen serves both.
+export interface VariationSubject {
+  _id: string;
+  title: string;
+  ref: string;
+  counterparty: string;
+  tenantBusinessName?: string;
+  variations: ContractVariation[];
+  /** Amendments logged before variations existed (none on a deal). */
+  amendments: ContractAmendment[];
+}
+
+// Where the screen reads and writes. The default is Contract Management;
+// a deal contract passes its own.
+export interface VariationApi {
+  clauses: () => Promise<{ clauses: ContractClause[]; canVary: boolean }>;
+  create: (
+    dto: VariationInput & { type: VariationType; submit?: boolean },
+  ) => Promise<ContractVariation>;
+  update: (
+    ref: string,
+    dto: Partial<VariationInput>,
+  ) => Promise<ContractVariation>;
+  advance: (ref: string, to: VariationStatus) => Promise<ContractVariation>;
+  remove: (ref: string) => Promise<unknown>;
+  document: (
+    mode: "current" | "original" | "redline",
+  ) => Promise<{ mode: string; html: string; executedCount: number }>;
+}
+export const crmVariationApi = (id: string): VariationApi => ({
+  clauses: () => crmClauses(id),
+  create: (dto) => crmCreate(id, dto),
+  update: (ref, dto) => crmUpdate(id, ref, dto),
+  advance: (ref, to) => crmAdvance(id, ref, to),
+  remove: (ref) => crmDelete(id, ref),
+  document: (mode) => crmDocument(id, mode),
+});
+const ApiContext = createContext<VariationApi | null>(null);
+const useVariationApi = () => {
+  const api = useContext(ApiContext);
+  if (!api) throw new Error("ContractVariations API missing");
+  return api;
+};
 
 // ─────────────────────────────────────────────────────────────
 // Types of variation (labels, descriptions and reference prefixes
@@ -185,7 +234,7 @@ const para = (s: string) =>
     .map((p) => `<p>${p.replace(/\n/g, "<br/>")}</p>`)
     .join("");
 
-function exportVariation(contract: SignableContract, v: ContractVariation) {
+function exportVariation(contract: VariationSubject, v: ContractVariation) {
   const t = typeInfo(v.type);
   const clauses = v.clauses
     .map(
@@ -247,11 +296,12 @@ function DocumentDialog({
   onClose,
   initialMode,
 }: {
-  contract: SignableContract;
+  contract: VariationSubject;
   open: boolean;
   onClose: () => void;
   initialMode: DocMode;
 }) {
+  const api = useVariationApi();
   const [mode, setMode] = useState<DocMode>(initialMode);
   useEffect(() => {
     if (open) setMode(initialMode);
@@ -261,7 +311,7 @@ function DocumentDialog({
   ).length;
   const q = useQuery({
     queryKey: ["variation-doc", contract._id, mode, executed],
-    queryFn: () => fetchVariationDocument(contract._id, mode),
+    queryFn: () => api.document(mode),
     enabled: open,
   });
   return (
@@ -343,13 +393,14 @@ function VariationForm({
   onClose,
   onSaved,
 }: {
-  contract: SignableContract;
+  contract: VariationSubject;
   open: boolean;
   editing: ContractVariation | null;
   nextRefFor: (t: VariationType) => string;
   onClose: () => void;
   onSaved: (v: ContractVariation, submitted: boolean) => void;
 }) {
+  const api = useVariationApi();
   const { toast } = useToast();
   const [step, setStep] = useState<1 | 2>(1);
   const [type, setType] = useState<VariationType>("amendment");
@@ -366,7 +417,7 @@ function VariationForm({
 
   const clausesQ = useQuery({
     queryKey: ["contract-clauses", contract._id],
-    queryFn: () => fetchContractClauses(contract._id),
+    queryFn: () => api.clauses(),
     enabled: open,
     staleTime: 0,
     gcTime: 0,
@@ -436,13 +487,13 @@ function VariationForm({
           };
       let v: ContractVariation;
       if (editing) {
-        v = await updateVariation(contract._id, editing.ref, {
+        v = await api.update(editing.ref, {
           ...common,
           ...body,
         });
-        if (submit) v = await advanceVariation(contract._id, v.ref, "review");
+        if (submit) v = await api.advance(v.ref, "review");
       } else {
-        v = await createVariation(contract._id, {
+        v = await api.create({
           type,
           ...common,
           ...body,
@@ -857,18 +908,18 @@ function DetailSheet({
   onPreview,
   onChanged,
 }: {
-  contract: SignableContract;
+  contract: VariationSubject;
   variation: ContractVariation | null;
   onClose: () => void;
   onEdit: (v: ContractVariation) => void;
   onPreview: () => void;
   onChanged: () => void;
 }) {
+  const api = useVariationApi();
   const { toast } = useToast();
   const [confirmDelete, setConfirmDelete] = useState(false);
   const advance = useMutation({
-    mutationFn: (to: VariationStatus) =>
-      advanceVariation(contract._id, variation!.ref, to),
+    mutationFn: (to: VariationStatus) => api.advance(variation!.ref, to),
     onSuccess: (v) => {
       const msg = {
         draft: "Returned to draft",
@@ -887,7 +938,7 @@ function DetailSheet({
       }),
   });
   const del = useMutation({
-    mutationFn: () => deleteVariation(contract._id, variation!.ref),
+    mutationFn: () => api.remove(variation!.ref),
     onSuccess: () => {
       toast({ title: `${variation!.ref} deleted` });
       setConfirmDelete(false);
@@ -1229,17 +1280,34 @@ function DetailSheet({
 // The tab
 // ─────────────────────────────────────────────────────────────
 
-export default function ContractVariations({
+interface VariationsProps {
+  contract: VariationSubject;
+  canVary: boolean;
+  blockedReason: string;
+  onChanged: () => void;
+  /** Defaults to Contract Management. */
+  api?: VariationApi;
+}
+
+export default function ContractVariations(props: VariationsProps) {
+  const { api, contract } = props;
+  const value = useMemo(
+    () => api ?? crmVariationApi(contract._id),
+    [api, contract._id],
+  );
+  return (
+    <ApiContext.Provider value={value}>
+      <VariationsScreen {...props} />
+    </ApiContext.Provider>
+  );
+}
+
+function VariationsScreen({
   contract,
   canVary,
   blockedReason,
   onChanged,
-}: {
-  contract: SignableContract;
-  canVary: boolean;
-  blockedReason: string;
-  onChanged: () => void;
-}) {
+}: VariationsProps) {
   const qc = useQueryClient();
   const [filter, setFilter] = useState<"all" | VariationType>("all");
   const [openRef, setOpenRef] = useState<string | null>(null);

@@ -1,4 +1,11 @@
 import { api } from "../api";
+import type {
+  ContractClause,
+  ContractVariation,
+  VariationInput,
+  VariationStatus,
+  VariationType,
+} from "../crm/tools-api";
 
 // Deal/data-room files carry a relative /uploads/... fileUrl, same as
 // every other module — resolve it against the API's own origin before
@@ -156,6 +163,34 @@ export interface ContractSection {
   /** Resolved body split into paragraphs — what a redline anchors to. */
   lines?: string[];
   redlines?: Redline[];
+  /** The stored text split into lines ({{fields}} unresolved) — what a tracked change anchors to. */
+  rawLines?: string[];
+  /** The lines before any proposed change was accepted. */
+  originalLines?: string[];
+  /** Variation that added this section (an executed addendum), if any. */
+  variationRef?: string | null;
+  changes?: TrackedChange[];
+}
+
+/** A proposed edit to one line, made by one side in a negotiation round. */
+export interface TrackedChange {
+  id: string;
+  lineIndex: number;
+  before: string;
+  after: string;
+  /** Only what differs: text removed, where it started in `before`, text added. */
+  del: string;
+  ins: string;
+  offset: number;
+  addedLines: string[];
+  kind: "replace" | "add";
+  party: DealPartySide;
+  round: number;
+  status: "pending" | "accepted";
+  authorName: string;
+  createdAt: string;
+  decidedBy?: string;
+  decidedAt?: string | null;
 }
 
 /** One merge field a contract's text uses, with its current value. */
@@ -211,6 +246,13 @@ export interface Contract {
   reviewLoop: ReviewLoop;
   pdfUrl: string | null;
   createdAt: string;
+  /** True once every signatory has signed (or the deal is past Signing). */
+  executed?: boolean;
+  /** Amendments, addenda, side letters, waivers and extensions. */
+  variations?: ContractVariation[];
+  /** Negotiation: the current round, and the side holding the pen. */
+  round?: number;
+  penParty?: DealPartySide;
 }
 
 export interface CP {
@@ -239,7 +281,7 @@ export interface PostCompletionItem {
   status: ChecklistStatus;
 }
 
-export type DealPartySide = "Buyer" | "Seller";
+export type DealPartySide = "Party A" | "Party B";
 
 export interface DealPartyPermissions {
   dataRoom: boolean;
@@ -836,3 +878,84 @@ export const updateCommercialTerms = async (
   const res = await api.patch(`/deals/${dealId}/commercial-terms`, dto);
   return res.data?.data ?? res.data;
 };
+
+// ── Negotiation: tracked changes, accept / reject, rounds ───────────
+
+const body = <T>(res: any): T => res.data?.data ?? res.data;
+
+export const proposeChange = async (
+  dealId: string,
+  contractId: string,
+  sectionIndex: number,
+  dto: { lineIndex: number; text: string; party?: DealPartySide },
+) =>
+  body<{ ok: boolean }>(
+    await api.post(
+      `/deals/${dealId}/contracts/${contractId}/sections/${sectionIndex}/changes`,
+      dto,
+    ),
+  );
+export const decideChange = async (
+  dealId: string,
+  contractId: string,
+  sectionIndex: number,
+  changeId: string,
+  decision: "accept" | "reject",
+) =>
+  body<{ ok: boolean }>(
+    await api.post(
+      `/deals/${dealId}/contracts/${contractId}/sections/${sectionIndex}/changes/${changeId}/${decision}`,
+    ),
+  );
+export const decideAllChanges = async (
+  dealId: string,
+  contractId: string,
+  decision: "accept" | "reject",
+) =>
+  body<{ ok: boolean; count: number }>(
+    await api.post(
+      `/deals/${dealId}/contracts/${contractId}/changes/${decision}`,
+    ),
+  );
+export const advanceRound = async (dealId: string, contractId: string) =>
+  body<{ round: number; penParty: DealPartySide }>(
+    await api.post(`/deals/${dealId}/contracts/${contractId}/rounds/advance`),
+  );
+
+// ── Variations on an executed contract ──────────────────────────────
+
+const vBase = (dealId: string, contractId: string) =>
+  `/deals/${dealId}/contracts/${contractId}`;
+
+export const dealVariationApi = (dealId: string, contractId: string) => ({
+  clauses: async () =>
+    body<{ clauses: ContractClause[]; canVary: boolean }>(
+      await api.get(`${vBase(dealId, contractId)}/clauses`),
+    ),
+  create: async (
+    dto: VariationInput & { type: VariationType; submit?: boolean },
+  ) =>
+    body<ContractVariation>(
+      await api.post(`${vBase(dealId, contractId)}/variations`, dto),
+    ),
+  update: async (ref: string, dto: Partial<VariationInput>) =>
+    body<ContractVariation>(
+      await api.patch(`${vBase(dealId, contractId)}/variations/${ref}`, dto),
+    ),
+  advance: async (ref: string, to: VariationStatus) =>
+    body<ContractVariation>(
+      await api.post(`${vBase(dealId, contractId)}/variations/${ref}/advance`, {
+        to,
+      }),
+    ),
+  remove: async (ref: string) =>
+    body<unknown>(
+      await api.delete(`${vBase(dealId, contractId)}/variations/${ref}`),
+    ),
+  document: async (mode: "current" | "original" | "redline") =>
+    body<{ mode: string; html: string; executedCount: number }>(
+      await api.get(`${vBase(dealId, contractId)}/variations/document`, {
+        params: { mode },
+      }),
+    ),
+});
