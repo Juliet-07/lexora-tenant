@@ -591,6 +591,7 @@ export function CaseDraftingTab({
           title={editingDraft.title}
           subtitle={`v${editingDraft.currentVersion} → v${editingDraft.currentVersion + 1} on save`}
           value={editingDraft.content}
+          mergeFields
           saving={saveMut.isPending}
           onClose={() => setEditingDraft(null)}
           onSave={(html) => saveMut.mutate(html)}

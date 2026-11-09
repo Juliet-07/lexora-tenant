@@ -117,7 +117,7 @@ export function DocumentEditorDialog({
           className={
             mergeFields
               ? "grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,1fr)_320px] lg:grid-rows-[minmax(0,1fr)]"
-              : "min-h-0 flex-1"
+              : "grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)]"
           }
         >
           <div className="min-h-0 overflow-y-auto">

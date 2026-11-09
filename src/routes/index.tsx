@@ -34,6 +34,7 @@ import ContactPage from "@/pages/marketing/Contact";
 import EventRegisterPage from "@/pages/public/EventRegisterPage";
 import EventFeedbackPage from "@/pages/public/EventFeedbackPage";
 import UnsubscribePage from "@/pages/public/UnsubscribePage";
+import ReadinessSharePage from "@/pages/public/ReadinessSharePage";
 
 /**
  * Top-level router. Module-specific routes live in their own files so
@@ -56,6 +57,7 @@ const PUBLIC_ROUTE_PATTERNS = [
   /^\/esg-approve\/[^/]+$/,
   /^\/deal-review\/contract\/[^/]+$/,
   /^\/deal-review\/offer\/[^/]+$/,
+  /^\/readiness\/share\/[^/]+$/,
   /^\/forgot-password$/,
   /^\/reset-password$/,
   /^\/reactivate$/,
@@ -177,6 +179,14 @@ export function AppRoutes() {
         <Route
           path="/login/deal-review/offer/:token"
           element={<DealOfferReviewPage />}
+        />
+        <Route
+          path="/readiness/share/:token"
+          element={<ReadinessSharePage />}
+        />
+        <Route
+          path="/login/readiness/share/:token"
+          element={<ReadinessSharePage />}
         />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />
