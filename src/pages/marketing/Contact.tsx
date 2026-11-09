@@ -188,7 +188,7 @@ export default function Contact() {
                     <p className="text-xs uppercase tracking-wide text-intro-muted">
                       Email
                     </p>
-                    <p>info@lexoraafrica.com</p>
+                    <p>support@lexoraafrica.com</p>
                   </div>
                 </li>
                 <li className="flex gap-3">

@@ -182,7 +182,7 @@ export function MarketingLayout({ children }: { children: React.ReactNode }) {
           </p>
           <div className="flex items-center gap-5">
             <span className="flex items-center gap-1.5">
-              <Mail className="h-3.5 w-3.5" /> info@lexoraafrica.com
+              <Mail className="h-3.5 w-3.5" /> support@lexoraafrica.com
             </span>
             <span className="flex items-center gap-1.5">
               <Building2 className="h-3.5 w-3.5" /> Kigali, Rwanda
