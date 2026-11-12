@@ -179,15 +179,28 @@ export default function Clients() {
 
   const saveMut = useMutation({
     mutationFn: (d: Draft) => {
-      const { clientUserId, clientName, ...dto } = d;
-      return saveClientCommercial(clientUserId, dto);
+      const { clientUserId, clientName, ...rest } = d as Draft & {
+        relationshipManagerEmployeeId?: string | null;
+      };
+      const { relationshipManagerEmployeeId, ...dto } = rest;
+      return saveClientCommercial(clientUserId, {
+        ...dto,
+        relationshipManagerId:
+          dto.relationshipManagerId ??
+          relationshipManagerEmployeeId ??
+          undefined,
+      });
     },
-    onSuccess: (_saved, d) => {
+    onSuccess: (saved, d) => {
       invalidate();
       setDraft(null);
       toast({
         title: "Client parameters saved",
-        description: `${d.clientName} — RM, service lines and SLA updated.`,
+        description: saved.rmNotified
+          ? `${d.clientName} is now in ${saved.relationshipManager}'s workspace, and they've been notified by app and email.`
+          : (saved.rmNotice ??
+            `${d.clientName} — RM, service lines and SLA updated.`),
+        variant: saved.rmNotice ? "destructive" : undefined,
       });
     },
     onError: (err: any) =>
@@ -599,9 +612,22 @@ export default function Clients() {
                   <Label>Relationship manager (RM)</Label>
                   {hasEmployees ? (
                     <Select
-                      value={draft.relationshipManager}
-                      onValueChange={(v) =>
-                        setDraft({ ...draft, relationshipManager: v })
+                      value={
+                        draft.relationshipManagerId ??
+                        (draft as any).relationshipManagerEmployeeId ??
+                        employeeOptions.find(
+                          (e) => e.name === draft.relationshipManager,
+                        )?.id ??
+                        ""
+                      }
+                      onValueChange={(id) =>
+                        setDraft({
+                          ...draft,
+                          relationshipManagerId: id,
+                          relationshipManager:
+                            employeeOptions.find((e) => e.id === id)?.name ??
+                            "",
+                        })
                       }
                     >
                       <SelectTrigger>
@@ -609,7 +635,7 @@ export default function Clients() {
                       </SelectTrigger>
                       <SelectContent>
                         {employeeOptions.map((e) => (
-                          <SelectItem key={e.id} value={e.name}>
+                          <SelectItem key={e.id} value={e.id}>
                             {e.name}
                             {e.jobTitle ? ` — ${e.jobTitle}` : ""}
                           </SelectItem>
@@ -623,6 +649,7 @@ export default function Clients() {
                       onChange={(e) =>
                         setDraft({
                           ...draft,
+                          relationshipManagerId: undefined,
                           relationshipManager: e.target.value,
                         })
                       }
@@ -630,7 +657,7 @@ export default function Clients() {
                   )}
                   <p className="mt-1 text-xs text-muted-foreground">
                     {hasEmployees
-                      ? "Selected from employees in HR."
+                      ? "Selected from employees in HR. The client appears in their workspace and they're notified."
                       : "No employees found in HR — type the RM's name directly."}
                   </p>
                 </div>

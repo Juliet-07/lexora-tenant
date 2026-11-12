@@ -20,7 +20,11 @@ import { useAuth } from "@/contexts/AuthContext";
 import { QuickClockCard } from "@/components/hr/QuickClockCard";
 import { NoticeDashboardLine } from "@/components/dashboard/NoticeDashboardLine";
 import { fetchMyTasks, fetchMyMandates } from "@/lib/crm/mandates-api";
-import { fetchClients, displayName, toneFor } from "@/lib/client/clients-api";
+import {
+  fetchMyAssignedClients,
+  displayName,
+  toneFor,
+} from "@/lib/client/clients-api";
 
 // ─────────────────────────────────────────────────────────────
 // Team Member ("employee of the tenant") dashboard. Scoped
@@ -63,7 +67,7 @@ export default function TeamMemberDashboard() {
   });
   const { data: clients = [], isLoading: clientsLoading } = useQuery({
     queryKey: ["my-dashboard-clients"],
-    queryFn: fetchClients,
+    queryFn: fetchMyAssignedClients,
   });
 
   const isLoading = tasksLoading || mandatesLoading || clientsLoading;

@@ -43,7 +43,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import {
-  fetchClients,
+  fetchMyAssignedClients,
   displayName,
   prettyLabel,
   toneFor,
@@ -101,7 +101,7 @@ export default function AssignedClients() {
   // differs because the caller differs.
   const { data: clients = [], isLoading } = useQuery({
     queryKey: ["my-assigned-clients"],
-    queryFn: fetchClients,
+    queryFn: fetchMyAssignedClients,
   });
 
   // Gates the Vendors tab — only shown to a genuine Head of

@@ -8,6 +8,9 @@ export interface ClientCommercial {
   _id: string;
   clientUserId: string;
   relationshipManager: string;
+  // The HR employee behind the RM name — set when picked from the HR
+  // list; this is what puts the client in that employee's workspace.
+  relationshipManagerEmployeeId?: string | null;
   serviceLines: string[];
   riskRating: ClientRisk;
   feeTier: FeeTier;
@@ -28,6 +31,9 @@ export interface ClientCommercial {
 
 export interface UpsertClientCommercialPayload {
   relationshipManager?: string;
+  // HR employee id of the RM ('' clears). Assigns the client to that
+  // employee and notifies them.
+  relationshipManagerId?: string;
   serviceLines?: string[];
   riskRating?: ClientRisk;
   feeTier?: FeeTier;
@@ -55,7 +61,9 @@ export const fetchClientCommercials = async (): Promise<
 export const saveClientCommercial = async (
   clientUserId: string,
   dto: UpsertClientCommercialPayload,
-): Promise<ClientCommercial> => {
+): Promise<
+  ClientCommercial & { rmNotice?: string | null; rmNotified?: boolean }
+> => {
   const res = await api.put(`/crm/client-commercials/${clientUserId}`, dto);
   return unwrap(res);
 };

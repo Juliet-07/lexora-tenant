@@ -74,7 +74,10 @@ import {
   fetchMyPayrollSummary,
 } from "@/lib/hr/hr-api";
 import { fetchMyPerformanceSummary } from "@/lib/hr/hr-performance-api";
-import { fetchClients, type ApiClient } from "@/lib/client/clients-api";
+import {
+  fetchMyAssignedClients,
+  type ApiClient,
+} from "@/lib/client/clients-api";
 import { fetchMyMandates, type Mandate } from "@/lib/crm/mandates-api";
 
 // ─── Dummy data — for modules with no backend yet ──────────────
@@ -291,7 +294,7 @@ export default function MyProfile() {
 
   const { data: assignedClients = [] } = useQuery({
     queryKey: ["my-assigned-clients"],
-    queryFn: fetchClients,
+    queryFn: fetchMyAssignedClients,
     staleTime: 60_000,
   });
   const { data: myMandates = [] } = useQuery({

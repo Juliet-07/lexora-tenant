@@ -136,6 +136,19 @@ export const fetchClients = async (): Promise<ApiClient[]> => {
   return data?.clients ?? data?.items ?? [];
 };
 
+// The employee workspace's own client list: only clients assigned to
+// the signed-in user. The tenant owner still gets everyone here;
+// an employee — even one with module/admin access — gets only theirs.
+// Enforced server-side (scope=mine), not by filtering in the UI.
+export const fetchMyAssignedClients = async (): Promise<ApiClient[]> => {
+  const res = await api.get("/tenant/my-clients", {
+    params: { scope: "mine" },
+  });
+  const data = res.data?.data;
+  if (Array.isArray(data)) return data;
+  return data?.clients ?? data?.items ?? [];
+};
+
 // Separate function for the one real caller that needs the
 // ex-clients filter — deliberately not added as an optional param
 // on fetchClients above, since every other call site uses the
