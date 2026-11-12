@@ -9,6 +9,7 @@ import {
   FileText,
   Loader2,
   MessageSquare,
+  PanelRight,
   PenSquare,
   Plus,
   Search,
@@ -44,7 +45,20 @@ import { useAuth } from "@/contexts/AuthContext";
 import ContractVariations from "@/components/crm/ContractVariations";
 import DealContractRedline from "@/components/grc/DealContractRedline";
 import {
-  addContractComment,
+  CommentThread,
+  ContractTrackerPanel,
+  useCommentActions,
+} from "@/components/grc/DealContractTracker";
+import {
+  ContractReviewTab,
+  SendForReviewDialog,
+} from "@/components/grc/DealContractReviewTab";
+import {
+  collectThreads,
+  commentCounts,
+  reviewerRows,
+} from "@/lib/grc/contract-tracking";
+import {
   addRedline,
   deleteContract,
   downloadContractPdf,
@@ -52,9 +66,7 @@ import {
   downloadRedlinedContractPdf,
   fetchContractPdfBlob,
   removeContractSection,
-  sendContractForReview,
   setContractVariable,
-  toggleContractComment,
   updateContractSectionBody,
   type Contract,
   type ContractField,
@@ -115,6 +127,16 @@ export function DealContractDialog({
   const queryClient = useQueryClient();
   const [tab, setTab] = useState("preview");
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [sendOpen, setSendOpen] = useState(false);
+  // Jumping to a clause from the tracker or the Review tab: the Edit tab
+  // opens that clause. `nonce` makes jumping to the same clause twice work.
+  const [focus, setFocus] = useState<{ sIndex: number; nonce: number } | null>(
+    null,
+  );
+  const jumpToClause = (sIndex: number) => {
+    setFocus({ sIndex, nonce: Date.now() });
+    setTab("edit");
+  };
 
   // A freshly generated term sheet is mostly terms still to be agreed, so it
   // opens on the Fields tab; a contract opens on its preview.
@@ -129,17 +151,6 @@ export function DealContractDialog({
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: ["deal", deal._id] });
 
-  const sendReviewMut = useMutation({
-    mutationFn: () => sendContractForReview(deal._id, contract!._id),
-    onSuccess: (res) => {
-      invalidate();
-      toast.success(
-        `Sent to ${res.sent.length} part${res.sent.length === 1 ? "y" : "ies"}`,
-      );
-    },
-    onError: (err: any) =>
-      toast.error(err?.response?.data?.message ?? "Failed to send for review"),
-  });
   const deleteMut = useMutation({
     mutationFn: () => deleteContract(deal._id, contract!._id),
     onSuccess: () => {
@@ -159,6 +170,9 @@ export function DealContractDialog({
     onError: () => toast.error("Failed to load the PDF preview"),
   });
 
+  const reviewedCount = contract
+    ? reviewerRows(contract).filter((r) => r.status !== "pending").length
+    : 0;
   const pendingChanges = (contract?.sections ?? []).reduce(
     (n, s) =>
       n + (s.changes ?? []).filter((c) => c.status === "pending").length,
@@ -246,8 +260,7 @@ export function DealContractDialog({
                     <Button
                       size="sm"
                       variant="outline"
-                      disabled={sendReviewMut.isPending}
-                      onClick={() => sendReviewMut.mutate()}
+                      onClick={() => setSendOpen(true)}
                     >
                       <Send className="mr-1 h-3.5 w-3.5" />
                       Send for review
@@ -307,7 +320,12 @@ export function DealContractDialog({
                     )}
                   </TabsTrigger>
                   <TabsTrigger value="review">
-                    Review ({contract.reviewLoop?.responses?.length ?? 0})
+                    Review
+                    {(contract.reviewLoop?.tokens?.length ?? 0) > 0 && (
+                      <span className="ml-1.5 rounded-full bg-sky-500/15 px-1.5 text-[11px] text-sky-700">
+                        {reviewedCount}/{contract.reviewLoop?.tokens?.length}
+                      </span>
+                    )}
                   </TabsTrigger>
                   {!isTermSheet && (
                     <TabsTrigger value="amendments">
@@ -334,6 +352,8 @@ export function DealContractDialog({
                     contract={contract}
                     labels={labels}
                     onChanged={invalidate}
+                    focus={focus}
+                    onOpenRedline={() => setTab("redline")}
                   />
                 </TabsContent>
                 <TabsContent value="redline" className="m-0 p-6">
@@ -351,7 +371,14 @@ export function DealContractDialog({
                   />
                 </TabsContent>
                 <TabsContent value="review" className="m-0 p-6">
-                  <ReviewTab contract={contract} docName={docName} />
+                  <ContractReviewTab
+                    deal={deal}
+                    contract={contract}
+                    docName={docName}
+                    onChanged={invalidate}
+                    onJump={jumpToClause}
+                    onSend={() => setSendOpen(true)}
+                  />
                 </TabsContent>
                 {!isTermSheet && (
                   <TabsContent value="amendments" className="m-0 p-6">
@@ -390,6 +417,15 @@ export function DealContractDialog({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      {contract && (
+        <SendForReviewDialog
+          deal={deal}
+          contract={contract}
+          open={sendOpen}
+          onOpenChange={setSendOpen}
+          onSent={invalidate}
+        />
+      )}
     </>
   );
 }
@@ -575,11 +611,15 @@ function EditTab({
   contract,
   labels,
   onChanged,
+  focus,
+  onOpenRedline,
 }: {
   deal: Deal;
   contract: Contract;
   labels: Map<string, string>;
   onChanged: () => void;
+  focus: { sIndex: number; nonce: number } | null;
+  onOpenRedline: () => void;
 }) {
   const { user } = useAuth();
   const defaultAuthor = user
@@ -589,6 +629,32 @@ function EditTab({
   const [openRedlines, setOpenRedlines] = useState<number | null>(null);
   const [commentText, setCommentText] = useState("");
   const [commentAuthor, setCommentAuthor] = useState(defaultAuthor);
+  const [commentParty, setCommentParty] = useState<"" | "Party A" | "Party B">(
+    "",
+  );
+  const [commentInternal, setCommentInternal] = useState(false);
+  const [showTracker, setShowTracker] = useState(true);
+  const [flash, setFlash] = useState<number | null>(null);
+  const actions = useCommentActions(deal, contract, onChanged);
+  const { open: openComments_n } = commentCounts(contract);
+
+  // Opened from the tracker or the Review tab: show that clause's comments
+  // and bring it into view.
+  useEffect(() => {
+    if (!focus) return;
+    setOpenComments(focus.sIndex);
+    setFlash(focus.sIndex);
+    const t = setTimeout(() => {
+      document
+        .getElementById(`clause-${focus.sIndex}`)
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 60);
+    const off = setTimeout(() => setFlash(null), 2200);
+    return () => {
+      clearTimeout(t);
+      clearTimeout(off);
+    };
+  }, [focus]);
   const [redlineLine, setRedlineLine] = useState<number | null>(null);
   const [redlineText, setRedlineText] = useState("");
   const [removeIdx, setRemoveIdx] = useState<number | null>(null);
@@ -612,25 +678,6 @@ function EditTab({
       setOpenRedlines(null);
     },
   });
-  const commentMut = useMutation({
-    mutationFn: (index: number) =>
-      addContractComment(
-        deal._id,
-        contract._id,
-        index,
-        commentAuthor.trim() || "You",
-        commentText,
-      ),
-    onSuccess: () => {
-      onChanged();
-      setCommentText("");
-    },
-  });
-  const toggleMut = useMutation({
-    mutationFn: ({ sIndex, cIndex }: { sIndex: number; cIndex: number }) =>
-      toggleContractComment(deal._id, contract._id, sIndex, cIndex),
-    onSuccess: onChanged,
-  });
   const redlineMut = useMutation({
     mutationFn: ({
       sIndex,
@@ -652,223 +699,303 @@ function EditTab({
   });
 
   return (
-    <div className="mx-auto max-w-4xl space-y-3">
-      {locked && (
-        <p className="rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs">
-          This contract has been executed, so its text can no longer be edited
-          directly. Use the <b>Amendments</b> tab to vary it.
+    <div
+      className={`mx-auto grid gap-4 ${showTracker ? "max-w-6xl lg:grid-cols-[minmax(0,1fr)_340px]" : "max-w-4xl"}`}
+    >
+      <div className="min-w-0 space-y-3">
+        <div className="flex justify-end">
+          <Button
+            size="sm"
+            variant="outline"
+            aria-pressed={showTracker}
+            onClick={() => setShowTracker((v) => !v)}
+          >
+            <PanelRight className="mr-1.5 h-3.5 w-3.5" />
+            Comments &amp; changes
+            {openComments_n > 0 && (
+              <span className="ml-1.5 rounded-full bg-primary/15 px-1.5 text-[11px] text-primary">
+                {openComments_n}
+              </span>
+            )}
+          </Button>
+        </div>
+        {locked && (
+          <p className="rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs">
+            This contract has been executed, so its text can no longer be edited
+            directly. Use the <b>Amendments</b> tab to vary it.
+          </p>
+        )}
+        <p className="rounded-md border bg-background px-3 py-2 text-xs text-muted-foreground">
+          Merge fields appear as <code>{"{{field}}"}</code> while you edit and
+          are filled in from the <b>Fields</b> tab — change a value there and it
+          updates everywhere it appears.
         </p>
-      )}
-      <p className="rounded-md border bg-background px-3 py-2 text-xs text-muted-foreground">
-        Merge fields appear as <code>{"{{field}}"}</code> while you edit and are
-        filled in from the <b>Fields</b> tab — change a value there and it
-        updates everywhere it appears.
-      </p>
-      {contract.sections.map((s: ContractSection, i: number) => (
-        <div key={i} className="rounded-lg border bg-background p-4">
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <h3 className="text-sm font-semibold">{s.title}</h3>
-            <div className="flex items-center gap-1">
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => setOpenRedlines(openRedlines === i ? null : i)}
-              >
-                <PenSquare className="mr-1 h-3.5 w-3.5 text-rose-600" />
-                {s.redlines?.length ?? 0}
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => setOpenComments(openComments === i ? null : i)}
-              >
-                <MessageSquare className="mr-1 h-3.5 w-3.5" />
-                {s.comments.length}
-              </Button>
-              <Button
-                size="icon"
-                variant="ghost"
-                disabled={locked}
-                aria-label={`Remove section ${s.title}`}
-                onClick={() => setRemoveIdx(i)}
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-
-          {locked ? (
-            <div
-              className={DOC_CLASSES}
-              dangerouslySetInnerHTML={{ __html: s.renderedBody ?? s.body }}
-            />
-          ) : (
-            <SectionBody
-              value={s.body}
-              onSave={(body) => bodyMut.mutateAsync({ index: i, body })}
-            />
-          )}
-
-          <div className="mt-1 border-t pt-2">
-            <p className="mb-1 text-xs font-medium text-muted-foreground">
-              With fields filled in
-            </p>
-            <div
-              className={`${DOC_CLASSES} text-muted-foreground`}
-              dangerouslySetInnerHTML={{
-                __html: highlightMissing(s.renderedBody ?? s.body, labels),
-              }}
-            />
-          </div>
-
-          {openRedlines === i && (
-            <div className="mt-3 space-y-1.5 border-t pt-2">
-              <div className="mb-1 text-xs font-medium text-rose-700">
-                Line-by-line redline
-              </div>
-              {(s.lines ?? []).map((line: string, lineIdx: number) => {
-                const lineRedlines = (s.redlines ?? []).filter(
-                  (r) => r.lineIndex === lineIdx,
-                );
-                return (
-                  <div key={lineIdx} className="rounded border p-2 text-xs">
-                    <div className="flex items-start justify-between gap-2">
-                      <span className="flex-1">{line}</span>
-                      <button
-                        className="shrink-0 text-rose-600 hover:text-rose-700"
-                        aria-label="Add a redline to this line"
-                        onClick={() => {
-                          setRedlineLine(
-                            redlineLine === lineIdx ? null : lineIdx,
-                          );
-                          setRedlineText("");
-                        }}
-                      >
-                        <Plus className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                    {lineRedlines.map((r, ri) => (
-                      <div
-                        key={ri}
-                        className="mt-1.5 border-l-2 border-rose-300 pl-2 text-[11px]"
-                      >
-                        <span className="font-medium">{r.authorName}</span>{" "}
-                        <span className="text-muted-foreground">
-                          ({r.source} ·{" "}
-                          {new Date(r.createdAt).toLocaleDateString()})
-                        </span>
-                        <div>{r.comment}</div>
-                      </div>
-                    ))}
-                    {redlineLine === lineIdx && (
-                      <div className="mt-2 flex gap-2">
-                        <Input
-                          placeholder="Redline comment…"
-                          value={redlineText}
-                          onChange={(e) => setRedlineText(e.target.value)}
-                          className="h-7 text-xs"
-                        />
-                        <Button
-                          size="sm"
-                          disabled={!redlineText.trim() || redlineMut.isPending}
-                          onClick={() =>
-                            redlineMut.mutate({
-                              sIndex: i,
-                              lineIndex: lineIdx,
-                              comment: redlineText,
-                            })
-                          }
-                        >
-                          Add
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {openComments === i && (
-            <div className="mt-3 space-y-2 border-t pt-2">
-              {s.comments.map((c, ci) => (
-                <div
-                  key={ci}
-                  className={`rounded border p-2 text-xs ${c.resolved ? "border-emerald-500/20 bg-emerald-500/5" : "bg-muted/40"}`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium">{c.author}</span>
-                    <button
-                      className="text-muted-foreground hover:text-foreground"
-                      onClick={() =>
-                        toggleMut.mutate({ sIndex: i, cIndex: ci })
-                      }
-                    >
-                      {c.resolved ? "Reopen" : "Resolve"}
-                    </button>
-                  </div>
-                  <div
-                    className={
-                      c.resolved ? "text-muted-foreground line-through" : ""
-                    }
-                  >
-                    {c.text}
-                  </div>
-                </div>
-              ))}
-              <div className="flex gap-2">
-                <Input
-                  placeholder="Your name"
-                  value={commentAuthor}
-                  onChange={(e) => setCommentAuthor(e.target.value)}
-                  className="h-8 w-32 text-xs"
-                />
-                <Input
-                  placeholder="Add a comment…"
-                  value={commentText}
-                  onChange={(e) => setCommentText(e.target.value)}
-                  className="h-8 text-xs"
-                />
+        {contract.sections.map((s: ContractSection, i: number) => (
+          <div
+            key={i}
+            id={`clause-${i}`}
+            className={`rounded-lg border bg-background p-4 transition-shadow ${flash === i ? "ring-2 ring-primary/50" : ""}`}
+          >
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold">{s.title}</h3>
+              <div className="flex items-center gap-1">
                 <Button
                   size="sm"
-                  disabled={!commentText.trim()}
-                  onClick={() => commentMut.mutate(i)}
+                  variant="ghost"
+                  onClick={() => setOpenRedlines(openRedlines === i ? null : i)}
                 >
-                  Add
+                  <PenSquare className="mr-1 h-3.5 w-3.5 text-rose-600" />
+                  {s.redlines?.length ?? 0}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setOpenComments(openComments === i ? null : i)}
+                >
+                  <MessageSquare className="mr-1 h-3.5 w-3.5" />
+                  {s.comments.length}
+                </Button>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  disabled={locked}
+                  aria-label={`Remove section ${s.title}`}
+                  onClick={() => setRemoveIdx(i)}
+                >
+                  <Trash2 className="h-4 w-4" />
                 </Button>
               </div>
             </div>
-          )}
-        </div>
-      ))}
-      {contract.sections.length === 0 && (
-        <div className="py-10 text-center text-sm text-muted-foreground">
-          This document has no sections.
+
+            {locked ? (
+              <div
+                className={DOC_CLASSES}
+                dangerouslySetInnerHTML={{ __html: s.renderedBody ?? s.body }}
+              />
+            ) : (
+              <SectionBody
+                value={s.body}
+                onSave={(body) => bodyMut.mutateAsync({ index: i, body })}
+              />
+            )}
+
+            <div className="mt-1 border-t pt-2">
+              <p className="mb-1 text-xs font-medium text-muted-foreground">
+                With fields filled in
+              </p>
+              <div
+                className={`${DOC_CLASSES} text-muted-foreground`}
+                dangerouslySetInnerHTML={{
+                  __html: highlightMissing(s.renderedBody ?? s.body, labels),
+                }}
+              />
+            </div>
+
+            {openRedlines === i && (
+              <div className="mt-3 space-y-1.5 border-t pt-2">
+                <div className="mb-1 text-xs font-medium text-rose-700">
+                  Line-by-line redline
+                </div>
+                {(s.lines ?? []).map((line: string, lineIdx: number) => {
+                  const lineRedlines = (s.redlines ?? []).filter(
+                    (r) => r.lineIndex === lineIdx,
+                  );
+                  return (
+                    <div key={lineIdx} className="rounded border p-2 text-xs">
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="flex-1">{line}</span>
+                        <button
+                          className="shrink-0 text-rose-600 hover:text-rose-700"
+                          aria-label="Add a redline to this line"
+                          onClick={() => {
+                            setRedlineLine(
+                              redlineLine === lineIdx ? null : lineIdx,
+                            );
+                            setRedlineText("");
+                          }}
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                      {lineRedlines.map((r, ri) => (
+                        <div
+                          key={ri}
+                          className="mt-1.5 border-l-2 border-rose-300 pl-2 text-[11px]"
+                        >
+                          <span className="font-medium">{r.authorName}</span>{" "}
+                          <span className="text-muted-foreground">
+                            ({r.source} ·{" "}
+                            {new Date(r.createdAt).toLocaleDateString()})
+                          </span>
+                          <div>{r.comment}</div>
+                        </div>
+                      ))}
+                      {redlineLine === lineIdx && (
+                        <div className="mt-2 flex gap-2">
+                          <Input
+                            placeholder="Redline comment…"
+                            value={redlineText}
+                            onChange={(e) => setRedlineText(e.target.value)}
+                            className="h-7 text-xs"
+                          />
+                          <Button
+                            size="sm"
+                            disabled={
+                              !redlineText.trim() || redlineMut.isPending
+                            }
+                            onClick={() =>
+                              redlineMut.mutate({
+                                sIndex: i,
+                                lineIndex: lineIdx,
+                                comment: redlineText,
+                              })
+                            }
+                          >
+                            Add
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {openComments === i && (
+              <div className="mt-3 space-y-2 border-t pt-2">
+                {s.comments.map((c, ci) => (
+                  <CommentThread
+                    key={ci}
+                    thread={{
+                      sIndex: i,
+                      cIndex: ci,
+                      sectionTitle: s.title,
+                      comment: c,
+                    }}
+                    actions={actions}
+                  />
+                ))}
+                <div className="space-y-1.5 rounded-md bg-muted/30 p-2">
+                  <div className="flex flex-wrap gap-2">
+                    <Input
+                      placeholder="Your name"
+                      value={commentAuthor}
+                      onChange={(e) => setCommentAuthor(e.target.value)}
+                      className="h-8 w-36 text-xs"
+                      aria-label="Your name"
+                    />
+                    <select
+                      aria-label="Comment from"
+                      value={commentParty}
+                      onChange={(e) =>
+                        setCommentParty(
+                          e.target.value as "" | "Party A" | "Party B",
+                        )
+                      }
+                      className="h-8 rounded-md border bg-background px-1.5 text-xs"
+                    >
+                      <option value="">From the team</option>
+                      <option value="Party A">From Party A</option>
+                      <option value="Party B">From Party B</option>
+                    </select>
+                    <label className="flex items-center gap-1 text-xs">
+                      <input
+                        type="checkbox"
+                        checked={commentInternal}
+                        onChange={(e) => setCommentInternal(e.target.checked)}
+                      />
+                      Internal note
+                    </label>
+                  </div>
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Add a comment…"
+                      value={commentText}
+                      onChange={(e) => setCommentText(e.target.value)}
+                      className="h-8 text-xs"
+                      aria-label="Add a comment"
+                    />
+                    <Button
+                      size="sm"
+                      disabled={!commentText.trim() || actions.add.isPending}
+                      onClick={() =>
+                        actions.add.mutate(
+                          {
+                            sIndex: i,
+                            author: commentAuthor.trim() || "You",
+                            text: commentText.trim(),
+                            party: commentParty || undefined,
+                            internal: commentInternal,
+                          },
+                          {
+                            onSuccess: () => {
+                              setCommentText("");
+                              setCommentInternal(false);
+                            },
+                          },
+                        )
+                      }
+                    >
+                      Add
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+        {contract.sections.length === 0 && (
+          <div className="py-10 text-center text-sm text-muted-foreground">
+            This document has no sections.
+          </div>
+        )}
+
+        <AlertDialog
+          open={removeIdx !== null}
+          onOpenChange={(o) => !o && setRemoveIdx(null)}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Remove this section?</AlertDialogTitle>
+              <AlertDialogDescription>
+                “{removeIdx !== null ? contract.sections[removeIdx]?.title : ""}
+                ” and its comments and redlines will be removed from this
+                contract.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Keep it</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() =>
+                  removeIdx !== null && removeMut.mutate(removeIdx)
+                }
+              >
+                Remove
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </div>
+      {showTracker && (
+        <div className="min-w-0">
+          <div className="lg:sticky lg:top-0">
+            <ContractTrackerPanel
+              deal={deal}
+              contract={contract}
+              onChanged={onChanged}
+              onJump={(sIndex) => {
+                setOpenComments(sIndex);
+                setFlash(sIndex);
+                document
+                  .getElementById(`clause-${sIndex}`)
+                  ?.scrollIntoView({ behavior: "smooth", block: "center" });
+                setTimeout(() => setFlash(null), 2200);
+              }}
+              onOpenRedline={onOpenRedline}
+            />
+          </div>
         </div>
       )}
-
-      <AlertDialog
-        open={removeIdx !== null}
-        onOpenChange={(o) => !o && setRemoveIdx(null)}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Remove this section?</AlertDialogTitle>
-            <AlertDialogDescription>
-              “{removeIdx !== null ? contract.sections[removeIdx]?.title : ""}”
-              and its comments and redlines will be removed from this contract.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Keep it</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => removeIdx !== null && removeMut.mutate(removeIdx)}
-            >
-              Remove
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }
@@ -1070,65 +1197,3 @@ function FieldsTab({
 }
 
 // ── Review ──────────────────────────────────────────────────
-
-function ReviewTab({
-  contract,
-  docName,
-}: {
-  contract: Contract;
-  docName: string;
-}) {
-  const responses = contract.reviewLoop?.responses ?? [];
-  const sent = contract.reviewLoop?.tokens ?? [];
-  return (
-    <div className="mx-auto max-w-3xl space-y-4">
-      <p className="rounded-md border bg-background px-3 py-2 text-xs text-muted-foreground">
-        <b>Send for review</b> emails a secure link to each party on the deal
-        who has {docName === "term sheet" ? "offer" : "contract"}-review access.
-        They can comment, redline and approve or request changes — their answers
-        appear here.
-      </p>
-      {sent.length > 0 && (
-        <div className="rounded-lg border bg-background p-4">
-          <p className="mb-2 text-sm font-medium">Sent to</p>
-          <ul className="space-y-1 text-sm">
-            {sent.map((t) => (
-              <li key={t.partyEmail} className="flex justify-between gap-2">
-                <span>
-                  {t.partyName}{" "}
-                  <span className="text-muted-foreground">
-                    · {t.partyEmail}
-                  </span>
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  {new Date(t.sentAt).toLocaleDateString()}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-      {responses.length === 0 && (
-        <p className="py-8 text-center text-sm text-muted-foreground">
-          {sent.length ? "No responses yet." : "Not sent for review yet."}
-        </p>
-      )}
-      {responses.map((r, i) => (
-        <div
-          key={i}
-          className={`rounded-md border p-3 text-sm ${r.decision === "Approved" ? "border-emerald-500/30 bg-emerald-500/5" : "border-amber-500/30 bg-amber-500/5"}`}
-        >
-          <div className="flex justify-between">
-            <span className="font-medium">{r.partyName}</span>
-            <Badge variant="outline">{r.decision}</Badge>
-          </div>
-          {r.comment && (
-            <div className="mt-1 text-xs text-muted-foreground">
-              {r.comment}
-            </div>
-          )}
-        </div>
-      ))}
-    </div>
-  );
-}

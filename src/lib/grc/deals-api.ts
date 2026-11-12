@@ -81,6 +81,13 @@ export interface ReviewLoopToken {
   partyEmail?: string;
   partyName?: string;
   sentAt: string;
+  /** The negotiation round it was at when sent, who sent it, and the note. */
+  round?: number;
+  sentBy?: string;
+  message?: string;
+  /** First time the reviewer opened it since it was last sent. */
+  viewedAt?: string | null;
+  lastRemindedAt?: string | null;
 }
 
 export interface ReviewLoopResponse {
@@ -90,11 +97,23 @@ export interface ReviewLoopResponse {
   decision: "Approved" | "Changes Requested";
   comment?: string;
   respondedAt: string;
+  round?: number;
+}
+
+/** Something that happened in a review: sent, reminded, opened, answered. */
+export interface ReviewEvent {
+  type: "sent" | "reminded" | "viewed" | "responded";
+  at: string;
+  by: string;
+  partyEmail: string;
+  round: number;
+  detail: string;
 }
 
 export interface ReviewLoop {
   tokens: ReviewLoopToken[];
   responses: ReviewLoopResponse[];
+  history?: ReviewEvent[];
 }
 
 export interface TermSheet {
@@ -154,11 +173,28 @@ export interface DDItem {
   materiality: Materiality | null;
 }
 
+export interface ContractReply {
+  author: string;
+  text: string;
+  party: DealPartySide | null;
+  /** For the deal team only. */
+  internal: boolean;
+  createdAt: string;
+}
 export interface ContractComment {
   author: string;
   text: string;
   resolved: boolean;
   createdAt: string;
+  /** Which side it is from, if from one. */
+  party?: DealPartySide | null;
+  /** An internal note, for the deal team only. */
+  internal?: boolean;
+  /** The words of the clause it is about. */
+  quote?: string;
+  replies?: ContractReply[];
+  resolvedBy?: string;
+  resolvedAt?: string | null;
 }
 /** One line of a contract's table of contents. */
 export interface ContractTocEntry {
@@ -774,10 +810,29 @@ export const addContractComment = async (
   index: number,
   author: string,
   text: string,
+  extra: { party?: DealPartySide; internal?: boolean; quote?: string } = {},
 ): Promise<Deal> => {
   const res = await api.post(
     `/deals/${dealId}/contracts/${contractId}/sections/${index}/comments`,
-    { author, text },
+    { author, text, ...extra },
+  );
+  return res.data?.data ?? res.data;
+};
+export const replyToContractComment = async (
+  dealId: string,
+  contractId: string,
+  sectionIndex: number,
+  commentIndex: number,
+  dto: {
+    author: string;
+    text: string;
+    party?: DealPartySide;
+    internal?: boolean;
+  },
+): Promise<Deal> => {
+  const res = await api.post(
+    `/deals/${dealId}/contracts/${contractId}/sections/${sectionIndex}/comments/${commentIndex}/replies`,
+    dto,
   );
   return res.data?.data ?? res.data;
 };
@@ -829,10 +884,22 @@ export const downloadContractPdf = (
 export const sendContractForReview = async (
   dealId: string,
   contractId: string,
+  dto: { recipients?: string[]; message?: string } = {},
 ): Promise<{ sent: string[] }> => {
   const res = await api.post(
     `/deals/${dealId}/contracts/${contractId}/review/send`,
-    {},
+    dto,
+  );
+  return res.data?.data ?? res.data;
+};
+export const remindContractReviewers = async (
+  dealId: string,
+  contractId: string,
+  recipients?: string[],
+): Promise<{ reminded: string[] }> => {
+  const res = await api.post(
+    `/deals/${dealId}/contracts/${contractId}/review/remind`,
+    { recipients },
   );
   return res.data?.data ?? res.data;
 };
