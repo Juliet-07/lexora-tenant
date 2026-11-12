@@ -118,6 +118,20 @@ export interface ContractReviewSnapshot {
   sections?: ContractReviewSection[];
   /** A term sheet is reviewed with different wording from a contract. */
   kind?: DealDocKind;
+  /** The document as the tenant sees it — cover, contents and body. */
+  preview?: DealDocumentPreviewData;
+}
+
+/** A document as a reader sees it (review and signing pages). */
+export interface DealDocumentPreviewData {
+  name: string;
+  cover: string;
+  toc: {
+    enabled: boolean;
+    title: string;
+    entries: { title: string; level: number; page?: number }[];
+  };
+  sections: { title: string; html: string }[];
 }
 
 export interface DataRoomFile {
@@ -272,8 +286,35 @@ export interface Signatory {
   name: string;
   party: string;
   role: string;
+  title?: string;
+  email?: string;
   signed: boolean;
   signedAt: string | null;
+  status?: "pending" | "sent" | "signed";
+  sentAt?: string | null;
+  lastRemindedAt?: string | null;
+  viewedAt?: string | null;
+  signatureMethod?: "typed" | "drawn" | null;
+  signatureData?: string | null;
+  ip?: string | null;
+  device?: string | null;
+}
+export interface SigningAuditEntry {
+  at: string;
+  type: string;
+  text: string;
+  ip: string | null;
+}
+export interface SigningDocument {
+  contractId: string;
+  name: string;
+  reference: string;
+  hash: string;
+  sentAt: string | null;
+  sentBy: string;
+  completedAt: string | null;
+  signedPdfUrl: string | null;
+  archivedToDataRoom: boolean;
 }
 export interface PostCompletionItem {
   item: string;
@@ -295,6 +336,8 @@ export interface DealParty {
   name: string;
   email: string;
   phone: string;
+  /** The person who signs for this side. One per side. */
+  authorizedSignatory?: boolean;
   permissions: DealPartyPermissions;
 }
 
@@ -330,6 +373,8 @@ export interface Deal {
     signatories: Signatory[];
     signingDate: string | null;
     venue: string;
+    document?: SigningDocument | null;
+    audit?: SigningAuditEntry[];
   };
   postCompletion: PostCompletionItem[];
   offerReviewLoop?: ReviewLoop;
@@ -348,6 +393,7 @@ export const addParty = async (
     name: string;
     email: string;
     phone?: string;
+    authorizedSignatory?: boolean;
     permissions?: Partial<DealPartyPermissions>;
   },
 ): Promise<Deal> => {
@@ -364,6 +410,7 @@ export const updateParty = async (
     name: string;
     email: string;
     phone: string;
+    authorizedSignatory: boolean;
     permissions: Partial<DealPartyPermissions>;
   }>,
 ): Promise<Deal> => {
@@ -533,27 +580,79 @@ export const toggleSigningChecklistItem = async (
   );
   return res.data?.data ?? res.data;
 };
-export const addSignatory = async (
+export const sendForSigning = async (
   id: string,
-  name: string,
-  party: string,
-  role?: string,
-): Promise<Deal> => {
-  const res = await api.post(`/deals/${id}/signing/signatories`, {
-    name,
-    party,
-    role,
-  });
+  dto: { contractId: string; message?: string },
+): Promise<{ sent: number; failed: string[] }> => {
+  const res = await api.post(`/deals/${id}/signing/send`, dto);
   return res.data?.data ?? res.data;
 };
-export const markSignatorySigned = async (
+export const remindSignatories = async (
   id: string,
-  index: number,
-): Promise<Deal> => {
-  const res = await api.patch(
-    `/deals/${id}/signing/signatories/${index}/sign`,
-    {},
+  index?: number,
+): Promise<{ reminded: number; failed: string[] }> => {
+  const res = await api.post(`/deals/${id}/signing/remind`, { index });
+  return res.data?.data ?? res.data;
+};
+export const resetSigning = async (id: string): Promise<{ ok: boolean }> => {
+  const res = await api.post(`/deals/${id}/signing/reset`, {});
+  return res.data?.data ?? res.data;
+};
+export const sendExecutedCopies = async (
+  id: string,
+  dto: { message?: string; includeCertificate?: boolean } = {},
+): Promise<{ sent: number; failed: string[] }> => {
+  const res = await api.post(`/deals/${id}/signing/executed-copies`, dto);
+  return res.data?.data ?? res.data;
+};
+export const advanceFromSigning = async (
+  id: string,
+): Promise<{ ok: boolean; stage: string }> => {
+  const res = await api.post(`/deals/${id}/signing/advance`, {});
+  return res.data?.data ?? res.data;
+};
+/** The signed PDF / certificate need the login, so they are fetched as blobs. */
+export const downloadSigningFile = async (
+  id: string,
+  kind: "signed" | "certificate",
+): Promise<Blob> => {
+  const res = await api.get(
+    `/deals/${id}/signing/${kind === "signed" ? "signed.pdf" : "certificate.pdf"}`,
+    { responseType: "blob" },
   );
+  return res.data;
+};
+
+// ── Signing by link (no login) ──
+export interface SigningPageData {
+  businessName: string;
+  dealName: string;
+  documentName: string;
+  state: "ready" | "signed" | "changed";
+  signatory: { name: string; email: string; title: string; side: string };
+  signedAt: string | null;
+  signatureMethod: "typed" | "drawn" | null;
+  signatureData: string | null;
+  completed: boolean;
+  others: { name: string; side: string; signed: boolean }[];
+  preview: DealDocumentPreviewData;
+}
+export const fetchSigningPage = async (
+  token: string,
+): Promise<SigningPageData> => {
+  const res = await api.get(`/deals/sign/${token}`);
+  return res.data?.data ?? res.data;
+};
+export const submitSignature = async (
+  token: string,
+  dto: {
+    name: string;
+    method: "typed" | "drawn";
+    signatureData?: string;
+    consent: boolean;
+  },
+): Promise<{ success: boolean; completed: boolean }> => {
+  const res = await api.post(`/deals/sign/${token}`, dto);
   return res.data?.data ?? res.data;
 };
 export const updateSigningDetails = async (

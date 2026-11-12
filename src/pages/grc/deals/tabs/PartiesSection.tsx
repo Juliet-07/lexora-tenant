@@ -30,13 +30,21 @@ export default function PartiesSection({ deal }: { deal: Deal }) {
     name: "",
     email: "",
     phone: "",
+    authorizedSignatory: false,
   });
 
   const addMut = useMutation({
     mutationFn: () => addParty(deal._id, f),
     onSuccess: () => {
       invalidate();
-      setF({ side: "Party A", title: "", name: "", email: "", phone: "" });
+      setF({
+        side: "Party A",
+        title: "",
+        name: "",
+        email: "",
+        phone: "",
+        authorizedSignatory: false,
+      });
     },
     onError: (err: any) =>
       toast.error(err?.response?.data?.message ?? "Failed to add party"),
@@ -59,8 +67,17 @@ export default function PartiesSection({ deal }: { deal: Deal }) {
       <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
         {side}
       </div>
+      {bySide(side).length > 0 &&
+        !bySide(side).some((p) => p.authorizedSignatory) && (
+          <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-2.5 py-1.5">
+            Select who signs for {side}.
+          </div>
+        )}
       {bySide(side).map((p) => (
-        <div key={p.index} className="border rounded-md p-2.5 space-y-1.5">
+        <div
+          key={p.index}
+          className={`border rounded-md p-2.5 space-y-1.5 ${p.authorizedSignatory ? "border-primary/60 bg-primary/5" : ""}`}
+        >
           <div className="flex items-start justify-between gap-2">
             <div className="text-sm">
               <div className="font-medium">
@@ -83,6 +100,21 @@ export default function PartiesSection({ deal }: { deal: Deal }) {
             </Button>
           </div>
           <div className="flex flex-wrap gap-3 text-xs pt-1 border-t">
+            <label className="flex items-center gap-1.5 cursor-pointer font-medium">
+              <input
+                type="radio"
+                name={`signatory-${side}`}
+                aria-label={`Authorised signatory: ${p.name}`}
+                checked={!!p.authorizedSignatory}
+                onChange={() =>
+                  patchMut.mutate({
+                    index: p.index,
+                    patch: { authorizedSignatory: true },
+                  })
+                }
+              />
+              Authorised signatory
+            </label>
             {(["dataRoom", "contractReview", "offerReview"] as const).map(
               (key) => (
                 <label
@@ -165,6 +197,16 @@ export default function PartiesSection({ deal }: { deal: Deal }) {
           <Plus className="h-4 w-4 mr-1" />
           Add
         </Button>
+        <label className="col-span-2 md:col-span-6 flex items-center gap-1.5 text-xs cursor-pointer">
+          <input
+            type="checkbox"
+            checked={f.authorizedSignatory}
+            onChange={(e) =>
+              setF({ ...f, authorizedSignatory: e.target.checked })
+            }
+          />
+          Authorised signatory for {f.side}
+        </label>
       </div>
     </div>
   );

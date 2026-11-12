@@ -191,7 +191,7 @@ export default function DealDetail() {
       </Card>
 
       <Tabs defaultValue="overview">
-        <TabsList className="flex-wrap h-auto">
+        <TabsList className="w-full flex-wrap h-auto">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="termsheet">Term Sheet</TabsTrigger>
           <TabsTrigger value="dataroom">Data Room</TabsTrigger>

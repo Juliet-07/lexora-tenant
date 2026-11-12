@@ -22,6 +22,7 @@ import PolicyApprovalPage from "@/pages/grc/compliance/PolicyApproval";
 import EsgChairApprovalPage from "@/pages/grc/esg/EsgChairApproval";
 import DealContractReviewPage from "@/pages/grc/deals/DealContractReview";
 import DealOfferReviewPage from "@/pages/grc/deals/DealOfferReview";
+import DealSignPage from "@/pages/public/DealSignPage";
 import SignToolContractPage from "@/pages/public/SignToolContractPage";
 import Intro from "@/pages/Intro";
 import Platform from "@/pages/marketing/Platform";
@@ -57,6 +58,7 @@ const PUBLIC_ROUTE_PATTERNS = [
   /^\/esg-approve\/[^/]+$/,
   /^\/deal-review\/contract\/[^/]+$/,
   /^\/deal-review\/offer\/[^/]+$/,
+  /^\/deal-sign\/[^/]+$/,
   /^\/readiness\/share\/[^/]+$/,
   /^\/forgot-password$/,
   /^\/reset-password$/,
@@ -172,6 +174,8 @@ export function AppRoutes() {
           path="/login/deal-review/contract/:token"
           element={<DealContractReviewPage />}
         />
+        <Route path="/deal-sign/:token" element={<DealSignPage />} />
+        <Route path="/login/deal-sign/:token" element={<DealSignPage />} />
         <Route
           path="/deal-review/offer/:token"
           element={<DealOfferReviewPage />}

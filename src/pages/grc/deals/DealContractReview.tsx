@@ -1,13 +1,12 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Document, Page, pdfjs } from "react-pdf";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { CheckCircle2, ShieldCheck } from "lucide-react";
+import { CheckCircle2, Download, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import {
   addExternalRedline,
@@ -15,9 +14,7 @@ import {
   submitReview,
   type ContractReviewSnapshot,
 } from "@/lib/grc/deals-api";
-
-pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
-const PDF_LOAD_OPTIONS = { disableRange: true, disableStream: true };
+import { DealDocumentViewer } from "@/components/grc/DealDocumentPreview";
 
 const resolveFileUrl = (url: string | null): string | null => {
   if (!url) return null;
@@ -51,6 +48,7 @@ export default function DealContractReviewPage() {
   >("");
   const [comment, setComment] = useState("");
   const [reviewed, setReviewed] = useState(false);
+  const markReviewed = useCallback(() => setReviewed(true), []);
   const [submitted, setSubmitted] = useState(false);
 
   useEffect(() => {
@@ -136,19 +134,31 @@ export default function DealContractReviewPage() {
         <Card>
           <CardContent className="p-5 space-y-2">
             <div className="text-sm font-medium">1. Review the document</div>
-            {snap.pdfUrl ? (
-              <ReviewPdfViewer
-                url={resolveFileUrl(snap.pdfUrl)!}
-                onScrolledToEnd={() => setReviewed(true)}
+            {snap.preview ? (
+              <DealDocumentViewer
+                preview={snap.preview}
+                title={snap.contractName}
+                onScrolledToEnd={markReviewed}
               />
             ) : (
               <p className="text-sm text-muted-foreground">
                 No document available yet.
               </p>
             )}
+            {snap.pdfUrl && (
+              <a
+                href={resolveFileUrl(snap.pdfUrl)!}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+              >
+                <Download className="h-3.5 w-3.5" />
+                Download as PDF
+              </a>
+            )}
             {!reviewed && (
               <p className="text-xs text-muted-foreground">
-                Scroll to the last page to continue.
+                Read to the end of the document to continue.
               </p>
             )}
           </CardContent>
@@ -211,51 +221,6 @@ export default function DealContractReviewPage() {
         </Card>
       </div>
     </Shell>
-  );
-}
-
-function ReviewPdfViewer({
-  url,
-  onScrolledToEnd,
-}: {
-  url: string;
-  onScrolledToEnd: () => void;
-}) {
-  const [numPages, setNumPages] = useState(0);
-  const [fired, setFired] = useState(false);
-
-  return (
-    <div
-      onScroll={(e) => {
-        const el = e.currentTarget;
-        if (!fired && el.scrollTop + el.clientHeight >= el.scrollHeight - 20) {
-          setFired(true);
-          onScrolledToEnd();
-        }
-      }}
-      className="border rounded-md overflow-y-auto bg-muted/10"
-      style={{ maxHeight: 480 }}
-    >
-      <Document
-        file={url}
-        options={PDF_LOAD_OPTIONS}
-        onLoadSuccess={(pdf) => setNumPages(pdf.numPages)}
-        loading={
-          <p className="text-center text-sm text-muted-foreground py-8">
-            Loading document…
-          </p>
-        }
-        error={
-          <p className="text-center text-sm text-red-600 py-8">
-            Failed to load PDF.
-          </p>
-        }
-      >
-        {Array.from({ length: numPages }, (_, i) => (
-          <Page key={i} pageNumber={i + 1} width={560} />
-        ))}
-      </Document>
-    </div>
   );
 }
 

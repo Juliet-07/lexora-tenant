@@ -61,6 +61,7 @@ import {
   type ContractSection,
   type Deal,
 } from "@/lib/grc/deals-api";
+import { DOC_CLASSES } from "@/components/grc/DealDocumentPreview";
 
 // ═══════════════════════════════════════════════════════════════
 // A deal contract, opened in a pop-up. It is generated from a template and
@@ -94,9 +95,6 @@ function highlightMissing(html: string, labels: Map<string, string>): string {
       `<mark data-missing="${t}" title="${esc(labels.get(t) ?? t)} — not filled in yet">{{${t}}}</mark>`,
   );
 }
-
-const DOC_CLASSES =
-  "text-sm leading-relaxed [&_p]:my-2 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-6 [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-6 [&_h1]:text-lg [&_h1]:font-semibold [&_h2]:text-base [&_h2]:font-semibold [&_h3]:font-semibold [&_table]:my-2 [&_table]:w-full [&_td]:border [&_td]:p-1.5 [&_th]:border [&_th]:p-1.5 [&_mark]:rounded [&_mark]:bg-warning/20 [&_mark]:px-0.5 [&_mark]:text-amber-800 dark:[&_mark]:text-amber-200 [&_mark]:ring-1 [&_mark]:ring-warning/40";
 
 export function DealContractDialog({
   deal,
