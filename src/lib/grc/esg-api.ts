@@ -435,6 +435,47 @@ export interface ReportIndicator {
   boardChairApproval: BoardChairApproval;
 }
 export type EsgReportStatus = "Draft" | "Compiled" | "Published";
+export type EsgReportEmailStatus = "Sent" | "Failed" | "No email";
+export interface EsgReportRecipient {
+  boardMemberId: string;
+  name: string;
+  email: string;
+  emailStatus: EsgReportEmailStatus;
+  sentAt: string | null;
+  readAt: string | null;
+}
+export interface EsgReportSnapshotIndicator {
+  code: string;
+  title: string;
+  owner: string;
+  requirement: string;
+  response: string;
+  status: string;
+  isApplicable: boolean;
+  applicabilityNote: string;
+  evidence: string[];
+  signedOffBy: string | null;
+  signedOffAt: string | null;
+  esgChairName: string;
+  esgChairDecidedAt: string | null;
+  boardChairName: string;
+  boardChairDecidedAt: string | null;
+}
+export interface EsgReportSnapshot {
+  businessName: string;
+  frameworkLabel: string;
+  frameworkDescription: string;
+  builtAt: string;
+  totals: {
+    total: number;
+    applicable: number;
+    notApplicable: number;
+    signedOff: number;
+    pending: number;
+    pct: number;
+  };
+  indicators: EsgReportSnapshotIndicator[];
+}
 export interface EsgReport {
   _id: string;
   frameworkId: string;
@@ -444,6 +485,20 @@ export interface EsgReport {
   compiledAt: string | null;
   publishedAt: string | null;
   note: string;
+  publishedBy?: string;
+  publishMessage?: string;
+  // Who the published report went to, and whether they've opened it.
+  recipients?: EsgReportRecipient[];
+}
+export interface EsgReportDetail extends EsgReport {
+  snapshot: EsgReportSnapshot;
+}
+export interface PublishReportResult {
+  report: EsgReport;
+  emailed: number;
+  failed: number;
+  notified: number;
+  totalMembers: number;
 }
 export interface Coverage {
   signedOff: number;
@@ -623,9 +678,42 @@ export const compileReport = async (
   });
   return res.data?.data ?? res.data;
 };
-export const publishReport = async (id: string): Promise<EsgReport> => {
-  const res = await api.post(`/grc/esg/reports/${id}/publish`);
+export const fetchReport = async (id: string): Promise<EsgReportDetail> => {
+  const res = await api.get(`/grc/esg/reports/${id}`);
   return res.data?.data ?? res.data;
+};
+// Publishing sends the report to every active board member — emailed
+// with the PDF attached, and added to their portal's Board Pack page.
+export const publishReport = async (
+  id: string,
+  message?: string,
+): Promise<PublishReportResult> => {
+  const res = await api.post(`/grc/esg/reports/${id}/publish`, { message });
+  return res.data?.data ?? res.data;
+};
+// For members who never got it (appointed since, or an email failed).
+export const sendReportToBoard = async (
+  id: string,
+): Promise<PublishReportResult> => {
+  const res = await api.post(`/grc/esg/reports/${id}/send-to-board`);
+  return res.data?.data ?? res.data;
+};
+export const downloadReportPdf = async (
+  id: string,
+  filename?: string,
+): Promise<void> => {
+  const res = await api.get(`/grc/esg/reports/${id}/pdf`, {
+    responseType: "blob",
+  });
+  const blob = new Blob([res.data], { type: "application/pdf" });
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename ?? "ESG report.pdf";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(url);
 };
 
 // ── Client-side derived helpers (no server round trip needed) ──

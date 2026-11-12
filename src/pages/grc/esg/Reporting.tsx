@@ -80,7 +80,7 @@ import {
   addIndicatorEvidence,
   fetchReports,
   compileReport,
-  publishReport,
+  downloadReportPdf,
   fetchDashboard,
   updateIndicatorRequirement,
   updateIndicatorApplicability,
@@ -91,6 +91,7 @@ import {
   EsgReport,
   indicatorTone,
 } from "@/lib/grc/esg-api";
+import EsgReportViewer from "@/components/grc/EsgReportViewer";
 import { fetchCommittees, Committee } from "@/lib/grc/governance-api";
 import {
   exportReportExcel,
@@ -240,16 +241,18 @@ export default function EsgReporting() {
       }
     },
   });
-  const publishMut = useMutation({
-    mutationFn: (id: string) => publishReport(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["esgReports"] });
-      toast({
-        title: "Report published",
-        description: "Available for board pack and investor distribution.",
-      });
-    },
-  });
+  // The report viewer owns view, download, publish and send-to-board.
+  const [viewing, setViewing] = useState<{
+    id: string;
+    publish: boolean;
+  } | null>(null);
+  const downloadReport = async (r: EsgReport) => {
+    try {
+      await downloadReportPdf(r._id, `${r.title}.pdf`);
+    } catch {
+      toast({ title: "Could not download the PDF", variant: "destructive" });
+    }
+  };
 
   const currentFramework = frameworks.find((f) => f._id === tab);
 
@@ -398,7 +401,8 @@ export default function EsgReporting() {
                 <TableHead>Framework</TableHead>
                 <TableHead>Period</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="w-64">Actions</TableHead>
+                <TableHead>Board</TableHead>
+                <TableHead className="w-80">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -428,13 +432,39 @@ export default function EsgReporting() {
                         {r.status}
                       </Badge>
                     </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {r.status !== "Published"
+                        ? "—"
+                        : r.recipients?.length
+                          ? `${r.recipients.filter((x) => x.emailStatus === "Sent").length} emailed · ${r.recipients.filter((x) => x.readAt).length} read`
+                          : "Not sent"}
+                    </TableCell>
                     <TableCell>
                       <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() =>
+                            setViewing({ id: r._id, publish: false })
+                          }
+                        >
+                          <Eye className="h-3.5 w-3.5 mr-1" />
+                          View
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => downloadReport(r)}
+                        >
+                          <Download className="h-3.5 w-3.5 mr-1" />
+                          PDF
+                        </Button>
                         {r.status !== "Published" && (
                           <Button
                             size="sm"
-                            disabled={publishMut.isPending}
-                            onClick={() => publishMut.mutate(r._id)}
+                            onClick={() =>
+                              setViewing({ id: r._id, publish: true })
+                            }
                           >
                             <Send className="h-3.5 w-3.5 mr-1" />
                             Publish
@@ -448,7 +478,7 @@ export default function EsgReporting() {
               {!reports.length && (
                 <TableRow>
                   <TableCell
-                    colSpan={5}
+                    colSpan={6}
                     className="text-center text-xs text-muted-foreground py-8"
                   >
                     No reports compiled yet.
@@ -459,6 +489,12 @@ export default function EsgReporting() {
           </Table>
         </CardContent>
       </Card>
+
+      <EsgReportViewer
+        reportId={viewing?.id ?? null}
+        openPublish={viewing?.publish ?? false}
+        onClose={() => setViewing(null)}
+      />
 
       <IndicatorSheet
         indicator={selected}
