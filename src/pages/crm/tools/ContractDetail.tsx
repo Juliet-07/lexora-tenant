@@ -73,6 +73,7 @@ import {
   countersignContract,
   sendSignedContractCopy,
   downloadContractPdf,
+  downloadContractSigningCertificate,
   previewContractPdf,
   updateContractGovernance,
   addConditionPrecedent,
@@ -207,6 +208,14 @@ export default function ContractDetail() {
   const downloadMut = useMutation({
     mutationFn: () => downloadContractPdf(id),
     onError: onErr("Download failed"),
+  });
+  const certificateMut = useMutation({
+    mutationFn: () =>
+      downloadContractSigningCertificate(
+        id,
+        `${contract?.title ?? "Contract"} (Signing certificate).pdf`,
+      ),
+    onError: onErr("Could not download the signing certificate"),
   });
   const sendMut = useMutation({
     mutationFn: () => sendContractForSignature(id),
@@ -603,6 +612,21 @@ export default function ContractDetail() {
             >
               <Download className="mr-2 h-4 w-4" /> Export
             </Button>
+            {contract.signatureStatus === "countersigned" && (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={certificateMut.isPending}
+                onClick={() => certificateMut.mutate()}
+              >
+                {certificateMut.isPending ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <ShieldCheck className="mr-2 h-4 w-4" />
+                )}
+                Signing certificate
+              </Button>
+            )}
             {contract.stage !== "Expiry / Termination" && (
               <Button
                 size="sm"
@@ -1371,6 +1395,21 @@ export default function ContractDetail() {
                   }}
                 >
                   <PenTool className="mr-2 h-4 w-4" /> Countersign
+                </Button>
+              )}
+              {contract.signatureStatus === "countersigned" && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={certificateMut.isPending}
+                  onClick={() => certificateMut.mutate()}
+                >
+                  {certificateMut.isPending ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <ShieldCheck className="mr-2 h-4 w-4" />
+                  )}
+                  Signing certificate
                 </Button>
               )}
               {contract.signatureStatus === "countersigned" && (

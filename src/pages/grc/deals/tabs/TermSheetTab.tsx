@@ -2,10 +2,17 @@ import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { AlertTriangle, FileSignature, Sparkles } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  FileSignature,
+  PenLine,
+  Sparkles,
+} from "lucide-react";
 import { GenerateTermSheetDialog } from "@/components/grc/GenerateTermSheetDialog";
 import { DealContractDialog } from "@/components/grc/DealContractDialog";
 import { DocReviewBadge } from "@/components/grc/DocReviewBadge";
+import DealSigningPanel from "@/components/grc/DealSigningPanel";
 import type { Deal, TermSheet } from "@/lib/grc/deals-api";
 
 // The deal's term sheets. A term sheet is a document in its own right: it
@@ -45,8 +52,8 @@ export default function TermSheetTab({ deal }: { deal: Deal }) {
           <p className="text-sm text-muted-foreground">
             Generated from the term sheet templates your platform admin
             publishes and filled in from this deal. Complete the terms, send it
-            to the parties for review and export it. Once it is agreed, draft
-            the contract on the <b>Contract</b> tab.
+            to the parties for review, have it signed and export it. Once it is
+            signed, draft the contract on the <b>Contract</b> tab.
           </p>
         </div>
         <Button size="sm" onClick={() => setGenerateOpen(true)}>
@@ -59,6 +66,10 @@ export default function TermSheetTab({ deal }: { deal: Deal }) {
         {termSheets.map((c) => {
           const missing = (c.fields ?? []).filter((f) => !f.filled).length;
           const responses = c.reviewLoop?.responses?.length ?? 0;
+          const sign = deal.termSheetSigning;
+          const outForSigning =
+            sign?.document?.contractId === c._id &&
+            (sign?.signatories?.length ?? 0) > 0;
           return (
             <Card
               key={c._id}
@@ -92,6 +103,24 @@ export default function TermSheetTab({ deal }: { deal: Deal }) {
                       {missing} term{missing === 1 ? "" : "s"} to complete
                     </Badge>
                   )}
+                  {c.signed ? (
+                    <Badge
+                      variant="outline"
+                      className="gap-1 border-emerald-500/40 text-emerald-700"
+                    >
+                      <CheckCircle2 className="h-3 w-3" />
+                      Signed
+                    </Badge>
+                  ) : (
+                    outForSigning && (
+                      <Badge
+                        variant="outline"
+                        className="border-amber-500/40 text-amber-700"
+                      >
+                        Out for signing
+                      </Badge>
+                    )
+                  )}
                   {responses > 0 && (
                     <Badge variant="secondary">
                       {responses} review response
@@ -112,6 +141,23 @@ export default function TermSheetTab({ deal }: { deal: Deal }) {
             the first one.
           </CardContent>
         </Card>
+      )}
+
+      {termSheets.length > 0 && (
+        <section className="space-y-3 pt-2" aria-label="Term sheet signing">
+          <div>
+            <h3 className="flex items-center gap-2 text-base font-semibold">
+              <PenLine className="h-4 w-4" />
+              Signing
+            </h3>
+            <p className="text-sm text-muted-foreground">
+              Send the agreed term sheet to the authorised signatory of each
+              side. Once both have signed you can download the executed copy and
+              the signing certificate, and move the deal to Due Diligence.
+            </p>
+          </div>
+          <DealSigningPanel deal={deal} kind="term_sheet" />
+        </section>
       )}
 
       {/* {legacy.length > 0 && (

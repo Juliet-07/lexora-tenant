@@ -21,6 +21,7 @@ import {
   MessageSquare,
   Mail,
   Eye,
+  ShieldCheck,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -31,6 +32,7 @@ import {
   respondToContractComment,
   sendSignedContractCopy,
   viewSignedContractPdf,
+  downloadContractSigningCertificate,
   type SignableContract,
 } from "@/lib/crm/tools-api";
 
@@ -205,6 +207,25 @@ export default function OnboardingContractEditor({
       });
     } finally {
       setViewingPdf(false);
+    }
+  };
+
+  const [downloadingCert, setDownloadingCert] = useState(false);
+  const handleDownloadCertificate = async () => {
+    setDownloadingCert(true);
+    try {
+      await downloadContractSigningCertificate(
+        contractId!,
+        `${contract?.title ?? "Contract"} (Signing certificate).pdf`,
+      );
+    } catch (err: any) {
+      toast({
+        title: "Could not download the signing certificate",
+        description: err?.response?.data?.message ?? "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setDownloadingCert(false);
     }
   };
 
@@ -422,6 +443,22 @@ export default function OnboardingContractEditor({
                         <>
                           <Eye className="h-3.5 w-3.5 mr-1.5" /> View Signed
                           Copy
+                        </>
+                      )}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="flex-1"
+                      onClick={handleDownloadCertificate}
+                      disabled={downloadingCert}
+                    >
+                      {downloadingCert ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <>
+                          <ShieldCheck className="h-3.5 w-3.5 mr-1.5" /> Signing
+                          Certificate
                         </>
                       )}
                     </Button>

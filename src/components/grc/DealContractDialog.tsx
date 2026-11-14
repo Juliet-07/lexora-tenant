@@ -659,7 +659,7 @@ function EditTab({
   const [redlineText, setRedlineText] = useState("");
   const [removeIdx, setRemoveIdx] = useState<number | null>(null);
   // Once executed, the text is changed only by a variation.
-  const locked = !!contract.executed;
+  const locked = !!contract.executed || !!contract.signed;
 
   const bodyMut = useMutation({
     mutationFn: ({ index, body }: { index: number; body: string }) =>
@@ -721,8 +721,17 @@ function EditTab({
         </div>
         {locked && (
           <p className="rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs">
-            This contract has been executed, so its text can no longer be edited
-            directly. Use the <b>Amendments</b> tab to vary it.
+            {contract.signed ? (
+              <>
+                This term sheet has been signed, so its text can no longer be
+                edited.
+              </>
+            ) : (
+              <>
+                This contract has been executed, so its text can no longer be
+                edited directly. Use the <b>Amendments</b> tab to vary it.
+              </>
+            )}
           </p>
         )}
         <p className="rounded-md border bg-background px-3 py-2 text-xs text-muted-foreground">

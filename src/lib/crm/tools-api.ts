@@ -1167,6 +1167,27 @@ export const downloadContractPdf = async (
   window.URL.revokeObjectURL(url);
 };
 
+// The certificate of signing — both signatures with time, IP and device, the
+// document fingerprint and the trail. The backend only issues it once the
+// counterparty has signed AND the tenant has countersigned. Downloads.
+export const downloadContractSigningCertificate = async (
+  id: string,
+  filename?: string,
+): Promise<void> => {
+  const res = await api.get(`/tools/contracts/${id}/signing-certificate`, {
+    responseType: "blob",
+  });
+  const blob = new Blob([res.data], { type: "application/pdf" });
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename ?? `signing-certificate-${id}.pdf`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(url);
+};
+
 // Real, fully-executed copy — only ever succeeds once the backend's
 // own guard confirms both parties have actually signed. Opens in a
 // new tab rather than downloading, since "view" and "download" are

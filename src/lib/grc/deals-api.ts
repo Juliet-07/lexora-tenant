@@ -298,6 +298,8 @@ export interface Contract {
   createdAt: string;
   /** True once every signatory has signed (or the deal is past Signing). */
   executed?: boolean;
+  /** A term sheet both sides have signed — its text is fixed. */
+  signed?: boolean;
   /** Amendments, addenda, side letters, waivers and extensions. */
   variations?: ContractVariation[];
   /** Negotiation: the current round, and the side holding the pen. */
@@ -352,6 +354,19 @@ export interface SigningDocument {
   signedPdfUrl: string | null;
   archivedToDataRoom: boolean;
 }
+export interface DealSigningBlock {
+  checklist: SigningItem[];
+  signatories: Signatory[];
+  signingDate: string | null;
+  venue: string;
+  document?: SigningDocument | null;
+  audit?: SigningAuditEntry[];
+}
+/** Which of a deal's two signing envelopes a call is about. */
+export type SigningKind = "contract" | "term_sheet";
+const kindQuery = (kind?: SigningKind) =>
+  kind === "term_sheet" ? { kind } : undefined;
+
 export interface PostCompletionItem {
   item: string;
   dueDate: string;
@@ -404,14 +419,9 @@ export interface Deal {
   /** Multi-contract deals; the singular `contract` remains the primary one. */
   contracts?: Contract[];
   cps: CP[];
-  signing: {
-    checklist: SigningItem[];
-    signatories: Signatory[];
-    signingDate: string | null;
-    venue: string;
-    document?: SigningDocument | null;
-    audit?: SigningAuditEntry[];
-  };
+  signing: DealSigningBlock;
+  /** The term sheet's own signing — separate from the contract's. */
+  termSheetSigning?: DealSigningBlock;
   postCompletion: PostCompletionItem[];
   offerReviewLoop?: ReviewLoop;
   contractReviewLoop?: ReviewLoop;
@@ -619,42 +629,66 @@ export const toggleSigningChecklistItem = async (
 export const sendForSigning = async (
   id: string,
   dto: { contractId: string; message?: string },
+  kind?: SigningKind,
 ): Promise<{ sent: number; failed: string[] }> => {
-  const res = await api.post(`/deals/${id}/signing/send`, dto);
+  const res = await api.post(`/deals/${id}/signing/send`, dto, {
+    params: kindQuery(kind),
+  });
   return res.data?.data ?? res.data;
 };
 export const remindSignatories = async (
   id: string,
   index?: number,
+  kind?: SigningKind,
 ): Promise<{ reminded: number; failed: string[] }> => {
-  const res = await api.post(`/deals/${id}/signing/remind`, { index });
+  const res = await api.post(
+    `/deals/${id}/signing/remind`,
+    { index },
+    { params: kindQuery(kind) },
+  );
   return res.data?.data ?? res.data;
 };
-export const resetSigning = async (id: string): Promise<{ ok: boolean }> => {
-  const res = await api.post(`/deals/${id}/signing/reset`, {});
+export const resetSigning = async (
+  id: string,
+  kind?: SigningKind,
+): Promise<{ ok: boolean }> => {
+  const res = await api.post(
+    `/deals/${id}/signing/reset`,
+    {},
+    { params: kindQuery(kind) },
+  );
   return res.data?.data ?? res.data;
 };
 export const sendExecutedCopies = async (
   id: string,
   dto: { message?: string; includeCertificate?: boolean } = {},
+  kind?: SigningKind,
 ): Promise<{ sent: number; failed: string[] }> => {
-  const res = await api.post(`/deals/${id}/signing/executed-copies`, dto);
+  const res = await api.post(`/deals/${id}/signing/executed-copies`, dto, {
+    params: kindQuery(kind),
+  });
   return res.data?.data ?? res.data;
 };
 export const advanceFromSigning = async (
   id: string,
+  kind?: SigningKind,
 ): Promise<{ ok: boolean; stage: string }> => {
-  const res = await api.post(`/deals/${id}/signing/advance`, {});
+  const res = await api.post(
+    `/deals/${id}/signing/advance`,
+    {},
+    { params: kindQuery(kind) },
+  );
   return res.data?.data ?? res.data;
 };
 /** The signed PDF / certificate need the login, so they are fetched as blobs. */
 export const downloadSigningFile = async (
   id: string,
-  kind: "signed" | "certificate",
+  fileKind: "signed" | "certificate",
+  kind?: SigningKind,
 ): Promise<Blob> => {
   const res = await api.get(
-    `/deals/${id}/signing/${kind === "signed" ? "signed.pdf" : "certificate.pdf"}`,
-    { responseType: "blob" },
+    `/deals/${id}/signing/${fileKind === "signed" ? "signed.pdf" : "certificate.pdf"}`,
+    { responseType: "blob", params: kindQuery(kind) },
   );
   return res.data;
 };
@@ -664,6 +698,8 @@ export interface SigningPageData {
   businessName: string;
   dealName: string;
   documentName: string;
+  /** Whether the link is for the contract or the term sheet. */
+  documentKind?: SigningKind;
   state: "ready" | "signed" | "changed";
   signatory: { name: string; email: string; title: string; side: string };
   signedAt: string | null;
