@@ -213,7 +213,10 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
       title: "Deals & Transactions",
       icon: Handshake,
       adminOnly: true,
-      children: [{ title: "Deal Pipeline", url: "/grc/deals/pipeline" }],
+      children: [
+        { title: "Deal Pipeline", url: "/grc/deals/pipeline" },
+        { title: "Portfolio Analysis", url: "/grc/intelligence/portfolio" },
+      ],
     },
     {
       title: "Deal Intelligence",
@@ -221,7 +224,6 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
       adminOnly: true,
       children: [
         { title: "Company Valuation", url: "/grc/intelligence/valuation" },
-        { title: "Portfolio Analysis", url: "/grc/intelligence/portfolio" },
         {
           title: "Investor Readiness",
           url: "/grc/intelligence/investor-readiness",

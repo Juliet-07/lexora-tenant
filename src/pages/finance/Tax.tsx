@@ -105,7 +105,6 @@ const statusClass = (s: string) =>
 const OBLIGATION_TYPES: TaxObligationType[] = [
   "VAT return",
   "PAYE remittance",
-  "RSSB contributions",
   "WHT remittance",
   "CIT provisional",
 ];
@@ -119,7 +118,7 @@ const RECURRING_FREQUENCIES: TaxRecurringFrequency[] = [
 const taxWorkflow = [
   {
     action: "Review tax calendar",
-    detail: "Upcoming RRA and RSSB obligations with due dates and amounts",
+    detail: "Upcoming tax obligations with due dates and amounts",
     owner: "Finance manager",
     trigger: "Start of month",
   },
@@ -131,7 +130,7 @@ const taxWorkflow = [
     trigger: "By the 10th",
   },
   {
-    action: "Prepare PAYE & RSSB",
+    action: "Prepare PAYE & Pension",
     detail:
       "Payroll declarations sourced directly from the authorised payroll run",
     owner: "Accountant",
@@ -248,7 +247,7 @@ export default function Tax() {
     mutationFn: (invoiceId: string) => resyncEbm(invoiceId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["ebmStatus"] });
-      toast({ title: "Re-synced to EBM" });
+      toast({ title: "Re-synced" });
     },
     onError: onErr("Failed to re-sync"),
   });
@@ -293,8 +292,8 @@ export default function Tax() {
         <div>
           <h1 className="text-2xl font-bold">Tax</h1>
           <p className="text-sm text-muted-foreground">
-            RRA and RSSB obligations: VAT, PAYE, RSSB, CIT, WHT and EBM
-            compliance
+            Tax Obligations: VAT, PAYE, Pension, CIT, WHT and Fiscal
+            Reconciliation
           </p>
         </div>
         <Select
@@ -321,10 +320,10 @@ export default function Tax() {
         <TabsList className="flex-wrap h-auto">
           <TabsTrigger value="calendar">Tax calendar</TabsTrigger>
           <TabsTrigger value="vat">VAT</TabsTrigger>
-          <TabsTrigger value="payroll">PAYE & RSSB</TabsTrigger>
+          <TabsTrigger value="payroll">PAYE & Pension</TabsTrigger>
           <TabsTrigger value="cit">CIT</TabsTrigger>
           <TabsTrigger value="wht">WHT</TabsTrigger>
-          <TabsTrigger value="ebm">EBM</TabsTrigger>
+          <TabsTrigger value="ebm">Fiscal Recon</TabsTrigger>
           <TabsTrigger value="workflow">Workflow</TabsTrigger>
         </TabsList>
 
@@ -471,15 +470,15 @@ export default function Tax() {
           )}
         </TabsContent>
 
-        {/* PAYE & RSSB */}
+        {/* PAYE & Pension */}
         <TabsContent value="payroll" className="mt-4">
           <Card>
             <CardHeader>
               <CardTitle className="text-base">
-                PAYE & RSSB remittances
+                PAYE & Pension remittances
               </CardTitle>
               <p className="text-xs text-muted-foreground">
-                Sourced from real, approved HR payroll runs — PAYE and RSSB
+                Sourced from real, approved HR payroll runs — PAYE
                 (pension, maternity, occupational hazard) taken directly from
                 each payslip's own deduction lines.
               </p>
@@ -491,7 +490,7 @@ export default function Tax() {
                     <TableHead>Period</TableHead>
                     <TableHead>Gross</TableHead>
                     <TableHead>PAYE</TableHead>
-                    <TableHead>RSSB</TableHead>
+                    <TableHead>Pemsion</TableHead>
                     <TableHead>Status</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -625,11 +624,11 @@ export default function Tax() {
           </Card>
         </TabsContent>
 
-        {/* EBM */}
+        {/* Fiscal Recon */}
         <TabsContent value="ebm" className="mt-4">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between gap-3">
-              <CardTitle className="text-base">EBM reconciliation</CardTitle>
+              <CardTitle className="text-base">Fiscal Reconciliation</CardTitle>
               <Button
                 size="sm"
                 variant="outline"

@@ -442,7 +442,7 @@ export default function Accounting() {
       </div>
 
       {/* Overview row 1 - cross-module summary */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-4 gap-3">
         {[
           {
             label: "Sales",
