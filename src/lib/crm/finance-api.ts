@@ -1071,37 +1071,147 @@ export type TaxObligationType =
   | "PAYE remittance"
   | "RSSB contributions"
   | "WHT remittance"
-  | "CIT provisional";
-export type TaxObligationStatus = "Draft" | "Filed";
-export type TaxRecurringFrequency = "Monthly" | "Quarterly" | "Annually";
+  | "CIT provisional"
+  | "Excise duty return"
+  | "Capital gains tax"
+  | "Stamp duty"
+  | "Skills development levy"
+  | "Turnover tax"
+  | "Environmental levy";
+// "Pending approval" = recorded by a team member, waiting for the
+// account owner, who has the final say on every filing.
+export type TaxObligationStatus = "Draft" | "Pending approval" | "Filed";
+export type TaxPeriodType = "monthly" | "quarterly" | "annual" | "once-off";
+export type TaxPriority = "normal" | "high" | "urgent";
+export type TaxRecurringFrequency =
+  | "Monthly"
+  | "Quarterly"
+  | "Bi-annually"
+  | "Annually";
+export interface TaxFilingFile {
+  url: string;
+  name: string;
+  mimeType?: string;
+}
+export interface TaxFiling {
+  filedOn: string;
+  amountPaid: number;
+  notes: string;
+  returnFile: TaxFilingFile | null;
+  popFile: TaxFilingFile | null;
+  recordedById: string;
+  recordedByName: string;
+  recordedAt: string | null;
+  approvedByName: string;
+  approvedAt: string | null;
+  rejectedReason: string;
+  rejectedAt: string | null;
+}
 export interface TaxObligation {
   _id: string;
   type: TaxObligationType;
+  name: string;
+  jurisdiction: string;
+  currency: string;
+  periodType: TaxPeriodType;
   period: string;
+  periodYear: number;
+  // yyyymm (quarter = its last month, year = december) — sorts the archive
+  periodKey: number;
+  periodStart: string | null;
   dueOn: string;
   amount: number;
   status: TaxObligationStatus;
   filedAt: string | null;
+  responsibleId: string | null;
+  responsibleName: string;
+  priority: TaxPriority;
+  notes: string;
+  requireDocuments: boolean;
+  filing: TaxFiling | null;
   recurring?: boolean;
   frequency?: TaxRecurringFrequency | null;
+  dueDay?: number | null;
   nextDueOn?: string | null;
+}
+export interface TaxResponsibleOption {
+  _id: string;
+  name: string;
+  isOwner: boolean;
 }
 export const fetchTaxObligations = async (): Promise<TaxObligation[]> => {
   const res = await api.get("/finance/tax-obligations");
   const d = unwrap(res);
   return Array.isArray(d) ? d : [];
 };
-export const createTaxObligation = async (dto: {
+export const fetchTaxResponsibleOptions = async (): Promise<
+  TaxResponsibleOption[]
+> => {
+  const d = unwrap(
+    await api.get("/finance/tax-obligations/responsible-options"),
+  );
+  return Array.isArray(d) ? d : [];
+};
+export interface CreateTaxObligationInput {
   type: TaxObligationType;
-  period: string;
+  name?: string;
+  jurisdiction?: string;
+  currency?: string;
+  periodType: TaxPeriodType;
+  periodYear?: number;
+  periodMonth?: number;
+  periodQuarter?: number;
+  period?: string;
   dueOn: string;
-  amount: number;
+  amount?: number;
+  responsibleId?: string;
+  priority?: TaxPriority;
+  notes?: string;
+  requireDocuments?: boolean;
+  // Recurring is just: on/off, how often, and the day of the month it
+  // falls due. Entries and reminders are handled by the backend.
   recurring?: boolean;
   frequency?: TaxRecurringFrequency;
-}): Promise<TaxObligation> =>
+  dueDay?: number;
+}
+export const createTaxObligation = async (
+  dto: CreateTaxObligationInput,
+): Promise<TaxObligation> =>
   unwrap(await api.post("/finance/tax-obligations", dto));
-export const fileTaxObligation = async (id: string): Promise<TaxObligation> =>
-  unwrap(await api.post(`/finance/tax-obligations/${id}/file`));
+// The owner files outright; anyone else's filing goes to the owner for
+// approval (the returned obligation says which: Filed / Pending approval).
+export const recordTaxFiling = async (
+  id: string,
+  dto: {
+    filedOn: string;
+    amountPaid?: number;
+    notes?: string;
+    returnFile?: File | null;
+    popFile?: File | null;
+  },
+): Promise<TaxObligation> => {
+  const form = new FormData();
+  form.append("filedOn", dto.filedOn);
+  if (dto.amountPaid != null && !Number.isNaN(dto.amountPaid))
+    form.append("amountPaid", String(dto.amountPaid));
+  if (dto.notes) form.append("notes", dto.notes);
+  if (dto.returnFile) form.append("returnFile", dto.returnFile);
+  if (dto.popFile) form.append("popFile", dto.popFile);
+  return unwrap(
+    await api.post(`/finance/tax-obligations/${id}/record-filing`, form, {
+      headers: { "Content-Type": "multipart/form-data" },
+    }),
+  );
+};
+export const approveTaxFiling = async (id: string): Promise<TaxObligation> =>
+  unwrap(await api.post(`/finance/tax-obligations/${id}/approve-filing`));
+export const rejectTaxFiling = async (
+  id: string,
+  reason: string,
+): Promise<TaxObligation> =>
+  unwrap(
+    await api.post(`/finance/tax-obligations/${id}/reject-filing`, { reason }),
+  );
 
 export interface VatLine {
   category: string;

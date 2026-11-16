@@ -62,8 +62,6 @@ import {
 import { WorkflowTable } from "@/components/finance/WorkflowTable";
 import {
   fetchTaxObligations,
-  createTaxObligation,
-  fileTaxObligation,
   fetchVatReturn,
   fetchPayrollTax,
   fetchCitProvision,
@@ -73,11 +71,16 @@ import {
   updateEbmReceipt,
   deleteEbmReceipt,
   type EbmDocument,
-  type TaxObligationType,
-  type TaxRecurringFrequency,
+  type TaxObligation,
   resolveFinanceFileUrl,
 } from "@/lib/crm/finance-api";
 import { Checkbox } from "@/components/ui/checkbox";
+import { useAuth } from "@/contexts/AuthContext";
+import { AddTaxObligationDialog } from "@/components/finance/tax/AddTaxObligationDialog";
+import { RecordTaxFilingDialog } from "@/components/finance/tax/RecordTaxFilingDialog";
+import { TaxFilingDocsDialog } from "@/components/finance/tax/TaxFilingDocsDialog";
+import { TaxCalendarTab } from "@/components/finance/tax/TaxCalendarTab";
+import { TaxFilingArchiveTab } from "@/components/finance/tax/TaxFilingArchiveTab";
 import {
   DocumentPreviewDialog,
   type PreviewDocument,
@@ -101,19 +104,6 @@ const statusClass = (s: string) =>
     : s === "Error"
       ? "bg-destructive/10 text-destructive"
       : "bg-warning/10 text-warning";
-
-const OBLIGATION_TYPES: TaxObligationType[] = [
-  "VAT return",
-  "PAYE remittance",
-  "WHT remittance",
-  "CIT provisional",
-];
-
-const RECURRING_FREQUENCIES: TaxRecurringFrequency[] = [
-  "Monthly",
-  "Quarterly",
-  "Annually",
-];
 
 const taxWorkflow = [
   {
@@ -196,53 +186,17 @@ export default function Tax() {
       variant: "destructive",
     });
 
+  const { user } = useAuth();
+  // Writes on the fiscal reconciliation (re-sync, receipts) stay with the
+  // account owner; a finance employee can read them and work the calendar.
+  const isOwner = user?.userType === "tenant";
+
   const [newObligationOpen, setNewObligationOpen] = useState(false);
-  const [obligationDraft, setObligationDraft] = useState({
-    type: "VAT return" as TaxObligationType,
-    period: "",
-    dueOn: "",
-    amount: 0,
-    recurring: false,
-    frequency: "Monthly" as TaxRecurringFrequency,
-  });
-  const createObligationMut = useMutation({
-    mutationFn: () =>
-      createTaxObligation({
-        type: obligationDraft.type,
-        period: obligationDraft.period,
-        dueOn: obligationDraft.dueOn,
-        amount: obligationDraft.amount,
-        recurring: obligationDraft.recurring,
-        ...(obligationDraft.recurring
-          ? { frequency: obligationDraft.frequency }
-          : {}),
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["taxObligations"] });
-      setNewObligationOpen(false);
-      setObligationDraft({
-        type: "VAT return",
-        period: "",
-        dueOn: "",
-        amount: 0,
-        recurring: false,
-        frequency: "Monthly",
-      });
-      toast({ title: "Added to tax calendar" });
-    },
-    onError: onErr("Failed to add obligation"),
-  });
-  const fileMut = useMutation({
-    mutationFn: (id: string) => fileTaxObligation(id),
-    onSuccess: (o) => {
-      queryClient.invalidateQueries({ queryKey: ["taxObligations"] });
-      toast({
-        title: "Filed to RRA",
-        description: `${o.type} (${o.period}) submitted.`,
-      });
-    },
-    onError: onErr("Failed to file"),
-  });
+  const [recordTarget, setRecordTarget] = useState<TaxObligation | null>(null);
+  const [docsTargetId, setDocsTargetId] = useState<string | null>(null);
+  // Looked up from the live list so the dialog reflects an approval or a
+  // resubmission without needing to be reopened.
+  const docsTarget = calendar.find((o) => o._id === docsTargetId) ?? null;
   const resyncMut = useMutation({
     mutationFn: (invoiceId: string) => resyncEbm(invoiceId),
     onSuccess: () => {
@@ -324,79 +278,18 @@ export default function Tax() {
           <TabsTrigger value="cit">CIT</TabsTrigger>
           <TabsTrigger value="wht">WHT</TabsTrigger>
           <TabsTrigger value="ebm">Fiscal Recon</TabsTrigger>
+          <TabsTrigger value="archive">Filing Archive</TabsTrigger>
           <TabsTrigger value="workflow">Workflow</TabsTrigger>
         </TabsList>
 
         {/* Tax calendar */}
-        <TabsContent value="calendar" className="mt-4 space-y-3">
-          <div className="flex justify-end">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setNewObligationOpen(true)}
-            >
-              <Plus className="mr-2 h-4 w-4" /> Add obligation
-            </Button>
-          </div>
-          <Card>
-            <CardContent className="p-4 overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Obligation</TableHead>
-                    <TableHead>Period</TableHead>
-                    <TableHead>Due</TableHead>
-                    <TableHead>Amount</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Action</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {calendar.map((t) => (
-                    <TableRow key={t._id}>
-                      <TableCell className="font-medium text-sm">
-                        {t.type}
-                      </TableCell>
-                      <TableCell className="text-sm">{t.period}</TableCell>
-                      <TableCell className="text-sm">
-                        {t.dueOn?.slice(0, 10)}
-                      </TableCell>
-                      <TableCell className="text-sm font-semibold">
-                        {money(t.amount)}
-                      </TableCell>
-                      <TableCell>
-                        <Badge className={`text-xs ${statusClass(t.status)}`}>
-                          {t.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {t.status !== "Filed" && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            disabled={fileMut.isPending}
-                            onClick={() => fileMut.mutate(t._id)}
-                          >
-                            File return
-                          </Button>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {!calendar.length && (
-                    <TableRow>
-                      <TableCell
-                        colSpan={6}
-                        className="py-8 text-center text-sm text-muted-foreground"
-                      >
-                        No obligations on the calendar yet.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+        <TabsContent value="calendar" className="mt-4">
+          <TaxCalendarTab
+            obligations={calendar}
+            onAdd={() => setNewObligationOpen(true)}
+            onRecord={setRecordTarget}
+            onViewDocs={(o) => setDocsTargetId(o._id)}
+          />
         </TabsContent>
 
         {/* VAT */}
@@ -478,9 +371,9 @@ export default function Tax() {
                 PAYE & Pension remittances
               </CardTitle>
               <p className="text-xs text-muted-foreground">
-                Sourced from real, approved HR payroll runs — PAYE
-                (pension, maternity, occupational hazard) taken directly from
-                each payslip's own deduction lines.
+                Sourced from real, approved HR payroll runs — PAYE (pension,
+                maternity, occupational hazard) taken directly from each
+                payslip's own deduction lines.
               </p>
             </CardHeader>
             <CardContent className="p-4 pt-0">
@@ -716,41 +609,46 @@ export default function Tax() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button size="icon" variant="ghost">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem
-                              disabled={resyncMut.isPending}
-                              onClick={() => resyncMut.mutate(e._id)}
-                            >
-                              <RefreshCw className="mr-2 h-3.5 w-3.5" /> Re-sync
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => {
-                                setReceiptTarget(e);
-                                setReceiptNumberDraft(
-                                  e.receipt === "—" ? "" : e.receipt,
-                                );
-                                setReceiptFile(null);
-                              }}
-                            >
-                              <Pencil className="mr-2 h-3.5 w-3.5" /> Update
-                              receipt number
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              disabled={e.receipt === "—" && !e.receiptFileUrl}
-                              className="text-destructive focus:text-destructive"
-                              onClick={() => setDeleteTarget(e)}
-                            >
-                              <Trash2 className="mr-2 h-3.5 w-3.5" /> Delete
-                              receipt
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                        {isOwner && (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button size="icon" variant="ghost">
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem
+                                disabled={resyncMut.isPending}
+                                onClick={() => resyncMut.mutate(e._id)}
+                              >
+                                <RefreshCw className="mr-2 h-3.5 w-3.5" />{" "}
+                                Re-sync
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  setReceiptTarget(e);
+                                  setReceiptNumberDraft(
+                                    e.receipt === "—" ? "" : e.receipt,
+                                  );
+                                  setReceiptFile(null);
+                                }}
+                              >
+                                <Pencil className="mr-2 h-3.5 w-3.5" /> Update
+                                receipt number
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                disabled={
+                                  e.receipt === "—" && !e.receiptFileUrl
+                                }
+                                className="text-destructive focus:text-destructive"
+                                onClick={() => setDeleteTarget(e)}
+                              >
+                                <Trash2 className="mr-2 h-3.5 w-3.5" /> Delete
+                                receipt
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -770,6 +668,14 @@ export default function Tax() {
           </Card>
         </TabsContent>
 
+        {/* Filing Archive */}
+        <TabsContent value="archive" className="mt-4">
+          <TaxFilingArchiveTab
+            obligations={calendar}
+            onViewDocs={(o) => setDocsTargetId(o._id)}
+          />
+        </TabsContent>
+
         <TabsContent value="workflow" className="mt-4">
           <WorkflowTable
             title="How tax compliance is used"
@@ -778,136 +684,20 @@ export default function Tax() {
         </TabsContent>
       </Tabs>
 
-      {/* New obligation */}
-      <Dialog open={newObligationOpen} onOpenChange={setNewObligationOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Add to tax calendar</DialogTitle>
-          </DialogHeader>
-          <div className="grid gap-3">
-            <div>
-              <Label>Obligation</Label>
-              <Select
-                value={obligationDraft.type}
-                onValueChange={(v) =>
-                  setObligationDraft({
-                    ...obligationDraft,
-                    type: v as TaxObligationType,
-                  })
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {OBLIGATION_TYPES.map((t) => (
-                    <SelectItem key={t} value={t}>
-                      {t}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Period</Label>
-              <Input
-                value={obligationDraft.period}
-                onChange={(e) =>
-                  setObligationDraft({
-                    ...obligationDraft,
-                    period: e.target.value,
-                  })
-                }
-                placeholder="e.g. July 2026"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label>Due date</Label>
-                <Input
-                  type="date"
-                  value={obligationDraft.dueOn}
-                  onChange={(e) =>
-                    setObligationDraft({
-                      ...obligationDraft,
-                      dueOn: e.target.value,
-                    })
-                  }
-                />
-              </div>
-              <div>
-                <Label>Amount</Label>
-                <Input
-                  type="number"
-                  value={obligationDraft.amount}
-                  onChange={(e) =>
-                    setObligationDraft({
-                      ...obligationDraft,
-                      amount: Number(e.target.value),
-                    })
-                  }
-                />
-              </div>
-            </div>
-            <div className="flex items-center gap-2 pt-1">
-              <Checkbox
-                id="obligation-recurring"
-                checked={obligationDraft.recurring}
-                onCheckedChange={(v) =>
-                  setObligationDraft({
-                    ...obligationDraft,
-                    recurring: v === true,
-                  })
-                }
-              />
-              <Label htmlFor="obligation-recurring" className="cursor-pointer">
-                Recurring — add to calendar and remind me automatically
-              </Label>
-            </div>
-            {obligationDraft.recurring && (
-              <div>
-                <Label>Frequency</Label>
-                <Select
-                  value={obligationDraft.frequency}
-                  onValueChange={(v) =>
-                    setObligationDraft({
-                      ...obligationDraft,
-                      frequency: v as TaxRecurringFrequency,
-                    })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {RECURRING_FREQUENCIES.map((f) => (
-                      <SelectItem key={f} value={f}>
-                        {f}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  A new obligation is created and a reminder (email and portal)
-                  is sent ahead of each due date, on this cadence.
-                </p>
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button
-              disabled={
-                !obligationDraft.period ||
-                !obligationDraft.dueOn ||
-                createObligationMut.isPending
-              }
-              onClick={() => createObligationMut.mutate()}
-            >
-              Add
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <AddTaxObligationDialog
+        open={newObligationOpen}
+        onOpenChange={setNewObligationOpen}
+        defaultCurrency={vat?.currency || financeCurrency || "RWF"}
+      />
+      <RecordTaxFilingDialog
+        obligation={recordTarget}
+        onOpenChange={(o) => !o && setRecordTarget(null)}
+      />
+      <TaxFilingDocsDialog
+        obligation={docsTarget}
+        onOpenChange={(o) => !o && setDocsTargetId(null)}
+        onPreview={setPreviewDoc}
+      />
 
       {/* Update EBM receipt — the real number off the physical
           device/slip, never auto-generated, with an optional photo
