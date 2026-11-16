@@ -1854,6 +1854,33 @@ export const downloadPayslipPdf = async (
   window.URL.revokeObjectURL(url);
 };
 
+// The bulk bank payment file (CSV) for a processed or paid run. Returns
+// how many lines it holds and how many employees have no bank details on
+// file (they are marked MISSING in the file rather than left out).
+export const downloadPayrollBankFile = async (
+  runId: string,
+): Promise<{ lines: number; missing: number }> => {
+  const res = await api.get(`/hr/payroll/runs/${runId}/bank-file`, {
+    responseType: "blob",
+  });
+  const disposition: string = res.headers?.["content-disposition"] ?? "";
+  const filename =
+    /filename="?([^";]+)"?/.exec(disposition)?.[1] ?? `payroll-bank-file.csv`;
+  const blob = new Blob([res.data], { type: "text/csv;charset=utf-8" });
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(url);
+  return {
+    lines: Number(res.headers?.["x-payment-lines"] ?? 0),
+    missing: Number(res.headers?.["x-missing-bank-details"] ?? 0),
+  };
+};
+
 // Tenant-composed subject/body (PO, Oct 2026: "give the tenant the
 // ability to type the body of the email themselves"). `body` may
 // contain the literal token `{{employeeName}}`, substituted server-side

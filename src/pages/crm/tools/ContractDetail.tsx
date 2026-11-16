@@ -37,7 +37,6 @@ import {
   Clock,
   Download,
   Eye,
-  FileSignature,
   FileText,
   Flag,
   GitCompare,
@@ -60,7 +59,6 @@ import { fetchEmployees } from "@/lib/hr/hr-api";
 import {
   fetchContract,
   advanceContractStage,
-  executeContract,
   initiateRenewal,
   toggleAutoRenew,
   addNegotiationRound,
@@ -276,14 +274,6 @@ export default function ContractDetail() {
     onSuccess: ok("Signed copy emailed"),
     onError: onErr("Could not send signed copy"),
   });
-  const executeMut = useMutation({
-    mutationFn: () => executeContract(id, executeForm),
-    onSuccess: () => {
-      setExecuteOpen(false);
-      ok("Execution recorded")();
-    },
-    onError: onErr("Could not record execution"),
-  });
   const roundMut = useMutation({
     mutationFn: () =>
       addNegotiationRound(id, {
@@ -403,11 +393,6 @@ export default function ContractDetail() {
   const [fieldEdits, setFieldEdits] = useState<Record<string, string>>({});
   const [signerName, setSignerName] = useState("");
   const [countersignOpen, setCountersignOpen] = useState(false);
-  const [executeOpen, setExecuteOpen] = useState(false);
-  const [executeForm, setExecuteForm] = useState({
-    executedOn: today(),
-    effectiveOn: today(),
-  });
   const [roundOpen, setRoundOpen] = useState(false);
   const [roundForm, setRoundForm] = useState({
     by: "",
@@ -1369,7 +1354,7 @@ export default function ContractDetail() {
             <div>
               <h2 className="text-lg font-semibold">Execution &amp; signing</h2>
               <p className="text-sm text-muted-foreground">
-                Signature workflow and conditions precedent.
+                Signature workflow and countersignature.
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -1425,13 +1410,6 @@ export default function ContractDetail() {
                     : "Email signed copy"}
                 </Button>
               )}
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setExecuteOpen(true)}
-              >
-                <FileSignature className="mr-2 h-4 w-4" /> Record execution
-              </Button>
             </div>
           </div>
 
@@ -1481,7 +1459,7 @@ export default function ContractDetail() {
             </CardContent>
           </Card>
 
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div className="grid gap-4">
             <Card>
               <CardHeader className="pb-2">
                 <SectionTitle icon={PenTool}>Signatories</SectionTitle>
@@ -1539,62 +1517,6 @@ export default function ContractDetail() {
                 <p className="text-xs text-muted-foreground">
                   Sequential: the counterparty signs first, we countersign.
                 </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex-row items-center justify-between pb-2">
-                <SectionTitle icon={Flag}>
-                  Conditions precedent ({cpsDone}/{cps.length})
-                </SectionTitle>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => setCpOpen(true)}
-                >
-                  <Plus className="h-4 w-4" />
-                </Button>
-              </CardHeader>
-              <CardContent className="space-y-3 pt-0">
-                {cps.length > 0 && (
-                  <Progress
-                    value={(cpsDone / cps.length) * 100}
-                    className="h-2"
-                  />
-                )}
-                {cps.map((c) => (
-                  <label key={c._id} className="flex items-start gap-2">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        toggleCpMut.mutate({
-                          conditionId: c._id,
-                          satisfied: !c.satisfied,
-                        })
-                      }
-                      className="mt-0.5 shrink-0"
-                    >
-                      {c.satisfied ? (
-                        <Check className="h-4 w-4 text-success" />
-                      ) : (
-                        <Clock className="h-4 w-4 text-warning" />
-                      )}
-                    </button>
-                    <div>
-                      <p className="text-sm font-medium">{c.label}</p>
-                      {c.detail && (
-                        <p className="text-xs text-muted-foreground">
-                          {c.detail}
-                        </p>
-                      )}
-                    </div>
-                  </label>
-                ))}
-                {!cps.length && (
-                  <p className="text-sm text-muted-foreground">
-                    No conditions precedent recorded.
-                  </p>
-                )}
               </CardContent>
             </Card>
           </div>
@@ -1852,50 +1774,6 @@ export default function ContractDetail() {
               onClick={() => countersignMut.mutate()}
             >
               Countersign
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={executeOpen} onOpenChange={setExecuteOpen}>
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Record execution</DialogTitle>
-          </DialogHeader>
-          <div className="grid gap-3">
-            <div>
-              <Label>Executed on</Label>
-              <Input
-                type="date"
-                value={executeForm.executedOn}
-                onChange={(e) =>
-                  setExecuteForm({
-                    ...executeForm,
-                    executedOn: e.target.value,
-                  })
-                }
-              />
-            </div>
-            <div>
-              <Label>Effective from</Label>
-              <Input
-                type="date"
-                value={executeForm.effectiveOn}
-                onChange={(e) =>
-                  setExecuteForm({
-                    ...executeForm,
-                    effectiveOn: e.target.value,
-                  })
-                }
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button
-              disabled={executeMut.isPending}
-              onClick={() => executeMut.mutate()}
-            >
-              Save
             </Button>
           </DialogFooter>
         </DialogContent>

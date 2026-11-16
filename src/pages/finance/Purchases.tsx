@@ -53,7 +53,11 @@ import {
 } from "@/hooks/use-finance-currency";
 import { WorkflowTable } from "@/components/finance/WorkflowTable";
 import { fetchMandates } from "@/lib/crm/mandates-api";
-import { fetchEmployees, fetchAllPayrollRuns } from "@/lib/hr/hr-api";
+import {
+  fetchEmployees,
+  fetchAllPayrollRuns,
+  downloadPayrollBankFile,
+} from "@/lib/hr/hr-api";
 import {
   fetchVendors,
   fetchPurchasesOverview,
@@ -200,6 +204,7 @@ export default function Purchases() {
     queryFn: () => fetchPurchasesOverview(financeCurrency || undefined),
   });
   const nextPayroll = payrollRuns[0];
+  const [bankFileRunId, setBankFileRunId] = useState<string | null>(null);
 
   const onErr = (title: string) => (err: any) =>
     toast({
@@ -997,18 +1002,38 @@ export default function Purchases() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">
-                        {p.status === "processed" && (
+                        {(p.status === "processed" || p.status === "paid") && (
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() =>
-                              toast({
-                                title: "Bank file generated",
-                                description: `Bulk payment file for ${p.periodLabel} ready for upload — authorisation happens in HR's payroll run.`,
-                              })
-                            }
+                            disabled={bankFileRunId === p._id}
+                            onClick={() => {
+                              setBankFileRunId(p._id);
+                              downloadPayrollBankFile(p._id)
+                                .then(({ missing }) =>
+                                  toast({
+                                    title: "Bank file downloaded",
+                                    description: missing
+                                      ? `${missing} employee${missing === 1 ? " has" : "s have"} no bank details on file and ${missing === 1 ? "is" : "are"} marked MISSING — fix ${missing === 1 ? "it" : "them"} before uploading to the bank.`
+                                      : `Bulk payment file for ${p.periodLabel}, ready to upload to the bank.`,
+                                    variant: missing
+                                      ? "destructive"
+                                      : undefined,
+                                  }),
+                                )
+                                .catch((err) =>
+                                  toast({
+                                    title: "Could not generate the bank file",
+                                    description:
+                                      err?.response?.data?.message ??
+                                      "Please try again.",
+                                    variant: "destructive",
+                                  }),
+                                )
+                                .finally(() => setBankFileRunId(null));
+                            }}
                           >
-                            Generate bank file
+                            Download bank file
                           </Button>
                         )}
                       </TableCell>

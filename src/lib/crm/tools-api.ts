@@ -258,11 +258,6 @@ export const createContract = async (dto: {
   unwrap(await api.post("/tools/contracts", dto));
 export const advanceContractStage = async (id: string): Promise<Contract> =>
   unwrap(await api.post(`/tools/contracts/${id}/advance`));
-export const executeContract = async (
-  id: string,
-  dto: { executedOn: string; effectiveOn: string },
-): Promise<Contract> =>
-  unwrap(await api.post(`/tools/contracts/${id}/execute`, dto));
 export const initiateRenewal = async (id: string): Promise<Contract> =>
   unwrap(await api.post(`/tools/contracts/${id}/initiate-renewal`));
 export const toggleAutoRenew = async (id: string): Promise<Contract> =>

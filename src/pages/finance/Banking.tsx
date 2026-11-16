@@ -185,6 +185,9 @@ export default function Banking() {
     date: new Date().toISOString().slice(0, 10),
     description: "",
     amount: 0,
+    // Money in adds to the account, money out deducts from it. The amount
+    // itself is always typed as a positive figure.
+    direction: "in" as "in" | "out",
   });
   const [matchTarget, setMatchTarget] = useState<string | null>(null);
   const [matchedBillId, setMatchedBillId] = useState<string | null>(null);
@@ -194,6 +197,9 @@ export default function Banking() {
     enabled: !!matchedBillId,
   });
   const [matchType, setMatchType] = useState<TxLinkType>("Invoice");
+  // A bill is paid out of an account; a client invoice is paid into one.
+  const matchTx = txs.find((t) => t._id === matchTarget);
+  const matchIsOutflow = !!matchTx && matchTx.amount < 0;
   const [matchId, setMatchId] = useState("");
   const [matchNote, setMatchNote] = useState("");
 
@@ -202,7 +208,16 @@ export default function Banking() {
     queryClient.invalidateQueries({ queryKey: ["bankAccounts"] });
   };
   const createTxMut = useMutation({
-    mutationFn: () => createBankTransaction(txDraft),
+    mutationFn: () =>
+      createBankTransaction({
+        accountId: txDraft.accountId,
+        date: txDraft.date,
+        description: txDraft.description,
+        amount:
+          txDraft.direction === "out"
+            ? -Math.abs(txDraft.amount)
+            : Math.abs(txDraft.amount),
+      }),
     onSuccess: () => {
       invalidateTx();
       setNewTxOpen(false);
@@ -211,6 +226,7 @@ export default function Banking() {
         date: new Date().toISOString().slice(0, 10),
         description: "",
         amount: 0,
+        direction: "in",
       });
       toast({ title: "Transaction recorded" });
     },
@@ -471,7 +487,7 @@ export default function Banking() {
                             variant="outline"
                             onClick={() => {
                               setMatchTarget(t._id);
-                              setMatchType("Invoice");
+                              setMatchType(t.amount < 0 ? "Bill" : "Invoice");
                               setMatchId("");
                             }}
                           >
@@ -922,6 +938,27 @@ export default function Banking() {
                 }
               />
             </div>
+            <div>
+              <Label>Type</Label>
+              <Select
+                value={txDraft.direction}
+                onValueChange={(v) =>
+                  setTxDraft({ ...txDraft, direction: v as "in" | "out" })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="in">
+                    Money in — adds to the account (e.g. a client payment)
+                  </SelectItem>
+                  <SelectItem value="out">
+                    Money out — deducts from the account (e.g. a bill payment)
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label>Date</Label>
@@ -934,12 +971,16 @@ export default function Banking() {
                 />
               </div>
               <div>
-                <Label>Amount (negative for outflow)</Label>
+                <Label>Amount</Label>
                 <Input
                   type="number"
+                  min={0}
                   value={txDraft.amount}
                   onChange={(e) =>
-                    setTxDraft({ ...txDraft, amount: Number(e.target.value) })
+                    setTxDraft({
+                      ...txDraft,
+                      amount: Math.abs(Number(e.target.value)),
+                    })
                   }
                 />
               </div>
@@ -984,8 +1025,13 @@ export default function Banking() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Invoice">Invoice payment</SelectItem>
-                  <SelectItem value="Bill">Bill</SelectItem>
+                  {matchIsOutflow ? (
+                    <SelectItem value="Bill">Bill (money out)</SelectItem>
+                  ) : (
+                    <SelectItem value="Invoice">
+                      Invoice payment (money in)
+                    </SelectItem>
+                  )}
                   <SelectItem value="Manual">Other / manual note</SelectItem>
                 </SelectContent>
               </Select>
@@ -1010,11 +1056,15 @@ export default function Banking() {
                   <SelectValue placeholder="Select bill..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {bills.map((b) => (
-                    <SelectItem key={b._id} value={b._id}>
-                      {b.ref} — {b.vendorName}
-                    </SelectItem>
-                  ))}
+                  {bills
+                    .filter(
+                      (b) => b.status !== "Paid" && b.status !== "Rejected",
+                    )
+                    .map((b) => (
+                      <SelectItem key={b._id} value={b._id}>
+                        {b.ref} — {b.vendorName}
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
             )}
