@@ -358,6 +358,12 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
       icon: FileBarChart,
       adminOnly: true,
     },
+    {
+      title: "Finance Settings",
+      url: "/finance/settings",
+      icon: Settings,
+      adminOnly: true,
+    },
   ],
 
   // ── HR & People Management ─────────────────────────────────

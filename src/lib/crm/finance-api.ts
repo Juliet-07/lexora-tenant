@@ -1888,6 +1888,8 @@ export interface RemittanceAccount {
   currency: string;
   branchCode: string;
   swiftCode: string;
+  description?: string;
+  isPrimary?: boolean;
   active: boolean;
   createdAt: string;
 }
@@ -1905,6 +1907,7 @@ export const createRemittanceAccount = async (dto: {
   currency: string;
   branchCode?: string;
   swiftCode?: string;
+  description?: string;
 }): Promise<RemittanceAccount> =>
   unwrap(await api.post("/finance/remittance-accounts", dto));
 export const updateRemittanceAccount = async (
@@ -1916,9 +1919,14 @@ export const updateRemittanceAccount = async (
     currency: string;
     branchCode: string;
     swiftCode: string;
+    description: string;
   }>,
 ): Promise<RemittanceAccount> =>
   unwrap(await api.patch(`/finance/remittance-accounts/${id}`, dto));
+export const setRemittanceAccountPrimary = async (
+  id: string,
+): Promise<RemittanceAccount> =>
+  unwrap(await api.post(`/finance/remittance-accounts/${id}/primary`, {}));
 export const setRemittanceAccountActive = async (
   id: string,
   active: boolean,
@@ -3038,4 +3046,226 @@ export const downloadManagementReportPdf = (
       a.click();
       URL.revokeObjectURL(a.href);
     });
+};
+
+// ── Finance settings ──────────────────────────────────────────
+// One page, owner-only, that sets the defaults the rest of the finance
+// module (and every PDF the firm issues) reads from.
+
+export type FinanceSettingsSection =
+  | "general"
+  | "tax"
+  | "invoicing"
+  | "approvals"
+  | "banking"
+  | "branding";
+
+export interface TaxCategory {
+  code: string;
+  name: string;
+  rate: number | null;
+  active: boolean;
+}
+export interface WhtCategory {
+  name: string;
+  rate: number;
+}
+export interface ApprovalTier {
+  id?: string;
+  name: string;
+  min: number;
+  max: number | null;
+  mode: "single" | "dual";
+  approverIds: string[];
+  backupId: string;
+  note?: string;
+}
+export interface ExpenseLimit {
+  role: string;
+  monthlyLimit: number | null;
+}
+
+export interface GeneralSettings {
+  numberFormat: "comma-dot" | "dot-comma" | "space-dot";
+  dateFormat: "DD/MM/YYYY" | "MM/DD/YYYY" | "DD MMM YYYY" | "YYYY-MM-DD";
+  multiCurrency: boolean;
+  fiscalYearStartMonth: number;
+  reportingPeriods: "monthly" | "quarterly" | "bi-annually";
+  lockClosedPeriods: boolean;
+  autoClosePeriods: boolean;
+  defaultAccounts: {
+    revenue: string;
+    receivable: string;
+    payable: string;
+    bank: string;
+    retainedEarnings: string;
+  };
+  exchangeRateSource: "central-bank" | "manual" | "commercial";
+  autoSyncRates: boolean;
+  asset: {
+    depreciationMethod:
+      | "straight-line"
+      | "reducing-balance"
+      | "units-of-production";
+    capitalisationThreshold: number;
+    trackInsuranceExpiry: boolean;
+  };
+  trust: {
+    interestTreatment: "firm-retained" | "credited-to-client" | "split";
+    requireDrawdownApproval: boolean;
+    autoReconcile: boolean;
+  };
+}
+export interface TaxSettings {
+  jurisdiction: string;
+  tin: string;
+  standardVatRate: number;
+  vatRegistered: boolean;
+  autoCalculateVat: boolean;
+  categories: TaxCategory[];
+  whtCategories: WhtCategory[];
+  reminders: { vat: boolean; paye: boolean; cit: boolean; pension: boolean };
+}
+export interface InvoicingSettings {
+  defaultPaymentTerms: string;
+  lateInterestRate: number;
+  applyLateFees: boolean;
+  earlyPaymentDiscount: { enabled: boolean; percent: number; days: number };
+  dunning: {
+    enabled: boolean;
+    firstReminderDays: number;
+    secondReminderDays: number;
+    finalNoticeDays: number;
+  };
+  invoiceFooter: string;
+  creditNoteFooter: string;
+}
+export interface ApprovalSettings {
+  tiers: ApprovalTier[];
+  expenseLimits: ExpenseLimit[];
+  rules: {
+    selfApprovalRestriction: boolean;
+    receiptRequired: boolean;
+    receiptThreshold: number;
+    budgetCheck: boolean;
+    escalateOnTimeout: boolean;
+    escalationHours: number;
+  };
+}
+export interface BankingSettings {
+  matchingTolerance: number;
+  autoMatchByReference: boolean;
+  suggestRules: boolean;
+  flagUnmatched: boolean;
+  flagUnmatchedAfterDays: number;
+}
+export interface BrandingSettings {
+  headerColor: string;
+  accentColor: string;
+  highlightColor: string;
+  companyName: string;
+  tagline: string;
+  address: string;
+  headingFont: string;
+  bodyFont: string;
+  showLogo: boolean;
+  showTagline: boolean;
+  footerWithAddressAndTin: boolean;
+  watermarkDrafts: boolean;
+}
+
+export interface FinanceSettingsMap {
+  general: GeneralSettings;
+  tax: TaxSettings;
+  invoicing: InvoicingSettings;
+  approvals: ApprovalSettings;
+  banking: BankingSettings;
+  branding: BrandingSettings;
+}
+
+export interface FinanceSettingsPayload {
+  settings: FinanceSettingsMap;
+  logo: {
+    url: string;
+    name: string;
+    source: "finance" | "payslip" | "profile";
+  } | null;
+  profile: {
+    businessName: string;
+    taxId: string;
+    baseCurrency: string;
+    address: string;
+  };
+  presets: Record<
+    string,
+    { headerColor: string; accentColor: string; highlightColor: string }
+  >;
+  fonts: { heading: string[]; body: string[] };
+}
+
+export interface FinanceSettingsLogEntry {
+  _id: string;
+  section: FinanceSettingsSection;
+  summary: string;
+  actorName: string;
+  createdAt: string;
+}
+
+export type BrandingPreviewKind =
+  | "invoice"
+  | "receipt"
+  | "quote"
+  | "purchase-order"
+  | "payslip";
+
+export const fetchFinanceSettings = async (): Promise<FinanceSettingsPayload> =>
+  unwrap(await api.get("/finance/settings"));
+
+export const saveFinanceSettingsSection = async <
+  S extends FinanceSettingsSection,
+>(
+  section: S,
+  patch: Partial<FinanceSettingsMap[S]>,
+): Promise<FinanceSettingsPayload> =>
+  unwrap(await api.put(`/finance/settings/${section}`, patch));
+
+export const resetFinanceSettingsSection = async (
+  section: FinanceSettingsSection,
+): Promise<FinanceSettingsPayload> =>
+  unwrap(await api.post(`/finance/settings/${section}/reset`, {}));
+
+export const uploadBrandingLogo = async (
+  file: File,
+): Promise<FinanceSettingsPayload> => {
+  const form = new FormData();
+  form.append("file", file);
+  return unwrap(
+    await api.post("/finance/settings/branding/logo", form, {
+      headers: { "Content-Type": "multipart/form-data" },
+    }),
+  );
+};
+
+export const removeBrandingLogo = async (): Promise<FinanceSettingsPayload> =>
+  unwrap(await api.delete("/finance/settings/branding/logo"));
+
+export const fetchFinanceSettingsLog = async (
+  section?: FinanceSettingsSection | "all",
+): Promise<FinanceSettingsLogEntry[]> => {
+  const d = unwrap(
+    await api.get("/finance/settings/log", {
+      params: section && section !== "all" ? { section } : undefined,
+    }),
+  );
+  return Array.isArray(d) ? d : [];
+};
+
+// A real PDF built with the saved branding and sample figures.
+export const fetchBrandingPreviewPdf = async (
+  kind: BrandingPreviewKind,
+): Promise<Blob> => {
+  const res = await api.get(`/finance/settings/branding/preview/${kind}`, {
+    responseType: "blob",
+  });
+  return new Blob([res.data], { type: "application/pdf" });
 };

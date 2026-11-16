@@ -50,6 +50,7 @@ import { useToast } from "@/hooks/use-toast";
 import { fetchMandates, money } from "@/lib/crm/mandates-api";
 import {
   fetchInvoices,
+  fetchFinanceSettings,
   fetchWipRegister,
   wipValue,
   createInvoice,
@@ -142,6 +143,28 @@ export default function Invoicing() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = list.find((i) => i._id === selectedId) ?? null;
   const [openNew, setOpenNew] = useState(false);
+  // Finance Settings supply the starting VAT rate and the due date. They
+  // are only a starting point — both stay editable on the form.
+  const { data: financeSettings } = useQuery({
+    queryKey: ["finance-settings"],
+    queryFn: fetchFinanceSettings,
+    retry: false,
+  });
+  const openNewInvoice = () => {
+    const tax = financeSettings?.settings.tax;
+    const terms = financeSettings?.settings.invoicing.defaultPaymentTerms;
+    const days =
+      terms === "due-on-receipt" ? 0 : Number(terms?.replace("net-", ""));
+    setDraft((d) => ({
+      ...d,
+      vatRate: tax ? (tax.vatRegistered ? tax.standardVatRate : 0) : d.vatRate,
+      dueOn:
+        Number.isFinite(days) && terms
+          ? new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10)
+          : d.dueOn,
+    }));
+    setOpenNew(true);
+  };
   const [draft, setDraft] = useState({
     mandateId: "",
     model: "Time & materials" as BillingModel,
@@ -328,7 +351,7 @@ export default function Invoicing() {
             dunning
           </p>
         </div>
-        <Button onClick={() => setOpenNew(true)}>
+        <Button onClick={openNewInvoice}>
           <Plus className="mr-2 h-4 w-4" /> New invoice
         </Button>
       </div>

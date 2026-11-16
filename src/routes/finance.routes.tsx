@@ -11,6 +11,7 @@ import Accounting from "@/pages/finance/Accounting";
 import AssetRegister from "@/pages/finance/AssetRegister";
 import Report from "@/pages/finance/Report";
 import FundAccounting from "@/pages/finance/FundAccounting";
+import FinanceSettings from "@/pages/finance/FinanceSettings";
 
 /**
  * Finance — Module 5.
@@ -79,6 +80,11 @@ export const financeRoutes = ({ isAdmin, accessibleModules }: RouteContext) => {
       key="fin-funds"
       path="/finance/funds"
       element={layout(<FundAccounting />)}
+    />,
+    <Route
+      key="fin-settings"
+      path="/finance/settings"
+      element={layout(<FinanceSettings />)}
     />,
     <Route
       key="fin-fallback"

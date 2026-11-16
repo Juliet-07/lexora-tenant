@@ -1,22 +1,26 @@
 import { useMemo } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Navigate, useSearchParams } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { User as UserIcon, Lock, Crown, Landmark, ShieldCheck } from "lucide-react";
+import { User as UserIcon, Lock, Crown, ShieldCheck } from "lucide-react";
 
 import ProfileTab from "./Profile";
 import SecurityTab from "./Security";
 import PlanTab from "./Plan";
-import PaymentDetailsTab from "./PaymentDetails";
 import RolesTab from "./Roles";
 
 export default function Settings() {
   const [params, setParams] = useSearchParams();
   const tab = params.get("tab") ?? "profile";
   const validTabs = useMemo(
-    () => new Set(["profile", "security", "roles", "plan", "payment-details"]),
+    () => new Set(["profile", "security", "roles", "plan"]),
     [],
   );
   const active = validTabs.has(tab) ? tab : "profile";
+
+  // Payment details moved to Finance → Finance Settings → Bank Accounts.
+  if (tab === "payment-details") {
+    return <Navigate to="/finance/settings?tab=bank-accounts" replace />;
+  }
 
   const setTab = (v: string) => {
     const next = new URLSearchParams(params);
@@ -47,9 +51,6 @@ export default function Settings() {
           <TabsTrigger value="plan">
             <Crown className="h-4 w-4 mr-2" /> Plan
           </TabsTrigger>
-          <TabsTrigger value="payment-details">
-            <Landmark className="h-4 w-4 mr-2" /> Payment details
-          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="profile">
@@ -63,9 +64,6 @@ export default function Settings() {
         </TabsContent>
         <TabsContent value="plan">
           <PlanTab />
-        </TabsContent>
-        <TabsContent value="payment-details">
-          <PaymentDetailsTab />
         </TabsContent>
       </Tabs>
     </div>
