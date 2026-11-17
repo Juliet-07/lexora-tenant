@@ -226,13 +226,30 @@ export function PageHero({
   eyebrow,
   title,
   subtitle,
+  backgroundImage,
 }: {
   eyebrow?: string;
   title: React.ReactNode;
   subtitle?: string;
+  backgroundImage?: string;
 }) {
   return (
     <section className="marketing-hero relative overflow-hidden border-b border-intro-foreground/10 py-20 sm:py-24">
+      {backgroundImage && (
+        <>
+          <img
+            src={backgroundImage}
+            alt=""
+            aria-hidden="true"
+            className="absolute inset-0 h-full w-full object-cover object-top"
+          />
+          <div className="absolute inset-0 bg-intro/75" aria-hidden="true" />
+          <div
+            className="absolute inset-0 bg-gradient-to-b from-intro/60 via-transparent to-intro"
+            aria-hidden="true"
+          />
+        </>
+      )}
       <div
         className="absolute inset-0 intro-grid opacity-30"
         aria-hidden="true"
