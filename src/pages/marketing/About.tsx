@@ -14,7 +14,7 @@ import {
   CtaBand,
   MarketingLayout,
 } from "@/components/marketing/MarketingLayout";
-import boardroomImage from "@/assets/intro-boardroom.jpg";
+import boardroomImage from "@/assets/about-pic.png";
 
 const arms = [
   {

@@ -18,7 +18,7 @@ import { CtaBand, MarketingLayout } from "@/components/marketing/MarketingLayout
 import { pillars, testimonials } from "@/data/marketingContent";
 import dashboardPreview from "@/assets/dashboard-preview.png";
 import executiveImage from "@/assets/intro-executive.jpg";
-import boardroomImage from "@/assets/intro-boardroom.jpg";
+import boardroomImage from "@/assets/intro-boardroom.png";
 
 const pillarIcons = [Users, FolderKanban, Cog, Gauge];
 
@@ -93,7 +93,7 @@ export default function Intro() {
             </p>
           </div>
 
-           <div className="relative mx-auto w-full max-w-[620px] intro-reveal intro-delay marketing-float">
+           <div className="relative mx-auto w-full max-w-[620px] intro-reveal intro-delay marketing-float hidden">
             <div className="relative ml-auto w-[88%] overflow-hidden rounded-2xl border border-intro-foreground/10 bg-intro-surface shadow-intro-deep">
               <img src={executiveImage} alt="African business leader in a modern Kigali office" width={1024} height={1280} className="aspect-[4/5] w-full object-cover" />
               <div className="absolute inset-0 bg-gradient-to-t from-intro via-transparent to-transparent" />
