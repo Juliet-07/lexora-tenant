@@ -44,6 +44,14 @@ export default function Intro() {
   return (
     <MarketingLayout>
       <section id="top" className="marketing-hero relative overflow-hidden">
+        <img
+          src="/marketing/hero-governance-globe.jpg"
+          alt=""
+          aria-hidden="true"
+          className="absolute inset-0 h-full w-full object-cover object-center"
+        />
+        <div className="absolute inset-0 bg-intro/80" aria-hidden="true" />
+        <div className="absolute inset-0 bg-gradient-to-r from-intro via-intro/60 to-transparent" aria-hidden="true" />
         <div className="absolute inset-0 intro-grid opacity-30" aria-hidden="true" />
         <FloatingStars />
         <div className="relative mx-auto grid max-w-[1440px] items-center gap-14 px-5 py-16 sm:px-8 lg:grid-cols-[0.95fr_1.05fr] lg:px-12 lg:py-20">
