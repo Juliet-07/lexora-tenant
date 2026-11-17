@@ -276,7 +276,7 @@ export default function Insights() {
         eyebrow="Insights"
         title="Boardroom Bytes and governance intelligence"
         subtitle="Analysis, commentary, and practical guidance on governance, risk, and compliance across African markets."
-        backgroundImage="/marketing/insights-boardroom-banner.jpg"
+        backgroundImage="/marketing/insights-boardroom-hero.jpg"
       />
       <InsightsGrid />
     </MarketingLayout>
