@@ -12,6 +12,11 @@ import {
 } from "@/components/ui/select";
 import { ChevronRight, Eye, Folder, FolderOpen, Paperclip } from "lucide-react";
 import type { TaxObligation } from "@/lib/crm/finance-api";
+import { ApprovalDetailsDialog } from "@/components/finance/ApprovalDetailsDialog";
+import {
+  taxFilingDetails,
+  type ApprovalDetails,
+} from "@/lib/crm/approval-details";
 import {
   TAX_TYPES,
   docCount,
@@ -34,6 +39,7 @@ export function TaxFilingArchiveTab({
   const [year, setYear] = useState("all");
   const [type, setType] = useState("all");
   const [open, setOpen] = useState<Record<string, boolean>>({});
+  const [details, setDetails] = useState<ApprovalDetails | null>(null);
 
   const filed = useMemo(
     () =>
@@ -215,6 +221,20 @@ export function TaxFilingArchiveTab({
                                   <Button
                                     size="sm"
                                     variant="ghost"
+                                    title="View who recorded and approved this filing"
+                                    onClick={() =>
+                                      setDetails(
+                                        taxFilingDetails(o, (n, c) =>
+                                          formatMoney(n, c),
+                                        ),
+                                      )
+                                    }
+                                  >
+                                    <Eye className="mr-1 h-4 w-4" /> Details
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
                                     onClick={() => onViewDocs(o)}
                                   >
                                     <Eye className="mr-1 h-4 w-4" /> Documents
@@ -239,6 +259,10 @@ export function TaxFilingArchiveTab({
           )}
         </CardContent>
       </Card>
+      <ApprovalDetailsDialog
+        details={details}
+        onClose={() => setDetails(null)}
+      />
     </div>
   );
 }

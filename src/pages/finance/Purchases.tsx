@@ -46,7 +46,14 @@ import {
   XCircle,
   Upload,
   Paperclip,
+  Eye,
 } from "lucide-react";
+import { ApprovalDetailsDialog } from "@/components/finance/ApprovalDetailsDialog";
+import {
+  billDetails,
+  claimDetails,
+  type ApprovalDetails,
+} from "@/lib/crm/approval-details";
 import { useToast } from "@/hooks/use-toast";
 import {
   useFinanceCurrency,
@@ -163,6 +170,7 @@ export default function Purchases() {
   const navigate = useNavigate();
   const [markPaidPrompt, setMarkPaidPrompt] = useState<Bill | null>(null);
   const [previewDoc, setPreviewDoc] = useState<PreviewDocument | null>(null);
+  const [details, setDetails] = useState<ApprovalDetails | null>(null);
 
   const { data: vendors = [] } = useQuery({
     queryKey: ["vendors"],
@@ -712,6 +720,14 @@ export default function Purchases() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right space-x-1">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          title="View details and who approved"
+                          onClick={() => setDetails(billDetails(b, money))}
+                        >
+                          <Eye className="mr-1 h-3.5 w-3.5" /> Details
+                        </Button>
                         {b.status === "Awaiting approval" &&
                           !canDecide(b, authUser) && (
                             <span className="text-xs text-muted-foreground">
@@ -980,6 +996,14 @@ export default function Purchases() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right space-x-1">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          title="View details and who approved"
+                          onClick={() => setDetails(claimDetails(c, money))}
+                        >
+                          <Eye className="mr-1 h-3.5 w-3.5" /> Details
+                        </Button>
                         {c.status === "Submitted" && (
                           <>
                             <Button
@@ -1247,6 +1271,11 @@ export default function Purchases() {
 
       {/* New vendor */}
       {/* New PO */}
+      <ApprovalDetailsDialog
+        details={details}
+        onClose={() => setDetails(null)}
+      />
+
       <Dialog open={newPoOpen} onOpenChange={setNewPoOpen}>
         <DialogContent className="max-h-[85vh] overflow-y-auto">
           <DialogHeader>

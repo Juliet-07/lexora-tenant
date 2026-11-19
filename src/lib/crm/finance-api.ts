@@ -416,7 +416,12 @@ export interface ApprovalInfo {
   mode: "single" | "dual";
   approverIds: string[];
   approverNames: string[];
-  approvals: { userId: string; name: string; at: string }[];
+  submittedAt?: string | null;
+  approvals: { userId: string; name: string; at: string; isOwner?: boolean }[];
+  // Who sent it back, when and why.
+  rejectedBy?: string;
+  rejectedAt?: string | null;
+  rejectedReason?: string;
 }
 
 export type QuoteStatus =
@@ -756,6 +761,7 @@ export interface Bill {
   status: BillStatus;
   recurring: boolean;
   approvedBy: string | null;
+  approvedAt?: string | null;
   paidAt: string | null;
   scheduledPaymentDate: string | null;
   scheduledPaymentTime: string;
@@ -913,6 +919,9 @@ export interface ExpenseClaim {
   receiptUrl: string | null;
   receiptName: string | null;
   createdAt: string;
+  // Who approved or rejected it, and when.
+  decidedByName?: string;
+  decidedAt?: string | null;
 }
 export const fetchExpenseClaims = async (): Promise<ExpenseClaim[]> => {
   const res = await api.get("/finance/expense-claims");

@@ -1,4 +1,9 @@
 import { useState } from "react";
+import { ApprovalDetailsDialog } from "@/components/finance/ApprovalDetailsDialog";
+import {
+  valuationDetails,
+  type ApprovalDetails,
+} from "@/lib/crm/approval-details";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -717,6 +722,7 @@ export default function FundAccounting() {
     },
     onError: onErr("Failed to review valuation"),
   });
+  const [details, setDetails] = useState<ApprovalDetails | null>(null);
   const [approveTarget, setApproveTarget] = useState<{
     valuationId: string;
     companyName: string;
@@ -1881,6 +1887,24 @@ export default function FundAccounting() {
                                 Review
                               </Button>
                             )}
+                            {row.valuation && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                title="View who proposed, reviewed and approved"
+                                onClick={() =>
+                                  setDetails(
+                                    valuationDetails(
+                                      row.valuation!,
+                                      row.companyName,
+                                      (n) => money(n, fund?.currency),
+                                    ),
+                                  )
+                                }
+                              >
+                                Details
+                              </Button>
+                            )}
                             {row.valuation?.status === "Reviewed" && (
                               <Button
                                 size="sm"
@@ -2172,9 +2196,7 @@ export default function FundAccounting() {
             <TabsContent value="compliance" className="pt-4 space-y-4">
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
-                  <CardTitle className="text-base">
-                    Key persons
-                  </CardTitle>
+                  <CardTitle className="text-base">Key persons</CardTitle>
                   <Button
                     size="sm"
                     variant="outline"
@@ -3689,6 +3711,11 @@ export default function FundAccounting() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ApprovalDetailsDialog
+        details={details}
+        onClose={() => setDetails(null)}
+      />
 
       {/* Approve valuation */}
       <Dialog

@@ -48,7 +48,10 @@ import {
   Send,
   Download,
   Link2,
+  Eye,
 } from "lucide-react";
+import { ApprovalDetailsDialog } from "@/components/finance/ApprovalDetailsDialog";
+import { quoteDetails, type ApprovalDetails } from "@/lib/crm/approval-details";
 import { ClientSelect } from "@/components/ClientDropdown";
 import { useAuth } from "@/contexts/AuthContext";
 import { canDecide, approvalProgress } from "@/lib/crm/finance-approval";
@@ -227,6 +230,7 @@ export default function Sales() {
   const [reviewAmount, setReviewAmount] = useState(0);
   const [reviewReason, setReviewReason] = useState("");
   const [reviewApprover, setReviewApprover] = useState("");
+  const [details, setDetails] = useState<ApprovalDetails | null>(null);
   const [genInvoiceOpen, setGenInvoiceOpen] = useState(false);
   const [genDueOn, setGenDueOn] = useState("");
   const [genVat, setGenVat] = useState(18);
@@ -887,6 +891,14 @@ export default function Sales() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right space-x-1">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          title="View details and who approved"
+                          onClick={() => setDetails(quoteDetails(q, money))}
+                        >
+                          <Eye className="mr-1 h-3.5 w-3.5" /> Details
+                        </Button>
                         {q.status === "Pending approval" &&
                           canDecide(q, authUser) && (
                             <>
@@ -1515,6 +1527,11 @@ export default function Sales() {
       </Dialog>
 
       {/* Generate invoice from WIP */}
+      <ApprovalDetailsDialog
+        details={details}
+        onClose={() => setDetails(null)}
+      />
+
       <Dialog open={genInvoiceOpen} onOpenChange={setGenInvoiceOpen}>
         <DialogContent>
           <DialogHeader>

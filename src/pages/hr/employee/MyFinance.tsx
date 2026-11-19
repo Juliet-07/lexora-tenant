@@ -36,6 +36,12 @@ import {
   type QuoteKind,
 } from "@/lib/crm/finance-api";
 import { approvalProgress } from "@/lib/crm/finance-approval";
+import { ApprovalDetailsDialog } from "@/components/finance/ApprovalDetailsDialog";
+import {
+  billDetails,
+  quoteDetails,
+  type ApprovalDetails,
+} from "@/lib/crm/approval-details";
 
 const CURRENCIES = ["USD", "EUR", "RWF", "GBP"];
 const OTHER_VENDOR = "__other__";
@@ -90,6 +96,7 @@ export default function MyFinance() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [billOpen, setBillOpen] = useState(false);
+  const [details, setDetails] = useState<ApprovalDetails | null>(null);
   const [quoteOpen, setQuoteOpen] = useState(false);
   const [bill, setBill] = useState(emptyBill);
   const [otherVendor, setOtherVendor] = useState(false);
@@ -254,6 +261,13 @@ export default function MyFinance() {
                       Reason: {b.rejectedReason}
                     </p>
                   )}
+                  <button
+                    type="button"
+                    className="text-xs text-primary hover:underline"
+                    onClick={() => setDetails(billDetails(b, money))}
+                  >
+                    View details &amp; approvals
+                  </button>
                 </div>
                 <div className="text-right">
                   <p className="text-sm font-semibold">
@@ -306,6 +320,13 @@ export default function MyFinance() {
                       Reason: {q.rejectedReason}
                     </p>
                   )}
+                  <button
+                    type="button"
+                    className="text-xs text-primary hover:underline"
+                    onClick={() => setDetails(quoteDetails(q, money))}
+                  >
+                    View details &amp; approvals
+                  </button>
                 </div>
                 <div className="text-right">
                   <p className="text-sm font-semibold">
@@ -320,6 +341,11 @@ export default function MyFinance() {
           ))}
         </TabsContent>
       </Tabs>
+
+      <ApprovalDetailsDialog
+        details={details}
+        onClose={() => setDetails(null)}
+      />
 
       {/* Submit a bill */}
       <Dialog open={billOpen} onOpenChange={setBillOpen}>
