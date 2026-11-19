@@ -62,16 +62,48 @@ describe("cap simulation", () => {
       50,
     );
   });
-  it("buyback shrinks the total and grows everyone else", () => {
+  it("buyback returns the shares to the company, not to the other holders", () => {
     const r = runSimulation(holders, 100, {
       type: "buyback",
       fromId: "a",
       shares: 1000,
       price: 0,
     });
-    expect(r.totalAfter).toBe(9000);
+    // The register total does not change — shares are not cancelled.
+    expect(r.totalBefore).toBe(10000);
+    expect(r.totalAfter).toBe(10000);
     expect(r.figures.find((f) => f.label === "Cost")!.value).toBe(100000); // falls back to current price
-    expect(r.rows.find((x) => x.name === "Bob")!.deltaPct).toBeGreaterThan(0);
+    // Nobody who did not sell moves.
+    const bob = r.rows.find((x) => x.name === "Bob")!;
+    expect(bob.after).toBe(bob.before);
+    expect(bob.deltaPct).toBeCloseTo(0);
+    // The seller drops and the company picks the shares up.
+    const seller = r.rows.find((x) => x.name === "Ann")!;
+    expect(seller.after).toBe(seller.before - 1000);
+    const company = r.rows.find((x) => x.isCompany)!;
+    expect(company.before).toBe(0);
+    expect(company.after).toBe(1000);
+    expect(company.afterPct).toBeCloseTo(10);
+    expect(sum(r)).toBeCloseTo(100);
+  });
+  it("a second buyback adds to what the company already holds", () => {
+    const r = runSimulation(
+      holders,
+      100,
+      { type: "buyback", fromId: "a", shares: 500, price: 0 },
+      800, // already bought back earlier
+    );
+    expect(r.totalBefore).toBe(10800);
+    expect(r.rows.find((x) => x.isCompany)!.after).toBe(1300);
+    expect(r.rows.find((x) => x.name === "Bob")!.deltaPct).toBeCloseTo(0);
+    expect(sum(r)).toBeCloseTo(100);
+  });
+  it("other scenarios keep the company's treasury shares in the register", () => {
+    const r = runSimulation(holders, 100, { type: "split", ratio: 2 }, 1000);
+    const company = r.rows.find((x) => x.isCompany)!;
+    expect(company.before).toBe(1000);
+    expect(company.after).toBe(2000);
+    expect(r.rows.find((x) => x.name === "Bob")!.deltaPct).toBeCloseTo(0);
     expect(sum(r)).toBeCloseTo(100);
   });
   it("esop from new shares leaves the pool at exactly the requested %", () => {

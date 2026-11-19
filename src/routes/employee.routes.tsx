@@ -20,6 +20,7 @@ import EmployeeOnboarding from "@/pages/EmployeeOnboarding";
 import MyCases from "@/pages/hr/employee/MyCases";
 import MyNotice from "@/pages/hr/employee/MyNotice";
 import MyAnnouncements from "@/pages/hr/employee/MyAnnouncements";
+import MyFinance from "@/pages/hr/employee/MyFinance";
 
 /** Self-service routes available only to employee. */
 export const employeeRoutes = ({ isAdmin, hierarchyRole }: RouteContext) => {
@@ -70,6 +71,11 @@ export const employeeRoutes = ({ isAdmin, hierarchyRole }: RouteContext) => {
       element={layout(<MyServiceDesk />)}
     />,
     <Route key="my-events" path="/my/events" element={layout(<MyEvents />)} />,
+    <Route
+      key="my-finance"
+      path="/my/finance"
+      element={layout(<MyFinance />)}
+    />,
     <Route
       key="my-learning"
       path="/my/learning"

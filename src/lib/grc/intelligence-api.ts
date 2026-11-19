@@ -65,6 +65,41 @@ export interface ValuationHistoryEntry {
   blendedEv: number;
 }
 
+/** What the company's own records say — the model is anchored to these. */
+export interface CompanyContext {
+  baseCurrency: string;
+  shares: {
+    /** "cap-table" once the share register has shares in issue. */
+    source: "cap-table" | "none";
+    authorised: number;
+    issued: number;
+    /** Held by the company after buybacks. */
+    treasury: number;
+    /** Issued less treasury — the count every per-share figure uses. */
+    outstanding: number;
+    pricePerShare: number;
+    /** outstanding × latest register price. */
+    registerValuation: number;
+  };
+  finance:
+    | { available: false }
+    | {
+        available: true;
+        periodFrom: string;
+        periodTo: string;
+        revenueTtm: number;
+        operatingCostTtm: number;
+        daTtm: number;
+        ebitdaMarginPct: number | null;
+        daPct: number | null;
+        totalAssets: number;
+        totalLiabilities: number;
+        netDebt: number;
+        borrowings: number;
+        cash: number;
+      };
+}
+
 export interface Valuation {
   _id: string;
   currency: string;
@@ -79,6 +114,9 @@ export interface Valuation {
   ddm: DdmInputs;
   blend: Record<MethodKey, MethodBlendEntry>;
   history: ValuationHistoryEntry[];
+  /** Cap-table shares/price and Finance figures this model is anchored to. */
+  context?: CompanyContext;
+  sharesSource?: "cap-table" | "none";
   // Server-computed, authoritative — refreshed after every mutation.
   dcfResult: any;
   compsResult: any;
@@ -166,6 +204,18 @@ export const updateBlendEntry = async (
     `/deal-intel/valuations/${id}/blend/${method}`,
     dto,
   );
+  return res.data?.data ?? res.data;
+};
+export const syncValuationFromCompany = async (
+  id: string,
+): Promise<Valuation> => {
+  const res = await api.post(`/deal-intel/valuations/${id}/sync-company`);
+  return res.data?.data ?? res.data;
+};
+export const applyValuationToRegister = async (
+  id: string,
+): Promise<Valuation> => {
+  const res = await api.post(`/deal-intel/valuations/${id}/apply-to-register`);
   return res.data?.data ?? res.data;
 };
 export const snapshotVersion = async (id: string): Promise<Valuation> => {

@@ -60,7 +60,8 @@ export const modules: ModuleEntry[] = [
   {
     number: "03",
     name: "Lexora Finance",
-    short: "Accounting, billing, trust and fund accounting, management reporting",
+    short:
+      "Accounting, billing, trust and fund accounting, management reporting",
     description:
       "Sales, billing and invoicing, purchases, banking, tax, accounting with general ledger, trust accounting with ring-fenced client accounts, fund accounting with capital calls, distributions, NAV, and LP reporting.",
     icon: Landmark,
@@ -82,7 +83,8 @@ export const modules: ModuleEntry[] = [
   {
     number: "04",
     name: "Lexora GRC",
-    short: "Governance, risk, compliance, ESG, board management, deal management",
+    short:
+      "Governance, risk, compliance, ESG, board management, deal management",
     description:
       "Governance codes with a built-in drafting editor and clause library, board and committee management, risk register with heat map, policy and procedure management, ESG framework alignment, deal and transaction management, and the GRC Health Score.",
     icon: Scale,
@@ -250,7 +252,7 @@ export const pricingFaq = [
   },
   {
     q: "Is there a free trial?",
-    a: "Yes. Every plan comes with a 7-day free trial with full access to all modules and features. No credit card required to start.",
+    a: "Yes. Every plan comes with a 14-day free trial with full access to all modules and features. No credit card required to start.",
   },
   {
     q: "Where is my data hosted?",
@@ -353,7 +355,8 @@ export const articles: Article[] = [
   },
   {
     category: "Compliance",
-    title: "AML compliance in East Africa: building programmes that survive regulatory change",
+    title:
+      "AML compliance in East Africa: building programmes that survive regulatory change",
     excerpt:
       "A practical guide to designing AML/KYC frameworks that are robust enough to adapt as regulations evolve across Rwanda, Kenya, Uganda, and Tanzania.",
     read: "5 min read",
@@ -361,7 +364,8 @@ export const articles: Article[] = [
   },
   {
     category: "Fund Administration",
-    title: "Capital call default management: protecting the fund when an LP fails to pay",
+    title:
+      "Capital call default management: protecting the fund when an LP fails to pay",
     excerpt:
       "The mechanics of default notices, cure periods, interest calculations, and forfeiture provisions that every fund administrator needs to understand.",
     read: "7 min read",
@@ -369,7 +373,8 @@ export const articles: Article[] = [
   },
   {
     category: "Governance",
-    title: "Board composition in African enterprises: independence, skills gaps, and succession",
+    title:
+      "Board composition in African enterprises: independence, skills gaps, and succession",
     excerpt:
       "Why independence percentages alone do not make a board effective, and how skills matrices and term tracking create genuinely effective boards.",
     read: "6 min read",
@@ -377,7 +382,8 @@ export const articles: Article[] = [
   },
   {
     category: "ESG",
-    title: "ESG frameworks for African markets: moving beyond checkbox compliance",
+    title:
+      "ESG frameworks for African markets: moving beyond checkbox compliance",
     excerpt:
       "How to connect ESG reporting to your governance infrastructure so the framework score reflects reality, not a parallel data entry exercise.",
     read: "5 min read",
@@ -393,7 +399,8 @@ export const articles: Article[] = [
   },
   {
     category: "Technology",
-    title: "From spreadsheets to systems: the case for unified business platforms in Africa",
+    title:
+      "From spreadsheets to systems: the case for unified business platforms in Africa",
     excerpt:
       "Why fragmented tools create operational fragility, and how a unified platform changes the economics of compliance for growing businesses.",
     read: "5 min read",

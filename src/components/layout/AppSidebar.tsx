@@ -92,6 +92,8 @@ type NavItem = {
   url?: string;
   icon: any;
   adminOnly?: boolean;
+  // Hidden from staff accounts — only the account owner sees it.
+  ownerOnly?: boolean;
   requiresRole?: string | string[];
   children?: NavChild[];
 };
@@ -363,6 +365,7 @@ const NAV_BY_MODULE: Record<string, NavItem[]> = {
       url: "/finance/settings",
       icon: Settings,
       adminOnly: true,
+      ownerOnly: true,
     },
   ],
 
@@ -503,6 +506,9 @@ export function AppSidebar() {
         { title: "Notices", url: "/my/notices" },
       ],
     },
+    // Any employee can submit a bill or prepare a quote here; it goes to
+    // the finance managers and the owner for approval.
+    { title: "Finance", url: "/my/finance", icon: Receipt },
     {
       title: "GRC",
       icon: ShieldCheck,
@@ -708,7 +714,11 @@ export function AppSidebar() {
     NAV_BY_MODULE[currentModule.id] ?? [
       { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
     ]
-  ).filter((n) => !n.adminOnly || isAdmin);
+  ).filter(
+    (n) =>
+      (!n.adminOnly || isAdmin) &&
+      (!n.ownerOnly || user?.userType === "tenant"),
+  );
 
   return (
     <Sidebar collapsible="icon">

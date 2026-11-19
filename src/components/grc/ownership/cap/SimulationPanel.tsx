@@ -153,14 +153,16 @@ function Results({
                     className="h-full flex items-center px-2 text-[11px] font-semibold text-white"
                     style={{
                       width: `${Math.max(Math.min(100, r.afterPct), 4)}%`,
-                      background: r.isNew
-                        ? "#16A34A"
-                        : SLICE_COLORS[i % SLICE_COLORS.length],
+                      background: r.isCompany
+                        ? "#64748B"
+                        : r.isNew
+                          ? "#16A34A"
+                          : SLICE_COLORS[i % SLICE_COLORS.length],
                     }}
                   >
                     {fmtPct(r.afterPct)}
                   </div>
-                  {!r.isNew && r.beforePct > 0 && (
+                  {!r.isNew && !r.isCompany && r.beforePct > 0 && (
                     <div
                       className="absolute top-0 h-full border-l-2 border-dashed border-foreground/60"
                       style={{ left: `${Math.min(100, r.beforePct)}%` }}
@@ -189,8 +191,9 @@ function Results({
             );
           })}
           <p className="text-[11px] text-muted-foreground">
-            The dashed line marks each holder's current stake. Total shares:{" "}
-            {fmtNum(result.totalBefore)} → {fmtNum(result.totalAfter)}.
+            The dashed line marks each holder's current stake. Total shares in
+            the register: {fmtNum(result.totalBefore)} →{" "}
+            {fmtNum(result.totalAfter)}.
           </p>
         </div>
       )}
@@ -348,7 +351,7 @@ export function SimulationPanel({
         };
         break;
     }
-    setResult(runSimulation(holders, pps, scenario));
+    setResult(runSimulation(holders, pps, scenario, cap.stats.treasury ?? 0));
   };
 
   const holderSelect = (value: string, onChange: (v: string) => void) => (

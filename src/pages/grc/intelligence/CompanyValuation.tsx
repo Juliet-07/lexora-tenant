@@ -33,6 +33,7 @@ import {
   Coins,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { invalidateOwnership } from "@/components/grc/ownership/shared";
 import {
   fetchValuations,
   createValuation,
@@ -46,6 +47,8 @@ import {
   updateDdm,
   updateBlendEntry,
   snapshotVersion,
+  syncValuationFromCompany,
+  applyValuationToRegister,
   downloadValuationReport,
   METHOD_KEYS,
   type Valuation,
@@ -60,6 +63,7 @@ import {
   blendedValuation,
   sensitivityMatrix,
   money,
+  pricePerShare,
   pct,
   type MethodKey,
 } from "@/lib/grc/valuation-math";
@@ -198,6 +202,31 @@ function ValuationWorkspace({
       updateBlendEntry(v._id, method, dto),
     onSuccess: invalidate,
   });
+  const syncMut = useMutation({
+    mutationFn: () => syncValuationFromCompany(v._id),
+    onSuccess: () => {
+      invalidate();
+      toast({
+        title: "Inputs refreshed from Finance",
+        description:
+          "Revenue, margin, D&A, net debt and net assets now match your books.",
+      });
+    },
+    onError: onErr("Couldn't refresh from Finance"),
+  });
+  const applyMut = useMutation({
+    mutationFn: () => applyValuationToRegister(v._id),
+    onSuccess: (nv) => {
+      invalidate();
+      invalidateOwnership(queryClient);
+      toast({
+        title: "Share register updated",
+        description: `Price per share is now ${pricePerShare(nv.blendResult.perShare, nv.currency)} — the cap table's valuation matches this model.`,
+      });
+    },
+    onError: onErr("Couldn't update the share register"),
+  });
+
   const snapshotMut = useMutation({
     mutationFn: () => snapshotVersion(v._id),
     onSuccess: () => {
@@ -288,6 +317,16 @@ function ValuationWorkspace({
         />
       </div>
 
+      <CompanyDataCard
+        v={v}
+        modelEquity={blend.equity}
+        modelPerShare={blend.perShare}
+        syncing={syncMut.isPending}
+        applying={applyMut.isPending}
+        onSync={() => syncMut.mutate()}
+        onApply={() => applyMut.mutate()}
+      />
+
       <Tabs defaultValue="dcf">
         <TabsList className="flex-wrap h-auto">
           <TabsTrigger value="dcf">DCF</TabsTrigger>
@@ -366,10 +405,15 @@ function ValuationWorkspace({
                 onBlur={() => saveDcfField("netDebt")}
               />
               <Num
-                label="Shares outstanding"
+                label={
+                  v.sharesSource === "cap-table"
+                    ? "Shares outstanding (cap table)"
+                    : "Shares outstanding"
+                }
                 value={dcfDraft.sharesOutstanding}
                 onChange={(n) => setDcfField("sharesOutstanding", n)}
                 onBlur={() => saveDcfField("sharesOutstanding")}
+                disabled={v.sharesSource === "cap-table"}
               />
             </CardContent>
           </Card>
@@ -869,7 +913,7 @@ function ValuationWorkspace({
               />
               <BridgeRow
                 label="Value per share"
-                value={money(blend.perShare, v.currency)}
+                value={pricePerShare(blend.perShare, v.currency)}
               />
               <BridgeRow
                 label="Implied EV/Revenue"
@@ -956,6 +1000,168 @@ function Kpi({
   );
 }
 
+function CompanyDataCard({
+  v,
+  modelEquity,
+  modelPerShare,
+  syncing,
+  applying,
+  onSync,
+  onApply,
+}: {
+  v: Valuation;
+  modelEquity: number;
+  modelPerShare: number;
+  syncing: boolean;
+  applying: boolean;
+  onSync: () => void;
+  onApply: () => void;
+}) {
+  const ctx = v.context;
+  if (!ctx) return null;
+  const { shares, finance } = ctx;
+  const hasShares = shares.outstanding > 0;
+  const currencyMismatch = v.currency.toUpperCase() !== ctx.baseCurrency;
+  const n = (x: number) => x.toLocaleString();
+  return (
+    <Card data-testid="company-data-card">
+      <CardContent className="p-4 space-y-3">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <p className="font-medium">Your company's own numbers</p>
+            <p className="text-xs text-muted-foreground">
+              Shares come from your share register and revenue, margin, net debt
+              and net assets from Finance — so this model values your company,
+              not placeholder figures. Growth, WACC and the other
+              forward-looking assumptions stay your judgement.
+            </p>
+          </div>
+          <div className="flex gap-2 flex-wrap">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={syncing || !finance.available}
+              onClick={onSync}
+            >
+              Refresh from Finance
+            </Button>
+            <Button
+              size="sm"
+              disabled={applying || !hasShares || currencyMismatch}
+              onClick={onApply}
+            >
+              Apply to share register
+            </Button>
+          </div>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-2">
+          <div className="rounded-md border p-3 space-y-1.5 text-sm">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Share register (cap table)
+            </p>
+            {hasShares ? (
+              <>
+                <Row k="Shares outstanding" val={n(shares.outstanding)} />
+                <Row
+                  k="Issued / held by company"
+                  val={`${n(shares.issued)} / ${n(shares.treasury)}`}
+                />
+                <Row
+                  k="Register price per share"
+                  val={
+                    shares.pricePerShare
+                      ? pricePerShare(shares.pricePerShare, ctx.baseCurrency)
+                      : "Not set"
+                  }
+                />
+                <Row
+                  k="Register valuation"
+                  val={money(shares.registerValuation, ctx.baseCurrency)}
+                />
+                <Row
+                  k="This model's equity value"
+                  val={money(modelEquity, v.currency)}
+                  bold
+                />
+                <Row
+                  k="This model, per share"
+                  val={pricePerShare(modelPerShare, v.currency)}
+                  bold
+                />
+              </>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                No shares are in issue yet. Issue shares in Governance → Cap
+                table and the per-share value will use that count.
+              </p>
+            )}
+          </div>
+          <div className="rounded-md border p-3 space-y-1.5 text-sm">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Finance books
+              {finance.available &&
+                ` · ${finance.periodFrom} → ${finance.periodTo}`}
+            </p>
+            {finance.available ? (
+              <>
+                <Row
+                  k="Revenue (last 12 months)"
+                  val={money(finance.revenueTtm, ctx.baseCurrency)}
+                />
+                <Row
+                  k="EBITDA margin"
+                  val={
+                    finance.ebitdaMarginPct === null
+                      ? "—"
+                      : `${finance.ebitdaMarginPct}%`
+                  }
+                />
+                <Row
+                  k="Net debt"
+                  val={money(finance.netDebt, ctx.baseCurrency)}
+                />
+                <Row
+                  k="Total assets / liabilities"
+                  val={`${money(finance.totalAssets, ctx.baseCurrency)} / ${money(finance.totalLiabilities, ctx.baseCurrency)}`}
+                />
+                <p className="text-[11px] text-muted-foreground pt-1">
+                  EBITDA margin is revenue less operating costs (before
+                  depreciation) ÷ revenue — a proxy from the ledger. Net debt is
+                  loans/overdrafts less cash and bank balances.
+                </p>
+              </>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                No Finance records yet, so revenue and debt must be entered by
+                hand. They fill in automatically once the books have entries.
+              </p>
+            )}
+          </div>
+        </div>
+
+        {currencyMismatch && (
+          <p className="text-xs text-amber-700">
+            This model is in {v.currency} but your share register is in{" "}
+            {ctx.baseCurrency}. Create a new model to apply it to the register.
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function Row({ k, val, bold }: { k: string; val: string; bold?: boolean }) {
+  return (
+    <div className="flex justify-between gap-3">
+      <span className="text-muted-foreground">{k}</span>
+      <span className={`tabular-nums ${bold ? "font-semibold" : ""}`}>
+        {val}
+      </span>
+    </div>
+  );
+}
+
 function Num({
   label,
   value,
@@ -963,6 +1169,7 @@ function Num({
   onBlur,
   editable,
   defaultValue,
+  disabled,
 }: {
   label: string;
   value: number;
@@ -970,6 +1177,7 @@ function Num({
   onBlur: (n: number) => void;
   editable?: boolean;
   defaultValue?: number;
+  disabled?: boolean;
 }) {
   if (editable) {
     return (
@@ -991,6 +1199,7 @@ function Num({
         type="number"
         className="h-8 mt-1"
         value={value}
+        disabled={disabled}
         onChange={(e) => onChange(Number(e.target.value))}
         onBlur={(e) => onBlur(Number(e.target.value))}
       />

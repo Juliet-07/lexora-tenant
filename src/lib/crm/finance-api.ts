@@ -410,7 +410,18 @@ export const fetchWriteOffs = async (
 
 // ── Quotes & proformas ────────────────────────────────────────
 
+// Who may approve a bill or quote an employee submitted, and who already has.
+export interface ApprovalInfo {
+  tierName: string;
+  mode: "single" | "dual";
+  approverIds: string[];
+  approverNames: string[];
+  approvals: { userId: string; name: string; at: string }[];
+}
+
 export type QuoteStatus =
+  | "Pending approval"
+  | "Rejected"
   | "Draft"
   | "Sent"
   | "Accepted"
@@ -432,6 +443,10 @@ export interface Quote {
   status: QuoteStatus;
   kind: QuoteKind;
   convertedInvoiceId: string | null;
+  submittedById?: string | null;
+  submittedByName?: string;
+  approval?: ApprovalInfo | null;
+  rejectedReason?: string;
 }
 export const fetchQuotes = async (): Promise<Quote[]> => {
   const res = await api.get("/finance/quotes");
@@ -452,6 +467,13 @@ export const createQuote = async (dto: {
   expires: string;
   kind: QuoteKind;
 }): Promise<Quote> => unwrap(await api.post("/finance/quotes", dto));
+export const approveQuote = async (id: string): Promise<Quote> =>
+  unwrap(await api.post(`/finance/quotes/${id}/approve`));
+export const rejectQuote = async (
+  id: string,
+  reason?: string,
+): Promise<Quote> =>
+  unwrap(await api.post(`/finance/quotes/${id}/reject`, { reason }));
 export const setQuoteStatus = async (
   id: string,
   status: QuoteStatus,
@@ -667,6 +689,21 @@ export const createPurchaseOrder = async (dto: {
   lines: PoLine[];
 }): Promise<PurchaseOrder> =>
   unwrap(await api.post("/finance/purchase-orders", dto));
+export const updatePurchaseOrder = async (
+  id: string,
+  dto: Partial<{
+    vendorId: string;
+    currency: string;
+    expectedDelivery: string;
+    notes: string;
+    deliveryAddress: string;
+    deliveryAttention: string;
+    deliveryPhone: string;
+    deliveryInstructions: string;
+    lines: PoLine[];
+  }>,
+): Promise<PurchaseOrder> =>
+  unwrap(await api.patch(`/finance/purchase-orders/${id}`, dto));
 export const issuePurchaseOrder = async (id: string): Promise<PurchaseOrder> =>
   unwrap(await api.post(`/finance/purchase-orders/${id}/issue`));
 export const fulfillPurchaseOrder = async (
@@ -724,6 +761,10 @@ export interface Bill {
   scheduledPaymentTime: string;
   receiptUrl: string | null;
   receiptFileName: string | null;
+  submittedById?: string | null;
+  submittedByName?: string;
+  approval?: ApprovalInfo | null;
+  rejectedReason?: string;
 }
 export const fetchBills = async (): Promise<Bill[]> => {
   const res = await api.get("/finance/bills");
@@ -779,8 +820,60 @@ export const approveBill = async (
   approvedBy: string,
 ): Promise<Bill> =>
   unwrap(await api.post(`/finance/bills/${id}/approve`, { approvedBy }));
-export const rejectBill = async (id: string): Promise<Bill> =>
-  unwrap(await api.post(`/finance/bills/${id}/reject`));
+export const rejectBill = async (id: string, reason?: string): Promise<Bill> =>
+  unwrap(await api.post(`/finance/bills/${id}/reject`, { reason }));
+
+// ── Employee workspace: bills and quotes submitted for approval ──
+
+export const fetchMyFinanceVendors = async (): Promise<
+  { _id: string; name: string }[]
+> => {
+  const d = unwrap(await api.get("/employee/finance/vendors"));
+  return Array.isArray(d) ? d : [];
+};
+export const fetchMySubmittedBills = async (): Promise<Bill[]> => {
+  const d = unwrap(await api.get("/employee/finance/bills"));
+  return Array.isArray(d) ? d : [];
+};
+export const fetchMySubmittedQuotes = async (): Promise<Quote[]> => {
+  const d = unwrap(await api.get("/employee/finance/quotes"));
+  return Array.isArray(d) ? d : [];
+};
+export const submitMyBill = async (
+  dto: {
+    vendorId?: string;
+    vendorName?: string;
+    description: string;
+    category?: string;
+    dueOn: string;
+    amount: number;
+    currency?: string;
+  },
+  receiptFile: File,
+): Promise<Bill> => {
+  const form = new FormData();
+  Object.entries(dto).forEach(([k, v]) => {
+    if (v !== undefined && v !== null && v !== "") form.append(k, String(v));
+  });
+  form.append("file", receiptFile);
+  return unwrap(
+    await api.post("/employee/finance/bills", form, {
+      headers: { "Content-Type": "multipart/form-data" },
+    }),
+  );
+};
+export const submitMyQuote = async (dto: {
+  clientName: string;
+  clientEmail: string;
+  title: string;
+  description?: string;
+  termsAndConditions?: string;
+  amount: number;
+  vatPercent?: number;
+  currency?: string;
+  expires: string;
+  kind: QuoteKind;
+}): Promise<Quote> => unwrap(await api.post("/employee/finance/quotes", dto));
 export const scheduleBillPayment = async (
   id: string,
   date: string,

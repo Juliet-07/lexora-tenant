@@ -44,7 +44,28 @@ export const RoleChips = ({ types }: { types: string[] }) => (
 );
 
 function Donut({ cap }: { cap: CapTable }) {
-  const holders = cap.holders.filter((h) => h.totalShares > 0);
+  const people = cap.holders.filter((h) => h.totalShares > 0);
+  // Shares the company bought back are still in the register — show them as
+  // the company's own slice rather than spreading them over the holders.
+  const treasury = cap.company?.treasuryShares ?? 0;
+  const holders = [
+    ...people.map((h) => ({
+      key: h.nodeId,
+      name: h.name,
+      shares: h.totalShares,
+      pct: h.pct,
+    })),
+    ...(treasury > 0
+      ? [
+          {
+            key: "__company__",
+            name: cap.company.name,
+            shares: treasury,
+            pct: cap.company.pct,
+          },
+        ]
+      : []),
+  ];
   const total = cap.stats.issued;
   const size = 200;
   const c = size / 2;
@@ -52,7 +73,7 @@ function Donut({ cap }: { cap: CapTable }) {
   const ir = 52;
   let start = -90;
   const paths = holders.map((h, i) => {
-    const angle = total ? (h.totalShares / total) * 360 : 0;
+    const angle = total ? (h.shares / total) * 360 : 0;
     // A single 100% slice can't be drawn as one arc — split it in two.
     const end = start + Math.min(angle, 359.99);
     const rad = (d: number) => (d * Math.PI) / 180;
@@ -66,7 +87,7 @@ function Donut({ cap }: { cap: CapTable }) {
     ].join(" ");
     start += angle;
     return (
-      <path key={h.nodeId} d={d} fill={SLICE_COLORS[i % SLICE_COLORS.length]}>
+      <path key={h.key} d={d} fill={SLICE_COLORS[i % SLICE_COLORS.length]}>
         <title>{`${h.name}: ${fmtPct(h.pct)}`}</title>
       </path>
     );
@@ -84,7 +105,7 @@ function Donut({ cap }: { cap: CapTable }) {
       </div>
       <div className="space-y-2">
         {holders.map((h, i) => (
-          <div key={h.nodeId} className="flex items-center gap-2.5 text-sm">
+          <div key={h.key} className="flex items-center gap-2.5 text-sm">
             <span
               className="h-3 w-3 rounded-sm"
               style={{ background: SLICE_COLORS[i % SLICE_COLORS.length] }}
@@ -92,7 +113,7 @@ function Donut({ cap }: { cap: CapTable }) {
             <div className="min-w-40">
               <div className="font-medium leading-tight">{h.name}</div>
               <div className="text-[11px] text-muted-foreground">
-                {fmtNum(h.totalShares)} shares
+                {fmtNum(h.shares)} shares
               </div>
             </div>
             <span className="font-semibold tabular-nums">{fmtPct(h.pct)}</span>
@@ -279,6 +300,44 @@ export function RegisterPanel({
                     </TableCell>
                   </TableRow>
                 ))}
+                {(cap.company?.treasuryShares ?? 0) > 0 && (
+                  <TableRow className="bg-muted/30">
+                    <TableCell>
+                      <div className="font-medium">{cap.company.name}</div>
+                      <span className="text-[11px] text-muted-foreground">
+                        Bought back from shareholders
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap gap-1">
+                        {cap.company.holdings.map((x) => (
+                          <Badge
+                            key={x.classId}
+                            variant="secondary"
+                            className="text-[10px]"
+                          >
+                            {x.className}
+                          </Badge>
+                        ))}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right font-semibold tabular-nums">
+                      {fmtNum(cap.company.treasuryShares)}
+                    </TableCell>
+                    <TableCell>
+                      <span className="font-semibold tabular-nums text-sm">
+                        {fmtPct(cap.company.pct)}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right text-muted-foreground">
+                      —
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline">No vote</Badge>
+                    </TableCell>
+                    <TableCell colSpan={2} />
+                  </TableRow>
+                )}
               </TableBody>
               <TableFooter>
                 <TableRow>
@@ -321,6 +380,21 @@ export function RegisterPanel({
                 </div>
               </div>
             ))}
+            {(cap.company?.treasuryShares ?? 0) > 0 && (
+              <div className="flex items-center gap-3">
+                <div className="w-40 truncate text-sm">{cap.company.name}</div>
+                <div className="flex-1 h-6 rounded-md bg-muted overflow-hidden">
+                  <div
+                    className="h-full flex items-center px-2 text-[11px] font-semibold text-foreground bg-border"
+                    style={{
+                      width: `${Math.max(Math.min(100, cap.company.pct), 4)}%`,
+                    }}
+                  >
+                    {fmtPct(cap.company.pct)}
+                  </div>
+                </div>
+              </div>
+            )}
             {cap.stats.unissued > 0 && (
               <div className="flex items-center gap-3">
                 <div className="w-40 truncate text-sm text-muted-foreground">
@@ -337,8 +411,11 @@ export function RegisterPanel({
               </div>
             )}
             <p className="text-[11px] text-muted-foreground pt-1">
-              Ownership bars show each holder's share of shares in issue;
-              unissued is shown against the total authorised.
+              Ownership bars show each holder's share of shares in issue. Shares
+              bought back from a shareholder return to the company (treasury) —
+              they don't change anyone else's percentage, carry no vote and
+              aren't valued as owned by anyone. Unissued is shown against the
+              total authorised.
             </p>
           </CardContent>
         </Card>

@@ -71,6 +71,8 @@ export interface SimRow {
   detail?: string;
   /** Rights issue only — this holder takes no part. */
   excluded?: boolean;
+  /** The company's own holding (treasury shares) — not a shareholder. */
+  isCompany?: boolean;
 }
 
 export interface SimWaterfall {
@@ -146,10 +148,54 @@ function buildRows(
   return rows;
 }
 
+export const COMPANY_NAME = "Company (treasury)";
+
+/**
+ * What ownership looks like after a scenario.
+ *
+ * The share register belongs to the company and is shared out to
+ * shareholders. `treasury` is what the company already holds from earlier
+ * buybacks: those shares stay in the register total, so a shareholder's
+ * percentage is measured against holders + company. A buyback therefore
+ * moves shares from the seller to the COMPANY — nobody else's holding or
+ * percentage changes.
+ */
 export function runSimulation(
   holders: SimHolder[],
   pricePerShare: number,
   s: SimScenario,
+  treasury = 0,
+): SimResult {
+  const r = simulate(holders, pricePerShare, s, treasury);
+  if (r.error || treasury <= 0 || s.type === "buyback") return r;
+  // Every other scenario leaves the company's treasury shares where they
+  // are (a split multiplies them with everyone else's) and counts them in
+  // the register total the percentages are measured against.
+  const tAfter = s.type === "split" ? Math.round(treasury * s.ratio) : treasury;
+  const regBefore = r.totalBefore + treasury;
+  const regAfter = r.totalAfter + tAfter;
+  const rows = r.rows.map((x) => {
+    const beforePct = pct(x.before, regBefore);
+    const afterPct = pct(x.after, regAfter);
+    return { ...x, beforePct, afterPct, deltaPct: afterPct - beforePct };
+  });
+  rows.push({
+    name: COMPANY_NAME,
+    before: treasury,
+    beforePct: pct(treasury, regBefore),
+    after: tAfter,
+    afterPct: pct(tAfter, regAfter),
+    deltaPct: pct(tAfter, regAfter) - pct(treasury, regBefore),
+    isCompany: true,
+  });
+  return { ...r, rows, totalBefore: regBefore, totalAfter: regAfter };
+}
+
+function simulate(
+  holders: SimHolder[],
+  pricePerShare: number,
+  s: SimScenario,
+  treasury: number,
 ): SimResult {
   const total = holders.reduce((a, h) => a + h.shares, 0);
   if (!holders.length || total <= 0) {
@@ -297,29 +343,47 @@ export function runSimulation(
         );
       }
       const price = s.price > 0 ? s.price : pricePerShare;
-      const newTotal = total - s.shares;
+      // The register total does not change: the shares go back to the
+      // company, they are not cancelled and not spread over the others.
+      const register = total + treasury;
+      const companyAfter = treasury + s.shares;
+      const rows = buildRows(
+        holders,
+        register,
+        (h) => (h.id === from.id ? h.shares - s.shares : h.shares),
+        register,
+      );
+      rows.push({
+        name: COMPANY_NAME,
+        before: treasury,
+        beforePct: pct(treasury, register),
+        after: companyAfter,
+        afterPct: pct(companyAfter, register),
+        deltaPct: pct(companyAfter, register) - pct(treasury, register),
+        isCompany: true,
+      });
       return {
         figures: [
-          { label: "Cancelled", kind: "num", value: s.shares },
+          { label: "Returned to the company", kind: "num", value: s.shares },
           { label: "Cost", kind: "money", value: s.shares * price },
-          { label: "New total", kind: "num", value: newTotal },
+          {
+            label: "Company holds after",
+            kind: "num",
+            value: companyAfter,
+            sub: `${pct(companyAfter, register).toFixed(1)}% of the register`,
+          },
           {
             label: `${from.name} after`,
             kind: "pct",
-            value: pct(from.shares - s.shares, newTotal),
+            value: pct(from.shares - s.shares, register),
           },
         ],
-        rows: buildRows(
-          holders,
-          total,
-          (h) => (h.id === from.id ? h.shares - s.shares : h.shares),
-          newTotal,
-        ),
+        rows,
         notes: [
-          "Bought-back shares are cancelled, so everyone who did not sell owns a bigger slice of a smaller company.",
+          "Bought-back shares go back to the company as treasury shares. They are not cancelled and they are not shared out to the other holders, so nobody else's holding or percentage changes. Until the company resells them they carry no vote.",
         ],
-        totalBefore: total,
-        totalAfter: newTotal,
+        totalBefore: register,
+        totalAfter: register,
       };
     }
 

@@ -25,6 +25,8 @@ export interface ShareClass {
   name: string;
   authorised: number;
   issued: number;
+  /** Held by the company after buybacks. */
+  treasury?: number;
   holders: number;
   parValue: number;
   voting: VotingKind;
@@ -65,15 +67,30 @@ export interface CapTable {
     authorised: number;
     issued: number;
     unissued: number;
+    /** Shares the company holds after buybacks (still in the register). */
+    treasury: number;
+    /** Shares held by shareholders (issued less the company's treasury). */
+    outstanding: number;
     shareholders: number;
     valuation: number;
+  };
+  /** The company as a holder: treasury shares plus what is still unissued. */
+  company: {
+    name: string;
+    treasuryShares: number;
+    unissuedShares: number;
+    pct: number;
+    holdings: { classId: string; className: string; shares: number }[];
   };
   classes: ShareClass[];
   holders: Shareholder[];
 }
 
 export type ShareTransactionType =
-  "Issuance" | "Transfer" | "Buyback" | "Valuation";
+  | "Issuance"
+  | "Transfer"
+  | "Buyback"
+  | "Valuation";
 
 export interface ShareTransaction {
   id: string;
@@ -348,7 +365,12 @@ export type IpAssetType =
   | "Domain Name"
   | "Design";
 export type IpAssetStatus =
-  "Registered" | "Active" | "Pending" | "Expired" | "Lapsed" | "Abandoned";
+  | "Registered"
+  | "Active"
+  | "Pending"
+  | "Expired"
+  | "Lapsed"
+  | "Abandoned";
 
 export interface IpDeadline {
   _id: string;

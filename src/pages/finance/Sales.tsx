@@ -50,6 +50,8 @@ import {
   Link2,
 } from "lucide-react";
 import { ClientSelect } from "@/components/ClientDropdown";
+import { useAuth } from "@/contexts/AuthContext";
+import { canDecide, approvalProgress } from "@/lib/crm/finance-approval";
 import { WorkflowTable } from "@/components/finance/WorkflowTable";
 import { fetchMandates, money } from "@/lib/crm/mandates-api";
 import {
@@ -69,6 +71,8 @@ import {
   fetchQuotes,
   createQuote,
   setQuoteStatus,
+  approveQuote,
+  rejectQuote,
   convertQuoteToInvoice,
   setQuoteMandate,
   downloadQuotePdf,
@@ -149,9 +153,27 @@ const badge = (s: string) => {
     ["Accepted", "Paid", "Active", "Approved for billing", "Synced"].includes(s)
   )
     return "bg-success/10 text-success";
-  if (["Sent", "Unbilled", "Pending", "Scheduled", "Held"].includes(s))
+  if (
+    [
+      "Sent",
+      "Unbilled",
+      "Pending",
+      "Scheduled",
+      "Held",
+      "Pending approval",
+    ].includes(s)
+  )
     return "bg-warning/10 text-warning";
-  if (["Declined", "Expired", "Written off", "Overdue", "Error"].includes(s))
+  if (
+    [
+      "Declined",
+      "Expired",
+      "Written off",
+      "Overdue",
+      "Error",
+      "Rejected",
+    ].includes(s)
+  )
     return "bg-destructive/10 text-destructive";
   return "bg-muted text-muted-foreground";
 };
@@ -165,6 +187,7 @@ const BAD_DEBT_BANDS = [
 
 export default function Sales() {
   const { toast } = useToast();
+  const { user: authUser } = useAuth();
   const queryClient = useQueryClient();
 
   const { data: mandates = [] } = useQuery({
@@ -415,6 +438,33 @@ export default function Sales() {
       toast({ title: `${quoteDraft.kind} created` });
     },
     onError: onErr("Failed to create"),
+  });
+  const approveQuoteMut = useMutation({
+    mutationFn: (id: string) => approveQuote(id),
+    onSuccess: (q) => {
+      queryClient.invalidateQueries({ queryKey: ["quotes"] });
+      toast({
+        title: q.status === "Draft" ? "Quote approved" : "Approval recorded",
+        description:
+          q.status === "Draft"
+            ? `${q.ref} is now a draft you can send.`
+            : approvalProgress(q),
+      });
+    },
+    onError: onErr("Failed to approve"),
+  });
+  const rejectQuoteMut = useMutation({
+    mutationFn: (id: string) =>
+      rejectQuote(
+        id,
+        window.prompt("Why is this quote being sent back? (optional)") ??
+          undefined,
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["quotes"] });
+      toast({ title: "Quote sent back" });
+    },
+    onError: onErr("Failed to reject"),
   });
   const downloadQuoteMut = useMutation({
     mutationFn: ({ id, ref }: { id: string; ref: string }) =>
@@ -806,7 +856,22 @@ export default function Sales() {
                           )}
                         </div>
                       </TableCell>
-                      <TableCell className="text-sm">{q.title}</TableCell>
+                      <TableCell className="text-sm">
+                        {q.title}
+                        {q.submittedByName && (
+                          <p className="text-[11px] text-muted-foreground">
+                            Prepared by {q.submittedByName}
+                            {q.status === "Pending approval" &&
+                              q.approval &&
+                              ` · ${approvalProgress(q)}`}
+                          </p>
+                        )}
+                        {q.status === "Rejected" && q.rejectedReason && (
+                          <p className="text-[11px] text-destructive">
+                            Sent back: {q.rejectedReason}
+                          </p>
+                        )}
+                      </TableCell>
                       <TableCell className="text-sm font-semibold">
                         {money(q.amount, q.currency)}
                       </TableCell>
@@ -822,6 +887,27 @@ export default function Sales() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right space-x-1">
+                        {q.status === "Pending approval" &&
+                          canDecide(q, authUser) && (
+                            <>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={approveQuoteMut.isPending}
+                                onClick={() => approveQuoteMut.mutate(q._id)}
+                              >
+                                Approve
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="text-destructive"
+                                onClick={() => rejectQuoteMut.mutate(q._id)}
+                              >
+                                Send back
+                              </Button>
+                            </>
+                          )}
                         {q.status === "Draft" && (
                           <Button
                             size="sm"
@@ -855,6 +941,8 @@ export default function Sales() {
                         {!q.convertedInvoiceId &&
                           q.status !== "Declined" &&
                           q.status !== "Expired" &&
+                          q.status !== "Pending approval" &&
+                          q.status !== "Rejected" &&
                           q.clientUserId && (
                             <Button
                               size="sm"

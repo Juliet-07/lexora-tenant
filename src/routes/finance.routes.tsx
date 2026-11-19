@@ -21,10 +21,9 @@ import FinanceSettings from "@/pages/finance/FinanceSettings";
  * bookmarks keep working.
  */
 export const financeRoutes = ({ isAdmin, accessibleModules }: RouteContext) => {
-  const canAccess =
-    isAdmin &&
-    (accessibleModules?.includes("finance") ||
-      accessibleModules?.includes("crm"));
+  // The Finance module belongs to the Finance role (and the owner, who
+  // holds every module) — a CRM-only employee has no finance access.
+  const canAccess = isAdmin && accessibleModules?.includes("finance");
 
   if (!canAccess) return [] as JSX.Element[];
 

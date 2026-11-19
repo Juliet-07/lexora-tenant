@@ -249,6 +249,14 @@ export function money(n: number, currency = "USD") {
   if (abs >= 1_000) return fmt(abs / 1_000, "k");
   return `${currency === "USD" ? "$" : currency + " "}${Math.round(abs)}`;
 }
+/** A price per share — keeps the decimals that `money` rounds away. */
+export function pricePerShare(n: number, currency = "USD") {
+  const sym = currency === "USD" ? "$" : currency + " ";
+  return `${n < 0 ? "-" : ""}${sym}${Math.abs(n).toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 4,
+  })}`;
+}
 export function pct(n: number, dp = 1) {
   return `${n.toFixed(dp)}%`;
 }

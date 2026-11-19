@@ -40,6 +40,7 @@ import {
 import {
   Plus,
   Download,
+  Pencil,
   Send,
   CheckCircle2,
   XCircle,
@@ -51,6 +52,8 @@ import {
   useFinanceCurrency,
   FINANCE_CURRENCIES,
 } from "@/hooks/use-finance-currency";
+import { useAuth } from "@/contexts/AuthContext";
+import { canDecide, approvalProgress } from "@/lib/crm/finance-approval";
 import { WorkflowTable } from "@/components/finance/WorkflowTable";
 import { fetchMandates } from "@/lib/crm/mandates-api";
 import {
@@ -63,6 +66,7 @@ import {
   fetchPurchasesOverview,
   fetchPurchaseOrders,
   createPurchaseOrder,
+  updatePurchaseOrder,
   issuePurchaseOrder,
   fulfillPurchaseOrder,
   cancelPurchaseOrder,
@@ -154,6 +158,7 @@ const badge = (s: string) => {
 
 export default function Purchases() {
   const { toast } = useToast();
+  const { user: authUser } = useAuth();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [markPaidPrompt, setMarkPaidPrompt] = useState<Bill | null>(null);
@@ -229,6 +234,53 @@ export default function Purchases() {
     { description: "", qty: 1, unit: 0, discountPct: 0, taxLabel: "" },
   ]);
   const [selectedPo, setSelectedPo] = useState<PurchaseOrder | null>(null);
+  // When set, the PO dialog edits this PO instead of creating a new one.
+  const [editingPo, setEditingPo] = useState<PurchaseOrder | null>(null);
+
+  const emptyPoDraft = {
+    vendorId: "",
+    currency: "USD",
+    expectedDelivery: "",
+    notes: "",
+    deliveryAddress: "",
+    deliveryAttention: "",
+    deliveryPhone: "",
+    deliveryInstructions: "",
+  };
+  const emptyPoLines = (): PoLine[] => [
+    { description: "", qty: 1, unit: 0, discountPct: 0, taxLabel: "" },
+  ];
+  const openNewPo = () => {
+    setEditingPo(null);
+    setPoDraft(emptyPoDraft);
+    setPoLines(emptyPoLines());
+    setNewPoOpen(true);
+  };
+  const openEditPo = (po: PurchaseOrder) => {
+    setEditingPo(po);
+    setPoDraft({
+      vendorId: po.vendorId,
+      currency: po.currency,
+      expectedDelivery: po.expectedDelivery?.slice(0, 10) ?? "",
+      notes: po.notes ?? "",
+      deliveryAddress: po.deliveryAddress ?? "",
+      deliveryAttention: po.deliveryAttention ?? "",
+      deliveryPhone: po.deliveryPhone ?? "",
+      deliveryInstructions: po.deliveryInstructions ?? "",
+    });
+    setPoLines(
+      po.lines.length
+        ? po.lines.map((l) => ({
+            description: l.description,
+            qty: l.qty,
+            unit: l.unit,
+            discountPct: l.discountPct ?? 0,
+            taxLabel: l.taxLabel ?? "",
+          }))
+        : emptyPoLines(),
+    );
+    setNewPoOpen(true);
+  };
 
   const invalidatePos = () =>
     queryClient.invalidateQueries({ queryKey: ["purchaseOrders"] });
@@ -247,6 +299,21 @@ export default function Purchases() {
       toast({ title: "Purchase order created", description: po.ref });
     },
     onError: onErr("Failed to create purchase order"),
+  });
+  const updatePoMut = useMutation({
+    mutationFn: () =>
+      updatePurchaseOrder(editingPo!._id, {
+        ...poDraft,
+        lines: poLines.filter((l) => l.description),
+      }),
+    onSuccess: (po) => {
+      invalidatePos();
+      setNewPoOpen(false);
+      setEditingPo(null);
+      setSelectedPo((cur) => (cur && cur._id === po._id ? po : cur));
+      toast({ title: "Purchase order updated", description: po.ref });
+    },
+    onError: onErr("Failed to update purchase order"),
   });
   const issuePoMut = useMutation({
     mutationFn: (id: string) => issuePurchaseOrder(id),
@@ -363,7 +430,14 @@ export default function Purchases() {
     onError: onErr("Failed"),
   });
   const rejectBillMut = useMutation({
-    mutationFn: (id: string) => rejectBill(id),
+    mutationFn: (id: string) => {
+      const b = bills.find((x) => x._id === id);
+      // An employee-submitted bill gets a reason so they know what to fix.
+      const reason = b?.submittedById
+        ? (window.prompt("Why is this bill being sent back? (optional)") ?? "")
+        : "";
+      return rejectBill(id, reason || undefined);
+    },
     onSuccess: invalidateBills,
     onError: onErr("Failed"),
   });
@@ -609,7 +683,22 @@ export default function Purchases() {
                           )}
                         </div>
                       </TableCell>
-                      <TableCell className="text-sm">{b.description}</TableCell>
+                      <TableCell className="text-sm">
+                        {b.description}
+                        {b.submittedByName && (
+                          <p className="text-[11px] text-muted-foreground">
+                            Submitted by {b.submittedByName}
+                            {b.status === "Awaiting approval" &&
+                              b.approval &&
+                              ` · ${approvalProgress(b)}`}
+                          </p>
+                        )}
+                        {b.status === "Rejected" && b.rejectedReason && (
+                          <p className="text-[11px] text-destructive">
+                            Rejected: {b.rejectedReason}
+                          </p>
+                        )}
+                      </TableCell>
                       <TableCell className="text-sm">{b.category}</TableCell>
                       <TableCell className="text-sm">
                         {b.dueOn?.slice(0, 10)}
@@ -623,26 +712,33 @@ export default function Purchases() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right space-x-1">
-                        {b.status === "Awaiting approval" && (
-                          <>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              disabled={approveBillMut.isPending}
-                              onClick={() => approveBillMut.mutate(b._id)}
-                            >
-                              Approve
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="text-destructive"
-                              onClick={() => rejectBillMut.mutate(b._id)}
-                            >
-                              Reject
-                            </Button>
-                          </>
-                        )}
+                        {b.status === "Awaiting approval" &&
+                          !canDecide(b, authUser) && (
+                            <span className="text-xs text-muted-foreground">
+                              {approvalProgress(b) || "Awaiting approval"}
+                            </span>
+                          )}
+                        {b.status === "Awaiting approval" &&
+                          canDecide(b, authUser) && (
+                            <>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={approveBillMut.isPending}
+                                onClick={() => approveBillMut.mutate(b._id)}
+                              >
+                                Approve
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="text-destructive"
+                                onClick={() => rejectBillMut.mutate(b._id)}
+                              >
+                                Reject
+                              </Button>
+                            </>
+                          )}
                         {b.status === "Approved" && (
                           <Button
                             size="sm"
@@ -688,7 +784,7 @@ export default function Purchases() {
         {/* Purchase orders */}
         <TabsContent value="pos" className="mt-4 space-y-3">
           <div className="flex justify-end">
-            <Button size="sm" onClick={() => setNewPoOpen(true)}>
+            <Button size="sm" onClick={openNewPo}>
               <Plus className="mr-2 h-4 w-4" /> New purchase order
             </Button>
           </div>
@@ -731,16 +827,30 @@ export default function Purchases() {
                         className="text-right"
                         onClick={(e) => e.stopPropagation()}
                       >
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={downloadPdfMut.isPending}
-                          onClick={() =>
-                            downloadPdfMut.mutate({ id: po._id, ref: po.ref })
-                          }
-                        >
-                          <Download className="mr-1.5 h-3.5 w-3.5" /> PDF
-                        </Button>
+                        <div className="flex justify-end gap-2">
+                          {["Draft", "Issued"].includes(po.status) && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => openEditPo(po)}
+                            >
+                              <Pencil className="mr-1.5 h-3.5 w-3.5" /> Edit
+                            </Button>
+                          )}
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={downloadPdfMut.isPending}
+                            onClick={() =>
+                              downloadPdfMut.mutate({
+                                id: po._id,
+                                ref: po.ref,
+                              })
+                            }
+                          >
+                            <Download className="mr-1.5 h-3.5 w-3.5" /> PDF
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -1140,7 +1250,11 @@ export default function Purchases() {
       <Dialog open={newPoOpen} onOpenChange={setNewPoOpen}>
         <DialogContent className="max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>New purchase order</DialogTitle>
+            <DialogTitle>
+              {editingPo
+                ? `Edit purchase order ${editingPo.ref}`
+                : "New purchase order"}
+            </DialogTitle>
           </DialogHeader>
           <div className="grid gap-3">
             <div>
@@ -1343,11 +1457,14 @@ export default function Purchases() {
               disabled={
                 !poDraft.vendorId ||
                 !poLines.some((l) => l.description) ||
-                createPoMut.isPending
+                createPoMut.isPending ||
+                updatePoMut.isPending
               }
-              onClick={() => createPoMut.mutate()}
+              onClick={() =>
+                editingPo ? updatePoMut.mutate() : createPoMut.mutate()
+              }
             >
-              Create draft
+              {editingPo ? "Save changes" : "Create draft"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1420,6 +1537,15 @@ export default function Purchases() {
                   >
                     <Download className="mr-2 h-4 w-4" /> Download PDF
                   </Button>
+                  {["Draft", "Issued"].includes(selectedPo.status) && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => openEditPo(selectedPo)}
+                    >
+                      <Pencil className="mr-2 h-4 w-4" /> Edit
+                    </Button>
+                  )}
                   {selectedPo.status === "Draft" && (
                     <Button
                       size="sm"

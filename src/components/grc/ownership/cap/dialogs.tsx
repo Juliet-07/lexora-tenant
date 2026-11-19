@@ -578,6 +578,8 @@ export function IssueSharesDialog({
 
 // ── Transfer shares ─────────────────────────────────────────────
 const NEW_HOLDER = "__new__";
+/** The company as seller — resells shares it bought back (treasury). */
+const COMPANY = "__company__";
 
 export function TransferDialog({
   open,
@@ -593,6 +595,8 @@ export function TransferDialog({
   const { toast } = useToast();
   const qc = useQueryClient();
   const sellers = cap.holders.filter((h) => h.totalShares > 0);
+  const treasuryHoldings = cap.company?.holdings ?? [];
+  const hasTreasury = (cap.company?.treasuryShares ?? 0) > 0;
   const [fromId, setFromId] = useState("");
   const [toId, setToId] = useState("");
   const [newName, setNewName] = useState("");
@@ -605,8 +609,10 @@ export function TransferDialog({
 
   useDialogReset(open, () => {
     const first = sellers[0];
-    setFromId(first?.nodeId ?? "");
-    setClassId(first?.holdings[0]?.classId ?? "");
+    setFromId(first?.nodeId ?? (hasTreasury ? COMPANY : ""));
+    setClassId(
+      first?.holdings[0]?.classId ?? cap.company?.holdings[0]?.classId ?? "",
+    );
     setToId("");
     setNewName("");
     setShares("");
@@ -616,8 +622,11 @@ export function TransferDialog({
     setFile(null);
   });
 
+  const fromCompany = fromId === COMPANY;
   const from = cap.holders.find((h) => h.nodeId === fromId);
-  const held = from?.holdings.find((h) => h.classId === classId)?.shares ?? 0;
+  const fromName = fromCompany ? cap.company.name : (from?.name ?? "");
+  const fromHoldings = fromCompany ? treasuryHoldings : (from?.holdings ?? []);
+  const held = fromHoldings.find((h) => h.classId === classId)?.shares ?? 0;
 
   const mut = useMutation({
     mutationFn: async () => {
@@ -631,7 +640,8 @@ export function TransferDialog({
       await createShareTransaction({
         type: "Transfer",
         date,
-        fromNodeId: fromId,
+        // No seller = the company reselling shares it bought back.
+        fromNodeId: fromCompany ? undefined : fromId,
         toNodeId,
         shareClassId: classId,
         shares: num(shares),
@@ -641,7 +651,7 @@ export function TransferDialog({
       if (file) {
         await uploadShareholderDoc({
           category: "Transfer Form",
-          title: `Share transfer — ${from?.name ?? ""} to ${toName}`,
+          title: `Share transfer — ${fromName} to ${toName}`,
           shareholderNodeId: toNodeId,
           access: "Restricted",
           date,
@@ -678,7 +688,7 @@ export function TransferDialog({
       });
     if (num(shares) > held)
       return toast({
-        title: `${from?.name} only holds ${fmtNum(held)} of that class`,
+        title: `${fromName} only holds ${fmtNum(held)} of that class`,
         variant: "destructive",
       });
     mut.mutate();
@@ -691,10 +701,11 @@ export function TransferDialog({
           <DialogTitle>Transfer shares</DialogTitle>
           <DialogDescription>
             Moves existing shares from one holder to another — the total in
-            issue doesn't change.
+            issue doesn't change. Shares the company bought back can be resold
+            by choosing the company as the seller.
           </DialogDescription>
         </DialogHeader>
-        {sellers.length === 0 ? (
+        {sellers.length === 0 && !hasTreasury ? (
           <p className="text-sm text-muted-foreground">
             Nobody holds shares yet — issue some first.
           </p>
@@ -707,8 +718,10 @@ export function TransferDialog({
                   onValueChange={(v) => {
                     setFromId(v);
                     setClassId(
-                      cap.holders.find((h) => h.nodeId === v)?.holdings[0]
-                        ?.classId ?? "",
+                      (v === COMPANY
+                        ? treasuryHoldings
+                        : (cap.holders.find((h) => h.nodeId === v)?.holdings ??
+                          []))[0]?.classId ?? "",
                     );
                   }}
                 >
@@ -716,6 +729,11 @@ export function TransferDialog({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
+                    {hasTreasury && (
+                      <SelectItem value={COMPANY}>
+                        {cap.company.name}
+                      </SelectItem>
+                    )}
                     {sellers.map((h) => (
                       <SelectItem key={h.nodeId} value={h.nodeId}>
                         {h.name}
@@ -757,7 +775,7 @@ export function TransferDialog({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {(from?.holdings ?? []).map((h) => (
+                    {fromHoldings.map((h) => (
                       <SelectItem key={h.classId} value={h.classId}>
                         {h.className} ({fmtNum(h.shares)})
                       </SelectItem>
