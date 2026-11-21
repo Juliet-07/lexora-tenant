@@ -35,6 +35,8 @@ import {
 } from "@/components/ui/dialog";
 import {
   Plus,
+  Pencil,
+  Trash2,
   ArrowLeft,
   ArrowRight,
   Gavel,
@@ -87,7 +89,11 @@ import {
   type SessionMode,
   type AdrPartyRole,
 } from "@/lib/crm/adr-api";
-import { mockDeadlineRules } from "@/data/caseDetailMock";
+import { useCaseDeadlines } from "@/lib/crm/case-deadlines";
+import {
+  EditCaseDialog,
+  DeleteCaseDialog,
+} from "@/components/crm/case/CaseManage";
 import {
   CaseTemplatesLibrary,
   CaseReportsPanel,
@@ -159,6 +165,12 @@ export default function Adr() {
     queryKey: ["adrCases"],
     queryFn: fetchAdrCases,
   });
+
+  // Real deadline rules across active cases (a hook, so it sits above the early returns).
+  const deadlineRows = useCaseDeadlines(
+    list.filter((c) => c.status === "Active"),
+    "ADR",
+  );
   const { data: mandates = [] } = useQuery({
     queryKey: ["adr-mandates"],
     queryFn: fetchMandates,
@@ -169,6 +181,8 @@ export default function Adr() {
   });
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [editCaseOpen, setEditCaseOpen] = useState(false);
+  const [deleteCaseOpen, setDeleteCaseOpen] = useState(false);
   const { data: detail } = useQuery({
     queryKey: ["adrCase", selectedId],
     queryFn: () => fetchAdrCase(selectedId!),
@@ -563,18 +577,8 @@ export default function Adr() {
     .flatMap((c) => (c.sessions ?? []).map((s) => ({ ...s, case: c })))
     .sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""));
 
-  // Rule-driven deadlines across active cases (dummy rules until the
-  // deadline-rules endpoint lands).
-  const deadlineRows = active.flatMap((c) =>
-    mockDeadlineRules(c._id).map((d) => ({
-      ...d,
-      key: `${c._id}-${d.id}`,
-      caseId: c._id,
-      caseRef: c.ref,
-      caseTitle: c.title,
-    })),
-  );
-
+  // Rule-driven deadlines across active cases — only the rules the tenant
+  // has actually set up on each case.
   const caseTable = (rows: AdrCase[], empty: string) => (
     <Card>
       <CardContent className="p-0">
@@ -738,6 +742,20 @@ export default function Adr() {
           <ArrowLeft className="mr-2 h-4 w-4" /> Back to cases
         </Button>
 
+        <EditCaseDialog
+          kind="ADR"
+          c={c}
+          open={editCaseOpen}
+          onOpenChange={setEditCaseOpen}
+        />
+        <DeleteCaseDialog
+          kind="ADR"
+          c={c}
+          open={deleteCaseOpen}
+          onOpenChange={setDeleteCaseOpen}
+          onDeleted={() => setSelectedId(null)}
+        />
+
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="flex flex-wrap items-center gap-2">
@@ -755,6 +773,23 @@ export default function Adr() {
               {c.teamName && ` · Team: ${c.teamName}`}
               {c.category && ` · ${c.category}`}
             </p>
+            <div className="mt-2 flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setEditCaseOpen(true)}
+              >
+                <Pencil className="mr-2 h-3.5 w-3.5" /> Edit case
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-destructive"
+                onClick={() => setDeleteCaseOpen(true)}
+              >
+                <Trash2 className="mr-2 h-3.5 w-3.5" /> Delete case
+              </Button>
+            </div>
           </div>
           {canAct && (
             <div className="flex flex-wrap items-center gap-2">
@@ -2222,9 +2257,11 @@ export default function Adr() {
                           className={
                             d.tone === "met"
                               ? "bg-success/10 text-success border-success/20"
-                              : d.tone === "due"
-                                ? "bg-amber-100 text-amber-700 border-amber-200"
-                                : "bg-muted text-muted-foreground border-border"
+                              : d.tone === "overdue"
+                                ? "bg-destructive/10 text-destructive border-destructive/20"
+                                : d.tone === "due"
+                                  ? "bg-amber-100 text-amber-700 border-amber-200"
+                                  : "bg-muted text-muted-foreground border-border"
                           }
                         >
                           {d.status}

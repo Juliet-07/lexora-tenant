@@ -734,7 +734,7 @@ export const logAdrTenantTime = async (
     date: string;
     hours: number;
     billable?: boolean;
-    rate: number;
+    rate?: number;
   },
 ): Promise<void> => {
   await api.post(`/crm/adr-cases/${caseId}/time`, dto);

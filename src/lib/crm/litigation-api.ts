@@ -622,7 +622,7 @@ export const logLitigationTenantTime = async (
     date: string;
     hours: number;
     billable?: boolean;
-    rate: number;
+    rate?: number;
   },
 ): Promise<void> => {
   await api.post(`/crm/litigation-cases/${caseId}/time`, dto);

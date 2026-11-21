@@ -128,9 +128,7 @@ export default function TimeTracking() {
       }),
   });
 
-  const pending = entries.filter(
-    (e) => e.status === "Submitted" || e.status === "Lead Approved",
-  );
+  const pending = entries.filter((e) => e.status === "Submitted");
   const approvedValue = entries
     .filter((e) => e.status === "Approved" && e.billable)
     .reduce((s, e) => s + e.hours * e.rate, 0);

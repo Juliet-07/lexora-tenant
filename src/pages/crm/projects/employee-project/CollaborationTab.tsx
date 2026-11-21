@@ -2,13 +2,89 @@ import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Send } from "lucide-react";
+import { Send, Users } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
   fetchMyCollabMessages,
   sendMyCollabMessage,
   markMyThreadRead,
+  fetchMyGroupMessages,
+  replyToMyGroup,
+  type GroupMessage,
 } from "@/lib/crm/mandates-api";
+
+// One group conversation: everyone the tenant addressed sees it, and any of
+// them can answer the whole group.
+function GroupThread({
+  mandateId,
+  messages,
+}: {
+  mandateId: string;
+  messages: GroupMessage[];
+}) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const [text, setText] = useState("");
+  const groupId = messages[0].groupId;
+  const members = messages[0].recipientNames ?? [];
+
+  const replyMut = useMutation({
+    mutationFn: () => replyToMyGroup(mandateId, groupId, "You", text.trim()),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["myGroupMessages", mandateId],
+      });
+      setText("");
+      toast({ title: "Reply sent to the group" });
+    },
+    onError: (err: any) =>
+      toast({
+        title: "Failed to send",
+        description: err?.response?.data?.message,
+        variant: "destructive",
+      }),
+  });
+
+  return (
+    <div className="space-y-2 rounded border p-3">
+      <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <Users className="h-3.5 w-3.5" /> Group: {members.join(", ")}
+      </p>
+      <div className="max-h-72 space-y-3 overflow-y-auto">
+        {messages.map((m) => (
+          <div
+            key={m._id}
+            className={`rounded-lg px-3 py-2 text-sm ${m.direction === "employee" ? "bg-primary/10" : "bg-muted"}`}
+          >
+            <p className="mb-0.5 text-[11px] font-medium opacity-80">
+              {m.author}
+              {m.direction === "tenant" && " (owner)"}
+            </p>
+            <p>{m.body}</p>
+            <p className="mt-1 text-[10px] opacity-70">
+              {new Date(m.createdAt).toLocaleString()}
+            </p>
+          </div>
+        ))}
+      </div>
+      <div className="flex gap-2">
+        <Textarea
+          placeholder="Reply to everyone in this group…"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          className="min-h-[52px]"
+        />
+        <Button
+          disabled={replyMut.isPending || !text.trim()}
+          onClick={() => replyMut.mutate()}
+          className="self-end"
+        >
+          <Send className="mr-2 h-4 w-4" /> Reply
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 export function CollaborationTab({ mandateId }: { mandateId: string }) {
   const queryClient = useQueryClient();
@@ -18,6 +94,17 @@ export function CollaborationTab({ mandateId }: { mandateId: string }) {
     queryFn: () => fetchMyCollabMessages(mandateId),
   });
   const [text, setText] = useState("");
+  const { data: groupMessages = [] } = useQuery({
+    queryKey: ["myGroupMessages", mandateId],
+    queryFn: () => fetchMyGroupMessages(mandateId),
+    refetchInterval: 15000,
+  });
+  const groups = Array.from(
+    groupMessages.reduce((map, m) => {
+      map.set(m.groupId, [...(map.get(m.groupId) ?? []), m]);
+      return map;
+    }, new Map<string, GroupMessage[]>()),
+  ).map(([, msgs]) => msgs);
 
   // Opening this tab is what "reading" it means — mark read as soon
   // as it mounts, and again whenever a new message arrives while
@@ -102,6 +189,18 @@ export function CollaborationTab({ mandateId }: { mandateId: string }) {
           <Send className="mr-2 h-4 w-4" /> Send
         </Button>
       </div>
+      {groups.length > 0 && (
+        <div className="space-y-3 pt-2">
+          <p className="text-sm font-medium">Group conversations</p>
+          {groups.map((msgs) => (
+            <GroupThread
+              key={msgs[0].groupId}
+              mandateId={mandateId}
+              messages={msgs}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

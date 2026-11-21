@@ -54,7 +54,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { fetchEmployees } from "@/lib/hr/hr-api";
+import { fetchEmployees, fetchTeams } from "@/lib/hr/hr-api";
 import { RichTextEditor } from "@/components/RichTextEditor";
 import { EscalationPanel } from "@/components/support/EscalationPanel";
 import {
@@ -118,6 +118,11 @@ export default function ServiceDesk() {
   const { data: list = [], isLoading } = useQuery({
     queryKey: ["tickets"],
     queryFn: () => fetchTickets(),
+  });
+  const { data: teams = [] } = useQuery({
+    queryKey: ["hr-teams"],
+    queryFn: fetchTeams,
+    retry: false,
   });
   const { data: employeesPage } = useQuery({
     queryKey: ["hr-employees-all"],
@@ -294,8 +299,9 @@ export default function ServiceDesk() {
     budget: 0,
     currency: defaultCurrency(),
     targetDate: "",
-    manager: "",
+    teamId: "",
   });
+  const convertTeam = teams.find((t) => t._id === convertDraft.teamId);
   const openConvert = () => {
     if (!selected) return;
     setConvertDraft({
@@ -305,7 +311,7 @@ export default function ServiceDesk() {
       budget: 0,
       currency: defaultCurrency(),
       targetDate: "",
-      manager: selected.agent || "",
+      teamId: "",
     });
     setConvertOpen(true);
   };
@@ -318,7 +324,9 @@ export default function ServiceDesk() {
         budget: Number(convertDraft.budget) || 0,
         currency: convertDraft.currency,
         targetDate: convertDraft.targetDate,
-        manager: convertDraft.manager.trim() || undefined,
+        teamId: convertDraft.teamId || undefined,
+        teamName:
+          teams.find((t) => t._id === convertDraft.teamId)?.name || undefined,
       }),
     onSuccess: ({ mandate }) => {
       invalidate();
@@ -1065,17 +1073,30 @@ export default function ServiceDesk() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label>Manager</Label>
-                  <Input
-                    value={convertDraft.manager}
-                    onChange={(e) =>
-                      setConvertDraft({
-                        ...convertDraft,
-                        manager: e.target.value,
-                      })
+                  <Label>Team</Label>
+                  <Select
+                    value={convertDraft.teamId}
+                    onValueChange={(v) =>
+                      setConvertDraft({ ...convertDraft, teamId: v })
                     }
-                    placeholder="Who owns this engagement"
-                  />
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select team..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {teams.map((t) => (
+                        <SelectItem key={t._id} value={t._id}>
+                          {t.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Manager:{" "}
+                    {convertTeam?.headOfDepartment
+                      ? `${convertTeam.headOfDepartment.firstName} ${convertTeam.headOfDepartment.lastName}`
+                      : "the team's Head of Department"}
+                  </p>
                 </div>
                 <div>
                   <Label>Fee structure</Label>

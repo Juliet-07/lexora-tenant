@@ -190,6 +190,11 @@ export function MyProjectsList() {
                 </div>
                 <p className="text-xs text-muted-foreground mb-3">
                   {m.clientName} · {m.ref}
+                  {m.isManager && (
+                    <Badge variant="secondary" className="ml-2 text-[10px]">
+                      You manage this
+                    </Badge>
+                  )}
                 </p>
                 <div className="space-y-2 mb-3">
                   <div className="flex items-center gap-2">
@@ -409,10 +414,12 @@ export function MyProjectDetail() {
         </Card>
       </div>
 
-      <Tabs defaultValue="my-tasks">
+      <Tabs defaultValue={mandate.isManager ? "board" : "my-tasks"}>
         <TabsList>
           <TabsTrigger value="my-tasks">My Tasks</TabsTrigger>
-          <TabsTrigger value="board">Board</TabsTrigger>
+          <TabsTrigger value="board">
+            {mandate.isManager ? "Board & assign" : "Board"}
+          </TabsTrigger>
           <TabsTrigger value="milestones">Milestones</TabsTrigger>
           <TabsTrigger value="time">Time</TabsTrigger>
           <TabsTrigger value="files">Files</TabsTrigger>
@@ -431,7 +438,7 @@ export function MyProjectDetail() {
           <MyTasksTab mandateId={mandate._id} />
         </TabsContent>
         <TabsContent value="board" className="mt-4">
-          <BoardTab mandateId={mandate._id} />
+          <BoardTab mandateId={mandate._id} isManager={!!mandate.isManager} />
         </TabsContent>
         <TabsContent value="milestones" className="mt-4">
           <MilestonesTab mandate={mandate} />

@@ -1,16 +1,10 @@
 import { api } from "../api";
 
-export type TimesheetStatus =
-  | "Draft"
-  | "Submitted"
-  | "Lead Approved"
-  | "Approved"
-  | "Rejected";
+export type TimesheetStatus = "Draft" | "Submitted" | "Approved" | "Rejected";
 
 export const TIMESHEET_STATUSES: TimesheetStatus[] = [
   "Draft",
   "Submitted",
-  "Lead Approved",
   "Approved",
   "Rejected",
 ];
@@ -28,7 +22,7 @@ export interface TimeEntry {
   _id: string;
   memberUserId: string;
   member: string;
-  mandateId: string;
+  mandateId: string | null;
   mandateName: string;
   taskId: string | null;
   taskTitle: string;
@@ -56,8 +50,8 @@ export interface TimeEntry {
 export interface CreateTimeEntryPayload {
   memberUserId: string;
   member: string;
-  mandateId: string;
-  mandateName: string;
+  mandateId?: string;
+  mandateName?: string;
   taskId?: string;
   taskTitle?: string;
   narrative?: string;
@@ -100,7 +94,13 @@ export const fetchTimeEntries = async (filters?: {
 }): Promise<TimeEntry[]> => {
   const res = await api.get("/crm/time-entries", { params: filters });
   const d = unwrap(res);
-  return Array.isArray(d) ? d : [];
+  // "Lead Approved" is retired — older rows simply read as Submitted
+  // (they are still waiting for the one and only approval).
+  return Array.isArray(d)
+    ? d.map((e: any) =>
+        e.status === "Lead Approved" ? { ...e, status: "Submitted" } : e,
+      )
+    : [];
 };
 
 export const createTimeEntry = async (
@@ -124,11 +124,6 @@ export const deleteTimeEntry = async (id: string): Promise<void> => {
 
 export const submitTimeEntry = async (id: string): Promise<TimeEntry> => {
   const res = await api.post(`/crm/time-entries/${id}/submit`);
-  return unwrap(res);
-};
-
-export const leadApproveTimeEntry = async (id: string): Promise<TimeEntry> => {
-  const res = await api.post(`/crm/time-entries/${id}/lead-approve`);
   return unwrap(res);
 };
 

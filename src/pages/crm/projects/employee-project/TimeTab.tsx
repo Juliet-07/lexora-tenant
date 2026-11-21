@@ -35,7 +35,6 @@ import {
 const statusClass: Record<TimesheetStatus, string> = {
   Draft: "bg-muted text-muted-foreground",
   Submitted: "bg-primary/10 text-primary",
-  "Lead Approved": "bg-warning/10 text-warning",
   Approved: "bg-success/10 text-success",
   Rejected: "bg-destructive/10 text-destructive",
 };

@@ -23,7 +23,6 @@ import {
 import { CheckCircle2, XCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
-  leadApproveTimeEntry,
   approveTimeEntry,
   rejectTimeEntry,
   type TimeEntry,
@@ -32,9 +31,7 @@ import {
 export function ApprovalsTab({ entries }: { entries: TimeEntry[] }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const pending = entries.filter(
-    (e) => e.status === "Submitted" || e.status === "Lead Approved",
-  );
+  const pending = entries.filter((e) => e.status === "Submitted");
 
   const [selected, setSelected] = useState<string[]>([]);
   const [rejectOpen, setRejectOpen] = useState(false);
@@ -51,15 +48,6 @@ export function ApprovalsTab({ entries }: { entries: TimeEntry[] }) {
       variant: "destructive",
     });
 
-  const leadApproveMut = useMutation({
-    mutationFn: (ids: string[]) =>
-      Promise.all(ids.map((id) => leadApproveTimeEntry(id))),
-    onSuccess: () => {
-      invalidate();
-      toast({ title: "Lead approved" });
-    },
-    onError: onErr("Failed to lead-approve"),
-  });
   const approveMut = useMutation({
     mutationFn: (ids: string[]) =>
       Promise.all(ids.map((id) => approveTimeEntry(id))),
@@ -93,14 +81,6 @@ export function ApprovalsTab({ entries }: { entries: TimeEntry[] }) {
           <span className="text-muted-foreground">
             {selected.length} selected
           </span>
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={leadApproveMut.isPending}
-            onClick={() => leadApproveMut.mutate(selected)}
-          >
-            Lead approve
-          </Button>
           <Button
             size="sm"
             disabled={approveMut.isPending}

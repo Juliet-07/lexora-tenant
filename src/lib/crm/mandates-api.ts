@@ -1,6 +1,6 @@
 import { defaultCurrency } from "@/lib/currency";
 import { api } from "../api";
-import { Task, TaskStatus } from "./tasks-api";
+import { Task, TaskStatus, type TaskPriority } from "./tasks-api";
 
 // Mandate documents carry a relative /uploads/... fileUrl, same as every
 // other module — resolve it against the API's own origin before using it
@@ -122,7 +122,14 @@ export interface Mandate {
   type: MandateType;
   stage: MandateStage;
   rag: Rag;
+  // Always the Head of Department of the assigned team (resolved by the
+  // server) — never entered by hand.
   manager: string;
+  managerEmployeeId?: string | null;
+  // True when a team is assigned but it has no Head of Department yet.
+  managerMissing?: boolean;
+  // Employee dashboard only: the caller is this mandate's manager (team HOD).
+  isManager?: boolean;
   teamId: string | null;
   teamName: string;
   team: string[];
@@ -151,7 +158,6 @@ export interface CreateMandatePayload {
   clientUserId: string;
   clientName: string;
   type: MandateType;
-  manager?: string;
   teamId?: string;
   teamName?: string;
   targetDate: string;
@@ -163,8 +169,8 @@ export interface CreateMandatePayload {
 
 export interface UpdateMandatePayload {
   name?: string;
+  description?: string;
   rag?: Rag;
-  manager?: string;
   teamId?: string;
   teamName?: string;
   team?: string[];
@@ -460,6 +466,92 @@ export const fileClientDocument = async (
   return unwrap(res);
 };
 
+export interface MandateDeleteImpact {
+  willDelete: Record<string, number>;
+  willDetach: Record<string, number>;
+  paidInvoiceCount: number;
+}
+
+export const fetchMandateDeleteImpact = async (
+  id: string,
+): Promise<MandateDeleteImpact> => {
+  const res = await api.get(`/crm/mandates/${id}/delete-impact`);
+  return unwrap(res);
+};
+
+// Removes the mandate and everything tied to it.
+export const deleteMandate = async (id: string): Promise<void> => {
+  await api.delete(`/crm/mandates/${id}`);
+};
+
+export interface MandateTeamMember {
+  _id: string;
+  name: string;
+  jobTitle: string;
+  isHod?: boolean;
+}
+
+export const fetchMandateTeamMembers = async (
+  id: string,
+): Promise<MandateTeamMember[]> => {
+  const res = await api.get(`/crm/mandates/${id}/team-members`);
+  const d = unwrap(res);
+  return Array.isArray(d) ? d : [];
+};
+
+export interface MandateOverview {
+  mandate: {
+    _id: string;
+    name: string;
+    manager: string;
+    managerMissing?: boolean;
+    teamName: string;
+  };
+  tasks: {
+    total: number;
+    overdue: number;
+    byStatus: Record<string, number>;
+    byAssignee: {
+      assignee: string;
+      assigneeUserId: string | null;
+      total: number;
+      done: number;
+      overdue: number;
+    }[];
+    recent: {
+      _id: string;
+      title: string;
+      assignee: string;
+      status: TaskStatus;
+      dueDate: string;
+    }[];
+  };
+  communications: {
+    clientThread: { count: number; lastAt: string | null };
+    employeeThreads: {
+      employeeUserId: string;
+      name: string;
+      count: number;
+      lastAt: string | null;
+      lastBody: string;
+    }[];
+    feed: {
+      channel: string;
+      author: string;
+      body: string;
+      direction: string;
+      createdAt: string;
+    }[];
+  };
+}
+
+export const fetchMandateOverview = async (
+  id: string,
+): Promise<MandateOverview> => {
+  const res = await api.get(`/crm/mandates/${id}/overview`);
+  return unwrap(res);
+};
+
 // EMPLOYEE PROJECTS APIS
 export const fetchMyMandates = async (): Promise<Mandate[]> => {
   const res = await api.get("/crm/my-mandates");
@@ -544,4 +636,51 @@ export const fetchMyThreadUnreadCount = async (
 
 export const markMyThreadRead = async (mandateId: string): Promise<void> => {
   await api.post(`/crm/my-mandates/${mandateId}/messages/read`);
+};
+
+// ── Manager (team Head of Department) task assignment ───────────
+
+export interface ManagerTaskPayload {
+  title: string;
+  assigneeEmployeeId: string;
+  priority: TaskPriority;
+  startDate?: string;
+  dueDate: string;
+  estimateHrs: number;
+  phase?: string;
+}
+
+export const fetchManagerTeamMembers = async (
+  mandateId: string,
+): Promise<MandateTeamMember[]> => {
+  const res = await api.get(`/crm/my-mandates/${mandateId}/team-members`);
+  const d = unwrap(res);
+  return Array.isArray(d) ? d : [];
+};
+
+export const createTaskAsManager = async (
+  mandateId: string,
+  dto: ManagerTaskPayload,
+): Promise<Task> => {
+  const res = await api.post(`/crm/my-mandates/${mandateId}/tasks`, dto);
+  return unwrap(res);
+};
+
+export const updateTaskAsManager = async (
+  mandateId: string,
+  taskId: string,
+  dto: Partial<ManagerTaskPayload> & { status?: TaskStatus },
+): Promise<Task> => {
+  const res = await api.patch(
+    `/crm/my-mandates/${mandateId}/tasks/${taskId}`,
+    dto,
+  );
+  return unwrap(res);
+};
+
+export const deleteTaskAsManager = async (
+  mandateId: string,
+  taskId: string,
+): Promise<void> => {
+  await api.delete(`/crm/my-mandates/${mandateId}/tasks/${taskId}`);
 };

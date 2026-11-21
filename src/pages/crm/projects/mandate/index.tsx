@@ -36,7 +36,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { Plus, Search, ArrowRight } from "lucide-react";
+import { Plus, Search, ArrowRight, Pencil, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { ClientSelect } from "@/components/ClientDropdown";
 import { fetchTeams } from "@/lib/hr/hr-api";
@@ -50,6 +50,12 @@ import {
   type FeeStructure,
 } from "@/lib/crm/mandates-api";
 
+import { OverviewTab } from "./OverviewTab";
+import {
+  EditMandateDialog,
+  DeleteMandateDialog,
+  hodName,
+} from "./MandateManage";
 import { WorkspaceTab } from "./WorkspaceTab";
 import { TasksTab } from "./TasksTab";
 import { MilestonesTab } from "./MilestonesTab";
@@ -97,6 +103,8 @@ export default function Mandates() {
   const [openNew, setOpenNew] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = list.find((m) => m._id === selectedId) ?? null;
+  const [editOpen, setEditOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   const [draft, setDraft] = useState({
     name: "",
@@ -418,6 +426,17 @@ export default function Mandates() {
                 </Select>
               </div>
             </div>
+            {draft.teamId && (
+              <p className="rounded bg-muted p-2 text-xs text-muted-foreground">
+                Manager:{" "}
+                <span className="font-medium text-foreground">
+                  {hodName(teams.find((t) => t._id === draft.teamId)) ??
+                    "this team has no Head of Department yet"}
+                </span>{" "}
+                — the mandate's manager is automatically the Head of Department
+                of the selected team, and they assign its tasks to the team.
+              </p>
+            )}
             <div className="grid grid-cols-[2fr_1fr_1fr] gap-3">
               <div>
                 <Label>Budget</Label>
@@ -495,11 +514,32 @@ export default function Mandates() {
           {selected && (
             <>
               <SheetHeader>
-                <SheetTitle>{selected.name}</SheetTitle>
-                <p className="text-sm text-muted-foreground">
-                  {selected.ref} · {selected.clientName} ·{" "}
-                  {selected.feeStructure}
-                </p>
+                <div className="flex items-start justify-between gap-3 pr-6">
+                  <div className="min-w-0">
+                    <SheetTitle>{selected.name}</SheetTitle>
+                    <p className="text-sm text-muted-foreground">
+                      {selected.ref} · {selected.clientName} ·{" "}
+                      {selected.feeStructure}
+                    </p>
+                  </div>
+                  <div className="flex flex-none gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setEditOpen(true)}
+                    >
+                      <Pencil className="mr-1.5 h-3.5 w-3.5" /> Edit
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-destructive hover:text-destructive"
+                      onClick={() => setDeleteOpen(true)}
+                    >
+                      <Trash2 className="mr-1.5 h-3.5 w-3.5" /> Delete
+                    </Button>
+                  </div>
+                </div>
               </SheetHeader>
 
               <div className="mt-4 flex flex-wrap items-center gap-2">
@@ -521,8 +561,9 @@ export default function Mandates() {
                 })}
               </div>
 
-              <Tabs defaultValue="workspace" className="mt-4">
+              <Tabs defaultValue="overview" className="mt-4">
                 <TabsList className="flex-wrap">
+                  <TabsTrigger value="overview">Overview</TabsTrigger>
                   <TabsTrigger value="workspace">Workspace</TabsTrigger>
                   <TabsTrigger value="tasks">Tasks</TabsTrigger>
                   <TabsTrigger value="milestones">Milestones</TabsTrigger>
@@ -534,6 +575,9 @@ export default function Mandates() {
                   <TabsTrigger value="closure">Closure</TabsTrigger>
                 </TabsList>
 
+                <TabsContent value="overview" className="pt-4">
+                  <OverviewTab mandate={selected} />
+                </TabsContent>
                 <TabsContent value="workspace" className="pt-4">
                   <WorkspaceTab mandate={selected} />
                 </TabsContent>
@@ -566,6 +610,23 @@ export default function Mandates() {
           )}
         </SheetContent>
       </Sheet>
+
+      {selected && (
+        <>
+          <EditMandateDialog
+            mandate={selected}
+            teams={teams}
+            open={editOpen}
+            onOpenChange={setEditOpen}
+          />
+          <DeleteMandateDialog
+            mandate={selected}
+            open={deleteOpen}
+            onOpenChange={setDeleteOpen}
+            onDeleted={() => setSelectedId(null)}
+          />
+        </>
+      )}
     </div>
   );
 }

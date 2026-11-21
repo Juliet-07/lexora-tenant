@@ -419,13 +419,22 @@ export function CaseDraftingTab({
         ? createAdrDraft(caseId, dto)
         : createLitigationDraft(caseId, dto);
     },
-    onSuccess: () => {
+    onSuccess: (created: any) => {
       queryClient.invalidateQueries({ queryKey: draftsKey });
+      const wasBlank = newTemplateId === "blank";
       setNewOpen(false);
       setNewTitle("");
       setNewTemplateId("blank");
       toast({ title: "Draft created" });
+      // A blank draft has nothing to read yet — open the editor straight away.
+      if (wasBlank && created?._id) setEditingDraft(created);
     },
+    onError: (err: any) =>
+      toast({
+        title: "Could not create draft",
+        description: err?.response?.data?.message,
+        variant: "destructive",
+      }),
   });
 
   const [editingDraft, setEditingDraft] = useState<
@@ -444,6 +453,12 @@ export function CaseDraftingTab({
       setEditingDraft(null);
       toast({ title: "Version saved" });
     },
+    onError: (err: any) =>
+      toast({
+        title: "Could not save draft",
+        description: err?.response?.data?.message,
+        variant: "destructive",
+      }),
   });
   const statusMut = useMutation({
     mutationFn: ({ id, status }: { id: string; status: AdrDraft["status"] }) =>
@@ -1262,7 +1277,6 @@ export function CaseTimeBillingTab({
   const statusTone: Record<string, string> = {
     Draft: "bg-muted text-muted-foreground border-border",
     Submitted: "bg-amber-100 text-amber-700 border-amber-200",
-    "Lead Approved": "bg-amber-100 text-amber-700 border-amber-200",
     Approved: "bg-emerald-100 text-emerald-700 border-emerald-200",
     Rejected: "bg-destructive/10 text-destructive border-destructive/20",
   };
@@ -1319,14 +1333,18 @@ export function CaseTimeBillingTab({
     hours: 1,
     narrative: "",
     billable: true,
-    rate: 0,
+    // Blank = priced from the rate card set up in Timesheets.
+    rate: "" as string,
   };
   const [logDraft, setLogDraft] = useState(emptyLogDraft);
   const logTimeMut = useMutation({
-    mutationFn: () =>
-      isAdr
-        ? logAdrTenantTime(caseId, logDraft)
-        : logLitigationTenantTime(caseId, logDraft),
+    mutationFn: () => {
+      const { rate, ...rest } = logDraft;
+      const dto = rate.trim() === "" ? rest : { ...rest, rate: Number(rate) };
+      return isAdr
+        ? logAdrTenantTime(caseId, dto)
+        : logLitigationTenantTime(caseId, dto);
+    },
     onSuccess: () => {
       invalidate();
       setLogTimeOpen(false);
@@ -1487,6 +1505,7 @@ export function CaseTimeBillingTab({
                         </>
                       )}
                       {e.status === "Approved" &&
+                        !!e.mandateId &&
                         e.wipBillingStatus === "Unbilled" && (
                           <Button
                             size="sm"
@@ -1609,17 +1628,23 @@ export function CaseTimeBillingTab({
               />
             </div>
             <div>
-              <Label className="text-xs">Rate per hour</Label>
+              <Label className="text-xs">Rate per hour (optional)</Label>
               <Input
                 type="number"
                 min={0}
                 step="0.01"
+                placeholder="Leave blank to use the rate card"
                 value={logDraft.rate}
                 onChange={(e) =>
-                  setLogDraft({ ...logDraft, rate: Number(e.target.value) })
+                  setLogDraft({ ...logDraft, rate: e.target.value })
                 }
                 disabled={!logDraft.billable}
               />
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Valued at the rate card set in Timesheets unless you enter a
+                rate here. The entry also appears in the Timesheet
+                {mandateId ? " and counts against the mandate" : ""}.
+              </p>
             </div>
             <label className="flex items-center gap-2 text-sm">
               <Checkbox

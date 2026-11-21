@@ -8,6 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { fetchTasks } from "@/lib/crm/tasks-api";
 import {
   fetchEmployeeMessages,
+  fetchMandateTeamMembers,
   sendEmployeeMessage,
 } from "@/lib/crm/mandates-api";
 
@@ -22,13 +23,20 @@ export function CollaborationTab({ mandateId }: { mandateId: string }) {
     queryKey: ["tasks", { mandateId }],
     queryFn: () => fetchTasks({ mandateId }),
   });
+  // …plus everyone on the mandate's team, so the owner can message the
+  // Head of Department and members before any task exists.
+  const { data: teamRoster = [] } = useQuery({
+    queryKey: ["mandateTeamMembers", mandateId],
+    queryFn: () => fetchMandateTeamMembers(mandateId),
+  });
   const teamMembers = useMemo(() => {
     const map = new Map<string, string>();
+    teamRoster.forEach((m) => map.set(m._id, m.name));
     tasks.forEach((t) => {
       if (t.assigneeUserId) map.set(t.assigneeUserId, t.assignee);
     });
     return Array.from(map, ([id, name]) => ({ id, name }));
-  }, [tasks]);
+  }, [tasks, teamRoster]);
 
   const [recipientId, setRecipientId] = useState<string | null>(null);
   const [text, setText] = useState("");

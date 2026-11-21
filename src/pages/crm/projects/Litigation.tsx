@@ -34,6 +34,8 @@ import {
 } from "@/components/ui/dialog";
 import {
   Plus,
+  Pencil,
+  Trash2,
   ArrowLeft,
   ArrowRight,
   Gavel,
@@ -50,7 +52,11 @@ import {
   Scale,
   Download,
 } from "lucide-react";
-import { mockDeadlineRules } from "@/data/caseDetailMock";
+import { useCaseDeadlines } from "@/lib/crm/case-deadlines";
+import {
+  EditCaseDialog,
+  DeleteCaseDialog,
+} from "@/components/crm/case/CaseManage";
 import {
   CaseTemplatesLibrary,
   CaseReportsPanel,
@@ -145,6 +151,8 @@ export default function Litigation() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const [editCaseOpen, setEditCaseOpen] = useState(false);
+  const [deleteCaseOpen, setDeleteCaseOpen] = useState(false);
   const onErr = (title: string) => (err: any) =>
     toast({
       title,
@@ -156,6 +164,12 @@ export default function Litigation() {
     queryKey: ["litigationCases"],
     queryFn: fetchLitigationCases,
   });
+
+  // Real deadline rules across active cases (a hook, so it sits above the early returns).
+  const litDeadlines = useCaseDeadlines(
+    list.filter((c) => c.status === "Active"),
+    "Litigation",
+  );
   const { data: mandates = [] } = useQuery({
     queryKey: ["litigation-mandates"],
     queryFn: fetchMandates,
@@ -517,6 +531,20 @@ export default function Litigation() {
           <ArrowLeft className="mr-2 h-4 w-4" /> Back to litigation
         </Button>
 
+        <EditCaseDialog
+          kind="Litigation"
+          c={c}
+          open={editCaseOpen}
+          onOpenChange={setEditCaseOpen}
+        />
+        <DeleteCaseDialog
+          kind="Litigation"
+          c={c}
+          open={deleteCaseOpen}
+          onOpenChange={setDeleteCaseOpen}
+          onDeleted={() => navigate("/crm/litigation")}
+        />
+
         {c.adrCaseId && (
           <div className="flex items-start justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3.5">
             <div className="flex items-start gap-2.5">
@@ -561,6 +589,23 @@ export default function Litigation() {
               {c.courtDivision && `, ${c.courtDivision}`}
               {c.courtCaseNumber && ` · Case No. ${c.courtCaseNumber}`}
             </p>
+            <div className="mt-2 flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setEditCaseOpen(true)}
+              >
+                <Pencil className="mr-2 h-3.5 w-3.5" /> Edit case
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-destructive"
+                onClick={() => setDeleteCaseOpen(true)}
+              >
+                <Trash2 className="mr-2 h-3.5 w-3.5" /> Delete case
+              </Button>
+            </div>
           </div>
           {canAct && (
             <div className="flex flex-wrap items-center gap-2">
@@ -1810,14 +1855,6 @@ export default function Litigation() {
     )
     .sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""));
 
-  const litDeadlines = active.flatMap((c) =>
-    mockDeadlineRules(c._id).map((d) => ({
-      ...d,
-      caseId: c._id,
-      caseTitle: c.title,
-    })),
-  );
-
   const litTable = (rows: LitigationCase[], empty: string) => (
     <Card>
       <CardContent className="p-0">
@@ -2006,7 +2043,7 @@ export default function Litigation() {
                 <TableBody>
                   {litDeadlines.map((d) => (
                     <TableRow
-                      key={d.id}
+                      key={d.key}
                       className="cursor-pointer"
                       onClick={() => navigate(`/crm/litigation/${d.caseId}`)}
                     >

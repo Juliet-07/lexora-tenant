@@ -30,7 +30,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { AlertTriangle, ArrowUpRight, ShieldAlert, Plus } from "lucide-react";
+import { AlertTriangle, ArrowUpRight, Plus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
   fetchMandates,
@@ -603,12 +603,7 @@ export default function Pmo() {
         <TabsContent value="risks" className="pt-4">
           <Card>
             <CardContent className="space-y-3 p-4">
-              <div className="flex items-center justify-between gap-2">
-                <p className="flex items-center gap-2 rounded bg-muted p-2 text-xs text-muted-foreground">
-                  <ShieldAlert className="h-3.5 w-3.5" /> GRC portfolio risk
-                  ratings aren't wired in here yet — this register is
-                  Projects-only for now.
-                </p>
+              <div className="flex items-center justify-end gap-2">
                 <Button size="sm" onClick={() => setOpenNewRisk(true)}>
                   <Plus className="mr-2 h-4 w-4" /> Log risk
                 </Button>

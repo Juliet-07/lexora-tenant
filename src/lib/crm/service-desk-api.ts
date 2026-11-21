@@ -153,7 +153,6 @@ export interface ConvertTicketToMandatePayload {
   feeStructure: FeeStructure;
   budget: number;
   targetDate: string;
-  manager?: string;
   teamId?: string;
   teamName?: string;
   currency?: string;
