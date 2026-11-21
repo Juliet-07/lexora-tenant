@@ -44,7 +44,7 @@ export function GradeBadge({
   grade: string | null;
   score: number | null;
 }) {
-  if (!grade) return <Badge variant="outline">No grade</Badge>;
+  if (!grade) return <Badge variant="outline">Not started</Badge>;
   return (
     <span
       className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-bold ${TONE_SOFT[scoreTone(score)]}`}
@@ -89,10 +89,10 @@ export default function DashboardTab({ hs }: { hs: HealthScore }) {
               <div
                 className={`mt-1 text-xl font-semibold ${TONE_TEXT[scoreTone(hs.composite)]}`}
               >
-                {hs.gradeLabel ?? "Not enough data"}
+                {hs.gradeLabel ?? "Not started"}
               </div>
               <p className="mt-1 text-sm text-muted-foreground">
-                {readScore(hs.composite)}
+                {readScore(hs.composite, hs.coverage.measured)}
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2 text-xs">
@@ -226,10 +226,9 @@ export default function DashboardTab({ hs }: { hs: HealthScore }) {
               Not measured yet ({unmeasured.length})
             </CardTitle>
             <p className="text-sm text-muted-foreground">
-              There is nothing recorded in Lexora to measure these from. They
-              are left out of the score — not counted as zero — and their weight
-              is shared among the indicators that are measured. Record the
-              underlying activity and they appear automatically.
+              There is nothing recorded in Lexora to measure these from yet, so
+              they count as zero. Record the underlying activity and the score
+              rises automatically.
             </p>
           </CardHeader>
           <CardContent className="grid grid-cols-1 gap-x-6 gap-y-2 md:grid-cols-2">
@@ -416,7 +415,7 @@ function IndicatorCard({ i }: { i: HsIndicator }) {
           <dd className="text-muted-foreground">
             {i.isMeasured
               ? `${i.effectiveWeight}% of the area score (set weight ${i.weight})`
-              : `Set weight ${i.weight} — shared out while not measured`}
+              : `Set weight ${i.weight} — counts as 0 until it is recorded`}
           </dd>
         </div>
         <div className="md:col-span-2">

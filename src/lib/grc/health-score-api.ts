@@ -176,8 +176,9 @@ export const rangeText = (i: Pick<HsIndicator, "floor" | "target" | "unit">) =>
   `${fmtValue(i.floor, i.unit)} scores 0 · ${fmtValue(i.target, i.unit)} scores 100`;
 
 /** The one-sentence reading of a score for a non-specialist. */
-export const readScore = (n: number | null): string => {
-  if (n === null) return "There is not enough recorded yet to give a score.";
+export const readScore = (n: number | null, measured: number = 1): string => {
+  if (n === null || measured === 0)
+    return "Not started — nothing has been recorded yet, so the score begins at 0 and rises as you use each module.";
   if (n >= 90)
     return "Excellent — controls are operating well across the company.";
   if (n >= 80) return "Strong — a few areas to tighten, nothing urgent.";

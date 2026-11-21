@@ -126,8 +126,9 @@ export default function ReportTab({ hs }: { hs: HealthScore }) {
             </span>
           </div>
           <p className="text-sm text-muted-foreground">
-            {readScore(hs.composite)} {hs.coverage.measured} of{" "}
-            {hs.coverage.total} indicators were measured.
+            {readScore(hs.composite, hs.coverage.measured)}{" "}
+            {hs.coverage.measured} of {hs.coverage.total} indicators were
+            measured.
             {hs.change !== null &&
               ` Change since ${hs.previous?.label}: ${hs.change > 0 ? "+" : ""}${hs.change}.`}
           </p>

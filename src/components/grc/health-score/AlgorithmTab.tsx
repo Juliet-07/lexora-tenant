@@ -23,12 +23,11 @@ const r1 = (n: number) => Math.round(n * 10) / 10;
 // arithmetic using the company's real numbers so the reader can check it.
 export default function AlgorithmTab({ hs }: { hs: HealthScore }) {
   const [key, setKey] = useState(
-    hs.modules.find((m) => m.score !== null)?.key ?? hs.modules[0].key,
+    hs.modules.find((m) => m.measuredCount > 0)?.key ?? hs.modules[0].key,
   );
   const m = hs.modules.find((x) => x.key === key) ?? hs.modules[0];
   const live = m.indicators.filter((i) => i.isMeasured);
   const crit = live.filter((i) => (i.normalised ?? 100) < 50);
-  const scored = hs.modules.filter((x) => x.score !== null);
 
   return (
     <div className="space-y-6">
@@ -62,17 +61,18 @@ export default function AlgorithmTab({ hs }: { hs: HealthScore }) {
           ))}
           <div className="md:col-span-4 rounded-md bg-muted/50 p-3 font-mono text-xs leading-relaxed">
             Health Score = Σ ( area weight × area score )<br />
-            Area score = Σ ( indicator weight × normalised ) ÷ Σ weights × 0.95
+            Area score = Σ ( indicator weight × normalised ) ÷ Σ all weights ×
+            0.95
             <sup>(indicators under 50)</sup>
             <br />
             Normalised = clamp( (value − floor) ÷ (target − floor) × 100, 0, 100
             )
           </div>
           <p className="md:col-span-4 text-xs text-muted-foreground">
-            An indicator that cannot be measured yet is <b>left out</b>, and its
-            weight is shared among the others in the same area. If a whole area
-            has nothing measured, its weight is shared among the other areas.
-            Nothing unmeasured is ever counted as a perfect score or a zero.
+            Nothing is assumed. An indicator that cannot be measured yet counts
+            as <b>zero</b> and keeps its weight, so a new company starts at 0
+            and the score rises as you record real activity in each area.
+            Compliance is never taken for granted.
           </p>
         </CardContent>
       </Card>
@@ -103,8 +103,8 @@ export default function AlgorithmTab({ hs }: { hs: HealthScore }) {
         <CardContent className="space-y-4">
           {live.length === 0 ? (
             <p className="py-6 text-sm text-muted-foreground">
-              Nothing in {m.name} can be measured yet, so it has no score and is
-              left out of the company total.
+              Nothing in {m.name} has been recorded yet, so it scores 0 and adds
+              nothing to the company total. It rises as you use this area.
             </p>
           ) : (
             <>
@@ -178,8 +178,8 @@ export default function AlgorithmTab({ hs }: { hs: HealthScore }) {
                 {m.measuredCount < m.totalCount && (
                   <li className="text-xs text-muted-foreground">
                     {m.totalCount - m.measuredCount} of {m.totalCount}{" "}
-                    indicators are not measured yet and are left out; the
-                    “Share” column already reflects that.
+                    indicators are not measured yet and count as 0, so the
+                    “Share” column adds up to less than 100%.
                   </li>
                 )}
               </ol>
@@ -213,18 +213,18 @@ export default function AlgorithmTab({ hs }: { hs: HealthScore }) {
                     <TableCell
                       className={`text-right font-medium ${TONE_TEXT[scoreTone(x.score)]}`}
                     >
-                      {x.score === null ? "Not measured" : fmtScore(x.score)}
+                      {x.measuredCount === 0
+                        ? "Not started"
+                        : fmtScore(x.score)}
                     </TableCell>
                     <TableCell className="text-right text-muted-foreground">
                       {x.weight}%
                     </TableCell>
                     <TableCell className="text-right text-muted-foreground">
-                      {x.score === null ? "—" : `${x.effectiveWeight}%`}
+                      {`${x.effectiveWeight}%`}
                     </TableCell>
                     <TableCell className="text-right">
-                      {x.score === null
-                        ? "—"
-                        : r1((x.score * x.effectiveWeight) / 100)}
+                      {r1(((x.score ?? 0) * x.effectiveWeight) / 100)}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -232,9 +232,7 @@ export default function AlgorithmTab({ hs }: { hs: HealthScore }) {
                   <TableCell>Company score</TableCell>
                   <TableCell />
                   <TableCell />
-                  <TableCell className="text-right">
-                    {scored.length ? "100%" : "—"}
-                  </TableCell>
+                  <TableCell className="text-right">100%</TableCell>
                   <TableCell
                     className={`text-right ${TONE_TEXT[scoreTone(hs.composite)]}`}
                   >

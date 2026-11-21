@@ -1251,11 +1251,32 @@ export default function HREmployees() {
             {isEditingOwner && (
               <>
                 <div className="col-span-2 text-xs text-muted-foreground bg-muted/40 rounded-md p-2">
-                  Owner accounts aren't assigned to a team, and their role level
-                  can't be changed here. You can still set a location so the
-                  location's payroll rules apply to the Owner's pay.
+                  The Owner's role level can't be changed here, but you can
+                  place the Owner in a team and a location. The location's
+                  payroll rules then apply to the Owner's pay. Create teams and
+                  locations first if the lists below are empty.
                 </div>
-                <div className="space-y-1 col-span-2">
+                <div className="space-y-1">
+                  <Label>Team</Label>
+                  <Select
+                    value={empForm.teamId ?? ""}
+                    onValueChange={(v) =>
+                      setEmpForm((f) => ({ ...f, teamId: v }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select team (optional)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {teams.map((t) => (
+                        <SelectItem key={t._id} value={t._id}>
+                          {t.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
                   <Label>Location</Label>
                   <Select
                     value={empForm.locationId ?? ""}

@@ -29,9 +29,9 @@ export function reportText(hs: HealthScore, c: ReportCommentary): string {
   L.push(`Assessed ${dateOf(hs.assessedAt)}`);
   L.push("");
   L.push(
-    `Overall: ${fmtScore(hs.composite)}/100 · Grade ${hs.grade ?? "—"} (${hs.gradeLabel ?? "not enough data"})`,
+    `Overall: ${fmtScore(hs.composite)}/100 · Grade ${hs.grade ?? "—"} (${hs.gradeLabel ?? "not started"})`,
   );
-  L.push(readScore(hs.composite));
+  L.push(readScore(hs.composite, hs.coverage.measured));
   if (hs.change !== null)
     L.push(
       `Change since ${hs.previous?.label}: ${hs.change > 0 ? "+" : ""}${hs.change}`,
@@ -45,7 +45,7 @@ export function reportText(hs: HealthScore, c: ReportCommentary): string {
   hs.modules.forEach((m) => {
     L.push(
       "",
-      `${m.name.toUpperCase()} — ${m.score === null ? "not measured" : `${fmtScore(m.score)} (${m.grade})`} · weight ${m.weight}%`,
+      `${m.name.toUpperCase()} — ${m.measuredCount === 0 ? "not started" : `${fmtScore(m.score)} (${m.grade})`} · weight ${m.weight}%`,
     );
     m.indicators.forEach((i) =>
       L.push(
@@ -78,14 +78,14 @@ export function healthScoreReportDefinition(
     rows: hs.modules.map((m) => [
       m.name,
       `${m.weight}%`,
-      m.score === null ? "Not measured" : fmtScore(m.score),
+      m.measuredCount === 0 ? "Not started" : fmtScore(m.score),
       m.grade ?? "—",
       `${m.measuredCount} of ${m.totalCount}`,
     ]),
   });
   hs.modules.forEach((m) => {
     sections.push({
-      heading: `${m.name} — ${m.score === null ? "not measured" : `${fmtScore(m.score)} (${m.grade})`}`,
+      heading: `${m.name} — ${m.measuredCount === 0 ? "not started" : `${fmtScore(m.score)} (${m.grade})`}`,
       note: `${m.fullName} · weight ${m.weight}%`,
       columns: ["Indicator", "Value", "Target", "Score", "What was counted"],
       rows: m.indicators.map((i) => [
