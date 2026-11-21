@@ -1,3 +1,4 @@
+import { defaultCurrency } from "@/lib/currency";
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -368,7 +369,7 @@ function InvestorDialog({
     stage: investor?.stage ?? "outreach",
     interest: investor?.interest ?? "medium",
     ticketAmount: investor?.ticketAmount ? String(investor.ticketAmount) : "",
-    ticketCurrency: investor?.ticketCurrency ?? "USD",
+    ticketCurrency: investor?.ticketCurrency ?? defaultCurrency(),
     notes: investor?.notes ?? "",
   });
 
@@ -382,7 +383,8 @@ function InvestorDialog({
         stage: f.stage,
         interest: f.interest as InvestorInput["interest"],
         ticketAmount: Number(f.ticketAmount.replace(/,/g, "")) || 0,
-        ticketCurrency: f.ticketCurrency.trim().toUpperCase() || "USD",
+        ticketCurrency:
+          f.ticketCurrency.trim().toUpperCase() || defaultCurrency(),
         notes: f.notes,
       };
       if (!body.email) delete body.email;

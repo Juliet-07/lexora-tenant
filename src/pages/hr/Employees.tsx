@@ -1,3 +1,4 @@
+import { defaultCurrency, withBase } from "@/lib/currency";
 import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
@@ -204,7 +205,7 @@ export default function HREmployees() {
     roleLevel: "regular",
     startDate: new Date().toISOString().slice(0, 10),
     salary: undefined,
-    salaryCurrency: "USD",
+    salaryCurrency: defaultCurrency(),
     taxId: undefined,
     allowances: [],
     reportsToManagerId: undefined,
@@ -1527,7 +1528,7 @@ export default function HREmployees() {
                 <div className="space-y-1">
                   <Label>Currency</Label>
                   <Select
-                    value={empForm.salaryCurrency ?? "USD"}
+                    value={empForm.salaryCurrency ?? defaultCurrency()}
                     onValueChange={(v) =>
                       setEmpForm((f) => ({ ...f, salaryCurrency: v }))
                     }
@@ -1536,7 +1537,7 @@ export default function HREmployees() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {SALARY_CURRENCIES.map((c) => (
+                      {withBase(SALARY_CURRENCIES).map((c) => (
                         <SelectItem key={c} value={c}>
                           {c}
                         </SelectItem>
@@ -1616,7 +1617,7 @@ export default function HREmployees() {
                     <div className="space-y-1">
                       <Label>Currency</Label>
                       <Select
-                        value={empForm.salaryCurrency ?? "USD"}
+                        value={empForm.salaryCurrency ?? defaultCurrency()}
                         onValueChange={(v) =>
                           setEmpForm((f) => ({ ...f, salaryCurrency: v }))
                         }
@@ -1625,7 +1626,7 @@ export default function HREmployees() {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {SALARY_CURRENCIES.map((c) => (
+                          {withBase(SALARY_CURRENCIES).map((c) => (
                             <SelectItem key={c} value={c}>
                               {c}
                             </SelectItem>

@@ -1,3 +1,4 @@
+import { defaultCurrency } from "@/lib/currency";
 import { api } from "../api";
 
 export type ClientRisk = "Low" | "Medium" | "High";
@@ -150,7 +151,7 @@ export function defaultCommercial(
     slaProfileId: "",
     revenueYtd: 0,
     costYtd: 0,
-    currency: "USD",
+    currency: defaultCurrency(),
     satisfaction: 0,
     openTickets: 0,
     invoiceDaysAvg: 30,

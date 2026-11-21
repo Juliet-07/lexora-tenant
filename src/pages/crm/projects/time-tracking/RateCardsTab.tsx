@@ -1,3 +1,4 @@
+import { defaultCurrency, withBase } from "@/lib/currency";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
@@ -35,7 +36,7 @@ import {
   type RateCard,
 } from "@/lib/crm/time-tracking-api";
 
-const money = (n: number, c = "USD") =>
+const money = (n: number, c = defaultCurrency()) =>
   n.toLocaleString(undefined, {
     style: "currency",
     currency: c,
@@ -62,7 +63,7 @@ export function RateCardsTab() {
     member: "",
     role: "",
     standardRate: 0,
-    currency: "USD",
+    currency: defaultCurrency(),
   });
 
   const upsertMut = useMutation({
@@ -92,7 +93,7 @@ export function RateCardsTab() {
       member: "",
       role: "",
       standardRate: 0,
-      currency: "USD",
+      currency: defaultCurrency(),
     });
     setOpen(true);
   };
@@ -228,7 +229,7 @@ export function RateCardsTab() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {["USD", "RWF", "EUR", "GBP", "NGN", "ZAR"].map((c) => (
+                    {withBase(["USD", "RWF", "EUR", "GBP", "NGN", "ZAR"]).map((c) => (
                       <SelectItem key={c} value={c}>
                         {c}
                       </SelectItem>

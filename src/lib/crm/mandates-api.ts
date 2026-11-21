@@ -1,3 +1,4 @@
+import { defaultCurrency } from "@/lib/currency";
 import { api } from "../api";
 import { Task, TaskStatus } from "./tasks-api";
 
@@ -80,7 +81,7 @@ export const ragClass: Record<Rag, string> = {
   Red: "bg-destructive/10 text-destructive",
 };
 
-export const money = (n: number, c = "USD") =>
+export const money = (n: number, c = defaultCurrency()) =>
   n.toLocaleString(undefined, {
     style: "currency",
     currency: c,

@@ -1,3 +1,4 @@
+import { defaultCurrency } from "@/lib/currency";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -48,19 +49,19 @@ interface ContextForm {
   useOfFunds: string;
 }
 
-const EMPTY: ContextForm = {
+const EMPTY = (): ContextForm => ({
   title: "",
   advisor: "",
   dealType: "equity",
   investorType: "mixed",
   raiseAmount: "",
-  currency: "USD",
+  currency: defaultCurrency(),
   targetClose: "",
   useOfFunds: "",
-};
+});
 
 function fromAssessment(a?: ReadinessAssessment): ContextForm {
-  if (!a) return EMPTY;
+  if (!a) return EMPTY();
   const c = a.dealContext;
   return {
     title: a.title ?? "",
@@ -68,7 +69,7 @@ function fromAssessment(a?: ReadinessAssessment): ContextForm {
     dealType: c.dealType,
     investorType: c.investorType,
     raiseAmount: c.raiseAmount ? String(c.raiseAmount) : "",
-    currency: c.currency || "USD",
+    currency: c.currency || defaultCurrency(),
     targetClose: c.targetClose ? c.targetClose.slice(0, 10) : "",
     useOfFunds: c.useOfFunds ?? "",
   };
@@ -79,7 +80,7 @@ function contextBody(f: ContextForm): Partial<DealContext> {
     dealType: f.dealType,
     investorType: f.investorType,
     raiseAmount: Number(f.raiseAmount.replace(/,/g, "")) || 0,
-    currency: f.currency.trim().toUpperCase() || "USD",
+    currency: f.currency.trim().toUpperCase() || defaultCurrency(),
     targetClose: f.targetClose || null,
     useOfFunds: f.useOfFunds,
   };
@@ -264,7 +265,7 @@ export function NewAssessmentWizard({
   onCreated: (a: ReadinessAssessment) => void;
 }) {
   const [step, setStep] = useState(0);
-  const [form, setForm] = useState<ContextForm>(EMPTY);
+  const [form, setForm] = useState<ContextForm>(EMPTY());
   const [weights, setWeights] = useState<Record<ReadinessDimension, number>>(
     INVESTOR_WEIGHT_PRESETS.mixed,
   );
@@ -378,7 +379,7 @@ export function NewAssessmentWizard({
                 {Number(form.raiseAmount.replace(/,/g, ""))
                   ? fmtMoney(
                       Number(form.raiseAmount.replace(/,/g, "")),
-                      form.currency.toUpperCase() || "USD",
+                      form.currency.toUpperCase() || defaultCurrency(),
                     )
                   : "—"}
               </span>

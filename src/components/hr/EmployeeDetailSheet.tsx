@@ -1,3 +1,4 @@
+import { defaultCurrency } from "@/lib/currency";
 import { useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
@@ -210,7 +211,7 @@ const fmtSalary = (
   try {
     return new Intl.NumberFormat("en-US", {
       style: "currency",
-      currency: currencyCode || "USD",
+      currency: currencyCode || defaultCurrency(),
       maximumFractionDigits: 0,
     }).format(amount);
   } catch {

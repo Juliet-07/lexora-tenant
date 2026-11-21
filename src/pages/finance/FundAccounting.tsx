@@ -1,3 +1,4 @@
+import { defaultCurrency } from "@/lib/currency";
 import { useState } from "react";
 import { ApprovalDetailsDialog } from "@/components/finance/ApprovalDetailsDialog";
 import {
@@ -119,7 +120,7 @@ import {
   type ScenarioResult,
 } from "@/lib/crm/finance-api";
 
-const money = (n: number, c = "USD") =>
+const money = (n: number, c = defaultCurrency()) =>
   (n ?? 0).toLocaleString(undefined, {
     style: "currency",
     currency: c,
@@ -191,14 +192,14 @@ interface FundFormState {
   recyclingPermitted: boolean;
   recyclingCapPct: number;
 }
-const emptyFundForm: FundFormState = {
+const emptyFundForm = (): FundFormState => ({
   name: "",
   structure: "Limited Partnership",
   jurisdiction: "",
   strategy: "",
   targetSize: 0,
   vintage: new Date().getFullYear(),
-  currency: "USD",
+  currency: defaultCurrency(),
   bankAccountId: "",
   mgmtFeePct: 2,
   carryPct: 20,
@@ -213,7 +214,7 @@ const emptyFundForm: FundFormState = {
   orgCostsCapAmount: 0,
   recyclingPermitted: false,
   recyclingCapPct: 0,
-};
+});
 
 export default function FundAccounting() {
   const { toast } = useToast();
@@ -374,7 +375,7 @@ export default function FundAccounting() {
 
   // ── New fund ─────────────────────────────────────────────
   const [openNewFund, setOpenNewFund] = useState(false);
-  const [fundForm, setFundForm] = useState(emptyFundForm);
+  const [fundForm, setFundForm] = useState(emptyFundForm());
   const createFundMut = useMutation({
     mutationFn: () =>
       createFund({
@@ -385,7 +386,7 @@ export default function FundAccounting() {
     onSuccess: (f) => {
       invalidateFund();
       setOpenNewFund(false);
-      setFundForm(emptyFundForm);
+      setFundForm(emptyFundForm());
       setSelectedFundId(f._id);
       toast({ title: "Fund created" });
     },
@@ -394,7 +395,7 @@ export default function FundAccounting() {
 
   // ── Edit terms ───────────────────────────────────────────
   const [openEditTerms, setOpenEditTerms] = useState(false);
-  const [termsForm, setTermsForm] = useState(emptyFundForm);
+  const [termsForm, setTermsForm] = useState(emptyFundForm());
   const openEdit = () => {
     if (!fund) return;
     setTermsForm({
@@ -866,7 +867,7 @@ export default function FundAccounting() {
   const [openNewFxRate, setOpenNewFxRate] = useState(false);
   const [fxForm, setFxForm] = useState({
     fromCurrency: "",
-    toCurrency: fund?.currency ?? "USD",
+    toCurrency: fund?.currency ?? defaultCurrency(),
     rate: 0,
     asOfDate: today(),
     source: "",
@@ -878,7 +879,7 @@ export default function FundAccounting() {
       setOpenNewFxRate(false);
       setFxForm({
         fromCurrency: "",
-        toCurrency: fund?.currency ?? "USD",
+        toCurrency: fund?.currency ?? defaultCurrency(),
         rate: 0,
         asOfDate: today(),
         source: "",

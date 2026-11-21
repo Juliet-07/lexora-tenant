@@ -1,3 +1,4 @@
+import { defaultCurrency } from "@/lib/currency";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -120,7 +121,7 @@ export default function AddClientWizard({
   // every onboarding contract came out with value 0 and currency
   // silently defaulted to USD on the backend.
   const [contractValue, setContractValue] = useState("");
-  const [contractCurrency, setContractCurrency] = useState("USD");
+  const [contractCurrency, setContractCurrency] = useState(defaultCurrency());
   const [contract, setContract] = useState<SignableContract | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
 
@@ -135,7 +136,7 @@ export default function AddClientWizard({
     setCreatedClient(null);
     setSelectedTemplate(null);
     setContractValue("");
-    setContractCurrency("USD");
+    setContractCurrency(defaultCurrency());
     setContract(null);
   };
 

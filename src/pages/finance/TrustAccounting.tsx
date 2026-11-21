@@ -1,3 +1,4 @@
+import { defaultCurrency } from "@/lib/currency";
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -62,7 +63,7 @@ import {
   type TrustLedger,
 } from "@/lib/crm/finance-api";
 
-const money = (n: number, c = "USD") =>
+const money = (n: number, c = defaultCurrency()) =>
   n.toLocaleString(undefined, {
     style: "currency",
     currency: c,
@@ -153,7 +154,7 @@ export default function TrustAccounting() {
     clientUserId: "",
     clientName: "",
     mandateName: "",
-    currency: "USD",
+    currency: defaultCurrency(),
     interestTreatment: "Client retained" as InterestTreatment,
   });
   const createLedgerMut = useMutation({
@@ -166,7 +167,7 @@ export default function TrustAccounting() {
         clientUserId: "",
         clientName: "",
         mandateName: "",
-        currency: "USD",
+        currency: defaultCurrency(),
         interestTreatment: "Client retained",
       });
       toast({ title: "Trust ledger created" });

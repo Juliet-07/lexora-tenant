@@ -1,3 +1,4 @@
+import { defaultCurrency, withBase } from "@/lib/currency";
 import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
@@ -105,7 +106,7 @@ export default function Mandates() {
     teamId: "",
     teamName: "",
     budget: 0,
-    currency: "USD",
+    currency: defaultCurrency(),
     feeStructure: "Fixed fee" as FeeStructure,
     targetDate: "",
     partiesText: "",
@@ -438,7 +439,7 @@ export default function Mandates() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {MANDATE_CURRENCIES.map((c) => (
+                    {withBase(MANDATE_CURRENCIES).map((c) => (
                       <SelectItem key={c} value={c}>
                         {c}
                       </SelectItem>

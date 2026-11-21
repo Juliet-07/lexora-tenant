@@ -1,3 +1,4 @@
+import { defaultCurrency } from "@/lib/currency";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Landmark, Pencil, Plus, RefreshCw, Star } from "lucide-react";
@@ -33,15 +34,15 @@ import {
   useSectionForm,
 } from "./shared";
 
-const EMPTY = {
+const EMPTY = () => ({
   accountName: "",
   bankName: "",
   accountNumber: "",
-  currency: "USD",
+  currency: defaultCurrency(),
   branchCode: "",
   swiftCode: "",
   description: "",
-};
+});
 
 export default function BankAccountsTab() {
   const { toast } = useToast();
@@ -71,9 +72,9 @@ export default function BankAccountsTab() {
   const [dialog, setDialog] = useState<
     { mode: "add" } | { mode: "edit"; account: RemittanceAccount } | null
   >(null);
-  const [draft, setDraft] = useState(EMPTY);
+  const [draft, setDraft] = useState(EMPTY());
   const openAdd = () => {
-    setDraft({ ...EMPTY, currency: baseCurrency || "USD" });
+    setDraft({ ...EMPTY(), currency: baseCurrency || defaultCurrency() });
     setDialog({ mode: "add" });
   };
   const openEdit = (a: RemittanceAccount) => {

@@ -1,3 +1,4 @@
+import { defaultCurrency } from "@/lib/currency";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -176,7 +177,7 @@ export function GenerateDealContractDialog({
   const [partyA, setPartyA] = useState<PartyForm | null>(null);
   const [partyB, setPartyB] = useState<PartyForm>(emptyParty());
   const [value, setValue] = useState("");
-  const [currency, setCurrency] = useState("USD");
+  const [currency, setCurrency] = useState(defaultCurrency());
   const [governingLaw, setGoverningLaw] = useState("");
   const [effectiveDate, setEffectiveDate] = useState("");
   const [expiresOn, setExpiresOn] = useState("");
@@ -210,7 +211,7 @@ export function GenerateDealContractDialog({
     if (!draft || !template) return;
     setTitle(draft.suggested.title);
     setValue(draft.suggested.value ? String(draft.suggested.value) : "");
-    setCurrency(draft.suggested.currency || "USD");
+    setCurrency(draft.suggested.currency || defaultCurrency());
     setGoverningLaw(draft.suggested.governingLaw || "");
     setExpiresOn(draft.suggested.expiresOn || "");
     // With exactly one party on the deal there is nobody else to pick.

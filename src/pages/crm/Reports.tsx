@@ -1,3 +1,4 @@
+import { defaultCurrency } from "@/lib/currency";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -267,11 +268,11 @@ export default function Reports() {
               r.commercial?.riskRating ?? "—",
               money(
                 r.commercial?.revenueYtd ?? 0,
-                r.commercial?.currency ?? "USD",
+                r.commercial?.currency ?? defaultCurrency(),
               ),
               money(
                 r.commercial?.costYtd ?? 0,
-                r.commercial?.currency ?? "USD",
+                r.commercial?.currency ?? defaultCurrency(),
               ),
               r.commercial?.satisfaction
                 ? `${r.commercial.satisfaction}/5`

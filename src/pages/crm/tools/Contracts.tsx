@@ -1,3 +1,4 @@
+import { defaultCurrency } from "@/lib/currency";
 import { useState } from "react";
 import {
   ContractPartyFields,
@@ -90,7 +91,7 @@ import {
 // Select value of the "More templates" row at the end of the template dropdown.
 const MORE_TEMPLATES = "__more_templates__";
 
-const money = (n: number, c = "USD") =>
+const money = (n: number, c = defaultCurrency()) =>
   (n ?? 0).toLocaleString(undefined, {
     style: "currency",
     currency: c,

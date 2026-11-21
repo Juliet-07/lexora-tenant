@@ -1,3 +1,4 @@
+import { defaultCurrency, withBase } from "@/lib/currency";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -100,7 +101,7 @@ function sumByCurrencyLabel<T extends { currency?: string }>(
   if (!rows.length) return money(0);
   const byCurrency = new Map<string, number>();
   rows.forEach((r) => {
-    const c = r.currency || "USD";
+    const c = r.currency || defaultCurrency();
     byCurrency.set(c, (byCurrency.get(c) ?? 0) + valueOf(r));
   });
   return [...byCurrency.entries()].map(([c, amt]) => money(amt, c)).join(" + ");
@@ -168,7 +169,7 @@ export default function Invoicing() {
   const [draft, setDraft] = useState({
     mandateId: "",
     model: "Time & materials" as BillingModel,
-    currency: "USD",
+    currency: defaultCurrency(),
     subtotal: 0,
     vatRate: 18,
     whtRate: 0,
@@ -585,7 +586,7 @@ export default function Invoicing() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {["USD", "EUR", "RWF", "GBP"].map((c) => (
+                    {withBase(["USD", "EUR", "RWF", "GBP"]).map((c) => (
                       <SelectItem key={c} value={c}>
                         {c}
                       </SelectItem>

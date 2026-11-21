@@ -1,3 +1,4 @@
+import { defaultCurrency } from "@/lib/currency";
 import { api } from "../api";
 import type {
   ContractClause,
@@ -67,7 +68,7 @@ export function stageColor(stage: DealStage): string {
   return map[stage];
 }
 
-export function formatMoney(v: number, ccy = "USD") {
+export function formatMoney(v: number, ccy = defaultCurrency()) {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: ccy,

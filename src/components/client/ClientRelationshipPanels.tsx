@@ -1,3 +1,4 @@
+import { defaultCurrency, withBase } from "@/lib/currency";
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -145,7 +146,7 @@ export function ClientDealsPanel({ clientId, clientName }: Props) {
                   </TableCell>
                   <TableCell>{d.status}</TableCell>
                   <TableCell className="text-right">
-                    {money(d.value ?? 0, d.currency || "USD")}
+                    {money(d.value ?? 0, d.currency || defaultCurrency())}
                   </TableCell>
                   <TableCell>{d.targetClose?.slice(0, 10) || "—"}</TableCell>
                   <TableCell className="text-right">
@@ -610,9 +611,11 @@ function CommercialEditDialog({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="USD">USD</SelectItem>
-                  <SelectItem value="RWF">RWF</SelectItem>
-                  <SelectItem value="KES">KES</SelectItem>
+                  {withBase(["USD", "RWF", "KES"]).map((c) => (
+                    <SelectItem key={c} value={c}>
+                      {c}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

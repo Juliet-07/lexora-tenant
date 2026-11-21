@@ -1,3 +1,4 @@
+import { defaultCurrency, withBase } from "@/lib/currency";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
@@ -100,7 +101,7 @@ export default function MyRequisitions() {
     typeKey: "",
     title: "",
     amount: "",
-    currency: "USD",
+    currency: defaultCurrency(),
     priority: "medium" as RequisitionPriority,
     justification: "",
   });
@@ -114,7 +115,7 @@ export default function MyRequisitions() {
         typeKey: "",
         title: "",
         amount: "",
-        currency: "USD",
+        currency: defaultCurrency(),
         priority: "medium",
         justification: "",
       });
@@ -218,13 +219,19 @@ export default function MyRequisitions() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {["USD", "EUR", "GBP", "NGN", "RWF", "KES", "ZAR"].map(
-                        (c) => (
-                          <SelectItem key={c} value={c}>
-                            {c}
-                          </SelectItem>
-                        ),
-                      )}
+                      {withBase([
+                        "USD",
+                        "EUR",
+                        "GBP",
+                        "NGN",
+                        "RWF",
+                        "KES",
+                        "ZAR",
+                      ]).map((c) => (
+                        <SelectItem key={c} value={c}>
+                          {c}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>

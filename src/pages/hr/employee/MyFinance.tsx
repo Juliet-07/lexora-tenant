@@ -1,3 +1,4 @@
+import { defaultCurrency, withBase } from "@/lib/currency";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Paperclip, Plus, Loader2, FileText, Receipt } from "lucide-react";
@@ -46,7 +47,7 @@ import {
 const CURRENCIES = ["USD", "EUR", "RWF", "GBP"];
 const OTHER_VENDOR = "__other__";
 
-const money = (n: number, c = "USD") =>
+const money = (n: number, c = defaultCurrency()) =>
   n.toLocaleString(undefined, { style: "currency", currency: c });
 
 const tone = (s: string) => {
@@ -70,16 +71,16 @@ const friendly = (kind: "bill" | "quote", s: string) => {
   return s;
 };
 
-const emptyBill = {
+const emptyBill = () => ({
   vendorId: "",
   vendorName: "",
   description: "",
   category: "",
   dueOn: "",
   amount: "",
-  currency: "USD",
-};
-const emptyQuote = {
+  currency: defaultCurrency(),
+});
+const emptyQuote = () => ({
   kind: "Quote" as QuoteKind,
   clientName: "",
   clientEmail: "",
@@ -88,9 +89,9 @@ const emptyQuote = {
   termsAndConditions: "",
   amount: "",
   vatPercent: "0",
-  currency: "USD",
+  currency: defaultCurrency(),
   expires: "",
-};
+});
 
 export default function MyFinance() {
   const { toast } = useToast();
@@ -98,10 +99,10 @@ export default function MyFinance() {
   const [billOpen, setBillOpen] = useState(false);
   const [details, setDetails] = useState<ApprovalDetails | null>(null);
   const [quoteOpen, setQuoteOpen] = useState(false);
-  const [bill, setBill] = useState(emptyBill);
+  const [bill, setBill] = useState(emptyBill());
   const [otherVendor, setOtherVendor] = useState(false);
   const [receipt, setReceipt] = useState<File | null>(null);
-  const [quote, setQuote] = useState(emptyQuote);
+  const [quote, setQuote] = useState(emptyQuote());
 
   const { data: bills = [], isLoading: billsLoading } = useQuery({
     queryKey: ["my-finance-bills"],
@@ -141,7 +142,7 @@ export default function MyFinance() {
     onSuccess: (b) => {
       queryClient.invalidateQueries({ queryKey: ["my-finance-bills"] });
       setBillOpen(false);
-      setBill(emptyBill);
+      setBill(emptyBill());
       setOtherVendor(false);
       setReceipt(null);
       toast({
@@ -169,7 +170,7 @@ export default function MyFinance() {
     onSuccess: (q) => {
       queryClient.invalidateQueries({ queryKey: ["my-finance-quotes"] });
       setQuoteOpen(false);
-      setQuote(emptyQuote);
+      setQuote(emptyQuote());
       toast({
         title: `${q.kind} submitted`,
         description: `${q.ref} is waiting for approval.`,
@@ -426,7 +427,7 @@ export default function MyFinance() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {CURRENCIES.map((c) => (
+                    {withBase(CURRENCIES).map((c) => (
                       <SelectItem key={c} value={c}>
                         {c}
                       </SelectItem>
@@ -588,7 +589,7 @@ export default function MyFinance() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {CURRENCIES.map((c) => (
+                    {withBase(CURRENCIES).map((c) => (
                       <SelectItem key={c} value={c}>
                         {c}
                       </SelectItem>

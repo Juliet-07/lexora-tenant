@@ -1,3 +1,4 @@
+import { defaultCurrency, withBase } from "@/lib/currency";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -54,7 +55,7 @@ import {
 import { fetchInvoices } from "@/lib/crm/finance-api";
 import { fetchBills, fetchBillById } from "@/lib/crm/finance-api";
 
-const money = (n: number, c = "USD") =>
+const money = (n: number, c = defaultCurrency()) =>
   n.toLocaleString(undefined, {
     style: "currency",
     currency: c,
@@ -156,7 +157,7 @@ export default function Banking() {
     name: "",
     bank: "",
     last4: "",
-    currency: "USD",
+    currency: defaultCurrency(),
     openingBalance: 0,
     type: "Office" as BankAccountType,
   });
@@ -169,7 +170,7 @@ export default function Banking() {
         name: "",
         bank: "",
         last4: "",
-        currency: "USD",
+        currency: defaultCurrency(),
         openingBalance: 0,
         type: "Office",
       });
@@ -843,7 +844,7 @@ export default function Banking() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {["USD", "EUR", "RWF", "GBP"].map((c) => (
+                    {withBase(["USD", "EUR", "RWF", "GBP"]).map((c) => (
                       <SelectItem key={c} value={c}>
                         {c}
                       </SelectItem>

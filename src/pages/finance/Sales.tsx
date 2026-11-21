@@ -1,3 +1,4 @@
+import { defaultCurrency } from "@/lib/currency";
 import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -145,7 +146,7 @@ const wipTotalLabel = (entries: WipEntry[]) => {
   if (!entries.length) return money(0);
   const byCurrency = new Map<string, number>();
   entries.forEach((w) => {
-    const c = w.currency || "USD";
+    const c = w.currency || defaultCurrency();
     byCurrency.set(c, (byCurrency.get(c) ?? 0) + wipValue(w));
   });
   return [...byCurrency.entries()].map(([c, amt]) => money(amt, c)).join(" + ");
@@ -252,7 +253,7 @@ export default function Sales() {
     termsAndConditions: "",
     amount: 0,
     vatPercent: 0,
-    currency: "USD",
+    currency: defaultCurrency(),
     expires: "",
     kind: "Quote" as QuoteKind,
   });
@@ -266,7 +267,7 @@ export default function Sales() {
     mandateId: "",
     description: "",
     amount: 0,
-    currency: "USD",
+    currency: defaultCurrency(),
     frequency: "Monthly" as RecurringFrequency,
     nextRun: "",
   });
@@ -362,7 +363,7 @@ export default function Sales() {
   // still one currency (matching Invoice.currency elsewhere), so a
   // mixed-currency selection can't be generated as a single invoice.
   const sameCurrency = selectedEntries.every(
-    (e) => (e.currency || "USD") === (selectedCurrency || "USD"),
+    (e) => (e.currency || defaultCurrency()) === (selectedCurrency || defaultCurrency()),
   );
   const canGenerate = selectedEntries.length > 0 && sameMandate && sameCurrency;
 
@@ -435,7 +436,7 @@ export default function Sales() {
         termsAndConditions: "",
         amount: 0,
         vatPercent: 0,
-        currency: "USD",
+        currency: defaultCurrency(),
         expires: "",
         kind: "Quote",
       });

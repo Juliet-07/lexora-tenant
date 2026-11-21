@@ -1,3 +1,4 @@
+import { defaultCurrency } from "@/lib/currency";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -26,7 +27,7 @@ const statusClass: Record<TimesheetStatus, string> = {
   Rejected: "bg-destructive/10 text-destructive",
 };
 
-const money = (n: number, c = "USD") =>
+const money = (n: number, c = defaultCurrency()) =>
   n.toLocaleString(undefined, {
     style: "currency",
     currency: c,

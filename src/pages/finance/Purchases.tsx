@@ -1,3 +1,4 @@
+import { defaultCurrency, withBase } from "@/lib/currency";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -146,7 +147,7 @@ const purchasesWorkflow = [
   },
 ];
 
-const money = (n: number, c = "USD") =>
+const money = (n: number, c = defaultCurrency()) =>
   n.toLocaleString(undefined, {
     style: "currency",
     currency: c,
@@ -230,7 +231,7 @@ export default function Purchases() {
   const [newPoOpen, setNewPoOpen] = useState(false);
   const [poDraft, setPoDraft] = useState({
     vendorId: "",
-    currency: "USD",
+    currency: defaultCurrency(),
     expectedDelivery: "",
     notes: "",
     deliveryAddress: "",
@@ -247,7 +248,7 @@ export default function Purchases() {
 
   const emptyPoDraft = {
     vendorId: "",
-    currency: "USD",
+    currency: defaultCurrency(),
     expectedDelivery: "",
     notes: "",
     deliveryAddress: "",
@@ -382,7 +383,7 @@ export default function Purchases() {
     category: "",
     dueOn: "",
     amount: 0,
-    currency: "USD",
+    currency: defaultCurrency(),
     recurring: false,
   });
   // The vendor receipt/invoice — image or PDF — is a required part
@@ -424,7 +425,7 @@ export default function Purchases() {
         category: "",
         dueOn: "",
         amount: 0,
-        currency: "USD",
+        currency: defaultCurrency(),
         recurring: false,
       });
       setBillReceiptFile(null);
@@ -476,7 +477,7 @@ export default function Purchases() {
     description: "",
     mandateId: "",
     amount: 0,
-    currency: "USD",
+    currency: defaultCurrency(),
     rechargeable: false,
   });
   // Optional — proof of the claim can be attached right away, or added
@@ -505,7 +506,7 @@ export default function Purchases() {
         description: "",
         mandateId: "",
         amount: 0,
-        currency: "USD",
+        currency: defaultCurrency(),
         rechargeable: false,
       });
       setClaimReceiptFile(null);
@@ -1420,7 +1421,7 @@ export default function Purchases() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {["USD", "EUR", "RWF", "GBP"].map((c) => (
+                    {withBase(["USD", "EUR", "RWF", "GBP"]).map((c) => (
                       <SelectItem key={c} value={c}>
                         {c}
                       </SelectItem>
@@ -1876,7 +1877,7 @@ export default function Purchases() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {["USD", "EUR", "RWF", "GBP"].map((c) => (
+                    {withBase(["USD", "EUR", "RWF", "GBP"]).map((c) => (
                       <SelectItem key={c} value={c}>
                         {c}
                       </SelectItem>
@@ -2018,7 +2019,7 @@ export default function Purchases() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {["USD", "EUR", "RWF", "GBP"].map((c) => (
+                    {withBase(["USD", "EUR", "RWF", "GBP"]).map((c) => (
                       <SelectItem key={c} value={c}>
                         {c}
                       </SelectItem>

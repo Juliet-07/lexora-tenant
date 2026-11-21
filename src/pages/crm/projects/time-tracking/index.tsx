@@ -1,3 +1,4 @@
+import { defaultCurrency } from "@/lib/currency";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
@@ -38,7 +39,7 @@ import { ApprovalsTab } from "./ApprovalsTab";
 import { UtilisationTab } from "./UtilisationTab";
 import { RateCardsTab } from "./RateCardsTab";
 
-const money = (n: number, c = "USD") =>
+const money = (n: number, c = defaultCurrency()) =>
   n.toLocaleString(undefined, {
     style: "currency",
     currency: c,

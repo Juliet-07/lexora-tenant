@@ -1,3 +1,4 @@
+import { defaultCurrency } from "@/lib/currency";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -48,7 +49,7 @@ import {
   type Metrics,
 } from "@/lib/grc/intelligence-api";
 
-function money(n: number, currency = "USD") {
+function money(n: number, currency = defaultCurrency()) {
   const abs = Math.abs(n);
   const fmt = (v: number, s: string) =>
     `${n < 0 ? "-" : ""}${currency === "USD" ? "$" : currency + " "}${v.toFixed(1)}${s}`;

@@ -1,3 +1,4 @@
+import { defaultCurrency } from "@/lib/currency";
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -99,7 +100,7 @@ import type {
   PleadingType,
 } from "@/lib/crm/litigation-api";
 
-const money = (n: number, c = "USD") =>
+const money = (n: number, c = defaultCurrency()) =>
   n.toLocaleString(undefined, {
     style: "currency",
     currency: c,

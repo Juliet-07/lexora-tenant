@@ -1,3 +1,4 @@
+import { defaultCurrency } from "@/lib/currency";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -47,7 +48,7 @@ import { fetchContracts, type SignableContract } from "@/lib/crm/tools-api";
 import { VendorSheet } from "@/components/crm/vendorManager/VendorSheet";
 import { AddVendorDialog } from "@/components/crm/vendorManager/AddVendorDialog";
 
-const money = (n: number, c = "USD") =>
+const money = (n: number, c = defaultCurrency()) =>
   `${c === "USD" ? "$" : `${c} `}${n.toLocaleString()}`;
 
 export const RISK_TONE: Record<VendorRisk, string> = {

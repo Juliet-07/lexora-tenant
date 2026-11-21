@@ -1,3 +1,4 @@
+import { defaultCurrency } from "@/lib/currency";
 import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
@@ -100,7 +101,7 @@ import {
   CaseAuditAccessTab,
 } from "@/components/crm/case/CaseTabs";
 
-const money = (n: number, c = "USD") =>
+const money = (n: number, c = defaultCurrency()) =>
   n.toLocaleString(undefined, {
     style: "currency",
     currency: c,

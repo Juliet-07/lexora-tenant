@@ -1,3 +1,4 @@
+import { defaultCurrency, withBase } from "@/lib/currency";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -117,7 +118,7 @@ function LogTransactionDialog({ onLogged }: { onLogged: () => void }) {
   const [form, setForm] = useState({
     clientId: "",
     amount: "",
-    currency: "USD",
+    currency: defaultCurrency(),
     type: "cash_deposit",
     transactionDate: new Date().toISOString().split("T")[0],
     counterpartyName: "",
@@ -153,7 +154,7 @@ function LogTransactionDialog({ onLogged }: { onLogged: () => void }) {
       setForm({
         clientId: "",
         amount: "",
-        currency: "USD",
+        currency: defaultCurrency(),
         type: "cash_deposit",
         transactionDate: new Date().toISOString().split("T")[0],
         counterpartyName: "",
@@ -230,13 +231,19 @@ function LogTransactionDialog({ onLogged }: { onLogged: () => void }) {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {["USD", "RWF", "EUR", "GBP", "ZWL", "KES", "UGX"].map(
-                    (c) => (
-                      <SelectItem key={c} value={c}>
-                        {c}
-                      </SelectItem>
-                    ),
-                  )}
+                  {withBase([
+                    "USD",
+                    "RWF",
+                    "EUR",
+                    "GBP",
+                    "ZWL",
+                    "KES",
+                    "UGX",
+                  ]).map((c) => (
+                    <SelectItem key={c} value={c}>
+                      {c}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

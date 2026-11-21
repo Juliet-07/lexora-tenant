@@ -85,7 +85,7 @@ export default function GeneralTab() {
         <div className="grid gap-4 sm:grid-cols-2">
           <Field
             label="Base currency"
-            hint="Set when the account was created. Change it in Settings → Profile."
+            hint="Your account currency — every record and report is kept in it. Change it in Settings → Profile (only possible before any ledger entries exist)."
           >
             <Input value={data.profile.baseCurrency} disabled />
           </Field>

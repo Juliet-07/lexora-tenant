@@ -1,3 +1,4 @@
+import { defaultCurrency, withBase } from "@/lib/currency";
 import { useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -126,7 +127,7 @@ const CURRENCIES = [
   "JPY",
 ];
 
-const fmt = (n: number, currency = "USD") => {
+const fmt = (n: number, currency = defaultCurrency()) => {
   try {
     return new Intl.NumberFormat("en-US", {
       style: "currency",
@@ -1508,7 +1509,7 @@ export default function HRPayroll() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {CURRENCIES.map((c) => (
+                  {withBase(CURRENCIES).map((c) => (
                     <SelectItem key={c} value={c}>
                       {c}
                     </SelectItem>
@@ -1528,7 +1529,7 @@ export default function HRPayroll() {
                   onClick={() =>
                     setManualRates((prev) => [
                       ...prev,
-                      { fromCurrency: "USD", rate: 0 },
+                      { fromCurrency: defaultCurrency(), rate: 0 },
                     ])
                   }
                 >
@@ -1563,7 +1564,7 @@ export default function HRPayroll() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {CURRENCIES.map((c) => (
+                        {withBase(CURRENCIES).map((c) => (
                           <SelectItem key={c} value={c}>
                             {c}
                           </SelectItem>
@@ -2217,7 +2218,7 @@ function PolicyEditorDialog({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {CURRENCIES.map((c) => (
+                  {withBase(CURRENCIES).map((c) => (
                     <SelectItem key={c} value={c}>
                       {c}
                     </SelectItem>
@@ -3303,7 +3304,7 @@ function OffboardingBreakdownDialog({
   onClose: () => void;
 }) {
   const b = payable?.breakdown;
-  const cur = b?.currency ?? "USD";
+  const cur = b?.currency ?? defaultCurrency();
   const employerTotal =
     b?.deductions.reduce((s, d) => s + d.employerAmount, 0) ?? 0;
 

@@ -1,3 +1,4 @@
+import { defaultCurrency, withBase } from "@/lib/currency";
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -286,7 +287,7 @@ function StrFormDialog({
       : prefill
         ? String(prefill.amount)
         : "",
-    currency: editStr?.currency ?? prefill?.currency ?? "USD",
+    currency: editStr?.currency ?? prefill?.currency ?? defaultCurrency(),
     transactionDate: editStr?.transactionDate
       ? new Date(editStr.transactionDate).toISOString().split("T")[0]
       : prefill?.transactionDate
@@ -516,11 +517,13 @@ function StrFormDialog({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {["USD", "RWF", "EUR", "GBP", "KES", "UGX"].map((c) => (
-                  <SelectItem key={c} value={c}>
-                    {c}
-                  </SelectItem>
-                ))}
+                {withBase(["USD", "RWF", "EUR", "GBP", "KES", "UGX"]).map(
+                  (c) => (
+                    <SelectItem key={c} value={c}>
+                      {c}
+                    </SelectItem>
+                  ),
+                )}
               </SelectContent>
             </Select>
           </div>

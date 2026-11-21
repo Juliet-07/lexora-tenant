@@ -14,6 +14,7 @@ import {
 } from "@/components/onboarding/OnboardingReminder";
 import { ViewSwitcher } from "./ViewSwitcher";
 import { FloatingTimer } from "@/components/crm/FloatingTimer";
+import { useBaseCurrency } from "@/hooks/use-base-currency";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -22,6 +23,10 @@ interface AppLayoutProps {
 export function AppLayout({ children }: AppLayoutProps) {
   const { user, logout, isAdmin } = useAuth();
   const hierarchyRole = user?.hierarchyRole ?? null;
+  // Load the account's base currency before any page renders, so every form
+  // and list starts from it instead of assuming USD. If it cannot be loaded
+  // the pages still open (USD fallback).
+  const { isLoading: currencyLoading } = useBaseCurrency();
 
   return (
     <SidebarProvider>
@@ -75,7 +80,9 @@ export function AppLayout({ children }: AppLayoutProps) {
               </Button>
             </div>
           </header>
-          <main className="flex-1 overflow-auto p-6">{children}</main>
+          <main className="flex-1 overflow-auto p-6">
+            {currencyLoading ? null : children}
+          </main>
         </div>
         {!isAdmin && <OnboardingReminder />}
         <FloatingTimer />

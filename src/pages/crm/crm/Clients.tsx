@@ -1,3 +1,4 @@
+import { defaultCurrency, withBase } from "@/lib/currency";
 import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -72,7 +73,7 @@ import {
 } from "@/lib/crm/client-commercial-api";
 import { fetchEmployees } from "@/lib/hr/hr-api";
 
-const money = (n: number, c = "USD") =>
+const money = (n: number, c = defaultCurrency()) =>
   n.toLocaleString(undefined, {
     style: "currency",
     currency: c,
@@ -754,7 +755,7 @@ export default function Clients() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {["USD", "EUR", "GBP", "NGN", "ZAR"].map((r) => (
+                      {withBase(["USD", "EUR", "GBP", "NGN", "ZAR"]).map((r) => (
                         <SelectItem key={r} value={r}>
                           {r}
                         </SelectItem>

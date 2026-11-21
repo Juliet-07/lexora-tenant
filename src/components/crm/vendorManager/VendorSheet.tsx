@@ -1,3 +1,4 @@
+import { defaultCurrency } from "@/lib/currency";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -56,7 +57,7 @@ import { fetchVendorContracts } from "@/lib/crm/tools-api";
 import { VendorContractDialog } from "./VendorContractDialog";
 import { RISK_TONE, STATUS_TONE, CONTRACT_TONE } from "@/pages/crm/crm/Vendors";
 
-const money = (n: number, c = "USD") =>
+const money = (n: number, c = defaultCurrency()) =>
   `${c === "USD" ? "$" : `${c} `}${n.toLocaleString()}`;
 
 function DetailBlock({

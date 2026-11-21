@@ -1,3 +1,4 @@
+import { defaultCurrency } from "@/lib/currency";
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -80,7 +81,7 @@ export function AddVendorDialog({
     serviceSummary: "",
     engagementType: ENGAGEMENT_TYPES[0],
     annualValue: "",
-    currency: "USD",
+    currency: defaultCurrency(),
     paymentTerms: PAYMENT_TERMS[0],
     budgetCode: "",
     risk: "Low" as VendorRisk,

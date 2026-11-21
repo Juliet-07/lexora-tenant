@@ -1,3 +1,4 @@
+import { defaultCurrency } from "@/lib/currency";
 import { useMemo, useState } from "react";
 import { MergeFieldsPanel } from "@/components/crm/MergeFieldsPanel";
 import ContractVariations from "@/components/crm/ContractVariations";
@@ -82,10 +83,10 @@ import {
   type ObligationType,
 } from "@/lib/crm/tools-api";
 
-const money = (n: number, c = "USD") =>
+const money = (n: number, c = defaultCurrency()) =>
   (n ?? 0).toLocaleString(undefined, {
     style: "currency",
-    currency: c || "USD",
+    currency: c || defaultCurrency(),
     maximumFractionDigits: 0,
   });
 const fmt = (d?: string | null) =>

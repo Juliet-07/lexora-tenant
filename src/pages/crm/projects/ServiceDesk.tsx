@@ -1,3 +1,4 @@
+import { defaultCurrency } from "@/lib/currency";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -291,7 +292,7 @@ export default function ServiceDesk() {
     type: "Advisory" as MandateType,
     feeStructure: "Time & materials" as FeeStructure,
     budget: 0,
-    currency: "USD",
+    currency: defaultCurrency(),
     targetDate: "",
     manager: "",
   });
@@ -302,7 +303,7 @@ export default function ServiceDesk() {
       type: "Advisory",
       feeStructure: "Time & materials",
       budget: 0,
-      currency: "USD",
+      currency: defaultCurrency(),
       targetDate: "",
       manager: selected.agent || "",
     });

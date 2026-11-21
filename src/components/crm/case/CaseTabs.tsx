@@ -1,3 +1,4 @@
+import { defaultCurrency } from "@/lib/currency";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -1433,7 +1434,7 @@ export function CaseTimeBillingTab({
                     <div className="flex items-center gap-1.5">
                       {(e.hours * e.rate).toLocaleString(undefined, {
                         style: "currency",
-                        currency: e.currency || "USD",
+                        currency: e.currency || defaultCurrency(),
                       })}
                       {e.rate === 0 && (
                         <Badge

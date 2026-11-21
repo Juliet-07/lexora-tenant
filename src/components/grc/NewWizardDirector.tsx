@@ -1,3 +1,4 @@
+import { defaultCurrency } from "@/lib/currency";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -109,7 +110,7 @@ export default function NewDirectorWizard({
   const [selectedTemplate, setSelectedTemplate] =
     useState<AvailableTemplate | null>(null);
   const [contractValue, setContractValue] = useState("");
-  const [contractCurrency, setContractCurrency] = useState("USD");
+  const [contractCurrency, setContractCurrency] = useState(defaultCurrency());
   const [contract, setContract] = useState<SignableContract | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
 
@@ -132,7 +133,7 @@ export default function NewDirectorWizard({
     setDocumentIds([]);
     setSelectedTemplate(null);
     setContractValue("");
-    setContractCurrency("USD");
+    setContractCurrency(defaultCurrency());
     setContract(null);
   };
 

@@ -1,3 +1,4 @@
+import { defaultCurrency, withBase } from "@/lib/currency";
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -85,7 +86,7 @@ export default function DealPipeline() {
     type: "M&A" as DealType,
     leadPartner: "",
     value: 0,
-    currency: "USD",
+    currency: defaultCurrency(),
     targetClose: "",
     longstopDate: "",
   });
@@ -111,7 +112,7 @@ export default function DealPipeline() {
         type: "M&A",
         leadPartner: "",
         value: 0,
-        currency: "USD",
+        currency: defaultCurrency(),
         targetClose: "",
         longstopDate: "",
       });
@@ -278,7 +279,7 @@ export default function DealPipeline() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {["USD", "EUR", "RWF", "GBP"].map((c) => (
+                      {withBase(["USD", "EUR", "RWF", "GBP"]).map((c) => (
                         <SelectItem key={c} value={c}>
                           {c}
                         </SelectItem>
