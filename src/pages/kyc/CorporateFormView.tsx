@@ -74,36 +74,42 @@ export function CorporateFormView({ formData }: Props) {
     );
   }
 
-  const f    = formData;
+  const f = formData;
   const decl = f._declaration;
 
   const beneficialOwners: any[] = f.beneficialOwnersList ?? [];
-  const directors:        any[] = f.directorsList        ?? [];
-  const relatedEntities:  any[] = f.relatedEntitiesList  ?? [];
+  const directors: any[] = f.directorsList ?? [];
+  const relatedEntities: any[] = f.relatedEntitiesList ?? [];
 
   return (
     <div className="space-y-4">
       {/* A — Entity Details */}
       <Section icon={Building2} title="A — Entity Details">
         <Grid>
-          <Field label="Legal Entity Name"         value={f.legalEntityName} />
-          <Field label="Entity Type"               value={f.entityType !== "Other" ? f.entityType : f.entityTypeOther} />
-          <Field label="Registration Number"       value={f.registrationNumber} />
-          <Field label="Tax Jurisdiction"          value={f.taxJurisdiction} />
-          <Field label="Date Established"          value={f.dateEstablished} />
-          <Field label="Countries of Operation"    value={f.countriesOfOperation} />
-          <Field label="Company Website"           value={f.website} />
+          <Field label="Legal Entity Name" value={f.legalEntityName} />
+          <Field
+            label="Entity Type"
+            value={f.entityType !== "Other" ? f.entityType : f.entityTypeOther}
+          />
+          <Field label="Registration Number" value={f.registrationNumber} />
+          <Field label="Tax Jurisdiction" value={f.taxJurisdiction} />
+          <Field label="Date Established" value={f.dateEstablished} />
+          <Field
+            label="Countries of Operation"
+            value={f.countriesOfOperation}
+          />
+          <Field label="Company Website" value={f.website} />
         </Grid>
       </Section>
 
       {/* Registered Address */}
       <Section icon={MapPin} title="Registered Business Address">
         <Grid>
-          <Field label="Street"       value={f.regStreet} />
-          <Field label="City"         value={f.regCity} />
-          <Field label="State"        value={f.regState} />
-          <Field label="Postal Code"  value={f.regPostalCode} />
-          <Field label="Country"      value={f.regCountry} />
+          <Field label="Street" value={f.regStreet} />
+          <Field label="City" value={f.regCity} />
+          <Field label="State" value={f.regState} />
+          <Field label="Postal Code" value={f.regPostalCode} />
+          <Field label="Country" value={f.regCountry} />
         </Grid>
       </Section>
 
@@ -111,9 +117,9 @@ export function CorporateFormView({ formData }: Props) {
       <Section icon={Activity} title="Business Activity">
         <div className="space-y-3">
           <Grid>
-            <Field label="Primary Activity"        value={f.primaryBusinessActivity} />
-            <Field label="Annual Revenue"          value={f.annualRevenue} />
-            <Field label="Number of Employees"     value={f.numberOfEmployees} />
+            <Field label="Primary Activity" value={f.primaryBusinessActivity} />
+            <Field label="Annual Revenue" value={f.annualRevenue} />
+            <Field label="Number of Employees" value={f.numberOfEmployees} />
           </Grid>
           {f.businessDescription && (
             <div>
@@ -147,13 +153,22 @@ export function CorporateFormView({ formData }: Props) {
                   Owner {i + 1}
                 </p>
                 <Grid>
-                  <Field label="First Name"          value={owner.firstName} />
-                  <Field label="Last Name"           value={owner.lastName} />
-                  <Field label="Date of Birth"       value={owner.dob} />
-                  <Field label="Nationality"         value={owner.nationality} />
-                  <Field label="Residential Address" value={owner.residentialAddress} />
-                  <Field label="Ownership %"         value={owner.ownershipPercentage} />
-                  <Field label="Nature of Control"   value={owner.natureOfControl} />
+                  <Field label="First Name" value={owner.firstName} />
+                  <Field label="Last Name" value={owner.lastName} />
+                  <Field label="Date of Birth" value={owner.dob} />
+                  <Field label="Nationality" value={owner.nationality} />
+                  <Field
+                    label="Residential Address"
+                    value={owner.residentialAddress}
+                  />
+                  <Field
+                    label="Ownership %"
+                    value={owner.ownershipPercentage}
+                  />
+                  <Field
+                    label="Nature of Control"
+                    value={owner.natureOfControl}
+                  />
                 </Grid>
               </div>
             ))}
@@ -186,11 +201,14 @@ export function CorporateFormView({ formData }: Props) {
                   )}
                 </div>
                 <Grid>
-                  <Field label="First Name"          value={d.firstName} />
-                  <Field label="Last Name"           value={d.lastName} />
-                  <Field label="Date of Birth"       value={d.dob} />
-                  <Field label="Nationality"         value={d.nationality} />
-                  <Field label="Residential Address" value={d.residentialAddress} />
+                  <Field label="First Name" value={d.firstName} />
+                  <Field label="Last Name" value={d.lastName} />
+                  <Field label="Date of Birth" value={d.dob} />
+                  <Field label="Nationality" value={d.nationality} />
+                  <Field
+                    label="Residential Address"
+                    value={d.residentialAddress}
+                  />
                 </Grid>
               </div>
             ))}
@@ -219,13 +237,23 @@ export function CorporateFormView({ formData }: Props) {
                   {r.entityName || `Entity ${i + 1}`}
                 </p>
                 <Grid>
-                  <Field label="Registration Number"     value={r.registrationNumber} />
-                  <Field label="Jurisdiction"            value={r.jurisdiction} />
-                  <Field label="Business Activity"       value={r.businessActivity} />
-                  <Field label="Shareholder Name"        value={r.shareholderName} />
-                  <Field label="Ownership %"             value={r.ownershipPercentage} />
-                  <Field label="Nature of Relationship"  value={r.natureOfRelationship} />
+                  <Field
+                    label="Registration Number"
+                    value={r.registrationNumber}
+                  />
+                  <Field label="Jurisdiction" value={r.jurisdiction} />
+                  <Field label="Business Activity" value={r.businessActivity} />
+                  <Field label="Shareholder Name" value={r.shareholderName} />
+                  <Field label="Ownership %" value={r.ownershipPercentage} />
+                  <Field
+                    label="Nature of Relationship"
+                    value={r.natureOfRelationship}
+                  />
                 </Grid>
+                <Field
+                  label="Purpose of Business Relationship"
+                  value={r.purposeOfRelationship}
+                />
               </div>
             ))}
           </div>
@@ -236,10 +264,19 @@ export function CorporateFormView({ formData }: Props) {
       <Section icon={ShieldAlert} title="E — AML Risk Assessment">
         <div className="space-y-4">
           <Grid>
-            <Field label="Purpose of Relationship"      value={f.purpose} />
-            <Field label="Expected Monthly Volume"      value={f.expectedValue} />
-            <Field label="Expected Monthly Transactions" value={f.expectedVolume} />
-            <Field label="Countries of Transaction"     value={f.expectedCountries} />
+            {/* Older submissions captured one purpose for the whole entity. */}
+            {f.purpose && (
+              <Field label="Purpose of Relationship" value={f.purpose} />
+            )}
+            <Field label="Expected Monthly Volume" value={f.expectedValue} />
+            <Field
+              label="Expected Monthly Transactions"
+              value={f.expectedVolume}
+            />
+            <Field
+              label="Countries of Transaction"
+              value={f.expectedCountries}
+            />
           </Grid>
 
           {f.transactionData?.length > 0 && (
@@ -249,7 +286,9 @@ export function CorporateFormView({ formData }: Props) {
               </p>
               <div className="flex flex-wrap gap-2">
                 {(f.transactionData as string[]).map((t) => (
-                  <Badge key={t} variant="outline" className="text-xs">{t}</Badge>
+                  <Badge key={t} variant="outline" className="text-xs">
+                    {t}
+                  </Badge>
                 ))}
               </div>
             </div>
@@ -262,7 +301,9 @@ export function CorporateFormView({ formData }: Props) {
               </p>
               <div className="flex flex-wrap gap-2">
                 {(f.sourceOfFunds as string[]).map((s) => (
-                  <Badge key={s} variant="secondary" className="text-xs">{s}</Badge>
+                  <Badge key={s} variant="secondary" className="text-xs">
+                    {s}
+                  </Badge>
                 ))}
               </div>
             </div>
@@ -277,10 +318,14 @@ export function CorporateFormView({ formData }: Props) {
                 {(f.highRiskIndicators as string[])
                   .filter((h) => h !== "None of the above")
                   .map((h) => (
-                    <Badge key={h} variant="destructive" className="text-xs">{h}</Badge>
+                    <Badge key={h} variant="destructive" className="text-xs">
+                      {h}
+                    </Badge>
                   ))}
                 {f.highRiskIndicators.includes("None of the above") && (
-                  <Badge variant="secondary" className="text-xs">None of the above</Badge>
+                  <Badge variant="secondary" className="text-xs">
+                    None of the above
+                  </Badge>
                 )}
               </div>
             </div>
@@ -293,21 +338,26 @@ export function CorporateFormView({ formData }: Props) {
         <Section icon={PenLine} title="F — Declaration">
           <div className="space-y-3">
             <Grid>
-              <Field label="Signatory Name"  value={decl.signature} />
+              <Field label="Signatory Name" value={decl.signature} />
               <Field label="Signatory Title" value={decl.signatoryTitle} />
               <Field
                 label="Signed At"
-                value={decl.signedAt
-                  ? new Date(decl.signedAt).toLocaleString()
-                  : undefined}
+                value={
+                  decl.signedAt
+                    ? new Date(decl.signedAt).toLocaleString()
+                    : undefined
+                }
               />
               <Field label="IP Address" value={decl.ipAddress} />
             </Grid>
             <Separator />
             <div className="grid grid-cols-3 gap-3 text-sm">
-              <ConsentBadge label="Information Accurate" value={decl.agreeTrue} />
-              <ConsentBadge label="Agreed to Notify"    value={decl.agreeUpdate} />
-              <ConsentBadge label="Data Processing"     value={decl.agreeConsent} />
+              <ConsentBadge
+                label="Information Accurate"
+                value={decl.agreeTrue}
+              />
+              <ConsentBadge label="Agreed to Notify" value={decl.agreeUpdate} />
+              <ConsentBadge label="Data Processing" value={decl.agreeConsent} />
             </div>
           </div>
         </Section>

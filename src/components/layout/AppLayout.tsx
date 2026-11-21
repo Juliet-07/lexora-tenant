@@ -37,13 +37,13 @@ export function AppLayout({ children }: AppLayoutProps) {
             <div className="flex items-center gap-3">
               <SidebarTrigger />
               {isAdmin && <ModuleSwitcher />}
-              <div className="relative hidden lg:block">
+              {/* <div className="relative hidden lg:block">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   placeholder="Search..."
                   className="pl-9 w-56 h-9 bg-muted/50 border-0"
                 />
-              </div>
+              </div> */}
             </div>
             <div className="flex items-center gap-3">
               <ViewSwitcher />
