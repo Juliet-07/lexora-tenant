@@ -8,13 +8,6 @@ import {
   CardDescription,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -24,19 +17,10 @@ import { Loader2, Save } from "lucide-react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
-import { FINANCE_CURRENCIES } from "@/hooks/use-finance-currency";
-import {
-  BASE_CURRENCY_KEY,
-  applyBaseCurrencyChange,
-  useBaseCurrency,
-} from "@/hooks/use-base-currency";
 
 // ─────────────────────────────────────────────────────────────
 // TYPES
 // ─────────────────────────────────────────────────────────────
-
-// Same list every finance page offers, kept in one place.
-const CURRENCIES = FINANCE_CURRENCIES;
 
 interface TenantProfile {
   _id?: string;
@@ -51,7 +35,6 @@ interface TenantProfile {
     registrationNumber?: string;
     taxId?: string;
     website?: string;
-    baseCurrency?: string;
     address?: {
       street?: string;
       city?: string;
@@ -81,7 +64,6 @@ type ProfileForm = {
   registrationNumber: string;
   taxId: string;
   website: string;
-  baseCurrency: string;
   street: string;
   city: string;
   state: string;
@@ -105,7 +87,6 @@ const EMPTY_FORM: ProfileForm = {
   registrationNumber: "",
   taxId: "",
   website: "",
-  baseCurrency: "USD",
   street: "",
   city: "",
   state: "",
@@ -134,7 +115,6 @@ function toForm(p: TenantProfile | null | undefined): ProfileForm {
     registrationNumber: tp.registrationNumber ?? "",
     taxId: tp.taxId ?? "",
     website: tp.website ?? "",
-    baseCurrency: tp.baseCurrency ?? "USD",
     street: addr.street ?? "",
     city: addr.city ?? "",
     state: addr.state ?? "",
@@ -156,7 +136,6 @@ function fromForm(f: ProfileForm) {
     registrationNumber: f.registrationNumber,
     taxId: f.taxId,
     website: f.website,
-    baseCurrency: f.baseCurrency,
     address: {
       street: f.street,
       city: f.city,
@@ -220,24 +199,10 @@ export default function ProfileTab() {
     },
   });
 
-  // The account's currency as the rest of the platform sees it. It is the
-  // source of truth for this field (an employee's own record has no business
-  // profile), and says whether the ledger already holds entries.
-  const { data: currencyState } = useBaseCurrency();
-  const isOwner = user?.userType === "tenant";
-  const currencyLocked = !!currencyState?.locked || !isOwner;
-
   const [form, setForm] = useState<ProfileForm>(EMPTY_FORM);
   useEffect(() => {
-    if (data)
-      setForm({
-        ...toForm(data),
-        baseCurrency:
-          currencyState?.baseCurrency ??
-          data.tenantProfile?.baseCurrency ??
-          "USD",
-      });
-  }, [data, currencyState?.baseCurrency]);
+    if (data) setForm(toForm(data));
+  }, [data]);
 
   const mutation = useMutation({
     mutationFn: async (payload: ReturnType<typeof fromForm>) => {
@@ -246,25 +211,9 @@ export default function ProfileTab() {
     },
     onSuccess: (updated) => {
       qc.setQueryData(["tenant-profile"], updated);
-      const saved = updated?.tenantProfile?.baseCurrency;
-      const changed =
-        !!saved &&
-        !!currencyState?.baseCurrency &&
-        saved.toUpperCase() !== currencyState.baseCurrency;
-      if (changed) {
-        // Every screen now starts from, and shows money in, the new currency.
-        qc.setQueryData(BASE_CURRENCY_KEY, {
-          baseCurrency: saved.toUpperCase(),
-          locked: false,
-          lockedReason: null,
-        });
-        applyBaseCurrencyChange(qc, saved);
-      }
       toast({
         title: "Profile updated",
-        description: changed
-          ? `Your account now uses ${saved!.toUpperCase()} throughout the platform.`
-          : "Your changes have been saved.",
+        description: "Your changes have been saved.",
       });
     },
     onError: (err: any) =>
@@ -392,49 +341,6 @@ export default function ProfileTab() {
               value={form.taxId}
               onChange={(v) => set("taxId", v)}
             />
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">
-                Reporting currency
-              </Label>
-              <Select
-                value={form.baseCurrency}
-                onValueChange={(v) => set("baseCurrency", v)}
-                disabled={currencyLocked}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Array.from(new Set([form.baseCurrency, ...CURRENCIES])).map(
-                    (c) => (
-                      <SelectItem key={c} value={c}>
-                        {c}
-                      </SelectItem>
-                    ),
-                  )}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                Every financial record, report, and balance is kept and shown in
-                this currency, and new records across the platform start in it —
-                amounts entered in another currency are converted using the rate
-                on the day.
-              </p>
-              {currencyState?.locked ? (
-                <p className="text-xs text-amber-600">
-                  {currencyState.lockedReason}
-                </p>
-              ) : !isOwner ? (
-                <p className="text-xs text-muted-foreground">
-                  Only the account owner can change the currency.
-                </p>
-              ) : (
-                <p className="text-xs text-muted-foreground">
-                  Set this before you record finance transactions — once the
-                  ledger has entries it can no longer be changed.
-                </p>
-              )}
-            </div>
             <Field
               label="Website"
               value={form.website}

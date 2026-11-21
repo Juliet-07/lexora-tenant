@@ -1,6 +1,6 @@
 // The account's base currency, shared by every screen.
 //
-// It is set once in Settings → Profile (the owner chooses it) and read from
+// It is set once in Finance Settings → General (the owner chooses it) and read from
 // the engine when the app loads (see hooks/use-base-currency.ts). Anything
 // that needs "the currency to use when none was chosen" — the default on a
 // new invoice, a bill, a rate card, a deal; the fallback when a record has no

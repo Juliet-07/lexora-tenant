@@ -6,9 +6,6 @@ export const BASE_CURRENCY_KEY = ["base-currency"];
 
 export interface BaseCurrencyState {
   baseCurrency: string;
-  /** True once the ledger has entries — the currency can no longer change. */
-  locked: boolean;
-  lockedReason: string | null;
 }
 
 export const fetchBaseCurrency = async (): Promise<BaseCurrencyState> => {
@@ -28,7 +25,7 @@ export const useBaseCurrency = () =>
   });
 
 /**
- * The account's currency changed (Settings → Profile). Point every screen at
+ * The account's currency changed (Finance Settings → General). Point every screen at
  * the new one: update the shared default, drop the per-browser "show finance
  * in…" override (it would keep showing the old currency), and refetch
  * everything that was computed or displayed in the old one.

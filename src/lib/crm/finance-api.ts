@@ -3331,6 +3331,12 @@ export const saveFinanceSettingsSection = async <
 ): Promise<FinanceSettingsPayload> =>
   unwrap(await api.put(`/finance/settings/${section}`, patch));
 
+/** Change the account base currency; the engine restates the books into it. */
+export const saveBaseCurrency = async (
+  baseCurrency: string,
+): Promise<FinanceSettingsPayload> =>
+  unwrap(await api.put("/finance/settings/base-currency", { baseCurrency }));
+
 export const resetFinanceSettingsSection = async (
   section: FinanceSettingsSection,
 ): Promise<FinanceSettingsPayload> =>
