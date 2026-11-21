@@ -3,28 +3,31 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { AtSign, Send } from "lucide-react";
+import { AtSign, Send, Users, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { fetchTasks } from "@/lib/crm/tasks-api";
 import {
   fetchEmployeeMessages,
+  fetchGroupMessages,
   fetchMandateTeamMembers,
   sendEmployeeMessage,
+  sendGroupMessage,
+  type EmployeeMessage,
 } from "@/lib/crm/mandates-api";
+
+const EVERYONE = "__everyone__";
 
 export function CollaborationTab({ mandateId }: { mandateId: string }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  // Who's eligible to @mention — anyone with a real task on this
-  // mandate. Same "derive from tasks, no new endpoint" approach used
-  // elsewhere, since that data's already real and already fetched.
+  // Who's eligible to message — anyone with a real task on this mandate,
+  // plus everyone on the mandate's team (so the owner can reach the Head
+  // of Department and members before any task exists).
   const { data: tasks = [] } = useQuery({
     queryKey: ["tasks", { mandateId }],
     queryFn: () => fetchTasks({ mandateId }),
   });
-  // …plus everyone on the mandate's team, so the owner can message the
-  // Head of Department and members before any task exists.
   const { data: teamRoster = [] } = useQuery({
     queryKey: ["mandateTeamMembers", mandateId],
     queryFn: () => fetchMandateTeamMembers(mandateId),
@@ -38,31 +41,57 @@ export function CollaborationTab({ mandateId }: { mandateId: string }) {
     return Array.from(map, ([id, name]) => ({ id, name }));
   }, [tasks, teamRoster]);
 
-  const [recipientId, setRecipientId] = useState<string | null>(null);
+  // One or more people. One = a private conversation; two or more = a
+  // shared group thread that everyone addressed sees and can answer.
+  const [recipientIds, setRecipientIds] = useState<string[]>([]);
   const [text, setText] = useState("");
   const [mentionOpen, setMentionOpen] = useState(false);
   const [mentionQuery, setMentionQuery] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const recipient = teamMembers.find((m) => m.id === recipientId);
+  const isGroup = recipientIds.length > 1;
+  const nameOf = (id: string) => teamMembers.find((m) => m.id === id)?.name;
+  const allSelected =
+    teamMembers.length > 0 && recipientIds.length === teamMembers.length;
 
-  const { data: thread = [] } = useQuery({
-    queryKey: ["employeeMessages", mandateId, recipientId],
-    queryFn: () => fetchEmployeeMessages(mandateId, recipientId as string),
-    enabled: !!recipientId,
+  const toggle = (id: string) =>
+    setRecipientIds((cur) =>
+      cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id],
+    );
+  const toggleEveryone = () =>
+    setRecipientIds(allSelected ? [] : teamMembers.map((m) => m.id));
+
+  const threadKey = [...recipientIds].sort().join(",");
+  const { data: thread = [] } = useQuery<EmployeeMessage[]>({
+    queryKey: [
+      "employeeMessages",
+      mandateId,
+      isGroup ? "group" : "one",
+      threadKey,
+    ],
+    queryFn: () =>
+      isGroup
+        ? fetchGroupMessages(mandateId, recipientIds)
+        : fetchEmployeeMessages(mandateId, recipientIds[0]),
+    enabled: recipientIds.length > 0,
+    refetchInterval: 15000,
   });
 
   const sendMut = useMutation({
     mutationFn: () =>
-      sendEmployeeMessage(mandateId, recipientId as string, "You", text.trim()),
+      isGroup
+        ? sendGroupMessage(mandateId, "You", text.trim(), recipientIds)
+        : sendEmployeeMessage(mandateId, recipientIds[0], "You", text.trim()),
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: ["employeeMessages", mandateId, recipientId],
+        queryKey: ["employeeMessages", mandateId],
       });
       setText("");
       toast({
         title: "Message sent",
-        description: `Sent to ${recipient?.name}`,
+        description: isGroup
+          ? `Sent to ${recipientIds.length} people — they can all reply here`
+          : `Sent to ${nameOf(recipientIds[0])}`,
       });
     },
     onError: (err: any) =>
@@ -76,9 +105,8 @@ export function CollaborationTab({ mandateId }: { mandateId: string }) {
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const value = e.target.value;
     setText(value);
-    // Only tracks a mention actively being typed at the very end of
-    // the text — the common case of "@" then a name right where the
-    // cursor is, without needing full cursor-position tracking.
+    // Only tracks a mention actively being typed at the very end of the
+    // text — "@" then a name right where the cursor is.
     const match = value.match(/@(\w*)$/);
     if (match) {
       setMentionOpen(true);
@@ -88,41 +116,80 @@ export function CollaborationTab({ mandateId }: { mandateId: string }) {
     }
   };
 
-  const pickMention = (member: { id: string; name: string }) => {
-    setText((t) => t.replace(/@(\w*)$/, `@${member.name} `));
-    setRecipientId(member.id);
+  const pickMention = (m: { id: string; name: string }) => {
+    setText((t) =>
+      t.replace(/@(\w*)$/, m.id === EVERYONE ? "@everyone " : `@${m.name} `),
+    );
+    if (m.id === EVERYONE) setRecipientIds(teamMembers.map((x) => x.id));
+    else setRecipientIds((cur) => (cur.includes(m.id) ? cur : [...cur, m.id]));
     setMentionOpen(false);
     textareaRef.current?.focus();
   };
 
-  const filteredMembers = teamMembers.filter((m) =>
-    m.name.toLowerCase().includes(mentionQuery),
-  );
+  const mentionOptions = [
+    ...(teamMembers.length > 1 ? [{ id: EVERYONE, name: "everyone" }] : []),
+    ...teamMembers,
+  ].filter((m) => m.name.toLowerCase().includes(mentionQuery));
 
   return (
     <div className="space-y-3">
       <p className="text-xs text-muted-foreground">
-        Type <strong>@</strong> to mention a team member on this mandate and
-        message them directly.
+        Pick one person for a private conversation, or several (or everyone) to
+        start a group thread — everyone you pick gets the message and can reply
+        to the whole group. You can also type <strong>@</strong> to add people.
       </p>
 
       {!teamMembers.length && (
         <p className="rounded border border-dashed p-3 text-xs text-muted-foreground">
-          No team members with tasks on this mandate yet — assign a task to
-          someone first.
+          No team members on this mandate yet — assign a team or a task first.
         </p>
       )}
 
-      {recipientId && (
+      {teamMembers.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Button
+            type="button"
+            size="sm"
+            variant={allSelected ? "default" : "outline"}
+            className="h-7 text-xs"
+            onClick={toggleEveryone}
+          >
+            <Users className="mr-1 h-3 w-3" /> Everyone
+          </Button>
+          {teamMembers.map((m) => (
+            <Button
+              key={m.id}
+              type="button"
+              size="sm"
+              variant={recipientIds.includes(m.id) ? "default" : "outline"}
+              className="h-7 text-xs"
+              onClick={() => toggle(m.id)}
+            >
+              {m.name}
+            </Button>
+          ))}
+        </div>
+      )}
+
+      {recipientIds.length > 0 && (
         <>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs text-muted-foreground">
-              Conversation with
+              {isGroup ? "Group conversation with" : "Conversation with"}
             </span>
-            <Badge variant="outline">
-              <AtSign className="mr-1 h-3 w-3" />
-              {recipient?.name}
-            </Badge>
+            {recipientIds.map((id) => (
+              <Badge key={id} variant="outline" className="gap-1">
+                <AtSign className="h-3 w-3" />
+                {nameOf(id)}
+                <button
+                  type="button"
+                  aria-label={`Remove ${nameOf(id)}`}
+                  onClick={() => toggle(id)}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
+            ))}
           </div>
           <div className="max-h-80 space-y-3 overflow-y-auto rounded border p-3">
             {!thread.length && (
@@ -165,19 +232,23 @@ export function CollaborationTab({ mandateId }: { mandateId: string }) {
             ref={textareaRef}
             value={text}
             onChange={handleChange}
-            placeholder="Type @ to mention someone on the team…"
+            placeholder="Write a message — type @ to add people or @everyone…"
             className="min-h-[60px]"
           />
-          {mentionOpen && filteredMembers.length > 0 && (
+          {mentionOpen && mentionOptions.length > 0 && (
             <div className="absolute z-10 mt-1 w-64 rounded-md border bg-popover shadow-md">
-              {filteredMembers.map((m) => (
+              {mentionOptions.map((m) => (
                 <button
                   key={m.id}
                   type="button"
                   className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-accent"
                   onClick={() => pickMention(m)}
                 >
-                  <AtSign className="h-3.5 w-3.5 text-muted-foreground" />
+                  {m.id === EVERYONE ? (
+                    <Users className="h-3.5 w-3.5 text-muted-foreground" />
+                  ) : (
+                    <AtSign className="h-3.5 w-3.5 text-muted-foreground" />
+                  )}
                   {m.name}
                 </button>
               ))}
@@ -185,7 +256,7 @@ export function CollaborationTab({ mandateId }: { mandateId: string }) {
           )}
         </div>
         <Button
-          disabled={!recipientId || sendMut.isPending || !text.trim()}
+          disabled={!recipientIds.length || sendMut.isPending || !text.trim()}
           onClick={() => sendMut.mutate()}
           className="self-end"
         >

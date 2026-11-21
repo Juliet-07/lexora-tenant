@@ -167,8 +167,27 @@ export interface CreateMandatePayload {
   parties?: string[];
 }
 
+// Currencies a mandate can be billed in — a pan-African practice regularly
+// bills in more than just USD.
+export const MANDATE_CURRENCIES = [
+  "USD",
+  "EUR",
+  "GBP",
+  "KES",
+  "NGN",
+  "ZAR",
+  "GHS",
+  "RWF",
+  "UGX",
+  "TZS",
+  "EGP",
+  "XOF",
+  "XAF",
+];
+
 export interface UpdateMandatePayload {
   name?: string;
+  currency?: string;
   description?: string;
   rag?: Rag;
   teamId?: string;
@@ -279,6 +298,61 @@ export const sendEmployeeMessage = async (
   );
   return unwrap(res);
 };
+
+// ── Group messages — one message to several team members at once ──
+export interface GroupMessage extends EmployeeMessage {
+  groupId: string;
+  recipientIds: string[];
+  recipientNames: string[];
+}
+
+export const fetchGroupMessages = async (
+  mandateId: string,
+  recipientIds: string[],
+): Promise<GroupMessage[]> => {
+  const res = await api.get(`/crm/mandates/${mandateId}/group-messages`, {
+    params: { recipients: recipientIds.join(",") },
+  });
+  const d = unwrap(res);
+  return Array.isArray(d) ? d : [];
+};
+
+export const sendGroupMessage = async (
+  mandateId: string,
+  author: string,
+  body: string,
+  recipientIds: string[],
+): Promise<GroupMessage> =>
+  unwrap(
+    await api.post(`/crm/mandates/${mandateId}/group-messages`, {
+      author,
+      body,
+      recipientIds,
+    }),
+  );
+
+// Employee side: the group conversations I'm in, and replying to one.
+export const fetchMyGroupMessages = async (
+  mandateId: string,
+): Promise<GroupMessage[]> => {
+  const res = await api.get(`/crm/my-mandates/${mandateId}/group-messages`);
+  const d = unwrap(res);
+  return Array.isArray(d) ? d : [];
+};
+
+export const replyToMyGroup = async (
+  mandateId: string,
+  groupId: string,
+  author: string,
+  body: string,
+): Promise<GroupMessage> =>
+  unwrap(
+    await api.post(`/crm/my-mandates/${mandateId}/group-messages`, {
+      groupId,
+      author,
+      body,
+    }),
+  );
 
 // Real unread count per employee thread on this mandate — keyed by
 // employee id, for a badge on each @mention recipient plus the

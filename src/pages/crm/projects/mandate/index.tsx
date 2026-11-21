@@ -44,6 +44,7 @@ import {
   fetchMandates,
   createMandate,
   MANDATE_STAGES,
+  MANDATE_CURRENCIES,
   ragClass,
   money,
   type Mandate,
@@ -65,24 +66,6 @@ import { CollaborationTab } from "./CollaborationTab";
 import { CommunicationsTab } from "./CommunicationsTab";
 import { NotesTab } from "./NotesTab";
 import { DocumentsTab } from "./DocumentsTab";
-
-// Real currency choice at mandate creation — a pan-African
-// practice regularly bills in more than just USD.
-const MANDATE_CURRENCIES = [
-  "USD",
-  "EUR",
-  "GBP",
-  "KES",
-  "NGN",
-  "ZAR",
-  "GHS",
-  "RWF",
-  "UGX",
-  "TZS",
-  "EGP",
-  "XOF",
-  "XAF",
-];
 
 export default function Mandates() {
   const queryClient = useQueryClient();
