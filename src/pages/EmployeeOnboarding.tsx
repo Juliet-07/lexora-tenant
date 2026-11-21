@@ -219,7 +219,7 @@ export default function EmployeeOnboarding() {
     onSuccess: () => {
       toast.success("Onboarding completed.");
       invalidateStatus();
-      navigate("/");
+      navigate("/dashboard", { replace: true });
     },
     onError: (err: any) =>
       toast.error(
@@ -397,7 +397,7 @@ export default function EmployeeOnboarding() {
               variant="secondary"
               size="sm"
               className="bg-white/15 hover:bg-white/25 text-white border-white/20"
-              onClick={() => navigate("/")}
+              onClick={() => navigate("/dashboard")}
             >
               <ArrowLeft className="h-4 w-4 mr-2" /> Back to dashboard
             </Button>

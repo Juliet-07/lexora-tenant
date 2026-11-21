@@ -11,6 +11,8 @@ export interface EmployeeDocumentFile {
   mimeType: string;
   sizeBytes: number;
   uploadedBy: DocumentUploader;
+  /** "onboarding" for certificates submitted during onboarding (read-only). */
+  source?: "onboarding";
   createdAt: string;
 }
 

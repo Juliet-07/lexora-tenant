@@ -820,6 +820,56 @@ export function EmployeeDetailSheet({ employee, onClose }: Props) {
                     label="Emergency phone"
                     value={emp.emergencyContactPhone ?? "—"}
                   />
+                  <Row
+                    icon={Phone}
+                    label="Next of kin"
+                    value={
+                      emp.nextOfKin?.name
+                        ? `${emp.nextOfKin.name}${
+                            emp.nextOfKin.relationship
+                              ? ` (${emp.nextOfKin.relationship})`
+                              : ""
+                          }`
+                        : "—"
+                    }
+                  />
+                  <Row
+                    icon={Phone}
+                    label="Next of kin phone"
+                    value={emp.nextOfKin?.phone ?? "—"}
+                  />
+                  <Row
+                    icon={HeartPulse}
+                    label="Blood group"
+                    value={emp.medicalInfo?.bloodGroup ?? "—"}
+                  />
+                  <Row
+                    icon={HeartPulse}
+                    label="Allergies"
+                    value={emp.medicalInfo?.allergies ?? "—"}
+                  />
+                  <Row
+                    icon={HeartPulse}
+                    label="Conditions"
+                    value={emp.medicalInfo?.conditions ?? "—"}
+                  />
+                  <Row
+                    icon={HeartPulse}
+                    label="Medications"
+                    value={emp.medicalInfo?.medications ?? "—"}
+                  />
+                  <Row
+                    icon={Phone}
+                    label="Doctor"
+                    value={
+                      [
+                        emp.medicalInfo?.doctorName,
+                        emp.medicalInfo?.doctorPhone,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ") || "—"
+                    }
+                  />
                 </CardContent>
               </Card>
 

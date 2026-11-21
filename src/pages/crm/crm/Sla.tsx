@@ -48,6 +48,7 @@ import {
   createSlaProfile,
   updateSlaProfile,
   deleteSlaProfile,
+  serviceLinesFromProfiles,
   type SlaProfile,
   type SlaTier,
   type SlaPriority,
@@ -191,7 +192,12 @@ export default function Sla() {
 
   const saveMut = useMutation({
     mutationFn: () =>
-      editingId ? updateSlaProfile(editingId, draft) : createSlaProfile(draft),
+      editingId
+        ? updateSlaProfile(editingId, {
+            ...draft,
+            serviceType: draft.serviceType.trim(),
+          })
+        : createSlaProfile({ ...draft, serviceType: draft.serviceType.trim() }),
     onSuccess: (saved) => {
       invalidate();
       toast({
@@ -726,13 +732,24 @@ export default function Sla() {
                 </Select>
               </div>
               <div>
-                <Label>Service type</Label>
+                <Label>Service line</Label>
                 <Input
                   value={draft.serviceType}
+                  list="sla-service-lines"
+                  placeholder="e.g. Corporate Secretarial"
                   onChange={(e) =>
                     setDraft({ ...draft, serviceType: e.target.value })
                   }
                 />
+                <datalist id="sla-service-lines">
+                  {serviceLinesFromProfiles(profiles).map((l) => (
+                    <option key={l} value={l} />
+                  ))}
+                </datalist>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  This becomes a service line you can assign to clients and
+                  filter by in Client Management.
+                </p>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -797,7 +814,7 @@ export default function Sla() {
           </div>
           <DialogFooter>
             <Button
-              disabled={saveMut.isPending}
+              disabled={saveMut.isPending || !draft.serviceType.trim()}
               onClick={() => saveMut.mutate()}
             >
               {saveMut.isPending ? "Saving…" : "Save changes"}

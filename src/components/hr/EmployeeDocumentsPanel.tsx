@@ -127,7 +127,9 @@ export function EmployeeDocumentsPanel({
         </Card>
       ) : (
         documents.map((doc) => {
-          const canDelete = isTenantView || doc.uploadedBy === "employee";
+          const fromOnboarding = doc.source === "onboarding";
+          const canDelete =
+            !fromOnboarding && (isTenantView || doc.uploadedBy === "employee");
           return (
             <Card key={doc._id}>
               <CardContent className="p-3 flex items-center justify-between">
@@ -146,9 +148,11 @@ export function EmployeeDocumentsPanel({
                       ) : (
                         <UserIcon className="h-3 w-3" />
                       )}
-                      {doc.uploadedBy === "tenant"
-                        ? "Added by your team"
-                        : "Uploaded by employee"}{" "}
+                      {fromOnboarding
+                        ? "Certificate submitted during onboarding"
+                        : doc.uploadedBy === "tenant"
+                          ? "Added by your team"
+                          : "Uploaded by employee"}{" "}
                       · {fmt(doc.createdAt)}
                     </p>
                   </div>

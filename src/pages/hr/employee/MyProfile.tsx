@@ -43,6 +43,7 @@ import {
   Loader2,
   Folder,
   GraduationCapIcon,
+  HeartPulse,
 } from "lucide-react";
 import { EmployeeDocumentsPanel } from "@/components/hr/EmployeeDocumentsPanel";
 import { useToast } from "@/hooks/use-toast";
@@ -72,6 +73,7 @@ import {
   OCCUPATIONAL_CATEGORIES,
   downloadMyPayslipPdf,
   fetchMyPayrollSummary,
+  resolveEmployeeFileUrl,
 } from "@/lib/hr/hr-api";
 import { fetchMyPerformanceSummary } from "@/lib/hr/hr-performance-api";
 import {
@@ -808,6 +810,97 @@ export default function MyProfile() {
                     )}
                   </div>
                 </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Details given during onboarding */}
+          <Card>
+            <CardContent className="p-4 space-y-1 text-sm">
+              <h3 className="font-semibold text-base mb-1">Next of kin</h3>
+              <Row
+                icon={Users}
+                label="Name"
+                value={profile.nextOfKin?.name ?? "—"}
+              />
+              <Row
+                icon={Users}
+                label="Relationship"
+                value={profile.nextOfKin?.relationship ?? "—"}
+              />
+              <Row
+                icon={Phone}
+                label="Phone"
+                value={profile.nextOfKin?.phone ?? "—"}
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-4 space-y-1 text-sm">
+              <h3 className="font-semibold text-base mb-1">
+                Medical information
+              </h3>
+              <Row
+                icon={HeartPulse}
+                label="Blood group"
+                value={profile.medicalInfo?.bloodGroup ?? "—"}
+              />
+              <Row
+                icon={HeartPulse}
+                label="Allergies"
+                value={profile.medicalInfo?.allergies ?? "—"}
+              />
+              <Row
+                icon={HeartPulse}
+                label="Conditions"
+                value={profile.medicalInfo?.conditions ?? "—"}
+              />
+              <Row
+                icon={HeartPulse}
+                label="Medications"
+                value={profile.medicalInfo?.medications ?? "—"}
+              />
+              <Row
+                icon={Phone}
+                label="Doctor"
+                value={
+                  [
+                    profile.medicalInfo?.doctorName,
+                    profile.medicalInfo?.doctorPhone,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ") || "—"
+                }
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-4 space-y-2 text-sm">
+              <h3 className="font-semibold text-base mb-1">
+                Certificates ({profile.certificates?.length ?? 0})
+              </h3>
+              {(profile.certificates?.length ?? 0) === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  No certificates uploaded yet.
+                </p>
+              ) : (
+                profile.certificates.map((c) => (
+                  <a
+                    key={c.fileUrl}
+                    href={resolveEmployeeFileUrl(c.fileUrl)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center justify-between p-2 border rounded-md hover:bg-muted/40 transition"
+                  >
+                    <span className="flex items-center gap-2 truncate">
+                      <FileText className="h-3.5 w-3.5 text-primary shrink-0" />
+                      <span className="truncate">{c.name}</span>
+                    </span>
+                    <Download className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  </a>
+                ))
               )}
             </CardContent>
           </Card>

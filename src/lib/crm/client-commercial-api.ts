@@ -122,16 +122,6 @@ export const healthFactors = (c: {
   },
 ];
 
-export const SERVICE_LINES = [
-  "TCSP",
-  "Compliance",
-  "Advisory",
-  "Governance",
-  "Tax",
-  "Legal",
-  "Audit support",
-];
-
 export function defaultCommercial(
   clientUserId: string,
   riskLevel?: string,

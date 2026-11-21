@@ -58,14 +58,16 @@ import {
   type ApiClient,
   type MarkAsExClientPayload,
 } from "@/lib/client/clients-api";
-import { fetchSlaProfiles } from "@/lib/crm/sla-profiles-api";
+import {
+  fetchSlaProfiles,
+  serviceLinesFromProfiles,
+} from "@/lib/crm/sla-profiles-api";
 import {
   fetchClientCommercials,
   saveClientCommercial,
   defaultCommercial,
   healthScore,
   healthBand,
-  SERVICE_LINES,
   type ClientCommercial,
   type ClientRisk,
   type FeeTier,
@@ -232,6 +234,17 @@ export default function Clients() {
     [kycClients, commercials],
   );
 
+  // Service lines are tenant-defined (created with an SLA profile). Lines
+  // already assigned to clients stay listed so legacy data remains usable.
+  const serviceLines = useMemo(
+    () =>
+      serviceLinesFromProfiles(
+        slaProfiles,
+        rows.flatMap((r) => r.commercial.serviceLines ?? []),
+      ),
+    [slaProfiles, rows],
+  );
+
   const filtered = rows.filter(
     (r) =>
       (serviceFilter === "all" ||
@@ -359,7 +372,7 @@ export default function Clients() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All services</SelectItem>
-                    {SERVICE_LINES.map((s) => (
+                    {serviceLines.map((s) => (
                       <SelectItem key={s} value={s}>
                         {s}
                       </SelectItem>
@@ -687,7 +700,7 @@ export default function Clients() {
               <div>
                 <Label>Service lines</Label>
                 <div className="mt-2 flex flex-wrap gap-2">
-                  {SERVICE_LINES.map((s) => (
+                  {serviceLines.map((s) => (
                     <Badge
                       key={s}
                       variant={
@@ -701,6 +714,12 @@ export default function Clients() {
                       {s}
                     </Badge>
                   ))}
+                  {serviceLines.length === 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      No service lines yet. Add one by creating an SLA profile
+                      (SLA Management) and entering its service line.
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -755,11 +774,13 @@ export default function Clients() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {withBase(["USD", "EUR", "GBP", "NGN", "ZAR"]).map((r) => (
-                        <SelectItem key={r} value={r}>
-                          {r}
-                        </SelectItem>
-                      ))}
+                      {withBase(["USD", "EUR", "GBP", "NGN", "ZAR"]).map(
+                        (r) => (
+                          <SelectItem key={r} value={r}>
+                            {r}
+                          </SelectItem>
+                        ),
+                      )}
                     </SelectContent>
                   </Select>
                 </div>

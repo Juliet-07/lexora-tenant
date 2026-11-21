@@ -54,23 +54,16 @@ import {
 import { fetchTickets } from "@/lib/crm/service-desk-api";
 import { fetchInvoices } from "@/lib/crm/finance-api";
 import { money } from "@/data/crmPmMockData";
-import { slaProfiles } from "@/data/crmClientMockData";
 import {
   fetchClientHealth,
   updateClientCommercial,
   type ClientHealth,
   type UpdateClientCommercialPayload,
 } from "@/lib/client/client-health-api";
-
-const SERVICE_LINE_OPTIONS = [
-  "TCSP",
-  "Compliance",
-  "Advisory",
-  "Governance",
-  "Tax",
-  "Legal",
-  "Audit support",
-];
+import {
+  fetchSlaProfiles,
+  serviceLinesFromProfiles,
+} from "@/lib/crm/sla-profiles-api";
 
 // ─────────────────────────────────────────────────────────────
 // Cross-module views of a single client: deals, projects,
@@ -475,6 +468,18 @@ function CommercialEditDialog({
     notes: health.notes,
   });
 
+  // Tenant-defined service lines (from SLA profiles) plus anything already
+  // assigned to this client.
+  const { data: slaProfiles = [] } = useQuery({
+    queryKey: ["slaProfiles"],
+    queryFn: fetchSlaProfiles,
+    enabled: open,
+  });
+  const serviceLineOptions = serviceLinesFromProfiles(
+    slaProfiles,
+    form.serviceLines ?? [],
+  );
+
   const toggleServiceLine = (line: string) => {
     setForm((f) => {
       const lines = f.serviceLines ?? [];
@@ -497,7 +502,7 @@ function CommercialEditDialog({
           <div className="space-y-2">
             <Label>Service lines</Label>
             <div className="flex flex-wrap gap-1.5">
-              {SERVICE_LINE_OPTIONS.map((line) => {
+              {serviceLineOptions.map((line) => {
                 const active = form.serviceLines?.includes(line);
                 return (
                   <button
@@ -567,7 +572,7 @@ function CommercialEditDialog({
               </SelectTrigger>
               <SelectContent>
                 {slaProfiles.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
+                  <SelectItem key={p._id} value={p._id}>
                     {p.tier} — {p.serviceType}
                   </SelectItem>
                 ))}
