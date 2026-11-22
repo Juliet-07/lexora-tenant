@@ -494,6 +494,9 @@ export const setQuoteMandate = async (
   mandateId: string,
 ): Promise<Quote> =>
   unwrap(await api.patch(`/finance/quotes/${id}/mandate`, { mandateId }));
+// Account owner only — the engine refuses it for an employee.
+export const deleteQuote = async (id: string): Promise<{ deleted: boolean }> =>
+  unwrap(await api.delete(`/finance/quotes/${id}`));
 export const downloadQuotePdf = async (
   id: string,
   ref: string,

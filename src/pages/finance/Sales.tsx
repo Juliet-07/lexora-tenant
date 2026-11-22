@@ -38,6 +38,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { FINANCE_CURRENCIES } from "@/hooks/use-finance-currency";
 import {
@@ -50,6 +60,7 @@ import {
   Download,
   Link2,
   Eye,
+  Trash2,
 } from "lucide-react";
 import { ApprovalDetailsDialog } from "@/components/finance/ApprovalDetailsDialog";
 import { quoteDetails, type ApprovalDetails } from "@/lib/crm/approval-details";
@@ -79,6 +90,7 @@ import {
   rejectQuote,
   convertQuoteToInvoice,
   setQuoteMandate,
+  deleteQuote,
   downloadQuotePdf,
   fetchCreditNotes,
   fetchRecurringInvoices,
@@ -257,6 +269,9 @@ export default function Sales() {
     expires: "",
     kind: "Quote" as QuoteKind,
   });
+  const [deleteQuoteTarget, setDeleteQuoteTarget] = useState<Quote | null>(
+    null,
+  );
   const [linkMandateTarget, setLinkMandateTarget] = useState<Quote | null>(
     null,
   );
@@ -363,7 +378,9 @@ export default function Sales() {
   // still one currency (matching Invoice.currency elsewhere), so a
   // mixed-currency selection can't be generated as a single invoice.
   const sameCurrency = selectedEntries.every(
-    (e) => (e.currency || defaultCurrency()) === (selectedCurrency || defaultCurrency()),
+    (e) =>
+      (e.currency || defaultCurrency()) ===
+      (selectedCurrency || defaultCurrency()),
   );
   const canGenerate = selectedEntries.length > 0 && sameMandate && sameCurrency;
 
@@ -475,6 +492,21 @@ export default function Sales() {
     mutationFn: ({ id, ref }: { id: string; ref: string }) =>
       downloadQuotePdf(id, ref),
     onError: onErr("Failed to download PDF"),
+  });
+  // Only the account owner may delete — an employee with Finance access
+  // never sees the button, and the engine refuses it for them as well.
+  const canDeleteQuote = authUser?.userType === "tenant";
+  const deleteQuoteMut = useMutation({
+    mutationFn: (id: string) => deleteQuote(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["quotes"] });
+      toast({ title: `${deleteQuoteTarget?.kind ?? "Quote"} deleted` });
+      setDeleteQuoteTarget(null);
+    },
+    onError: (err: any) => {
+      onErr("Could not delete")(err);
+      setDeleteQuoteTarget(null);
+    },
   });
   const linkMandateMut = useMutation({
     mutationFn: () => setQuoteMandate(linkMandateTarget!._id, linkMandateId),
@@ -981,6 +1013,17 @@ export default function Sales() {
                         >
                           <Download className="mr-1.5 h-3.5 w-3.5" /> PDF
                         </Button>
+                        {canDeleteQuote && !q.convertedInvoiceId && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-destructive hover:text-destructive"
+                            title={`Delete this ${q.kind.toLowerCase()}`}
+                            onClick={() => setDeleteQuoteTarget(q)}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -1579,6 +1622,39 @@ export default function Sales() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete quote / proforma — account owner only */}
+      <AlertDialog
+        open={!!deleteQuoteTarget}
+        onOpenChange={(o) => !o && setDeleteQuoteTarget(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Delete {deleteQuoteTarget?.ref}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteQuoteTarget?.status === "Draft"
+                ? "This draft will be removed permanently."
+                : `This ${deleteQuoteTarget?.kind.toLowerCase()} is ${deleteQuoteTarget?.status?.toLowerCase()}. Deleting it removes it permanently${deleteQuoteTarget?.status === "Sent" ? ", and the client keeps whatever copy was already emailed to them" : ""}.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleteQuoteMut.isPending}
+              onClick={(e) => {
+                e.preventDefault();
+                if (deleteQuoteTarget)
+                  deleteQuoteMut.mutate(deleteQuoteTarget._id);
+              }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* New quote */}
       <Dialog open={newQuoteOpen} onOpenChange={setNewQuoteOpen}>
