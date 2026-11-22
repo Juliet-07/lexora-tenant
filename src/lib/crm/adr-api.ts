@@ -146,6 +146,8 @@ export interface AdrTimelineEntry {
   title: string;
   description: string;
   source: AdrTimelineSource;
+  // Set when the entry records a settlement or award, so it can open that record.
+  outcomeKind?: "" | "Settlement" | "Award";
 }
 export interface AdrChecklistItem {
   _id: string;
@@ -199,6 +201,9 @@ export interface AdrCase {
   settlement: AdrSettlement | null;
   closure: AdrClosureDetails | null;
   outcome: string | null;
+  // "Draft" | "Recorded" while an outcome record exists, and the last day to challenge it.
+  outcomeStatus?: string;
+  challengeDeadline?: string | null;
   timeline: AdrTimelineEntry[];
   checklist: AdrChecklistItem[];
   disbursements: AdrDisbursement[];
@@ -293,13 +298,6 @@ export const updateAdrSession = async (
 ): Promise<AdrCase> =>
   unwrap(await api.patch(`/crm/adr-cases/${id}/sessions/${sessionId}`, dto));
 
-export const recordAdrSettlement = async (
-  id: string,
-  amount: number,
-  terms?: string,
-): Promise<AdrCase> =>
-  unwrap(await api.post(`/crm/adr-cases/${id}/settlement`, { amount, terms }));
-
 export const linkAdrSettlementDeed = async (
   id: string,
   documentId: string,
@@ -341,12 +339,6 @@ export const downloadAdrClosureReport = (id: string, caseRef: string): void => {
       URL.revokeObjectURL(a.href);
     });
 };
-
-export const recordAdrOutcome = async (
-  id: string,
-  outcome: string,
-): Promise<AdrCase> =>
-  unwrap(await api.post(`/crm/adr-cases/${id}/outcome`, { outcome }));
 
 // The real workflow transition matching "if mediation fails,
 // restart as arbitration" — resets to Notice stage on the backend.

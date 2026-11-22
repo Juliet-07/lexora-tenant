@@ -64,12 +64,10 @@ import {
   setAdrStage,
   addAdrSession,
   updateAdrSession,
-  recordAdrSettlement,
   linkAdrSettlementDeed,
   recordAdrClosure,
   downloadAdrClosureReport,
   fetchAdrDocuments,
-  recordAdrOutcome,
   restartAdrAsType,
   withdrawAdrCase,
   addAdrTimelineEntry,
@@ -90,6 +88,10 @@ import {
   type AdrPartyRole,
 } from "@/lib/crm/adr-api";
 import { useCaseDeadlines } from "@/lib/crm/case-deadlines";
+import {
+  CaseOutcomes,
+  useOutcomeUi,
+} from "@/components/crm/case/outcomes/CaseOutcomes";
 import {
   EditCaseDialog,
   DeleteCaseDialog,
@@ -225,11 +227,7 @@ export default function Adr() {
     venue: "",
   });
   const [sessionOpen, setSessionOpen] = useState(false);
-  const [settlementOpen, setSettlementOpen] = useState(false);
-  const [settlementDraft, setSettlementDraft] = useState({
-    amount: 0,
-    terms: "",
-  });
+  const outcomeUi = useOutcomeUi();
   const [deedOpen, setDeedOpen] = useState(false);
   const [deedDocumentId, setDeedDocumentId] = useState("");
   const [closureOpen, setClosureOpen] = useState(false);
@@ -245,8 +243,6 @@ export default function Adr() {
     precedentValue: false,
     precedentNotes: "",
   });
-  const [outcomeOpen, setOutcomeOpen] = useState(false);
-  const [outcomeDraft, setOutcomeDraft] = useState("");
   const [restartOpen, setRestartOpen] = useState(false);
   const [restartDraft, setRestartDraft] = useState({
     newType: ADR_TYPES[1],
@@ -348,22 +344,6 @@ export default function Adr() {
     onError: onErr("Failed to update session"),
   });
 
-  const settlementMut = useMutation({
-    mutationFn: () =>
-      recordAdrSettlement(
-        detail!._id,
-        Number(settlementDraft.amount),
-        settlementDraft.terms,
-      ),
-    onSuccess: () => {
-      invalidate();
-      setSettlementOpen(false);
-      setSettlementDraft({ amount: 0, terms: "" });
-      toast({ title: "Settlement recorded" });
-    },
-    onError: onErr("Failed to record settlement"),
-  });
-
   const { data: caseDocuments = [] } = useQuery({
     queryKey: ["adrDocuments", detail?._id],
     queryFn: () => fetchAdrDocuments(detail!._id),
@@ -388,17 +368,6 @@ export default function Adr() {
       toast({ title: "Closure details recorded" });
     },
     onError: onErr("Failed to record closure details"),
-  });
-
-  const outcomeMut = useMutation({
-    mutationFn: () => recordAdrOutcome(detail!._id, outcomeDraft),
-    onSuccess: () => {
-      invalidate();
-      setOutcomeOpen(false);
-      setOutcomeDraft("");
-      toast({ title: "Outcome recorded" });
-    },
-    onError: onErr("Failed to record outcome"),
   });
 
   const restartMut = useMutation({
@@ -808,20 +777,14 @@ export default function Adr() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => {
-                  setSettlementDraft({ amount: 0, terms: "" });
-                  setSettlementOpen(true);
-                }}
+                onClick={() => outcomeUi.openPanel("Settlement")}
               >
                 <Handshake className="mr-2 h-4 w-4" /> Record settlement
               </Button>
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => {
-                  setOutcomeDraft("");
-                  setOutcomeOpen(true);
-                }}
+                onClick={() => outcomeUi.openPanel("Award")}
               >
                 <Gavel className="mr-2 h-4 w-4" /> Record award
               </Button>
@@ -877,18 +840,46 @@ export default function Adr() {
         </div>
 
         {c.settlement && (
-          <div className="rounded-lg border border-success/30 bg-success/5 p-3 text-sm">
-            <span className="font-medium">Settled</span> at{" "}
-            {money(c.settlement.amount, c.currency)} on{" "}
-            {c.settlement.date?.slice(0, 10)}
-            {c.settlement.terms && ` — ${c.settlement.terms}`}
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-success/30 bg-success/5 p-3 text-sm">
+            <p>
+              <span className="font-medium">Settled</span>
+              {c.settlement.amount > 0 &&
+                ` at ${money(c.settlement.amount, c.currency)}`}{" "}
+              on {c.settlement.date?.slice(0, 10)}
+              {c.settlement.terms && ` — ${c.settlement.terms}`}
+            </p>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => outcomeUi.openView("Settlement")}
+            >
+              View record
+            </Button>
           </div>
         )}
         {c.outcome && (
-          <div className="rounded-lg border p-3 text-sm">
-            <span className="font-medium">Award / outcome:</span> {c.outcome}
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3 text-sm">
+            <p>
+              <span className="font-medium">Award / outcome:</span> {c.outcome}
+              {c.challengeDeadline &&
+                ` · challenge by ${c.challengeDeadline.slice(0, 10)}`}
+            </p>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => outcomeUi.openView("Award")}
+            >
+              View record
+            </Button>
           </div>
         )}
+
+        <CaseOutcomes
+          caseKind="adr"
+          c={c}
+          ui={outcomeUi}
+          onSaved={invalidate}
+        />
 
         <Tabs defaultValue="overview">
           <TabsList className="flex w-full flex-wrap justify-start">
@@ -958,6 +949,18 @@ export default function Adr() {
                               <p className="text-xs text-muted-foreground">
                                 {t.description}
                               </p>
+                            )}
+                            {t.outcomeKind && (
+                              <Button
+                                size="sm"
+                                variant="link"
+                                className="h-auto p-0 text-xs"
+                                onClick={() =>
+                                  outcomeUi.openView(t.outcomeKind as any)
+                                }
+                              >
+                                View record
+                              </Button>
                             )}
                           </div>
                         </div>
@@ -1194,10 +1197,7 @@ export default function Adr() {
             <div className="grid gap-3 lg:grid-cols-3">
               <button
                 disabled={!canAct}
-                onClick={() => {
-                  setSettlementDraft({ amount: 0, terms: "" });
-                  setSettlementOpen(true);
-                }}
+                onClick={() => outcomeUi.openPanel("Settlement")}
                 className="rounded-lg border p-4 text-left transition-colors hover:border-primary disabled:opacity-60"
               >
                 <p className="text-sm font-semibold">Settled at {c.type}</p>
@@ -1240,8 +1240,17 @@ export default function Adr() {
             </div>
             <div className="grid gap-4 lg:grid-cols-2">
               <Card>
-                <CardHeader className="pb-2">
+                <CardHeader className="flex flex-row items-center justify-between pb-2">
                   <CardTitle className="text-base">Settlement terms</CardTitle>
+                  {c.settlement && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => outcomeUi.openView("Settlement")}
+                    >
+                      View record
+                    </Button>
+                  )}
                 </CardHeader>
                 <CardContent className="space-y-2 text-sm">
                   {!c.settlement ? (
@@ -1504,50 +1513,6 @@ export default function Adr() {
           </DialogContent>
         </Dialog>
 
-        <Dialog open={settlementOpen} onOpenChange={setSettlementOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Record settlement</DialogTitle>
-            </DialogHeader>
-            <div className="grid gap-3">
-              <div>
-                <Label>Amount ({c.currency})</Label>
-                <Input
-                  type="number"
-                  value={settlementDraft.amount}
-                  onChange={(e) =>
-                    setSettlementDraft({
-                      ...settlementDraft,
-                      amount: Number(e.target.value),
-                    })
-                  }
-                />
-              </div>
-              <div>
-                <Label>Terms</Label>
-                <Textarea
-                  value={settlementDraft.terms}
-                  onChange={(e) =>
-                    setSettlementDraft({
-                      ...settlementDraft,
-                      terms: e.target.value,
-                    })
-                  }
-                  placeholder="e.g. Payment within 60 days"
-                />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button
-                disabled={!settlementDraft.amount || settlementMut.isPending}
-                onClick={() => settlementMut.mutate()}
-              >
-                Save
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
         <Dialog open={deedOpen} onOpenChange={setDeedOpen}>
           <DialogContent>
             <DialogHeader>
@@ -1741,27 +1706,6 @@ export default function Adr() {
                 onClick={() => closureMut.mutate()}
               >
                 Save closure details
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        <Dialog open={outcomeOpen} onOpenChange={setOutcomeOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Record award / outcome</DialogTitle>
-            </DialogHeader>
-            <Textarea
-              value={outcomeDraft}
-              onChange={(e) => setOutcomeDraft(e.target.value)}
-              placeholder="e.g. Award issued in favour of claimant — USD 780,000"
-            />
-            <DialogFooter>
-              <Button
-                disabled={!outcomeDraft.trim() || outcomeMut.isPending}
-                onClick={() => outcomeMut.mutate()}
-              >
-                Save
               </Button>
             </DialogFooter>
           </DialogContent>

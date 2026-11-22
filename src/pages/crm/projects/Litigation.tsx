@@ -62,6 +62,10 @@ import {
   CaseReportsPanel,
 } from "@/components/crm/case/CaseListTabs";
 import type { LitigationCase } from "@/lib/crm/litigation-api";
+import {
+  CaseOutcomes,
+  useOutcomeUi,
+} from "@/components/crm/case/outcomes/CaseOutcomes";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   CaseCommunicationsTab,
@@ -85,8 +89,6 @@ import {
   addLitigationCourtDate,
   addLitigationDisbursement,
   addLitigationTimelineEntry,
-  recordLitigationOutcome,
-  recordConsentJudgment,
   withdrawLitigationCase,
   recordLitigationClosure,
   downloadLitigationClosureReport,
@@ -236,10 +238,7 @@ export default function Litigation() {
   });
   const [noteOpen, setNoteOpen] = useState(false);
   const [noteDraft, setNoteDraft] = useState({ title: "", description: "" });
-  const [outcomeOpen, setOutcomeOpen] = useState(false);
-  const [outcomeDraft, setOutcomeDraft] = useState("");
-  const [consentOpen, setConsentOpen] = useState(false);
-  const [consentTerms, setConsentTerms] = useState("");
+  const outcomeUi = useOutcomeUi();
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [withdrawReason, setWithdrawReason] = useState("");
   const [closureOpen, setClosureOpen] = useState(false);
@@ -372,31 +371,6 @@ export default function Litigation() {
       toast({ title: "Note added to timeline" });
     },
     onError: onErr("Failed to add note"),
-  });
-
-  const outcomeMut = useMutation({
-    mutationFn: () => recordLitigationOutcome(detail!._id, outcomeDraft),
-    onSuccess: () => {
-      invalidate();
-      setOutcomeOpen(false);
-      setOutcomeDraft("");
-      toast({ title: "Judgment recorded" });
-    },
-    onError: onErr("Failed to record judgment"),
-  });
-
-  const consentMut = useMutation({
-    mutationFn: () => recordConsentJudgment(detail!._id, consentTerms),
-    onSuccess: () => {
-      invalidate();
-      setConsentOpen(false);
-      setConsentTerms("");
-      toast({
-        title: "Consent judgment recorded",
-        description: "Case closed by settlement.",
-      });
-    },
-    onError: onErr("Failed to record consent judgment"),
   });
 
   const withdrawMut = useMutation({
@@ -622,20 +596,14 @@ export default function Litigation() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => {
-                  setConsentTerms("");
-                  setConsentOpen(true);
-                }}
+                onClick={() => outcomeUi.openPanel("Consent judgment")}
               >
                 <Handshake className="mr-2 h-4 w-4" /> Consent judgment
               </Button>
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => {
-                  setOutcomeDraft("");
-                  setOutcomeOpen(true);
-                }}
+                onClick={() => outcomeUi.openPanel("Judgment")}
               >
                 <Gavel className="mr-2 h-4 w-4" /> Record judgment
               </Button>
@@ -656,9 +624,20 @@ export default function Litigation() {
 
         {c.outcome && (
           <div className="rounded-lg border p-3 text-sm">
-            <span className="font-medium">Judgment:</span> {c.outcome}
+            <p>
+              <span className="font-medium">Judgment:</span> {c.outcome}
+              {c.challengeDeadline &&
+                ` · appeal by ${c.challengeDeadline.slice(0, 10)}`}
+            </p>
           </div>
         )}
+
+        <CaseOutcomes
+          caseKind="litigation"
+          c={c}
+          ui={outcomeUi}
+          onSaved={invalidate}
+        />
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
           {[
@@ -782,6 +761,18 @@ export default function Litigation() {
                               <p className="text-xs text-muted-foreground">
                                 {tl.description}
                               </p>
+                            )}
+                            {tl.outcomeKind && (
+                              <Button
+                                size="sm"
+                                variant="link"
+                                className="h-auto p-0 text-xs"
+                                onClick={() =>
+                                  outcomeUi.openView(tl.outcomeKind as any)
+                                }
+                              >
+                                View record
+                              </Button>
                             )}
                           </div>
                         </div>
@@ -1081,10 +1072,7 @@ export default function Litigation() {
             <div className="grid gap-3 lg:grid-cols-3">
               <button
                 disabled={!canAct}
-                onClick={() => {
-                  setConsentTerms("");
-                  setConsentOpen(true);
-                }}
+                onClick={() => outcomeUi.openPanel("Consent judgment")}
                 className="rounded-lg border p-4 text-left transition-colors hover:border-primary disabled:opacity-60"
               >
                 <p className="text-sm font-semibold">Consent judgment</p>
@@ -1094,10 +1082,7 @@ export default function Litigation() {
               </button>
               <button
                 disabled={!canAct}
-                onClick={() => {
-                  setOutcomeDraft("");
-                  setOutcomeOpen(true);
-                }}
+                onClick={() => outcomeUi.openPanel("Judgment")}
                 className="rounded-lg border p-4 text-left transition-colors hover:border-primary disabled:opacity-60"
               >
                 <p className="text-sm font-semibold">Judgment issued</p>
@@ -1604,51 +1589,6 @@ export default function Litigation() {
                 onClick={() => noteMut.mutate()}
               >
                 Add note
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        <Dialog open={outcomeOpen} onOpenChange={setOutcomeOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Record judgment</DialogTitle>
-            </DialogHeader>
-            <Textarea
-              value={outcomeDraft}
-              onChange={(e) => setOutcomeDraft(e.target.value)}
-              placeholder="e.g. Judgment for the plaintiff — USD 380,000 plus costs"
-            />
-            <DialogFooter>
-              <Button
-                disabled={!outcomeDraft.trim() || outcomeMut.isPending}
-                onClick={() => outcomeMut.mutate()}
-              >
-                Save
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        <Dialog open={consentOpen} onOpenChange={setConsentOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Record consent judgment</DialogTitle>
-            </DialogHeader>
-            <p className="text-sm text-muted-foreground">
-              Settlement reached mid-litigation. This closes the case.
-            </p>
-            <Textarea
-              value={consentTerms}
-              onChange={(e) => setConsentTerms(e.target.value)}
-              placeholder="Terms of settlement"
-            />
-            <DialogFooter>
-              <Button
-                disabled={!consentTerms.trim() || consentMut.isPending}
-                onClick={() => consentMut.mutate()}
-              >
-                Record
               </Button>
             </DialogFooter>
           </DialogContent>

@@ -1,8 +1,0 @@
-- Keep committee members and tasks on the existing governance API; store only API-uncovered committee metadata locally, keyed by committee ID, because the backend contract does not support cadence, quorum, or charter links.
-- Keep meeting notice and preparation records in tenant-and-meeting-keyed prototype storage while the governance API lacks those fields; never represent local dispatch tracking as actual email delivery.
-- Keep the marketing site on its own typography and reference content layer so changes to public pages do not alter authenticated application styling.
-- Keep sample blog articles in the marketing content layer with stable slugs so listing links and directly opened article pages resolve the same content.
-- Keep public marketing photography as directly viewable JPEG files in public/marketing because editors need inspectable images and stable web paths.
-- Use the shared GRC print report layout for client-generated governance documents because agendas, minutes, codes and audit exports need consistent branding.
-- Frame organogram image exports from graph bounds at natural scale with pixel margins, independent of viewport zoom, because proportional fit padding can make downloaded charts unreadably small.
-- Keep the existing event workflow explicitly browser-local until an events service is available; public registration routes must bypass login and must not imply email delivery or cross-device registration support.

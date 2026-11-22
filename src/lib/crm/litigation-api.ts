@@ -97,6 +97,8 @@ export interface LitigationTimelineEntry {
   title: string;
   description: string;
   source: LitigationTimelineSource;
+  // Set when the entry records a consent judgment or judgment, so it can open that record.
+  outcomeKind?: "" | "Consent judgment" | "Judgment";
 }
 export interface LitigationPleading {
   _id: string;
@@ -176,6 +178,9 @@ export interface LitigationCase {
   courtDates: LitigationCourtDate[];
   disbursements: AdrDisbursement[];
   outcome: string | null;
+  // "Draft" | "Recorded" label for the outcome records, and the last day to appeal.
+  outcomeStatus?: string;
+  challengeDeadline?: string | null;
   closure: LitigationClosureDetails | null;
   createdAt: string;
   updatedAt: string;
@@ -290,22 +295,6 @@ export const addLitigationTimelineEntry = async (
   dto: { title: string; description?: string; at?: string },
 ): Promise<LitigationCase> =>
   unwrap(await api.post(`/crm/litigation-cases/${id}/timeline`, dto));
-
-export const recordLitigationOutcome = async (
-  id: string,
-  outcome: string,
-): Promise<LitigationCase> =>
-  unwrap(await api.post(`/crm/litigation-cases/${id}/outcome`, { outcome }));
-
-// Settlement reached mid-litigation — a consent judgment, per the
-// product owner's spec ("settlement remains possible at any stage").
-export const recordConsentJudgment = async (
-  id: string,
-  terms: string,
-): Promise<LitigationCase> =>
-  unwrap(
-    await api.post(`/crm/litigation-cases/${id}/consent-judgment`, { terms }),
-  );
 
 export const withdrawLitigationCase = async (
   id: string,
