@@ -51,21 +51,36 @@ function GroupThread({
         <Users className="h-3.5 w-3.5" /> Group: {members.join(", ")}
       </p>
       <div className="max-h-72 space-y-3 overflow-y-auto">
-        {messages.map((m) => (
-          <div
-            key={m._id}
-            className={`rounded-lg px-3 py-2 text-sm ${m.direction === "employee" ? "bg-primary/10" : "bg-muted"}`}
-          >
-            <p className="mb-0.5 text-[11px] font-medium opacity-80">
-              {m.author}
-              {m.direction === "tenant" && " (owner)"}
-            </p>
-            <p>{m.body}</p>
-            <p className="mt-1 text-[10px] opacity-70">
-              {new Date(m.createdAt).toLocaleString()}
-            </p>
-          </div>
-        ))}
+        {messages.map((m) => {
+          const fromOwner = m.direction === "tenant";
+          return (
+            <div
+              key={m._id}
+              className={`flex ${m.isMine ? "justify-end" : "justify-start"}`}
+            >
+              <div
+                className={`max-w-[80%] rounded-lg px-3 py-2 text-sm ${
+                  m.isMine
+                    ? "bg-primary text-primary-foreground"
+                    : fromOwner
+                      ? "border border-primary/30 bg-primary/5"
+                      : "bg-muted"
+                }`}
+              >
+                <p className="mb-0.5 text-xs font-semibold">
+                  {m.isMine ? "You" : m.author}
+                  {fromOwner && !m.isMine && (
+                    <span className="ml-1 font-normal opacity-70">(owner)</span>
+                  )}
+                </p>
+                <p>{m.body}</p>
+                <p className="mt-1 text-[10px] opacity-70">
+                  {new Date(m.createdAt).toLocaleString()}
+                </p>
+              </div>
+            </div>
+          );
+        })}
       </div>
       <div className="flex gap-2">
         <Textarea

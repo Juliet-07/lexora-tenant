@@ -921,15 +921,17 @@ export default function Litigation() {
                       .sort((a, b) => a.date.localeCompare(b.date))
                       .map((d) => (
                         <div key={d._id} className="rounded border p-2.5">
-                          <div className="flex items-center justify-between">
-                            <p className="text-sm font-medium">{d.title}</p>
+                          <div className="flex items-start justify-between gap-3">
+                            <p className="min-w-0 flex-1 break-words text-sm font-medium">
+                              {d.title}
+                            </p>
                             {daysUntil(d.date) >= 0 && (
-                              <Badge className="bg-primary text-primary-foreground">
+                              <Badge className="shrink-0 whitespace-nowrap bg-primary text-primary-foreground">
                                 {daysUntil(d.date)}d
                               </Badge>
                             )}
                           </div>
-                          <p className="text-xs text-muted-foreground">
+                          <p className="break-all text-xs text-muted-foreground">
                             {d.date?.slice(0, 10)}
                             {d.time && ` · ${d.time}`}
                             {d.location && ` · ${d.location}`}

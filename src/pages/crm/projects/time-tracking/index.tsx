@@ -1,37 +1,8 @@
 import { defaultCurrency } from "@/lib/currency";
-import { useEffect, useMemo, useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Play, Square } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/contexts/AuthContext";
-import { fetchMandates } from "@/lib/crm/mandates-api";
-import { fetchTasks } from "@/lib/crm/tasks-api";
-import {
-  fetchTimeEntries,
-  createTimeEntry,
-  type TimeEntry,
-} from "@/lib/crm/time-tracking-api";
+import { fetchTimeEntries } from "@/lib/crm/time-tracking-api";
 
 import { EntriesTab } from "./EntriesTab";
 import { WeeklyGridTab } from "./WeeklyGridTab";
@@ -46,88 +17,11 @@ const money = (n: number, c = defaultCurrency()) =>
     maximumFractionDigits: 0,
   });
 
-const fmt = (ms: number) => {
-  const s = Math.floor(ms / 1000);
-  const h = String(Math.floor(s / 3600)).padStart(2, "0");
-  const m = String(Math.floor((s % 3600) / 60)).padStart(2, "0");
-  const sec = String(s % 60).padStart(2, "0");
-  return `${h}:${m}:${sec}`;
-};
-
-const TIMER_STORAGE_KEY = "lexora.timesheet.timer.v1";
-
 export default function TimeTracking() {
-  const queryClient = useQueryClient();
-  const { toast } = useToast();
-  const { user } = useAuth();
-
   const { data: entries = [], isLoading } = useQuery({
     queryKey: ["timeEntries"],
     queryFn: () => fetchTimeEntries(),
   });
-  const { data: mandates = [] } = useQuery({
-    queryKey: ["mandates"],
-    queryFn: fetchMandates,
-  });
-
-  const [running, setRunning] = useState<{ start: number } | null>(() => {
-    const raw = localStorage.getItem(TIMER_STORAGE_KEY);
-    return raw ? { start: Number(raw) } : null;
-  });
-  const [now, setNow] = useState(Date.now());
-  const [openNew, setOpenNew] = useState(false);
-  const [draft, setDraft] = useState({
-    employeeUserId: "",
-    member: "",
-    mandateId: "",
-    mandateName: "",
-    taskId: "",
-    taskTitle: "",
-    narrative: "",
-    date: new Date().toISOString().slice(0, 10),
-    hours: 1,
-    billable: true,
-  });
-
-  const { data: mandateTasks = [] } = useQuery({
-    queryKey: ["tasks", { mandateId: draft.mandateId }],
-    queryFn: () => fetchTasks({ mandateId: draft.mandateId }),
-    enabled: !!draft.mandateId,
-  });
-
-  const invalidate = () =>
-    queryClient.invalidateQueries({ queryKey: ["timeEntries"] });
-
-  const createMut = useMutation({
-    mutationFn: (hours: number) =>
-      createTimeEntry({
-        memberUserId: draft.employeeUserId,
-        member: draft.member,
-        mandateId: draft.mandateId,
-        mandateName: draft.mandateName,
-        taskId: draft.taskId || undefined,
-        taskTitle: draft.taskTitle || undefined,
-        narrative: draft.narrative,
-        date: draft.date,
-        hours,
-        billable: draft.billable,
-      }),
-    onSuccess: () => {
-      invalidate();
-      setOpenNew(false);
-      toast({
-        title: "Time logged",
-        description: "Saved as a draft — submit it when ready for approval.",
-      });
-    },
-    onError: (err: any) =>
-      toast({
-        title: "Failed to log time",
-        description: err?.response?.data?.message,
-        variant: "destructive",
-      }),
-  });
-
   const pending = entries.filter((e) => e.status === "Submitted");
   const approvedValue = entries
     .filter((e) => e.status === "Approved" && e.billable)
@@ -137,74 +31,15 @@ export default function TimeTracking() {
     .reduce((s, e) => s + e.hours, 0);
   const totalHrs = entries.reduce((s, e) => s + e.hours, 0);
 
-  useEffect(() => {
-    if (!running) return;
-    const t = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, [running]);
-
-  const elapsedMs = running ? now - running.start : 0;
-
-  const startTimer = () => {
-    const t = Date.now();
-    localStorage.setItem(TIMER_STORAGE_KEY, String(t));
-    setRunning({ start: t });
-    setNow(t);
-    toast({ title: "Timer started" });
-  };
-
-  // Stopping goes straight to logging it against the tenant's own
-  // identity — this page is the tenant's own timesheet, not a way
-  // to log time on an employee's behalf, so there's no one else to
-  // pick here.
-  const stopTimer = () => {
-    if (!running) return;
-    const hrs = Math.max(
-      0.25,
-      Number(((Date.now() - running.start) / 3600000).toFixed(2)),
-    );
-    localStorage.removeItem(TIMER_STORAGE_KEY);
-    setRunning(null);
-    setDraft({
-      employeeUserId: user?.id ?? "",
-      member: user ? `${user.firstName} ${user.lastName}` : "",
-      mandateId: "",
-      mandateName: "",
-      taskId: "",
-      taskTitle: "",
-      narrative: "",
-      date: new Date().toISOString().slice(0, 10),
-      hours: hrs,
-      billable: true,
-    });
-    setOpenNew(true);
-  };
-
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">Timesheets</h1>
           <p className="text-sm text-muted-foreground">
-            Time entry, two-stage approval, utilisation and billing
+            Time entry, approval, utilisation and billing — start the timer from
+            the top bar
           </p>
-        </div>
-        <div className="flex gap-2">
-          {running ? (
-            <div className="flex items-center gap-2 rounded-md border bg-card px-3 py-2">
-              <span className="flex items-center gap-2 pl-1 font-mono text-sm tabular-nums">
-                <span className="h-2 w-2 animate-pulse rounded-full bg-destructive" />
-                {fmt(elapsedMs)}
-              </span>
-              <Button size="sm" variant="destructive" onClick={stopTimer}>
-                <Square className="mr-1.5 h-3.5 w-3.5" /> Stop timer
-              </Button>
-            </div>
-          ) : (
-            <Button variant="outline" onClick={startTimer}>
-              <Play className="mr-2 h-4 w-4" /> Start timer
-            </Button>
-          )}
         </div>
       </div>
 
@@ -255,103 +90,6 @@ export default function TimeTracking() {
           </TabsContent>
         </Tabs>
       )}
-
-      <Dialog open={openNew} onOpenChange={setOpenNew}>
-        <DialogContent className="max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Log {draft.hours}h to a mandate</DialogTitle>
-          </DialogHeader>
-          <div className="grid gap-3">
-            <div>
-              <Label>Mandate</Label>
-              <Select
-                value={draft.mandateId}
-                onValueChange={(v) => {
-                  const m = mandates.find((x) => x._id === v);
-                  setDraft({
-                    ...draft,
-                    mandateId: v,
-                    mandateName: m?.name ?? "",
-                    taskId: "",
-                    taskTitle: "",
-                  });
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select mandate..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {mandates.map((m) => (
-                    <SelectItem key={m._id} value={m._id}>
-                      {m.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Task (optional)</Label>
-              <Select
-                value={draft.taskId}
-                onValueChange={(v) => {
-                  const t = mandateTasks.find((x) => x._id === v);
-                  setDraft({ ...draft, taskId: v, taskTitle: t?.title ?? "" });
-                }}
-                disabled={!draft.mandateId}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Ad-hoc work (no specific task)" />
-                </SelectTrigger>
-                <SelectContent>
-                  {mandateTasks.map((t) => (
-                    <SelectItem key={t._id} value={t._id}>
-                      {t.title}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Narrative</Label>
-              <Textarea
-                value={draft.narrative}
-                onChange={(e) =>
-                  setDraft({ ...draft, narrative: e.target.value })
-                }
-                placeholder="What did you work on?"
-              />
-            </div>
-            <div>
-              <Label>Date</Label>
-              <Input
-                type="date"
-                value={draft.date}
-                onChange={(e) => setDraft({ ...draft, date: e.target.value })}
-              />
-            </div>
-            <label className="flex items-center justify-between rounded border p-3 text-sm">
-              Billable
-              <Switch
-                checked={draft.billable}
-                onCheckedChange={(v) => setDraft({ ...draft, billable: v })}
-              />
-            </label>
-          </div>
-          <DialogFooter>
-            <Button
-              disabled={
-                createMut.isPending ||
-                !draft.employeeUserId ||
-                !draft.mandateId ||
-                !draft.hours
-              }
-              onClick={() => createMut.mutate(draft.hours)}
-            >
-              {createMut.isPending ? "Saving…" : "Log time"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

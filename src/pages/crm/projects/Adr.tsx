@@ -1022,12 +1022,13 @@ export default function Adr() {
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <div className="flex items-center justify-between">
-                        <div>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
                           <p className="text-sm font-medium">
                             {c.type} session
                           </p>
-                          <p className="text-xs text-muted-foreground">
+                          {/* Long meeting links wrap instead of running under the badge */}
+                          <p className="break-all text-xs text-muted-foreground">
                             {nextSession.venue ||
                               (nextSession.mode === "Virtual"
                                 ? "Virtual"
@@ -1036,7 +1037,7 @@ export default function Adr() {
                               ` · ${nextSession.startTime}${nextSession.endTime ? `–${nextSession.endTime}` : ""}`}
                           </p>
                         </div>
-                        <Badge className="bg-primary text-primary-foreground">
+                        <Badge className="shrink-0 whitespace-nowrap bg-primary text-primary-foreground">
                           {daysUntil(nextSession.date)}d
                         </Badge>
                       </div>

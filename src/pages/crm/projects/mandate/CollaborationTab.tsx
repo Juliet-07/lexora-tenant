@@ -212,8 +212,8 @@ export function CollaborationTab({ mandateId }: { mandateId: string }) {
                 <div
                   className={`max-w-[75%] rounded-lg px-3 py-2 text-sm ${m.direction === "tenant" ? "bg-primary text-primary-foreground" : "bg-muted"}`}
                 >
-                  <p className="mb-0.5 text-[11px] font-medium opacity-80">
-                    {m.author}
+                  <p className="mb-0.5 text-xs font-semibold">
+                    {m.direction === "tenant" ? "You" : m.author}
                   </p>
                   <p>{m.body}</p>
                   <p className="mt-1 text-[10px] opacity-70">

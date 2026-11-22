@@ -304,6 +304,8 @@ export interface GroupMessage extends EmployeeMessage {
   groupId: string;
   recipientIds: string[];
   recipientNames: string[];
+  // Employee view only: true when the viewer wrote this message themselves.
+  isMine?: boolean;
 }
 
 export const fetchGroupMessages = async (

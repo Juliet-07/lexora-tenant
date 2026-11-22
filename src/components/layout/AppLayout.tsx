@@ -13,7 +13,7 @@ import {
   OnboardingProgressPill,
 } from "@/components/onboarding/OnboardingReminder";
 import { ViewSwitcher } from "./ViewSwitcher";
-import { FloatingTimer } from "@/components/crm/FloatingTimer";
+import { WorkTimer } from "@/components/crm/WorkTimer";
 import { useBaseCurrency } from "@/hooks/use-base-currency";
 
 interface AppLayoutProps {
@@ -46,6 +46,7 @@ export function AppLayout({ children }: AppLayoutProps) {
               </div> */}
             </div>
             <div className="flex items-center gap-3">
+              <WorkTimer />
               <ViewSwitcher />
               {!isAdmin && <OnboardingProgressPill />}
               <Badge variant="outline" className="text-xs">
@@ -85,7 +86,6 @@ export function AppLayout({ children }: AppLayoutProps) {
           </main>
         </div>
         {!isAdmin && <OnboardingReminder />}
-        <FloatingTimer />
       </div>
     </SidebarProvider>
   );
