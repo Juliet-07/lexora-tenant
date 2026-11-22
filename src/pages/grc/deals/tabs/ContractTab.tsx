@@ -1,8 +1,13 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { FileStack, Sparkles, AlertTriangle } from "lucide-react";
+import { FileStack, Sparkles, AlertTriangle, ShieldCheck } from "lucide-react";
+import { ApprovalBadge } from "@/components/approvals/ApprovalTracker";
+import { ApprovalWorkflowDialog } from "@/components/approvals/ApprovalWorkflowDialog";
+import { fetchApprovalWorkflow, runOf } from "@/lib/approvals-api";
+import { useAuth } from "@/contexts/AuthContext";
 import { GenerateDealContractDialog } from "@/components/grc/GenerateDealContractDialog";
 import { DealContractDialog } from "@/components/grc/DealContractDialog";
 import { DocReviewBadge } from "@/components/grc/DocReviewBadge";
@@ -15,6 +20,17 @@ import type { Deal } from "@/lib/grc/deals-api";
 export default function ContractTab({ deal }: { deal: Deal }) {
   const [generateOpen, setGenerateOpen] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
+  // The owner sets who drafts / reviews / approves deal contracts; team
+  // members who are only reviewers or approvers can open but not create.
+  const { user } = useAuth();
+  const isOwner = user?.userType === "tenant";
+  const [chainOpen, setChainOpen] = useState(false);
+  const { data: workflow } = useQuery({
+    queryKey: ["approval-workflow", "grc_deals"],
+    queryFn: () => fetchApprovalWorkflow("grc_deals"),
+    retry: false,
+  });
+  const canCreate = !workflow || workflow.me?.canDraft;
   // Term sheets are kept in the deal's documents too, but have their own tab.
   const contracts = (deal.contracts ?? []).filter(
     (c) => (c.kind ?? "contract") === "contract",
@@ -35,10 +51,24 @@ export default function ContractTab({ deal }: { deal: Deal }) {
             <b>Term Sheet</b> tab.
           </p>
         </div>
-        <Button size="sm" onClick={() => setGenerateOpen(true)}>
-          <Sparkles className="mr-1 h-4 w-4" />
-          Generate from template
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          {isOwner && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setChainOpen(true)}
+            >
+              <ShieldCheck className="mr-1 h-4 w-4" />
+              Approval chain
+            </Button>
+          )}
+          {canCreate && (
+            <Button size="sm" onClick={() => setGenerateOpen(true)}>
+              <Sparkles className="mr-1 h-4 w-4" />
+              Generate from template
+            </Button>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -74,6 +104,7 @@ export default function ContractTab({ deal }: { deal: Deal }) {
                   created {new Date(c.createdAt).toLocaleDateString()}
                 </p>
                 <div className="flex flex-wrap gap-1.5">
+                  {workflow?.configured && <ApprovalBadge run={runOf(c)} />}
                   <DocReviewBadge review={c.review} />
                   {missing > 0 && (
                     <Badge
@@ -118,6 +149,13 @@ export default function ContractTab({ deal }: { deal: Deal }) {
         open={openId !== null}
         onOpenChange={(o) => !o && setOpenId(null)}
       />
+      {isOwner && (
+        <ApprovalWorkflowDialog
+          area="grc_deals"
+          open={chainOpen}
+          onOpenChange={setChainOpen}
+        />
+      )}
     </div>
   );
 }

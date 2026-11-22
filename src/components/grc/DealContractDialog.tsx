@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { displayGroup, OTHER_FIELDS_GROUP } from "@/lib/crm/merge-fields";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   AlertTriangle,
@@ -14,6 +14,7 @@ import {
   Plus,
   Search,
   Send,
+  ShieldCheck,
   Trash2,
 } from "lucide-react";
 import {
@@ -67,6 +68,8 @@ import {
   fetchContractPdfBlob,
   removeContractSection,
   setContractVariable,
+  submitDealContractApproval,
+  decideDealContractApproval,
   updateContractSectionBody,
   type Contract,
   type ContractField,
@@ -74,6 +77,15 @@ import {
   type Deal,
 } from "@/lib/grc/deals-api";
 import { DOC_CLASSES } from "@/components/grc/DealDocumentPreview";
+import {
+  ApprovalBadge,
+  ApprovalTracker,
+} from "@/components/approvals/ApprovalTracker";
+import {
+  approvalBlockReason,
+  fetchApprovalWorkflow,
+  runOf,
+} from "@/lib/approvals-api";
 
 // ═══════════════════════════════════════════════════════════════
 // A deal contract, opened in a pop-up. It is generated from a template and
@@ -150,6 +162,58 @@ export function DealContractDialog({
 
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: ["deal", deal._id] });
+
+  // The owner's approval chain for deal contracts. Term sheets are not part
+  // of it.
+  const { data: workflow } = useQuery({
+    queryKey: ["approval-workflow", "grc_deals"],
+    queryFn: () => fetchApprovalWorkflow("grc_deals"),
+    enabled: open && !isTermSheet,
+    retry: false,
+  });
+  const run = runOf(contract ?? {});
+  const approvalBlock =
+    isTermSheet || !contract ? null : approvalBlockReason(workflow, run);
+  // Frozen while it is with the approvers, and for team members who are only
+  // reviewers / approvers (they follow along but cannot change it).
+  const approvalLock: "approval" | "viewer" | null =
+    isTermSheet || !workflow
+      ? null
+      : run.status === "In approval"
+        ? "approval"
+        : !workflow.me?.canDraft
+          ? "viewer"
+          : null;
+  const requestSend = () => {
+    if (approvalBlock) {
+      toast.error(approvalBlock);
+      setTab("approval");
+      return;
+    }
+    setSendOpen(true);
+  };
+  const submitMut = useMutation({
+    mutationFn: (note: string) =>
+      submitDealContractApproval(deal._id, contract!._id, note),
+    onSuccess: () => {
+      invalidate();
+      toast.success("Submitted for approval");
+    },
+    onError: (err: any) =>
+      toast.error(err?.response?.data?.message ?? "Could not submit"),
+  });
+  const decideMut = useMutation({
+    mutationFn: (v: { decision: "Approved" | "Sent back"; note: string }) =>
+      decideDealContractApproval(deal._id, contract!._id, v.decision, v.note),
+    onSuccess: (_d, v) => {
+      invalidate();
+      toast.success(
+        v.decision === "Approved" ? "Approved" : "Sent back for changes",
+      );
+    },
+    onError: (err: any) =>
+      toast.error(err?.response?.data?.message ?? "Could not record decision"),
+  });
 
   const deleteMut = useMutation({
     mutationFn: () => deleteContract(deal._id, contract!._id),
@@ -235,6 +299,9 @@ export function DealContractDialog({
                         {contract.templateName && (
                           <span>From “{contract.templateName}”</span>
                         )}
+                        {!isTermSheet && workflow?.configured && (
+                          <ApprovalBadge run={run} />
+                        )}
                         {fields.length > 0 &&
                           (missing.length ? (
                             <Badge
@@ -257,14 +324,17 @@ export function DealContractDialog({
                     </DialogDescription>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setSendOpen(true)}
-                    >
-                      <Send className="mr-1 h-3.5 w-3.5" />
-                      Send for review
-                    </Button>
+                    {approvalLock !== "viewer" && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        title={approvalBlock ?? undefined}
+                        onClick={requestSend}
+                      >
+                        <Send className="mr-1 h-3.5 w-3.5" />
+                        Send for review
+                      </Button>
+                    )}
                     <Button
                       size="sm"
                       onClick={() =>
@@ -284,14 +354,16 @@ export function DealContractDialog({
                     >
                       Export Redlined
                     </Button>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      aria-label={`Delete ${docName}`}
-                      onClick={() => setConfirmDelete(true)}
-                    >
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
+                    {approvalLock !== "viewer" && (
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        aria-label={`Delete ${docName}`}
+                        onClick={() => setConfirmDelete(true)}
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    )}
                   </div>
                 </div>
                 <TabsList className="w-fit">
@@ -319,6 +391,15 @@ export function DealContractDialog({
                       </span>
                     )}
                   </TabsTrigger>
+                  {!isTermSheet && (
+                    <TabsTrigger value="approval">
+                      <ShieldCheck className="mr-1.5 h-3.5 w-3.5" />
+                      Approval
+                      {run.status === "In approval" && (
+                        <span className="ml-1.5 h-1.5 w-1.5 rounded-full bg-primary" />
+                      )}
+                    </TabsTrigger>
+                  )}
                   <TabsTrigger value="review">
                     Review
                     {(contract.reviewLoop?.tokens?.length ?? 0) > 0 && (
@@ -354,6 +435,7 @@ export function DealContractDialog({
                     onChanged={invalidate}
                     focus={focus}
                     onOpenRedline={() => setTab("redline")}
+                    approvalLock={approvalLock}
                   />
                 </TabsContent>
                 <TabsContent value="redline" className="m-0 p-6">
@@ -368,8 +450,28 @@ export function DealContractDialog({
                     deal={deal}
                     contract={contract}
                     onChanged={invalidate}
+                    approvalLock={approvalLock}
                   />
                 </TabsContent>
+                {!isTermSheet && (
+                  <TabsContent value="approval" className="m-0 p-6">
+                    <div className="mx-auto max-w-3xl">
+                      <ApprovalTracker
+                        area="grc_deals"
+                        noun="contract"
+                        run={run}
+                        workflow={workflow}
+                        canSubmitNow={contract.sections.length > 0}
+                        cannotSubmitReason="Add the contract text first."
+                        busy={submitMut.isPending || decideMut.isPending}
+                        onSubmit={(note) => submitMut.mutateAsync(note)}
+                        onDecide={(decision, note) =>
+                          decideMut.mutateAsync({ decision, note })
+                        }
+                      />
+                    </div>
+                  </TabsContent>
+                )}
                 <TabsContent value="review" className="m-0 p-6">
                   <ContractReviewTab
                     deal={deal}
@@ -377,7 +479,7 @@ export function DealContractDialog({
                     docName={docName}
                     onChanged={invalidate}
                     onJump={jumpToClause}
-                    onSend={() => setSendOpen(true)}
+                    onSend={requestSend}
                   />
                 </TabsContent>
                 {!isTermSheet && (
@@ -613,6 +715,7 @@ function EditTab({
   onChanged,
   focus,
   onOpenRedline,
+  approvalLock,
 }: {
   deal: Deal;
   contract: Contract;
@@ -620,6 +723,7 @@ function EditTab({
   onChanged: () => void;
   focus: { sIndex: number; nonce: number } | null;
   onOpenRedline: () => void;
+  approvalLock: "approval" | "viewer" | null;
 }) {
   const { user } = useAuth();
   const defaultAuthor = user
@@ -659,7 +763,8 @@ function EditTab({
   const [redlineText, setRedlineText] = useState("");
   const [removeIdx, setRemoveIdx] = useState<number | null>(null);
   // Once executed, the text is changed only by a variation.
-  const locked = !!contract.executed || !!contract.signed;
+  // …and while it is with the approvers, or for a non-drafter.
+  const locked = !!contract.executed || !!contract.signed || !!approvalLock;
 
   const bodyMut = useMutation({
     mutationFn: ({ index, body }: { index: number; body: string }) =>
@@ -725,6 +830,17 @@ function EditTab({
               <>
                 This term sheet has been signed, so its text can no longer be
                 edited.
+              </>
+            ) : !contract.executed && approvalLock === "approval" ? (
+              <>
+                This contract is with the approvers, so its text is frozen. If
+                it needs changing, a reviewer can send it back from the{" "}
+                <b>Approval</b> tab.
+              </>
+            ) : !contract.executed && approvalLock === "viewer" ? (
+              <>
+                You can read this contract, but only a drafter set up by the
+                account owner can change it.
               </>
             ) : (
               <>
@@ -1096,10 +1212,12 @@ function FieldsTab({
   deal,
   contract,
   onChanged,
+  approvalLock,
 }: {
   deal: Deal;
   contract: Contract;
   onChanged: () => void;
+  approvalLock: "approval" | "viewer" | null;
 }) {
   const [q, setQ] = useState("");
   const [onlyEmpty, setOnlyEmpty] = useState(false);
@@ -1192,8 +1310,20 @@ function FieldsTab({
           Only fields to fill
         </label>
       </div>
-      {section("Common fields", groups.common)}
-      {section("This document's fields", groups.rest)}
+      {approvalLock && (
+        <p className="rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs">
+          {approvalLock === "approval"
+            ? "This contract is with the approvers, so its fields are frozen."
+            : "You can read this contract, but only a drafter can change its fields."}
+        </p>
+      )}
+      <fieldset
+        disabled={!!approvalLock}
+        className="m-0 min-w-0 space-y-5 border-0 p-0"
+      >
+        {section("Common fields", groups.common)}
+        {section("This document's fields", groups.rest)}
+      </fieldset>
       {!groups.common.length && !groups.rest.length && (
         <p className="py-8 text-center text-sm text-muted-foreground">
           {onlyEmpty && !q

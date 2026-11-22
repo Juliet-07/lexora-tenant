@@ -1,5 +1,6 @@
 import { defaultCurrency } from "@/lib/currency";
 import { api } from "../api";
+import type { ApprovalRun } from "../approvals-api";
 import type {
   ContractClause,
   ContractVariation,
@@ -306,6 +307,8 @@ export interface Contract {
   /** Negotiation: the current round, and the side holding the pen. */
   round?: number;
   penParty?: DealPartySide;
+  /** Internal approval chain (contracts only; term sheets have none). */
+  approval?: ApprovalRun;
 }
 
 export interface CP {
@@ -810,6 +813,33 @@ export const renameContract = async (
   const res = await api.patch(`/deals/${dealId}/contracts/${contractId}`, {
     name,
   });
+  return res.data?.data ?? res.data;
+};
+// ── Contract approval chain ────────────────────────────────────
+// Who drafts / reviews / approves is set once by the account owner (see
+// approvals-api). A drafter submits; each step then decides in turn, the
+// account owner last.
+export const submitDealContractApproval = async (
+  dealId: string,
+  contractId: string,
+  note?: string,
+): Promise<Deal> => {
+  const res = await api.post(
+    `/deals/${dealId}/contracts/${contractId}/approval/submit`,
+    { note },
+  );
+  return res.data?.data ?? res.data;
+};
+export const decideDealContractApproval = async (
+  dealId: string,
+  contractId: string,
+  decision: "Approved" | "Sent back",
+  note?: string,
+): Promise<Deal> => {
+  const res = await api.post(
+    `/deals/${dealId}/contracts/${contractId}/approval/decide`,
+    { decision, note },
+  );
   return res.data?.data ?? res.data;
 };
 export const deleteContract = async (

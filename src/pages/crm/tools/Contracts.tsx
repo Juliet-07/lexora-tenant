@@ -39,6 +39,7 @@ import {
 } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
 import {
+  ShieldCheck,
   Bell,
   RefreshCw,
   Plus,
@@ -57,6 +58,10 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { CommentThread } from "@/components/crm/CommentThread";
+import { ApprovalBadge } from "@/components/approvals/ApprovalTracker";
+import { ApprovalWorkflowDialog } from "@/components/approvals/ApprovalWorkflowDialog";
+import { fetchApprovalWorkflow, runOf } from "@/lib/approvals-api";
+import { useAuth } from "@/contexts/AuthContext";
 import { RichTextEditor } from "@/components/RichTextEditor";
 import { CategoryRow } from "@/components/crm/case/CaseListTabs";
 
@@ -119,6 +124,14 @@ export default function Contracts() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const isOwner = user?.userType === "tenant";
+  const [chainOpen, setChainOpen] = useState(false);
+  const { data: workflow } = useQuery({
+    queryKey: ["approval-workflow", "crm_contracts"],
+    queryFn: () => fetchApprovalWorkflow("crm_contracts"),
+    retry: false,
+  });
   const onErr = (title: string) => (err: any) =>
     toast({
       title,
@@ -395,6 +408,11 @@ export default function Contracts() {
           </p>
         </div>
         <div className="flex gap-2">
+          {isOwner && (
+            <Button variant="outline" onClick={() => setChainOpen(true)}>
+              <ShieldCheck className="mr-2 h-4 w-4" /> Approval chain
+            </Button>
+          )}
           <Button variant="outline" onClick={() => openGenerate()}>
             <Sparkles className="mr-2 h-4 w-4" /> Generate from template
           </Button>
@@ -517,6 +535,7 @@ export default function Contracts() {
                     <TableHead>Contract</TableHead>
                     <TableHead>Type</TableHead>
                     <TableHead>Stage</TableHead>
+                    {workflow?.configured && <TableHead>Approval</TableHead>}
                     <TableHead>Expiry</TableHead>
                     <TableHead>Owner</TableHead>
                     <TableHead className="text-right">Value</TableHead>
@@ -539,6 +558,11 @@ export default function Contracts() {
                         <Badge variant="outline">{c.type}</Badge>
                       </TableCell>
                       <TableCell className="text-sm">{c.stage}</TableCell>
+                      {workflow?.configured && (
+                        <TableCell>
+                          <ApprovalBadge run={runOf(c)} />
+                        </TableCell>
+                      )}
                       <TableCell className="text-sm">
                         {new Date(c.expiresOn).toLocaleDateString()}
                         {daysTo(c.expiresOn) <= 90 &&
@@ -559,7 +583,7 @@ export default function Contracts() {
                   {!filtered.length && (
                     <TableRow>
                       <TableCell
-                        colSpan={6}
+                        colSpan={workflow?.configured ? 7 : 6}
                         className="py-8 text-center text-sm text-muted-foreground"
                       >
                         {list.length
@@ -1199,6 +1223,13 @@ export default function Contracts() {
           )}
         </DialogContent>
       </Dialog>
+      {isOwner && (
+        <ApprovalWorkflowDialog
+          area="crm_contracts"
+          open={chainOpen}
+          onOpenChange={setChainOpen}
+        />
+      )}
     </div>
   );
 }

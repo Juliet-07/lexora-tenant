@@ -1,4 +1,5 @@
 import { api } from "../api";
+import type { ApprovalRun } from "../approvals-api";
 
 const unwrap = (res: any) => res.data?.data ?? res.data;
 
@@ -114,20 +115,6 @@ export interface ConditionPrecedent {
   detail: string;
   satisfied: boolean;
 }
-export type ApprovalStepStatus =
-  | "Waiting"
-  | "In review"
-  | "Approved"
-  | "Rejected";
-export interface ApprovalStep {
-  _id: string;
-  userId: string | null;
-  name: string;
-  role: string;
-  status: ApprovalStepStatus;
-  decidedAt: string | null;
-  note: string;
-}
 export interface Contract {
   _id: string;
   ref: string;
@@ -169,7 +156,8 @@ export interface Contract {
   conflictCheckStatus: "Pending" | "Clear" | "Flagged";
   riskClassification: "Low" | "Medium" | "High" | null;
   conditionsPrecedent: ConditionPrecedent[];
-  approvalChain: ApprovalStep[];
+  // Internal approval chain on this contract (see approvals-api).
+  approval?: ApprovalRun;
   // ── Live-computed, never stored — see getById on the backend ──
   tenantBusinessName: string;
   counterpartyKycStatus: string | null;
@@ -202,7 +190,6 @@ export const fetchContract = async (id: string): Promise<SignableContract> => {
     obligations: d.obligations ?? [],
     amendments: d.amendments ?? [],
     variations: d.variations ?? [],
-    approvalChain: d.approvalChain ?? [],
   };
 };
 
@@ -375,23 +362,21 @@ export const setConditionPrecedentSatisfied = async (
   );
 
 // ── Approval chain ──────────────────────────────────────────────
-// Setting the chain (re)starts it — the first step becomes "In
-// review", every other step resets to "Waiting".
-export const setApprovalChain = async (
+// Who drafts / reviews / approves is set once by the account owner (see
+// approvals-api). A drafter submits; each step then decides in turn, the
+// account owner last.
+export const submitContractApproval = async (
   id: string,
-  steps: { userId?: string; name: string; role: string }[],
+  note?: string,
 ): Promise<Contract> =>
-  unwrap(await api.post(`/tools/contracts/${id}/approval-chain`, { steps }));
-// Only the step currently "In review" can be decided — approving it
-// advances the next Waiting step to In review.
-export const decideApprovalStep = async (
+  unwrap(await api.post(`/tools/contracts/${id}/approval/submit`, { note }));
+export const decideContractApproval = async (
   id: string,
-  stepId: string,
-  decision: "Approved" | "Rejected",
+  decision: "Approved" | "Sent back",
   note?: string,
 ): Promise<Contract> =>
   unwrap(
-    await api.post(`/tools/contracts/${id}/approval-chain/${stepId}/decide`, {
+    await api.post(`/tools/contracts/${id}/approval/decide`, {
       decision,
       note,
     }),

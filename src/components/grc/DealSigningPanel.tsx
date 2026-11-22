@@ -1,5 +1,10 @@
+import {
+  approvalBlockReason,
+  fetchApprovalWorkflow,
+  runOf,
+} from "@/lib/approvals-api";
 import { useMemo, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -110,8 +115,7 @@ export default function DealSigningPanel({
   const sent = block?.document ?? null;
   const audit = block?.audit ?? [];
   const contracts = useMemo(
-    () =>
-      (deal.contracts ?? []).filter((c) => (c.kind ?? "contract") === kind),
+    () => (deal.contracts ?? []).filter((c) => (c.kind ?? "contract") === kind),
     [deal.contracts, kind],
   );
 
@@ -120,7 +124,7 @@ export default function DealSigningPanel({
   );
   const [message, setMessage] = useState("");
   const [showDoc, setShowDoc] = useState(false);
-  
+
   // Who signs for each side, from the deal's parties.
   const chosen = SIDES.map((side) => ({
     side,
@@ -137,6 +141,20 @@ export default function DealSigningPanel({
   const selected = contracts.find(
     (c) => c._id === (sent?.contractId ?? contractId),
   );
+
+  // A contract goes for signing only once the owner's approval chain has
+  // approved it (term sheets have no chain).
+  const { data: workflow } = useQuery({
+    queryKey: ["approval-workflow", "grc_deals"],
+    queryFn: () => fetchApprovalWorkflow("grc_deals"),
+    enabled: kind === "contract",
+    retry: false,
+  });
+  const chosenContract = contracts.find((c) => c._id === contractId);
+  const approvalBlock =
+    kind === "contract" && chosenContract
+      ? approvalBlockReason(workflow, runOf(chosenContract))
+      : null;
 
   const docPreview: DealDocumentPreviewData | null = selected
     ? {
@@ -267,7 +285,9 @@ export default function DealSigningPanel({
                 variant="outline"
                 className={status.tone}
                 data-testid={
-                  kind === "contract" ? "signing-status" : "signing-status-term-sheet"
+                  kind === "contract"
+                    ? "signing-status"
+                    : "signing-status-term-sheet"
                 }
               >
                 {status.label}
@@ -353,10 +373,20 @@ export default function DealSigningPanel({
                     placeholder="Anything they should know before signing…"
                   />
                 </div>
+                {approvalBlock && (
+                  <p className="rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs">
+                    {approvalBlock} A contract can be sent for signing once the
+                    approval chain has approved it — see the <b>Approval</b> tab
+                    on the contract.
+                  </p>
+                )}
                 <Button
                   className="w-full"
                   disabled={
-                    !contractId || missing.length > 0 || sendMut.isPending
+                    !contractId ||
+                    missing.length > 0 ||
+                    sendMut.isPending ||
+                    !!approvalBlock
                   }
                   onClick={() => sendMut.mutate()}
                 >

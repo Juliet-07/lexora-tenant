@@ -6,6 +6,16 @@ import { hasBareTokens } from "@/lib/crm/merge-fields";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  ApprovalTracker,
+  ApprovalBadge,
+} from "@/components/approvals/ApprovalTracker";
+import {
+  approvalBlockReason,
+  currentRunStep,
+  fetchApprovalWorkflow,
+  runOf,
+} from "@/lib/approvals-api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -77,8 +87,8 @@ import {
   updateContractGovernance,
   addConditionPrecedent,
   setConditionPrecedentSatisfied,
-  setApprovalChain,
-  decideApprovalStep,
+  submitContractApproval,
+  decideContractApproval,
   CONTRACT_STAGES,
   type ObligationType,
 } from "@/lib/crm/tools-api";
@@ -140,12 +150,6 @@ const outlineFrom = (html: string): { label: string; sub: boolean }[] => {
   return items;
 };
 
-const approvalStatusTone: Record<string, string> = {
-  Approved: "bg-success/10 text-success hover:bg-success/10",
-  "In review": "bg-primary/10 text-primary hover:bg-primary/10",
-  Waiting: "bg-muted text-muted-foreground",
-  Rejected: "bg-destructive/10 text-destructive hover:bg-destructive/10",
-};
 const changeStatusTone: Record<string, string> = {
   Accepted: "bg-success/10 text-success hover:bg-success/10",
   Rejected: "bg-destructive/10 text-destructive hover:bg-destructive/10",
@@ -182,6 +186,12 @@ export default function ContractDetail() {
     retry: false,
   });
   const employees = employeesPage?.items ?? [];
+  // Who drafts / reviews / approves contracts, as the owner set it up.
+  const { data: workflow } = useQuery({
+    queryKey: ["approval-workflow", "crm_contracts"],
+    queryFn: () => fetchApprovalWorkflow("crm_contracts"),
+    retry: false,
+  });
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ["contract", id] });
@@ -364,22 +374,21 @@ export default function ContractDetail() {
     onSuccess: invalidate,
     onError: onErr("Could not update condition"),
   });
-  const setChainMut = useMutation({
-    mutationFn: () =>
-      setApprovalChain(
-        id,
-        chainDraft.filter((s) => s.name.trim() && s.role.trim()),
-      ),
-    onSuccess: () => {
-      setChainSetupOpen(false);
-      ok("Approval chain set")();
-    },
-    onError: onErr("Could not set approval chain"),
+  const submitApprovalMut = useMutation({
+    mutationFn: (note: string) => submitContractApproval(id, note),
+    onSuccess: ok("Submitted for approval"),
+    onError: onErr("Could not submit for approval"),
   });
-  const decideStepMut = useMutation({
-    mutationFn: (vars: { stepId: string; decision: "Approved" | "Rejected" }) =>
-      decideApprovalStep(id, vars.stepId, vars.decision),
-    onSuccess: invalidate,
+  const decideApprovalMut = useMutation({
+    mutationFn: (vars: { decision: "Approved" | "Sent back"; note: string }) =>
+      decideContractApproval(id, vars.decision, vars.note),
+    onSuccess: (_d, vars) => {
+      invalidate();
+      toast({
+        title:
+          vars.decision === "Approved" ? "Approved" : "Sent back for changes",
+      });
+    },
     onError: onErr("Could not record decision"),
   });
 
@@ -421,10 +430,6 @@ export default function ContractDetail() {
   });
   const [cpOpen, setCpOpen] = useState(false);
   const [cpForm, setCpForm] = useState({ label: "", detail: "" });
-  const [chainSetupOpen, setChainSetupOpen] = useState(false);
-  const [chainDraft, setChainDraft] = useState<
-    { userId?: string; name: string; role: string }[]
-  >([{ name: "", role: "" }]);
 
   const outline = useMemo(
     () => outlineFrom(contract?.renderedBody ?? ""),
@@ -454,7 +459,10 @@ export default function ContractDetail() {
   // ── Real, derived data — replaces every mock computation ──
   const cps = contract.conditionsPrecedent;
   const cpsDone = cps.filter((c) => c.satisfied).length;
-  const chain = contract.approvalChain;
+  const run = runOf(contract);
+  const approvalBlock = approvalBlockReason(workflow, run);
+  // Employees who are only reviewers / approvers follow along but cannot edit.
+  const readOnlyForMe = !!workflow && !workflow.me?.canDraft;
   const allChanges = contract.rounds.flatMap((r) =>
     r.changes.map((c) => ({ ...c, roundId: r._id })),
   );
@@ -465,6 +473,9 @@ export default function ContractDetail() {
     (i) => i.type === "comment" || i.type === "tenant_response",
   );
   const stageIndex = CONTRACT_STAGES.indexOf(contract.stage);
+  const nextStage = CONTRACT_STAGES[stageIndex + 1];
+  // Going to the client for review is held until the chain has approved.
+  const advanceBlock = nextStage === "Client review" ? approvalBlock : null;
   const currentVersion = contract.amendments.length + 1;
   // Matches the engine (createVariation): a contract can only be varied
   // once it has been executed and is in force. Earlier stages are edited directly / negotiated; after
@@ -478,9 +489,13 @@ export default function ContractDetail() {
   // editable while Not Sent or Sent, locked once Signed,
   // Countersigned, or Declined — real recipients may already have
   // real copies of the document by then.
+  // …and, when an approval chain is in use, frozen while it is with the
+  // approvers, and for team members who are not drafters.
   const canEditBody =
-    contract.signatureStatus === "not_sent" ||
-    contract.signatureStatus === "sent";
+    (contract.signatureStatus === "not_sent" ||
+      contract.signatureStatus === "sent") &&
+    run.status !== "In approval" &&
+    !readOnlyForMe;
   // Surfaces the "Resync merge fields" action only when it could
   // actually do something — a plain scan for any leftover {{token}}
   // in the rendered body, which is exactly what renderContractBody
@@ -532,7 +547,7 @@ export default function ContractDetail() {
           ? "destructive"
           : "outline";
 
-  const currentApprovalStep = chain.find((s) => s.status === "In review");
+  const currentApprovalStep = currentRunStep(run);
 
   return (
     <div className="space-y-4">
@@ -613,11 +628,12 @@ export default function ContractDetail() {
                 Signing certificate
               </Button>
             )}
-            {contract.stage !== "Expiry / Termination" && (
+            {contract.stage !== "Expiry / Termination" && !readOnlyForMe && (
               <Button
                 size="sm"
                 className="bg-gradient-to-r from-primary to-secondary"
-                disabled={advanceMut.isPending}
+                disabled={advanceMut.isPending || !!advanceBlock}
+                title={advanceBlock ?? undefined}
                 onClick={() => advanceMut.mutate()}
               >
                 Advance to {CONTRACT_STAGES[stageIndex + 1] ?? "next stage"}
@@ -814,11 +830,13 @@ export default function ContractDetail() {
                   v={contract.leadDrafterName || "Not assigned"}
                 />
                 <KV
-                  k="Approval chain"
+                  k="Approval"
                   v={
-                    chain.length
-                      ? chain.map((s) => s.name).join(" → ")
-                      : "Not set"
+                    workflow?.configured ? (
+                      <ApprovalBadge run={run} />
+                    ) : (
+                      "No approval chain set up"
+                    )
                   }
                 />
                 <KV
@@ -977,7 +995,12 @@ export default function ContractDetail() {
                       <Lock className="mr-1.5 h-3 w-3" />
                       {contract.signatureStatus === "declined"
                         ? "Declined — locked"
-                        : "Signed — locked"}
+                        : contract.signatureStatus === "signed" ||
+                            contract.signatureStatus === "countersigned"
+                          ? "Signed — locked"
+                          : run.status === "In approval"
+                            ? "With approvers — locked"
+                            : "View only"}
                     </Badge>
                   )}
                 </div>
@@ -1216,32 +1239,12 @@ export default function ContractDetail() {
 
         {/* ══ APPROVALS ══ */}
         <TabsContent value="approvals" className="space-y-4 pt-4">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-semibold">Approval chain</h2>
-              <p className="text-sm text-muted-foreground">
-                Sequential internal approvals before the contract goes out for
-                execution.
-              </p>
-            </div>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                setChainDraft(
-                  chain.length
-                    ? chain.map((s) => ({
-                        userId: s.userId ?? undefined,
-                        name: s.name,
-                        role: s.role,
-                      }))
-                    : [{ name: "", role: "" }],
-                );
-                setChainSetupOpen(true);
-              }}
-            >
-              {chain.length ? "Restart chain" : "Set up chain"}
-            </Button>
+          <div>
+            <h2 className="text-lg font-semibold">Approval</h2>
+            <p className="text-sm text-muted-foreground">
+              Internal sign-off before the contract goes to the client and out
+              for signature.
+            </p>
           </div>
           {pending > 0 && (
             <Card className="border-warning/40 bg-warning/5">
@@ -1252,68 +1255,19 @@ export default function ContractDetail() {
               </CardContent>
             </Card>
           )}
-          <div className="grid gap-3 md:grid-cols-3">
-            {chain.map((a) => (
-              <Card key={a._id}>
-                <CardContent className="space-y-2 p-4 text-center">
-                  <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">
-                    {a.name
-                      .split(" ")
-                      .filter(Boolean)
-                      .slice(0, 2)
-                      .map((w) => w[0]?.toUpperCase())
-                      .join("")}
-                  </div>
-                  <p className="text-sm font-semibold">{a.name}</p>
-                  <p className="text-xs text-muted-foreground">{a.role}</p>
-                  <Badge className={approvalStatusTone[a.status]}>
-                    {a.status}
-                  </Badge>
-                  {a.decidedAt && (
-                    <p className="text-xs text-muted-foreground">
-                      {fmt(a.decidedAt)}
-                    </p>
-                  )}
-                  {a.status === "In review" && (
-                    <div className="flex justify-center gap-1.5 pt-1">
-                      <Button
-                        size="sm"
-                        disabled={decideStepMut.isPending}
-                        onClick={() =>
-                          decideStepMut.mutate({
-                            stepId: a._id,
-                            decision: "Approved",
-                          })
-                        }
-                      >
-                        Approve
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={decideStepMut.isPending}
-                        onClick={() =>
-                          decideStepMut.mutate({
-                            stepId: a._id,
-                            decision: "Rejected",
-                          })
-                        }
-                      >
-                        Reject
-                      </Button>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            ))}
-            {!chain.length && (
-              <Card className="border-dashed md:col-span-3">
-                <CardContent className="p-8 text-center text-sm text-muted-foreground">
-                  No approval chain set up yet.
-                </CardContent>
-              </Card>
-            )}
-          </div>
+          <ApprovalTracker
+            area="crm_contracts"
+            noun="contract"
+            run={run}
+            workflow={workflow}
+            canSubmitNow={!!contract.renderedBody?.trim()}
+            cannotSubmitReason="Add the contract text first."
+            busy={submitApprovalMut.isPending || decideApprovalMut.isPending}
+            onSubmit={(note) => submitApprovalMut.mutateAsync(note)}
+            onDecide={(decision, note) =>
+              decideApprovalMut.mutateAsync({ decision, note })
+            }
+          />
           <Card>
             <CardHeader className="pb-2">
               <SectionTitle icon={ShieldCheck}>
@@ -1341,7 +1295,11 @@ export default function ContractDetail() {
                 k="Currently awaiting"
                 v={
                   currentApprovalStep
-                    ? `${currentApprovalStep.name} (${currentApprovalStep.role})`
+                    ? `${currentApprovalStep.name} — ${
+                        currentApprovalStep.kind === "Owner"
+                          ? "account owner"
+                          : currentApprovalStep.userNames.join(" or ")
+                      }`
                     : "—"
                 }
               />
@@ -1360,18 +1318,20 @@ export default function ContractDetail() {
             </div>
             <div className="flex flex-wrap gap-2">
               {(contract.signatureStatus === "not_sent" ||
-                contract.signatureStatus === "sent") && (
-                <Button
-                  size="sm"
-                  disabled={sendMut.isPending}
-                  onClick={() => sendMut.mutate()}
-                >
-                  <Send className="mr-2 h-4 w-4" />
-                  {contract.signatureStatus === "sent"
-                    ? "Resend for signature"
-                    : "Send for signature"}
-                </Button>
-              )}
+                contract.signatureStatus === "sent") &&
+                !readOnlyForMe && (
+                  <Button
+                    size="sm"
+                    disabled={sendMut.isPending || !!approvalBlock}
+                    title={approvalBlock ?? undefined}
+                    onClick={() => sendMut.mutate()}
+                  >
+                    <Send className="mr-2 h-4 w-4" />
+                    {contract.signatureStatus === "sent"
+                      ? "Resend for signature"
+                      : "Send for signature"}
+                  </Button>
+                )}
               {contract.signatureStatus === "signed" && (
                 <Button
                   size="sm"
@@ -1421,9 +1381,7 @@ export default function ContractDetail() {
                 { label: "Draft finalised", done: stageIndex >= 1 },
                 {
                   label: "Internal approval",
-                  done:
-                    chain.length > 0 &&
-                    chain.every((s) => s.status === "Approved"),
+                  done: run.status === "Approved",
                 },
                 {
                   label: "CPs satisfied",
@@ -2139,110 +2097,6 @@ export default function ContractDetail() {
               onClick={() => addCpMut.mutate()}
             >
               Add
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={chainSetupOpen} onOpenChange={setChainSetupOpen}>
-        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>
-              {chain.length
-                ? "Restart approval chain"
-                : "Set up approval chain"}
-            </DialogTitle>
-          </DialogHeader>
-          <p className="text-xs text-muted-foreground">
-            The first step becomes "In review" immediately; every step resets.
-          </p>
-          <div className="space-y-2">
-            {chainDraft.map((s, i) => (
-              <div key={i} className="grid grid-cols-[1fr_1fr_auto] gap-2">
-                <Select
-                  value={s.userId || "custom"}
-                  onValueChange={(v) => {
-                    if (v === "custom") return;
-                    const emp = employees.find((e) => e._id === v);
-                    setChainDraft(
-                      chainDraft.map((x, j) =>
-                        j === i
-                          ? {
-                              ...x,
-                              userId: v,
-                              name: emp
-                                ? `${emp.firstName} ${emp.lastName}`
-                                : x.name,
-                            }
-                          : x,
-                      ),
-                    );
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Employee (optional)" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="custom">Type name manually</SelectItem>
-                    {employees.map((e) => (
-                      <SelectItem key={e._id} value={e._id}>
-                        {e.firstName} {e.lastName}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Input
-                  placeholder="Name"
-                  value={s.name}
-                  onChange={(e) =>
-                    setChainDraft(
-                      chainDraft.map((x, j) =>
-                        j === i ? { ...x, name: e.target.value } : x,
-                      ),
-                    )
-                  }
-                />
-                <Input
-                  placeholder="Role"
-                  value={s.role}
-                  onChange={(e) =>
-                    setChainDraft(
-                      chainDraft.map((x, j) =>
-                        j === i ? { ...x, role: e.target.value } : x,
-                      ),
-                    )
-                  }
-                />
-                {chainDraft.length > 1 && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="col-span-3 justify-self-end"
-                    onClick={() =>
-                      setChainDraft(chainDraft.filter((_, j) => j !== i))
-                    }
-                  >
-                    Remove step
-                  </Button>
-                )}
-              </div>
-            ))}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() =>
-                setChainDraft([...chainDraft, { name: "", role: "" }])
-              }
-            >
-              <Plus className="mr-1 h-3.5 w-3.5" /> Add step
-            </Button>
-          </div>
-          <DialogFooter>
-            <Button
-              disabled={setChainMut.isPending}
-              onClick={() => setChainMut.mutate()}
-            >
-              Save chain
             </Button>
           </DialogFooter>
         </DialogContent>
