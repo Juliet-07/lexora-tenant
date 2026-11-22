@@ -29,7 +29,7 @@ export function EvidenceLink({ name, url }: { name: string; url: string }) {
   );
 }
 
-/** The comments the approver has left on a vendor, newest last. */
+/** The approver / tenant comment thread on a vendor, oldest first. */
 export function ApprovalComments({
   comments,
 }: {
@@ -41,7 +41,11 @@ export function ApprovalComments({
       {comments.map((c) => (
         <div
           key={c._id}
-          className="rounded-md border border-border/60 bg-muted/30 px-3 py-2"
+          className={`rounded-md border px-3 py-2 ${
+            c.by === "tenant"
+              ? "border-primary/30 bg-primary/5"
+              : "border-border/60 bg-muted/30"
+          }`}
         >
           <p className="text-xs whitespace-pre-wrap break-words">{c.text}</p>
           <p className="mt-1 text-[10px] text-muted-foreground">

@@ -283,32 +283,6 @@ function ViewSheet({
                   )}
                 </div>
               )}
-              <div className="space-y-1.5">
-                <h4 className="text-sm font-semibold">Sharing history</h4>
-                {o.shared.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    Not shared yet.
-                  </p>
-                ) : (
-                  o.shared
-                    .slice()
-                    .reverse()
-                    .map((s) => (
-                      <div
-                        key={s._id}
-                        className="rounded-md border px-3 py-2 text-sm"
-                      >
-                        <p>{s.text}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {fmtDay(s.at)}
-                          {s.by?.name ? ` · ${s.by.name}` : ""}
-                          {s.emailsFailed.length > 0 &&
-                            ` · failed: ${s.emailsFailed.join(", ")}`}
-                        </p>
-                      </div>
-                    ))
-                )}
-              </div>
             </div>
             <div className="flex items-center justify-between gap-2 border-t px-5 py-3">
               <Button
@@ -329,7 +303,7 @@ function ViewSheet({
                 </Button>
                 <Button onClick={onEdit}>
                   <Pencil className="mr-1.5 h-4 w-4" />
-                  {o.status === "Draft" ? "Continue" : "Edit / share"}
+                  {o.status === "Draft" ? "Continue" : "Edit"}
                 </Button>
               </div>
             </div>

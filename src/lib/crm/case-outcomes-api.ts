@@ -7,7 +7,10 @@ const unwrap = (res: any) => res.data?.data ?? res.data;
 
 export type OutcomeCaseKind = "adr" | "litigation";
 export type OutcomeKind =
-  "Settlement" | "Award" | "Consent judgment" | "Judgment";
+  | "Settlement"
+  | "Award"
+  | "Consent judgment"
+  | "Judgment";
 
 export const OUTCOME_SLUG: Record<OutcomeKind, string> = {
   Settlement: "settlement",
@@ -160,21 +163,6 @@ export const generateOutcomeDocument = async (
       `${base(kind, caseId)}/${OUTCOME_SLUG[outcome]}/generate-document`,
       { form },
     ),
-  );
-
-export const shareCaseOutcome = async (
-  kind: OutcomeCaseKind,
-  caseId: string,
-  outcome: OutcomeKind,
-  dto: OutcomeShareInput,
-): Promise<{
-  text: string;
-  emailsSent: number;
-  emailsFailed: string[];
-  outcome: CaseOutcome;
-}> =>
-  unwrap(
-    await api.post(`${base(kind, caseId)}/${OUTCOME_SLUG[outcome]}/share`, dto),
   );
 
 export const downloadOutcomePdf = async (

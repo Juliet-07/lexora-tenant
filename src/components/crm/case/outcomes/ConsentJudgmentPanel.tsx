@@ -31,7 +31,6 @@ import {
 import {
   AUTHORITY_OPTIONS,
   blankPayment,
-  caseRefLine,
   courtOptions,
   pctOfClaim,
   scheduleErrors,

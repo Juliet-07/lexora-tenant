@@ -48,6 +48,7 @@ import {
   setVendorStatus,
   requestVendorApproval,
   decideVendorApproval,
+  addVendorApprovalComment,
   vendorSpendYtd,
   SPEND_MONTHS,
   type VendorStatus,
@@ -125,6 +126,25 @@ export function VendorSheet({
     "approved" | "rejected" | null
   >(null);
   const [decisionNote, setDecisionNote] = useState("");
+  const [replyText, setReplyText] = useState("");
+
+  const replyMut = useMutation({
+    mutationFn: () => addVendorApprovalComment(vendorId!, replyText.trim()),
+    onSuccess: () => {
+      invalidate();
+      setReplyText("");
+      toast({
+        title: "Reply sent",
+        description: "The approver has been notified.",
+      });
+    },
+    onError: (err: any) =>
+      toast({
+        title: "Could not send the reply",
+        description: err?.response?.data?.message,
+        variant: "destructive",
+      }),
+  });
 
   const statusMut = useMutation({
     mutationFn: (status: VendorStatus) => setVendorStatus(vendorId!, status),
@@ -350,12 +370,31 @@ export function VendorSheet({
                     </Button>
                   </div>
                 )}
-                {!!vendor.approvalComments?.length && (
+                {(vendor.approverEmployeeId ||
+                  !!vendor.approvalComments?.length) && (
                   <div className="space-y-1.5 pt-1">
                     <p className="text-[11px] font-semibold uppercase text-muted-foreground">
-                      Comments from {vendor.approverName || "the approver"}
+                      Comments with {vendor.approverName || "the approver"}
                     </p>
                     <ApprovalComments comments={vendor.approvalComments} />
+                    {vendor.approverEmployeeId && (
+                      <>
+                        <Textarea
+                          rows={2}
+                          placeholder="Reply to the approver…"
+                          value={replyText}
+                          onChange={(e) => setReplyText(e.target.value)}
+                        />
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={!replyText.trim() || replyMut.isPending}
+                          onClick={() => replyMut.mutate()}
+                        >
+                          Send reply
+                        </Button>
+                      </>
+                    )}
                   </div>
                 )}
               </div>

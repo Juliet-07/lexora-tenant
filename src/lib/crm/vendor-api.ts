@@ -53,11 +53,13 @@ export interface VendorSpendEntry {
   amount: number;
 }
 
-// A comment the assigned approver left for the tenant while reviewing.
+// One message in the approver / tenant comment thread on a vendor.
 export interface VendorApprovalComment {
   _id: string;
   at: string;
   author: string;
+  // Absent on comments saved before replies existed — those are the approver's.
+  by?: "approver" | "tenant";
   text: string;
 }
 
@@ -348,6 +350,12 @@ export const decideMyVendorApproval = async (
       note,
     }),
   );
+
+export const addVendorApprovalComment = async (
+  id: string,
+  text: string,
+): Promise<Vendor> =>
+  unwrap(await api.post(`/crm/vendors/${id}/approval/comments`, { text }));
 
 export const addMyVendorApprovalComment = async (
   id: string,
