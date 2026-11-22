@@ -34,7 +34,6 @@ import { useToast } from "@/hooks/use-toast";
 import {
   ExternalLink,
   FileSignature,
-  Paperclip,
   ShieldCheck,
   Upload,
   UserCheck,
@@ -55,6 +54,7 @@ import {
 } from "@/lib/crm/vendor-api";
 import { fetchVendorContracts } from "@/lib/crm/tools-api";
 import { VendorContractDialog } from "./VendorContractDialog";
+import { EvidenceLink, ApprovalComments } from "./VendorApprovalParts";
 import { RISK_TONE, STATUS_TONE, CONTRACT_TONE } from "@/pages/crm/crm/Vendors";
 
 const money = (n: number, c = defaultCurrency()) =>
@@ -350,6 +350,14 @@ export function VendorSheet({
                     </Button>
                   </div>
                 )}
+                {!!vendor.approvalComments?.length && (
+                  <div className="space-y-1.5 pt-1">
+                    <p className="text-[11px] font-semibold uppercase text-muted-foreground">
+                      Comments from {vendor.approverName || "the approver"}
+                    </p>
+                    <ApprovalComments comments={vendor.approvalComments} />
+                  </div>
+                )}
               </div>
 
               <div className="flex flex-wrap gap-2">
@@ -399,10 +407,12 @@ export function VendorSheet({
                       {d.hint}
                     </p>
                     {d.documentName && (
-                      <p className="text-[11px] text-primary mt-1">
-                        <Paperclip className="h-3 w-3 inline mr-1" />
-                        {d.documentName}
-                      </p>
+                      <div className="mt-1">
+                        <EvidenceLink
+                          name={d.documentName}
+                          url={d.documentUrl}
+                        />
+                      </div>
                     )}
                   </div>
                   {d.done ? (

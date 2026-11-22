@@ -51,9 +51,14 @@ import {
 } from "@/lib/client/clients-api";
 import { fetchMyProfile } from "@/lib/hr/hr-api";
 import {
+  EvidenceLink,
+  ApprovalComments,
+} from "@/components/crm/vendorManager/VendorApprovalParts";
+import {
   fetchMyVendorApprovals,
   fetchMyVendorApproval,
   decideMyVendorApproval,
+  addMyVendorApprovalComment,
   DD_CHECKLIST_LABELS,
   vendorSpendYtd,
   type Vendor,
@@ -690,6 +695,27 @@ function VendorApprovalDialog({
     "approved" | "rejected" | null
   >(null);
   const [decisionNote, setDecisionNote] = useState("");
+  const [commentText, setCommentText] = useState("");
+
+  const commentMut = useMutation({
+    mutationFn: () => addMyVendorApprovalComment(vendorId!, commentText.trim()),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["my-vendor-approval", vendorId],
+      });
+      setCommentText("");
+      toast({
+        title: "Comment sent",
+        description: "The tenant has been notified.",
+      });
+    },
+    onError: (err: any) =>
+      toast({
+        title: "Could not send the comment",
+        description: err?.response?.data?.message,
+        variant: "destructive",
+      }),
+  });
 
   const decideMut = useMutation({
     mutationFn: () =>
@@ -721,7 +747,7 @@ function VendorApprovalDialog({
   return (
     <>
       <Dialog open={!!vendor} onOpenChange={(o) => !o && onClose()}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{vendor.legalName}</DialogTitle>
           </DialogHeader>
@@ -758,13 +784,48 @@ function VendorApprovalDialog({
                 Due diligence — {doneCount}/{vendor.ddItems.length} complete
               </p>
               {vendor.ddItems.map((d) => (
-                <div key={d._id} className="flex items-center gap-2 py-1">
+                <div key={d._id} className="flex items-start gap-2 py-1">
                   <ShieldCheck
-                    className={`h-3.5 w-3.5 shrink-0 ${d.done ? "text-success" : "text-muted-foreground"}`}
+                    className={`h-3.5 w-3.5 mt-0.5 shrink-0 ${d.done ? "text-success" : "text-muted-foreground"}`}
                   />
-                  <span className="text-xs">{d.label}</span>
+                  <div className="min-w-0">
+                    <span className="text-xs">{d.label}</span>
+                    {d.documentUrl ? (
+                      <div>
+                        <EvidenceLink
+                          name={d.documentName}
+                          url={d.documentUrl}
+                        />
+                      </div>
+                    ) : (
+                      <p className="text-[11px] text-muted-foreground">
+                        No document attached
+                      </p>
+                    )}
+                  </div>
                 </div>
               ))}
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-[11px] font-semibold uppercase text-muted-foreground">
+                Comments for the tenant
+              </p>
+              <ApprovalComments comments={vendor.approvalComments} />
+              <Textarea
+                rows={2}
+                placeholder="Ask a question or flag something for the tenant…"
+                value={commentText}
+                onChange={(e) => setCommentText(e.target.value)}
+              />
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={!commentText.trim() || commentMut.isPending}
+                onClick={() => commentMut.mutate()}
+              >
+                Send comment
+              </Button>
             </div>
 
             {vendor.approvalStatus === "pending" ? (

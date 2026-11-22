@@ -53,6 +53,25 @@ export interface VendorSpendEntry {
   amount: number;
 }
 
+// A comment the assigned approver left for the tenant while reviewing.
+export interface VendorApprovalComment {
+  _id: string;
+  at: string;
+  author: string;
+  text: string;
+}
+
+// Evidence files carry a relative /uploads/... URL — resolve it against
+// the API's own origin, same pattern as every other module.
+const VENDOR_API_BASE = (api.defaults as any)?.baseURL ?? "/api";
+export const resolveVendorFileUrl = (
+  url: string | null | undefined,
+): string | null => {
+  if (!url) return null;
+  if (url.startsWith("http")) return url;
+  return `${new URL(VENDOR_API_BASE).origin}${url}`;
+};
+
 export interface Vendor {
   _id: string;
   legalName: string;
@@ -85,6 +104,8 @@ export interface Vendor {
   approvalRequestedAt: string | null;
   approvalDecidedAt: string | null;
   approvalDecisionNote: string;
+  // Absent on vendors saved before comments existed.
+  approvalComments?: VendorApprovalComment[];
   ddItems: DdChecklistItem[];
   notes: VendorNote[];
   activity: VendorActivity[];
@@ -327,3 +348,9 @@ export const decideMyVendorApproval = async (
       note,
     }),
   );
+
+export const addMyVendorApprovalComment = async (
+  id: string,
+  text: string,
+): Promise<Vendor> =>
+  unwrap(await api.post(`/crm/my-vendor-approvals/${id}/comments`, { text }));
