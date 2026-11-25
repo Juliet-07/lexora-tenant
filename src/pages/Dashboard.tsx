@@ -22,7 +22,10 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useModule, type SubscriptionInfo } from "@/contexts/ModuleContext";
 import { MotivationalQuote } from "@/components/dashboard/MotivationalQuote";
 import { quickLinksFor } from "@/components/dashboard/moduleQuickLinks";
-import { useCrossModuleMetrics } from "@/components/dashboard/useCrossModuleMetrics";
+import {
+  fullMoney,
+  useCrossModuleMetrics,
+} from "@/components/dashboard/useCrossModuleMetrics";
 import { ModulePulse } from "@/components/dashboard/ModulePulse";
 import { AttentionFeed } from "@/components/dashboard/AttentionFeed";
 import { TONE_TEXT, fmtScore, scoreTone } from "@/lib/grc/health-score-api";
@@ -157,8 +160,15 @@ export default function Dashboard() {
     modules,
     currentModule,
   } = useModule();
-  const { cards, attention, wins, overallScore, healthScore, counts } =
-    useCrossModuleMetrics(dashboardData);
+  const {
+    currency,
+    cards,
+    attention,
+    wins,
+    overallScore,
+    healthScore,
+    counts,
+  } = useCrossModuleMetrics(dashboardData);
 
   const now = new Date();
   const today = now.toLocaleDateString("en-US", {
@@ -400,7 +410,7 @@ export default function Dashboard() {
               <div className="rounded-lg bg-muted/30 p-2">
                 <p className="text-[11px] text-muted-foreground">Revenue</p>
                 <p className="text-lg font-bold">
-                  ${Math.round(pulse.revenue).toLocaleString()}
+                  {fullMoney(pulse.revenue, currency)}
                 </p>
               </div>
             </div>

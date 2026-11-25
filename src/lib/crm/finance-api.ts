@@ -1025,6 +1025,18 @@ export const createBankAccount = async (dto: {
   type: BankAccountType;
 }): Promise<BankAccount> =>
   unwrap(await api.post("/finance/bank-accounts", dto));
+export const updateBankAccount = async (
+  id: string,
+  dto: {
+    name?: string;
+    bank?: string;
+    last4?: string;
+    currency?: string;
+    openingBalance?: number;
+    type?: BankAccountType;
+  },
+): Promise<BankAccount> =>
+  unwrap(await api.patch(`/finance/bank-accounts/${id}`, dto));
 
 export type TxStatus = "Matched" | "Unmatched";
 export type TxLinkType = "Invoice" | "Bill" | "Payroll" | "Manual";
@@ -1057,6 +1069,16 @@ export const createBankTransaction = async (dto: {
   amount: number;
 }): Promise<BankTransaction> =>
   unwrap(await api.post("/finance/bank-transactions", dto));
+export const updateBankTransaction = async (
+  id: string,
+  dto: {
+    accountId?: string;
+    date?: string;
+    description?: string;
+    amount?: number;
+  },
+): Promise<BankTransaction> =>
+  unwrap(await api.patch(`/finance/bank-transactions/${id}`, dto));
 export const matchBankTransaction = async (
   id: string,
   linkType: TxLinkType,

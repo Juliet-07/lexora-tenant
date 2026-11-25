@@ -1,4 +1,18 @@
 import { fmtScore } from "@/lib/grc/health-score-api";
+import { defaultCurrency } from "@/lib/currency";
+
+const compact = new Intl.NumberFormat("en", {
+  notation: "compact",
+  maximumFractionDigits: 1,
+});
+
+/** A short money figure in the account's own currency, e.g. "RWF 4.1M". */
+export const shortMoney = (n: number, currency: string) =>
+  `${currency} ${compact.format(n || 0)}`;
+
+/** A full money figure in the account's own currency, e.g. "RWF 4,130,000". */
+export const fullMoney = (n: number, currency: string) =>
+  `${currency} ${Math.round(n || 0).toLocaleString()}`;
 
 export interface AttentionItem {
   id: string;
@@ -41,6 +55,11 @@ export interface ModulePulseCard {
 // while dashboardData is still loading, so callers don't need their
 // own separate loading branch just for this hook.
 export function useCrossModuleMetrics(dashboardData: any) {
+  // Every money figure on the dashboard is in the account's currency (set
+  // in Finance Settings); USD only until the account has chosen one.
+  const currency: string = String(
+    dashboardData?.currency || defaultCurrency(),
+  ).toUpperCase();
   const kyc = dashboardData?.kyc ?? {
     total: 0,
     approved: 0,
@@ -160,7 +179,7 @@ export function useCrossModuleMetrics(dashboardData: any) {
         { label: "Open tasks", value: crm.openTasks, tone: "default" },
         {
           label: "Receivables",
-          value: `$${Math.round(crm.receivables / 1000)}k`,
+          value: shortMoney(crm.receivables, currency),
           tone: crm.overdueInvoices ? "bad" : "good",
         },
       ],
@@ -170,7 +189,7 @@ export function useCrossModuleMetrics(dashboardData: any) {
       name: "Finance",
       accent: "from-amber-500 to-yellow-500",
       to: "/finance/report",
-      headline: `$${Math.round(finance.receivables / 1000)}k`,
+      headline: shortMoney(finance.receivables, currency),
       headlineLabel: "Outstanding receivables",
       score: finance.score,
       metrics: [
@@ -181,7 +200,7 @@ export function useCrossModuleMetrics(dashboardData: any) {
         },
         {
           label: "Monthly revenue",
-          value: `$${Math.round(finance.monthlyRevenue / 1000)}k`,
+          value: shortMoney(finance.monthlyRevenue, currency),
           tone: "default",
         },
         {
@@ -216,6 +235,7 @@ export function useCrossModuleMetrics(dashboardData: any) {
   ];
 
   return {
+    currency,
     cards,
     attention,
     wins,

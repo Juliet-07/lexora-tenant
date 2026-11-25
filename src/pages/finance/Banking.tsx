@@ -35,8 +35,10 @@ import { WorkflowTable } from "@/components/finance/WorkflowTable";
 import {
   fetchBankAccounts,
   createBankAccount,
+  updateBankAccount,
   fetchBankTransactions,
   createBankTransaction,
+  updateBankTransaction,
   matchBankTransaction,
   fetchBankRules,
   createBankRule,
@@ -49,6 +51,8 @@ import {
   signOffReconciliation,
   fetchCashForecast,
   type BankAccountType,
+  type BankAccount,
+  type BankTransaction,
   type TxLinkType,
   type BankRule,
 } from "@/lib/crm/finance-api";
@@ -179,6 +183,55 @@ export default function Banking() {
     onError: onErr("Failed to add account"),
   });
 
+  // A mistake in an account (wrong name, last 4, opening balance…) is
+  // fixed in the same dialog it was added in. Type and currency are
+  // locked by the server once the account has activity, so they are
+  // disabled here too rather than failing on save.
+  const [editAccountId, setEditAccountId] = useState<string | null>(null);
+  const openEditAccount = (a: BankAccount) => {
+    setEditAccountId(a._id);
+    setAccountDraft({
+      name: a.name,
+      bank: a.bank,
+      last4: a.last4,
+      currency: a.currency,
+      openingBalance: a.openingBalance ?? 0,
+      type: a.type,
+    });
+    setNewAccountOpen(true);
+  };
+  const closeAccountDialog = (open: boolean) => {
+    setNewAccountOpen(open);
+    if (!open) {
+      setEditAccountId(null);
+      setAccountDraft({
+        name: "",
+        bank: "",
+        last4: "",
+        currency: defaultCurrency(),
+        openingBalance: 0,
+        type: "Office",
+      });
+    }
+  };
+  const updateAccountMut = useMutation({
+    mutationFn: () => updateBankAccount(editAccountId!, accountDraft),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["bankAccounts"] });
+      queryClient.invalidateQueries({ queryKey: ["bankTransactions"] });
+      closeAccountDialog(false);
+      toast({ title: "Account updated" });
+    },
+    onError: onErr("Failed to update account"),
+  });
+  const editAccountLocked =
+    !!editAccountId &&
+    (txs.some((t) => t.accountId === editAccountId) ||
+      transfers.some(
+        (t) =>
+          t.fromAccountId === editAccountId || t.toAccountId === editAccountId,
+      ));
+
   // ── Bank feed ──────────────────────────────────────────────
   const [newTxOpen, setNewTxOpen] = useState(false);
   const [txDraft, setTxDraft] = useState({
@@ -208,6 +261,59 @@ export default function Banking() {
     queryClient.invalidateQueries({ queryKey: ["bankTransactions"] });
     queryClient.invalidateQueries({ queryKey: ["bankAccounts"] });
   };
+  // Edit a mistaken entry. Until it is matched, every field can change;
+  // once matched, only the description (the amount/date/account are what
+  // settled the invoice or bill).
+  const [editTx, setEditTx] = useState<BankTransaction | null>(null);
+  const openEditTx = (t: BankTransaction) => {
+    setEditTx(t);
+    setTxDraft({
+      accountId: t.accountId,
+      date: t.date?.slice(0, 10),
+      description: t.description,
+      amount: Math.abs(t.amount),
+      direction: t.amount < 0 ? "out" : "in",
+    });
+    setNewTxOpen(true);
+  };
+  const closeTxDialog = (open: boolean) => {
+    setNewTxOpen(open);
+    if (!open) {
+      setEditTx(null);
+      setTxDraft({
+        accountId: "",
+        date: new Date().toISOString().slice(0, 10),
+        description: "",
+        amount: 0,
+        direction: "in",
+      });
+    }
+  };
+  const txLocked = editTx?.status === "Matched";
+  const updateTxMut = useMutation({
+    mutationFn: () =>
+      updateBankTransaction(
+        editTx!._id,
+        txLocked
+          ? { description: txDraft.description }
+          : {
+              accountId: txDraft.accountId,
+              date: txDraft.date,
+              description: txDraft.description,
+              amount:
+                txDraft.direction === "out"
+                  ? -Math.abs(txDraft.amount)
+                  : Math.abs(txDraft.amount),
+            },
+      ),
+    onSuccess: () => {
+      invalidateTx();
+      queryClient.invalidateQueries({ queryKey: ["trialBalance"] });
+      closeTxDialog(false);
+      toast({ title: "Entry updated" });
+    },
+    onError: onErr("Failed to update entry"),
+  });
   const createTxMut = useMutation({
     mutationFn: () =>
       createBankTransaction({
@@ -390,6 +496,16 @@ export default function Banking() {
               <div className="flex items-center gap-2">
                 <Landmark className="h-4 w-4 text-primary" />
                 <p className="text-sm font-medium">{a.name}</p>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="ml-auto h-7 w-7"
+                  title="Edit account"
+                  aria-label={`Edit ${a.name}`}
+                  onClick={() => openEditAccount(a)}
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </Button>
               </div>
               <p className="text-lg font-bold">
                 {money(a.balance, a.currency)}
@@ -481,7 +597,15 @@ export default function Banking() {
                           {t.status}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="text-right whitespace-nowrap">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          title="Edit entry"
+                          onClick={() => openEditTx(t)}
+                        >
+                          <Pencil className="mr-1 h-3.5 w-3.5" /> Edit
+                        </Button>
                         {t.status === "Unmatched" && (
                           <Button
                             size="sm"
@@ -795,10 +919,12 @@ export default function Banking() {
       </Tabs>
 
       {/* New account */}
-      <Dialog open={newAccountOpen} onOpenChange={setNewAccountOpen}>
+      <Dialog open={newAccountOpen} onOpenChange={closeAccountDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Add bank account</DialogTitle>
+            <DialogTitle>
+              {editAccountId ? "Edit bank account" : "Add bank account"}
+            </DialogTitle>
           </DialogHeader>
           <div className="grid gap-3">
             <div>
@@ -835,6 +961,7 @@ export default function Banking() {
               <div>
                 <Label>Currency</Label>
                 <Select
+                  disabled={editAccountLocked}
                   value={accountDraft.currency}
                   onValueChange={(v) =>
                     setAccountDraft({ ...accountDraft, currency: v })
@@ -855,6 +982,7 @@ export default function Banking() {
               <div>
                 <Label>Type</Label>
                 <Select
+                  disabled={editAccountLocked}
                   value={accountDraft.type}
                   onValueChange={(v) =>
                     setAccountDraft({
@@ -889,32 +1017,52 @@ export default function Banking() {
                 }
               />
             </div>
+            {editAccountLocked && (
+              <p className="text-xs text-muted-foreground">
+                Type and currency are locked because transactions are already
+                recorded against this account.
+              </p>
+            )}
           </div>
           <DialogFooter>
             <Button
               disabled={
                 !accountDraft.name ||
                 !accountDraft.bank ||
-                createAccountMut.isPending
+                createAccountMut.isPending ||
+                updateAccountMut.isPending
               }
-              onClick={() => createAccountMut.mutate()}
+              onClick={() =>
+                editAccountId
+                  ? updateAccountMut.mutate()
+                  : createAccountMut.mutate()
+              }
             >
-              Add account
+              {editAccountId ? "Save changes" : "Add account"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* New transaction */}
-      <Dialog open={newTxOpen} onOpenChange={setNewTxOpen}>
+      <Dialog open={newTxOpen} onOpenChange={closeTxDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Record transaction</DialogTitle>
+            <DialogTitle>
+              {editTx ? "Edit entry" : "Record transaction"}
+            </DialogTitle>
           </DialogHeader>
+          {txLocked && (
+            <p className="text-xs text-muted-foreground">
+              This entry is matched to {editTx?.linkLabel || "a record"}, so
+              only the description can be changed.
+            </p>
+          )}
           <div className="grid gap-3">
             <div>
               <Label>Account</Label>
               <Select
+                disabled={txLocked}
                 value={txDraft.accountId}
                 onValueChange={(v) => setTxDraft({ ...txDraft, accountId: v })}
               >
@@ -942,6 +1090,7 @@ export default function Banking() {
             <div>
               <Label>Type</Label>
               <Select
+                disabled={txLocked}
                 value={txDraft.direction}
                 onValueChange={(v) =>
                   setTxDraft({ ...txDraft, direction: v as "in" | "out" })
@@ -964,6 +1113,7 @@ export default function Banking() {
               <div>
                 <Label>Date</Label>
                 <Input
+                  disabled={txLocked}
                   type="date"
                   value={txDraft.date}
                   onChange={(e) =>
@@ -974,6 +1124,7 @@ export default function Banking() {
               <div>
                 <Label>Amount</Label>
                 <Input
+                  disabled={txLocked}
                   type="number"
                   min={0}
                   value={txDraft.amount}
@@ -992,11 +1143,14 @@ export default function Banking() {
               disabled={
                 !txDraft.accountId ||
                 !txDraft.description ||
-                createTxMut.isPending
+                createTxMut.isPending ||
+                updateTxMut.isPending
               }
-              onClick={() => createTxMut.mutate()}
+              onClick={() =>
+                editTx ? updateTxMut.mutate() : createTxMut.mutate()
+              }
             >
-              Record
+              {editTx ? "Save changes" : "Record"}
             </Button>
           </DialogFooter>
         </DialogContent>

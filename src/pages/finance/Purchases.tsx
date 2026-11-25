@@ -1314,6 +1314,14 @@ export default function Purchases() {
             </div>
             <div className="space-y-2">
               <Label>Line items</Label>
+              {/* Labels so each box says what it is, not only its placeholder */}
+              <div className="grid grid-cols-[1fr_55px_80px_65px_100px] gap-2 text-[11px] font-medium text-muted-foreground">
+                <span>Description</span>
+                <span>Qty</span>
+                <span>Unit price</span>
+                <span>Disc %</span>
+                <span>Tax label</span>
+              </div>
               {poLines.map((l, i) => (
                 <div
                   key={i}
@@ -1321,6 +1329,7 @@ export default function Purchases() {
                 >
                   <Input
                     placeholder="Description"
+                    aria-label="Description"
                     value={l.description}
                     onChange={(e) =>
                       setPoLines((p) =>
@@ -1333,6 +1342,7 @@ export default function Purchases() {
                   <Input
                     type="number"
                     placeholder="Qty"
+                    aria-label="Quantity"
                     value={l.qty}
                     onChange={(e) =>
                       setPoLines((p) =>
@@ -1345,6 +1355,7 @@ export default function Purchases() {
                   <Input
                     type="number"
                     placeholder="Unit price"
+                    aria-label="Unit price"
                     value={l.unit}
                     onChange={(e) =>
                       setPoLines((p) =>
@@ -1357,6 +1368,7 @@ export default function Purchases() {
                   <Input
                     type="number"
                     placeholder="Disc %"
+                    aria-label="Discount percent"
                     value={l.discountPct ?? 0}
                     onChange={(e) =>
                       setPoLines((p) =>
@@ -1370,6 +1382,7 @@ export default function Purchases() {
                   />
                   <Input
                     placeholder="Tax label"
+                    aria-label="Tax label"
                     value={l.taxLabel ?? ""}
                     onChange={(e) =>
                       setPoLines((p) =>
