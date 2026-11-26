@@ -228,7 +228,7 @@ export const registerPolicyMeta = (fields: RegistryField[]) => {
 
 export const metaFor = (
   key: string,
-  source: "crm" | "hr" | "policy" = "crm",
+  source: "crm" | "hr" | "policy" | "fund" = "crm",
 ): MergeFieldMeta =>
   (source === "policy" ? POLICY_META[key] : undefined) ??
   META[key] ??

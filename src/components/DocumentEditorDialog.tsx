@@ -31,7 +31,7 @@ interface DocumentEditorDialogProps {
    */
   mergeFields?: boolean;
   /** Where the panel's field labels come from. */
-  mergeRegistry?: "crm" | "hr" | "policy";
+  mergeRegistry?: "crm" | "hr" | "policy" | "fund";
   /** Custom label for the save action — defaults to "Save Changes". */
   saveLabel?: string;
   /**

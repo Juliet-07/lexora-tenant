@@ -2064,13 +2064,57 @@ export const setRemittanceAccountActive = async (
 
 // ── Trust accounting ──────────────────────────────────────────
 
-export type InterestTreatment = "Client retained" | "Firm retained" | "Pooled";
+// Fetches a generated file (PDF / XLSX / CSV) and hands it to the browser
+// as a download, using the filename the server chose.
+export const downloadFinanceFile = async (
+  url: string,
+  params?: Record<string, any>,
+  fallbackName = "download",
+) => {
+  const res = await api.get(url, { params, responseType: "blob" });
+  const disposition: string = res.headers?.["content-disposition"] ?? "";
+  const m = /filename="?([^";]+)"?/i.exec(disposition);
+  const blobUrl = window.URL.createObjectURL(res.data as Blob);
+  const a = document.createElement("a");
+  a.href = blobUrl;
+  a.download = m?.[1] ?? fallbackName;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(blobUrl);
+};
+
+export type InterestTreatment =
+  | "Client retained"
+  | "Firm retained"
+  | "Pooled"
+  | "No interest";
+export type TrustLedgerStatus = "Active" | "Frozen" | "Closing";
+export type TrustRiskLevel = "Standard" | "EDD" | "PEP";
+export type TrustPortalAccess = "Active" | "Invite pending" | "Disabled";
+export type TrustDrawdownType =
+  | "Invoice"
+  | "Mandate"
+  | "Third-party expense"
+  | "Trust-to-office"
+  | "Refund";
+export type TrustLinkType = "Invoice" | "Bill" | "Mandate" | "Deposit";
 export type TrustMovementType = "Deposit" | "Drawdown" | "Interest";
 export type TrustMovementStatus =
+  | "Draft"
   | "Recorded"
   | "Awaiting authorisation"
   | "Approved"
   | "Rejected";
+
+export interface TrustNotifyPrefs {
+  depositConfirmations: boolean;
+  drawdownNotices: boolean;
+  monthlyStatements: boolean;
+  lowBalanceAlerts: boolean;
+  interestCredits: boolean;
+  reconciliationReports: boolean;
+}
 
 export interface TrustLedger {
   _id: string;
@@ -2079,100 +2123,382 @@ export interface TrustLedger {
   clientName: string;
   mandateId: string | null;
   mandateName: string;
+  mandateReference: string;
   currency: string;
   interestTreatment: InterestTreatment;
+  interestRate: number;
+  interestCreditedThrough: string | null;
   lastReconciledAt: string | null;
-  // Server-computed live from real movements — never sent, always present.
+  sourceOfFunds: string;
+  expectedPurpose: string;
+  sourceOfFundsNotes: string;
+  riskLevel: TrustRiskLevel;
+  maxDrawdownPerRequest: number;
+  invoiceLinkedOnly: boolean;
+  status: TrustLedgerStatus;
+  minBalance: number;
+  replenishmentTarget: number;
+  lastReplenishmentAt: string | null;
+  portalAccess: TrustPortalAccess;
+  portalContactEmail: string;
+  additionalPortalUsers: string[];
+  emailDigest: string;
+  notifyPrefs: TrustNotifyPrefs;
+  // Computed live by the server from real movements — never stored.
   balance: number;
+  reserved: number;
+  available: number;
+  belowMinimum: boolean;
+  depositsWithEvidence?: number;
 }
 export const fetchTrustLedgers = async (): Promise<TrustLedger[]> => {
-  const res = await api.get("/finance/trust-ledgers");
-  const d = unwrap(res);
+  const d = unwrap(await api.get("/finance/trust-ledgers"));
   return Array.isArray(d) ? d : [];
 };
 export const fetchTrustLedger = async (id: string): Promise<TrustLedger> =>
   unwrap(await api.get(`/finance/trust-ledgers/${id}`));
-export const createTrustLedger = async (dto: {
-  bankAccountId: string;
-  clientUserId: string;
-  clientName: string;
+
+export interface TrustLedgerInput {
   mandateId?: string;
   mandateName?: string;
-  currency?: string;
+  mandateReference?: string;
   interestTreatment?: InterestTreatment;
-}): Promise<TrustLedger> =>
+  interestRate?: number;
+  sourceOfFunds?: string;
+  expectedPurpose?: string;
+  sourceOfFundsNotes?: string;
+  riskLevel?: TrustRiskLevel;
+  maxDrawdownPerRequest?: number;
+  invoiceLinkedOnly?: boolean;
+  minBalance?: number;
+  replenishmentTarget?: number;
+  portalAccess?: TrustPortalAccess;
+  portalContactEmail?: string;
+  additionalPortalUsers?: string[];
+  emailDigest?: string;
+  notifyPrefs?: Partial<TrustNotifyPrefs>;
+}
+export const createTrustLedger = async (
+  dto: TrustLedgerInput & {
+    bankAccountId: string;
+    clientUserId: string;
+    clientName: string;
+    currency?: string;
+    frozen?: boolean;
+  },
+): Promise<TrustLedger> =>
   unwrap(await api.post("/finance/trust-ledgers", dto));
+export const updateTrustLedger = async (
+  id: string,
+  dto: TrustLedgerInput,
+): Promise<TrustLedger> =>
+  unwrap(await api.patch(`/finance/trust-ledgers/${id}`, dto));
+export const setTrustLedgerStatus = async (
+  id: string,
+  status: TrustLedgerStatus,
+  reason?: string,
+): Promise<TrustLedger> =>
+  unwrap(
+    await api.post(`/finance/trust-ledgers/${id}/status`, { status, reason }),
+  );
 export const markTrustLedgerReconciled = async (
   id: string,
 ): Promise<TrustLedger> =>
   unwrap(await api.post(`/finance/trust-ledgers/${id}/reconcile`));
 
+export interface TrustIntegrityRow {
+  ledgerId: string;
+  clientName: string;
+  mandateName: string;
+  currency: string;
+  balance: number;
+  depositsInTransit: number;
+  drawdownsClearing: number;
+  lastReconciledAt: string | null;
+  status: TrustLedgerStatus;
+}
 export interface TrustIntegrityCheck {
+  bankAccountId: string;
+  accountName?: string;
   bankBalance: number;
   ledgerTotal: number;
   ledgerCount: number;
   variance: number;
   matched: boolean;
+  ledgers: TrustIntegrityRow[];
 }
 export const fetchTrustIntegrityCheck = async (
   bankAccountId: string,
 ): Promise<TrustIntegrityCheck> =>
   unwrap(await api.get(`/finance/trust-ledgers/integrity/${bankAccountId}`));
+// Runs the check, and records the result in the audit trail.
+export const runTrustReconciliation = async (
+  bankAccountId?: string,
+): Promise<TrustIntegrityCheck[]> =>
+  unwrap(
+    await api.post("/finance/trust-ledgers/reconciliation/run", {
+      bankAccountId,
+    }),
+  );
 
+export interface TrustDocument {
+  name: string;
+  url: string;
+  mimeType: string;
+  size: number;
+  uploadedAt: string;
+}
 export interface TrustMovement {
   _id: string;
   ref: string;
   ledgerId: string;
+  clientName: string;
+  mandateName: string;
   type: TrustMovementType;
   amount: number;
+  currency: string;
   reference: string;
   date: string;
   status: TrustMovementStatus;
   preparedBy: string;
+  preparedById: string | null;
   authorisedBy: string | null;
+  authorisedById: string | null;
   authorisedAt: string | null;
   linkedInvoiceId: string | null;
   rejectedReason: string | null;
+  linkType: TrustLinkType | null;
+  linkId: string | null;
+  linkRef: string;
+  linkLabel: string;
+  narrative: string;
+  internalNotes: string;
+  remitterName: string;
+  sourceOfFunds: string;
+  purpose: string;
+  drawdownType: TrustDrawdownType | null;
+  payeeName: string;
+  expenseCategory: string;
+  paymentMethod: string;
+  beneficiaryAccount: string;
+  settledPaymentRef: string;
+  requestedDate: string | null;
+  requiresAdditionalApproval: boolean;
+  firstAuthorisedBy: string | null;
+  firstAuthorisedById: string | null;
+  firstAuthorisedAt: string | null;
+  periodStart: string | null;
+  periodEnd: string | null;
+  firmRetained: boolean;
+  documents: TrustDocument[];
   createdAt: string;
 }
-export const fetchTrustMovements = async (
-  ledgerId?: string,
-): Promise<TrustMovement[]> => {
-  const res = await api.get("/finance/trust-movements", {
-    params: ledgerId ? { ledgerId } : undefined,
-  });
-  const d = unwrap(res);
+export const fetchTrustMovements = async (filters?: {
+  ledgerId?: string;
+  type?: string;
+  status?: string;
+  from?: string;
+  to?: string;
+}): Promise<TrustMovement[]> => {
+  const d = unwrap(
+    await api.get("/finance/trust-movements", { params: filters }),
+  );
   return Array.isArray(d) ? d : [];
 };
-export const recordTrustDeposit = async (dto: {
-  ledgerId: string;
-  amount: number;
-  reference?: string;
-  date: string;
-  preparedBy: string;
-}): Promise<TrustMovement> =>
-  unwrap(await api.post("/finance/trust-movements/deposit", dto));
-export const requestTrustDrawdown = async (dto: {
-  ledgerId: string;
-  amount: number;
-  linkedInvoiceId?: string;
-  preparedBy: string;
-}): Promise<TrustMovement> =>
-  unwrap(await api.post("/finance/trust-movements/drawdown", dto));
-export const authoriseTrustDrawdown = async (
-  id: string,
-  authorisedBy: string,
-): Promise<TrustMovement> =>
-  unwrap(
-    await api.post(`/finance/trust-movements/${id}/authorise`, {
-      authorisedBy,
+// Every drawdown made against one invoice / bill / mandate / deposit.
+export const fetchTrustMovementsBySource = async (
+  linkType: TrustLinkType,
+  linkId: string,
+): Promise<TrustMovement[]> => {
+  const d = unwrap(
+    await api.get("/finance/trust-movements/by-source", {
+      params: { linkType, linkId },
     }),
   );
+  return Array.isArray(d) ? d : [];
+};
+
+const multipart = (fields: Record<string, any>, files: File[] = []) => {
+  const fd = new FormData();
+  for (const [k, v] of Object.entries(fields)) {
+    if (v === undefined || v === null || v === "") continue;
+    fd.append(k, String(v));
+  }
+  files.forEach((f) => fd.append("documents", f));
+  return fd;
+};
+
+export const recordTrustDeposit = async (
+  dto: {
+    ledgerId: string;
+    amount: number;
+    reference: string;
+    date: string;
+    remitterName?: string;
+    sourceOfFunds: string;
+    purpose?: string;
+    internalNotes?: string;
+  },
+  files: File[] = [],
+): Promise<TrustMovement> =>
+  unwrap(
+    await api.post("/finance/trust-movements/deposit", multipart(dto, files)),
+  );
+
+export interface TrustDrawdownInput {
+  ledgerId: string;
+  drawdownType: TrustDrawdownType;
+  amount: number;
+  linkedInvoiceId?: string;
+  linkedBillId?: string;
+  mandateId?: string;
+  linkedDepositId?: string;
+  payeeName?: string;
+  expenseCategory?: string;
+  requestedDate?: string;
+  paymentMethod?: string;
+  beneficiaryAccount?: string;
+  officeBankAccountId?: string;
+  narrative: string;
+  internalNotes?: string;
+  saveAsDraft?: boolean;
+}
+export const requestTrustDrawdown = async (
+  dto: TrustDrawdownInput,
+  files: File[] = [],
+): Promise<TrustMovement> =>
+  unwrap(
+    await api.post("/finance/trust-movements/drawdown", multipart(dto, files)),
+  );
+export const submitTrustDraft = async (id: string): Promise<TrustMovement> =>
+  unwrap(await api.post(`/finance/trust-movements/${id}/submit`));
+export const addTrustMovementDocuments = async (
+  id: string,
+  files: File[],
+): Promise<TrustMovement> =>
+  unwrap(
+    await api.post(
+      `/finance/trust-movements/${id}/documents`,
+      multipart({}, files),
+    ),
+  );
+// The signed-in user is the authoriser — the server refuses the preparer.
+export const authoriseTrustDrawdown = async (
+  id: string,
+): Promise<TrustMovement> =>
+  unwrap(await api.post(`/finance/trust-movements/${id}/authorise`, {}));
 export const rejectTrustDrawdown = async (
   id: string,
   reason?: string,
 ): Promise<TrustMovement> =>
   unwrap(await api.post(`/finance/trust-movements/${id}/reject`, { reason }));
+
+// ── Interest performance ──
+export interface TrustInterestMonth {
+  month: string;
+  accrued: number;
+  credited: number;
+}
+export interface TrustInterestRow {
+  ledgerId: string;
+  clientName: string;
+  mandateName: string;
+  currency: string;
+  treatment: InterestTreatment;
+  rate: number;
+  earns: boolean;
+  avgDailyBalance: number;
+  mtdAccrued: number;
+  uncreditedAccrued: number;
+  uncreditedDays: number;
+  creditedThrough: string | null;
+  ytdCredited: number;
+  ytdFirmRetained: number;
+  lifetimeCredited: number;
+  projectedAnnual: number;
+  nextCredit: string | null;
+  lastCreditAt: string | null;
+  history: TrustInterestMonth[];
+}
+export interface TrustInterestPerformance {
+  rows: TrustInterestRow[];
+  byCurrency: Record<
+    string,
+    {
+      mtdAccrued: number;
+      uncredited: number;
+      ytdCredited: number;
+      ytdFirmRetained: number;
+    }
+  >;
+  asOf: string;
+}
+export const fetchTrustInterest = async (): Promise<TrustInterestPerformance> =>
+  unwrap(await api.get("/finance/trust-interest"));
+export const runTrustInterestAccrual =
+  async (): Promise<TrustInterestPerformance> =>
+    unwrap(await api.post("/finance/trust-interest/run", {}));
+export const creditAllTrustInterest = async (): Promise<any> =>
+  unwrap(await api.post("/finance/trust-interest/credit-all", {}));
+export const creditTrustInterest = async (
+  ledgerId: string,
+  through?: string,
+): Promise<any> =>
+  unwrap(
+    await api.post(`/finance/trust-interest/${ledgerId}/credit`, { through }),
+  );
+
+// ── Audit trail & reports ──
+export interface TrustAuditEntry {
+  _id: string;
+  action: string;
+  ledgerId: string | null;
+  clientName: string;
+  movementId: string | null;
+  details: string;
+  amount: number | null;
+  currency: string;
+  userName: string;
+  userId?: string;
+  ip: string;
+  createdAt: string;
+}
+export const fetchTrustAudit = async (filters?: {
+  action?: string;
+  ledgerId?: string;
+  q?: string;
+  from?: string;
+  to?: string;
+}): Promise<TrustAuditEntry[]> => {
+  const d = unwrap(await api.get("/finance/trust-audit", { params: filters }));
+  return Array.isArray(d) ? d : [];
+};
+export type TrustReportKind =
+  | "regulatory-return"
+  | "source-of-funds"
+  | "client-statements"
+  | "balances"
+  | "movements"
+  | "interest"
+  | "reconciliation-history"
+  | "drawdown-audit"
+  | "audit-trail";
+export const downloadTrustReport = (
+  kind: TrustReportKind,
+  format: "pdf" | "xlsx" | "csv",
+  filters?: Record<string, string | undefined>,
+) =>
+  downloadFinanceFile(
+    `/finance/trust-reports/${kind}`,
+    { format, ...filters },
+    `${kind}.${format}`,
+  );
+export const emailTrustStatements = async (dto: {
+  ledgerIds?: string[];
+  from?: string;
+  to?: string;
+}): Promise<{ sent: number; failed: string[] }> =>
+  unwrap(await api.post("/finance/trust-reports/email-statements", dto));
 
 // ══════════════════════════════════════════════════════════════
 // Fund accounting
@@ -2215,6 +2541,23 @@ export interface Fund {
   excludedSectors: string[];
   allowedGeography: string[];
   investmentPeriodSuspended: boolean;
+  gpEntityName?: string;
+  lpaDate?: string | null;
+  firstCloseDate?: string | null;
+  finalCloseDeadline?: string | null;
+  termYears?: number;
+  lpaCallClause?: string;
+  lpaDefaultInterestClause?: string;
+  lpaDefaultClause?: string;
+  gpCommitmentPct?: number;
+  wireBeneficiary?: string;
+  wireBankName?: string;
+  wireAccountNumber?: string;
+  wireSwift?: string;
+  wireBranch?: string;
+  noticeSignatory?: string;
+  noticeSignatoryTitle?: string;
+  administratorEmail?: string;
   committed: number;
   called: number;
   unfunded: number;
@@ -2242,6 +2585,23 @@ export interface FundTermsInput {
   orgCostsCapAmount?: number;
   recyclingPermitted?: boolean;
   recyclingCapPct?: number;
+  gpEntityName?: string;
+  lpaDate?: string;
+  firstCloseDate?: string;
+  finalCloseDeadline?: string;
+  termYears?: number;
+  lpaCallClause?: string;
+  lpaDefaultInterestClause?: string;
+  lpaDefaultClause?: string;
+  gpCommitmentPct?: number;
+  wireBeneficiary?: string;
+  wireBankName?: string;
+  wireAccountNumber?: string;
+  wireSwift?: string;
+  wireBranch?: string;
+  noticeSignatory?: string;
+  noticeSignatoryTitle?: string;
+  administratorEmail?: string;
 }
 export const fetchFunds = async (): Promise<Fund[]> => {
   const res = await api.get("/finance/funds");
@@ -2290,6 +2650,10 @@ export interface CapitalCommitment {
   mgmtFeePctOverride: number | null;
   sideLetterNotes: string;
   equalisationApplied: boolean;
+  lpEmail?: string;
+  amlKycStatus?: string;
+  subscriptionStatus?: string;
+  currency?: string;
 }
 export const fetchCommitments = async (
   fundId: string,
@@ -2311,9 +2675,29 @@ export const createCommitment = async (
     hasSideLetter?: boolean;
     mgmtFeePctOverride?: number;
     sideLetterNotes?: string;
+    lpEmail?: string;
+    amlKycStatus?: string;
+    subscriptionStatus?: string;
+    currency?: string;
   },
 ): Promise<CapitalCommitment> =>
   unwrap(await api.post(`/finance/funds/${fundId}/commitments`, dto));
+export const updateCommitment = async (
+  fundId: string,
+  commitmentId: string,
+  dto: {
+    lpEmail?: string;
+    amlKycStatus?: string;
+    subscriptionStatus?: string;
+    type?: CommitmentType;
+  },
+): Promise<CapitalCommitment> =>
+  unwrap(
+    await api.patch(
+      `/finance/funds/${fundId}/commitments/${commitmentId}`,
+      dto,
+    ),
+  );
 
 export interface EqualisationCalc {
   commitmentId: string;
@@ -2376,6 +2760,31 @@ export interface CapitalCall {
   issuedOn: string;
   dueOn: string;
   allocations: CapitalCallAllocation[];
+  status?: "Draft" | "Issued";
+  purposeCategory?: string;
+  dealName?: string;
+  narrative?: string;
+  useOfProceeds?: CallUseOfProceeds[];
+  noticeDate?: string | null;
+  noticeLog?: CallNoticeLogEntry[];
+  noticesSentAt?: string | null;
+  scheduledSendAt?: string | null;
+}
+export interface CallUseOfProceeds {
+  label: string;
+  amount: number;
+  /** 'fee' lines follow each LP's own management-fee rate. */
+  kind?: string;
+}
+export interface CallNoticeLogEntry {
+  commitmentId: string;
+  lpName: string;
+  email: string;
+  method: string;
+  status: "Sent" | "Scheduled" | "Failed";
+  sentAt: string | null;
+  error: string;
+  sentBy: string;
 }
 export const fetchCapitalCalls = async (
   fundId: string,
@@ -2384,16 +2793,150 @@ export const fetchCapitalCalls = async (
   const d = unwrap(res);
   return Array.isArray(d) ? d : [];
 };
+export interface CapitalCallInput {
+  purpose: string;
+  totalAmount: number;
+  issuedOn: string;
+  dueOn: string;
+  purposeCategory?: string;
+  dealName?: string;
+  narrative?: string;
+  useOfProceeds?: CallUseOfProceeds[];
+  saveAsDraft?: boolean;
+}
 export const createCapitalCall = async (
   fundId: string,
-  dto: {
-    purpose: string;
-    totalAmount: number;
-    issuedOn: string;
-    dueOn: string;
-  },
+  dto: CapitalCallInput,
 ): Promise<CapitalCall> =>
   unwrap(await api.post(`/finance/funds/${fundId}/capital-calls`, dto));
+export const updateCapitalCallDraft = async (
+  fundId: string,
+  callId: string,
+  dto: Partial<CapitalCallInput>,
+): Promise<CapitalCall> =>
+  unwrap(
+    await api.patch(`/finance/funds/${fundId}/capital-calls/${callId}`, dto),
+  );
+export const issueCapitalCall = async (
+  fundId: string,
+  callId: string,
+): Promise<CapitalCall> =>
+  unwrap(
+    await api.post(`/finance/funds/${fundId}/capital-calls/${callId}/issue`),
+  );
+export const deleteCapitalCallDraft = async (
+  fundId: string,
+  callId: string,
+): Promise<{ deleted: boolean }> =>
+  unwrap(await api.delete(`/finance/funds/${fundId}/capital-calls/${callId}`));
+
+// ── Call notices ────────────────────────────────────────────────
+
+export interface CallNoticeData {
+  fundName: string;
+  fundDescriptor: string;
+  gpName: string;
+  noticeDate: string;
+  callRef: string;
+  lpaDate: string | null;
+  lpName: string;
+  lpType: string;
+  closeLabel: string;
+  currency: string;
+  totalCall: number;
+  pct: number;
+  lpAmount: number;
+  dueDate: string;
+  cureDays: number;
+  defaultInterestPct: number;
+  forfeiturePct: number;
+  lpaCallClause: string;
+  lpaDefaultInterestClause: string;
+  lpaDefaultClause: string;
+  commitment: number;
+  previouslyCalled: number;
+  totalCalledAfter: number;
+  pctCalledAfter: number;
+  remainingUnfunded: number;
+  purpose: string;
+  narrative: string;
+  wire: {
+    beneficiary: string;
+    bank: string;
+    accountNumber: string;
+    swift: string;
+    branch: string;
+    currency: string;
+    reference: string;
+  };
+  useOfProceeds: { label: string; amount: number; note: string }[];
+  signatory: string;
+  signatoryTitle: string;
+}
+export interface CallNoticePreviewRow {
+  commitmentId: string;
+  lpName: string;
+  lpEmail: string;
+  amount: number;
+  lastSend: { status: string; sentAt: string | null; method: string } | null;
+  data: CallNoticeData;
+}
+export interface CallNoticePreview {
+  callRef: string;
+  currency: string;
+  scheduledSendAt: string | null;
+  noticesSentAt: string | null;
+  notices: CallNoticePreviewRow[];
+  wireConfigured: boolean;
+  administratorEmail: string;
+}
+export const NOTICE_METHODS = [
+  "Email with PDF attachment",
+  "Email with link to portal",
+  "Email + portal notification",
+] as const;
+export const fetchCallNotices = async (
+  fundId: string,
+  callId: string,
+): Promise<CallNoticePreview> =>
+  unwrap(
+    await api.get(`/finance/funds/${fundId}/capital-calls/${callId}/notices`),
+  );
+export const downloadCallNoticePdf = (
+  fundId: string,
+  callId: string,
+  commitmentId?: string,
+) =>
+  downloadFinanceFile(
+    `/finance/funds/${fundId}/capital-calls/${callId}/notices/pdf`,
+    { commitmentId },
+    "capital-call-notice.pdf",
+  );
+export const sendCallNotices = async (
+  fundId: string,
+  callId: string,
+  dto: {
+    commitmentIds?: string[];
+    method?: string;
+    sendAt?: string;
+    subject?: string;
+    message?: string;
+    attachStatement?: boolean;
+    ccAdministrator?: boolean;
+  },
+): Promise<{
+  scheduled: boolean;
+  sendAt?: string;
+  count?: number;
+  sent?: number;
+  failed?: { lpName: string; error: string }[];
+}> =>
+  unwrap(
+    await api.post(
+      `/finance/funds/${fundId}/capital-calls/${callId}/notices/send`,
+      dto,
+    ),
+  );
 export const recordCallFunding = async (
   fundId: string,
   callId: string,
@@ -2487,6 +3030,537 @@ export const fetchCapitalAccountEntries = async (
   const d = unwrap(res);
   return Array.isArray(d) ? d : [];
 };
+
+// ── LP capital account statements ───────────────────────────────
+
+export interface FundStatement {
+  fund: { _id: string; name: string; currency: string };
+  lp: {
+    commitmentId: string;
+    name: string;
+    type: string;
+    closeLabel: string;
+    email: string;
+    hasSideLetter: boolean;
+    mgmtFeeRate: number;
+    isGp: boolean;
+  };
+  period: { label: string; from: string | null; to: string };
+  position: {
+    commitment: number;
+    called: number;
+    paid: number;
+    outstanding: number;
+    uncalled: number;
+    pctCalled: number;
+    pctPaid: number;
+  };
+  activity: {
+    opening: number;
+    contributions: number;
+    income: number;
+    expenses: number;
+    gainLoss: number;
+    distributions: number;
+    other: number;
+    closing: number;
+  };
+  metrics: {
+    paidIn: number;
+    distributed: number;
+    nav: number;
+    dpi: number;
+    rvpi: number;
+    tvpi: number;
+  };
+  calls: {
+    callId: string;
+    ref: string;
+    purpose: string;
+    issuedOn: string;
+    dueOn: string;
+    amount: number;
+    funded: number;
+    outstanding: number;
+    fundedAt: string | null;
+    status: string;
+    overdue: boolean;
+  }[];
+  ledger: {
+    date: string;
+    type: string;
+    description: string;
+    amount: number;
+    balance: number;
+  }[];
+  fees: any;
+  comparative: null | {
+    label: string;
+    opening: number;
+    contributions: number;
+    income: number;
+    expenses: number;
+    gainLoss: number;
+    distributions: number;
+    other: number;
+    closing: number;
+  };
+}
+export interface StatementQuery {
+  period?: string;
+  from?: string;
+  to?: string;
+  comparative?: boolean;
+}
+export const fetchFundStatement = async (
+  fundId: string,
+  commitmentId: string,
+  q: StatementQuery = {},
+): Promise<FundStatement> =>
+  unwrap(
+    await api.get(
+      `/finance/funds/${fundId}/statements/commitments/${commitmentId}`,
+      { params: q },
+    ),
+  );
+export const downloadFundStatementPdf = (
+  fundId: string,
+  commitmentId: string,
+  q: StatementQuery = {},
+) =>
+  downloadFinanceFile(
+    `/finance/funds/${fundId}/statements/commitments/${commitmentId}/pdf`,
+    q,
+    "capital-account-statement.pdf",
+  );
+
+export interface GeneratedFile {
+  name: string;
+  url: string;
+  path?: string;
+  mimeType: string;
+  size: number;
+  format: string;
+}
+export interface FundReportDelivery {
+  lpName: string;
+  email: string;
+  sentAt: string;
+  channel: string;
+  status: string;
+  error: string;
+}
+export interface FundReportRecord {
+  _id: string;
+  fundId: string;
+  reportType: string;
+  title: string;
+  period: string;
+  periodStart: string | null;
+  periodEnd: string | null;
+  recipients: string;
+  recipientLabel: string;
+  delivery: string;
+  commentary: string;
+  sections: string[];
+  branding: string;
+  status: string;
+  uploaded: boolean;
+  files: GeneratedFile[];
+  deliveries: FundReportDelivery[];
+  generatedBy: string;
+  createdAt: string;
+}
+export const generateStatements = async (
+  fundId: string,
+  dto: {
+    commitmentIds?: string[];
+    period?: string;
+    from?: string;
+    to?: string;
+    format?: "pdf" | "xlsx" | "both";
+    delivery?: "download" | "email" | "portal" | "email+portal";
+    metrics?: boolean;
+    contributions?: boolean;
+    fees?: boolean;
+    gains?: boolean;
+    comparative?: boolean;
+  },
+): Promise<FundReportRecord> =>
+  unwrap(await api.post(`/finance/funds/${fundId}/statements/generate`, dto));
+
+// ── LP reports ──────────────────────────────────────────────────
+
+export interface LpReportsPayload {
+  reports: FundReportRecord[];
+  types: { type: string; description: string }[];
+  uploadOnlyTypes: { type: string; description: string }[];
+  sections: string[];
+  periods: string[];
+}
+export const fetchLpReports = async (
+  fundId: string,
+): Promise<LpReportsPayload> =>
+  unwrap(await api.get(`/finance/funds/${fundId}/lp-reports`));
+export const generateLpReport = async (
+  fundId: string,
+  dto: {
+    reportType: string;
+    period?: string;
+    from?: string;
+    to?: string;
+    recipients?: string;
+    format?: "pdf" | "xlsx" | "both";
+    sections?: string[];
+    delivery?: string;
+    branding?: "fund" | "gp" | "none";
+    commentary?: string;
+    callId?: string;
+    distributionId?: string;
+  },
+): Promise<FundReportRecord> =>
+  unwrap(await api.post(`/finance/funds/${fundId}/lp-reports/generate`, dto));
+export const uploadLpReport = async (
+  fundId: string,
+  dto: {
+    reportType: string;
+    title?: string;
+    period?: string;
+    recipients?: string;
+    delivery?: string;
+    commentary?: string;
+  },
+  file: File,
+): Promise<FundReportRecord> => {
+  const fd = new FormData();
+  for (const [k, v] of Object.entries(dto)) {
+    if (v !== undefined && v !== "") fd.append(k, String(v));
+  }
+  fd.append("file", file);
+  return unwrap(
+    await api.post(`/finance/funds/${fundId}/lp-reports/upload`, fd),
+  );
+};
+export const sendLpReport = async (
+  fundId: string,
+  reportId: string,
+  dto: { recipients?: string; delivery?: string },
+): Promise<FundReportRecord> =>
+  unwrap(
+    await api.post(`/finance/funds/${fundId}/lp-reports/${reportId}/send`, dto),
+  );
+export const downloadLpReportFile = (
+  fundId: string,
+  reportId: string,
+  fileIndex = 0,
+  name = "report",
+) =>
+  downloadFinanceFile(
+    `/finance/funds/${fundId}/lp-reports/${reportId}/download`,
+    { file: fileIndex },
+    name,
+  );
+export const deleteLpReport = async (
+  fundId: string,
+  reportId: string,
+): Promise<{ deleted: boolean }> =>
+  unwrap(await api.delete(`/finance/funds/${fundId}/lp-reports/${reportId}`));
+
+// ── Side letters ────────────────────────────────────────────────
+
+export type SideLetterStatus = "Draft" | "Under negotiation" | "Executed";
+export type SideLetterMfn = "Triggered" | "Excluded" | "N/A";
+export type ProvisionCompliance =
+  | "Pending"
+  | "Applied"
+  | "Noted"
+  | "Seated"
+  | "Delivered"
+  | "Monitored"
+  | "Breach";
+export type MfnElectionStatus = "Pending" | "Elected" | "Declined";
+
+export interface SideLetterProvision {
+  _id?: string;
+  type: string;
+  lpaDefault: string;
+  term: string;
+  mfn: SideLetterMfn;
+  notes: string;
+  feePct: number | null;
+  compliance?: ProvisionCompliance;
+  complianceNotes?: string;
+  complianceCheckedAt?: string | null;
+}
+export interface MfnFlagRow {
+  _id: string;
+  provisionType: string;
+  term: string;
+  electionDeadline: string | null;
+  elections: {
+    commitmentId: string;
+    lpName: string;
+    status: MfnElectionStatus;
+    respondedAt: string | null;
+  }[];
+}
+export interface SideLetterRecord {
+  _id: string;
+  ref: string;
+  commitmentId: string;
+  lpName: string;
+  lpType: string;
+  commitment: number;
+  effectiveDate: string;
+  status: SideLetterStatus;
+  mfnElectionDeadline: string | null;
+  executedAt: string | null;
+  provisions: SideLetterProvision[];
+  mfnFlags: MfnFlagRow[];
+  document: {
+    name: string;
+    url: string;
+    mimeType: string;
+    size: number;
+  } | null;
+  draftDocumentId: string | null;
+}
+export interface SideLettersPayload {
+  letters: SideLetterRecord[];
+  provisionTypes: string[];
+  stats: {
+    total: number;
+    executed: number;
+    draft: number;
+    mfnOpen: number;
+    breaches: number;
+    lpacMembers: number;
+  };
+  lpac: {
+    commitmentId: string;
+    lpName: string;
+    commitment: number;
+    sideLetterRef: string;
+  }[];
+}
+export interface SideLetterProvisionInput {
+  type: string;
+  lpaDefault?: string;
+  term: string;
+  mfn?: SideLetterMfn;
+  notes?: string;
+  feePct?: number;
+}
+export const fetchSideLetters = async (
+  fundId: string,
+): Promise<SideLettersPayload> =>
+  unwrap(await api.get(`/finance/funds/${fundId}/side-letters`));
+export const createSideLetter = async (
+  fundId: string,
+  dto: {
+    commitmentId: string;
+    effectiveDate: string;
+    status?: SideLetterStatus;
+    mfnElectionDeadline?: string;
+    provisions: SideLetterProvisionInput[];
+  },
+): Promise<SideLetterRecord> =>
+  unwrap(await api.post(`/finance/funds/${fundId}/side-letters`, dto));
+export const updateSideLetter = async (
+  fundId: string,
+  id: string,
+  dto: {
+    effectiveDate?: string;
+    status?: SideLetterStatus;
+    mfnElectionDeadline?: string;
+    provisions?: SideLetterProvisionInput[];
+  },
+): Promise<SideLetterRecord> =>
+  unwrap(await api.patch(`/finance/funds/${fundId}/side-letters/${id}`, dto));
+export const executeSideLetter = async (
+  fundId: string,
+  id: string,
+): Promise<SideLetterRecord> =>
+  unwrap(await api.post(`/finance/funds/${fundId}/side-letters/${id}/execute`));
+export const setProvisionCompliance = async (
+  fundId: string,
+  id: string,
+  provisionId: string,
+  dto: { compliance: ProvisionCompliance; notes?: string },
+): Promise<SideLetterRecord> =>
+  unwrap(
+    await api.post(
+      `/finance/funds/${fundId}/side-letters/${id}/provisions/${provisionId}/compliance`,
+      dto,
+    ),
+  );
+export const recordMfnElection = async (
+  fundId: string,
+  id: string,
+  flagId: string,
+  commitmentId: string,
+  status: MfnElectionStatus,
+): Promise<SideLetterRecord> =>
+  unwrap(
+    await api.post(
+      `/finance/funds/${fundId}/side-letters/${id}/mfn/${flagId}/${commitmentId}`,
+      { status },
+    ),
+  );
+export const attachSideLetterDocument = async (
+  fundId: string,
+  id: string,
+  file: File,
+): Promise<SideLetterRecord> => {
+  const fd = new FormData();
+  fd.append("file", file);
+  return unwrap(
+    await api.post(`/finance/funds/${fundId}/side-letters/${id}/document`, fd),
+  );
+};
+export const deleteSideLetter = async (
+  fundId: string,
+  id: string,
+): Promise<{ deleted: boolean }> =>
+  unwrap(await api.delete(`/finance/funds/${fundId}/side-letters/${id}`));
+
+// ── Fund document vault ─────────────────────────────────────────
+
+export interface FundDocTemplateOption {
+  key: string;
+  title: string;
+  description: string;
+  tag: string;
+  category: string;
+  needs: "none" | "lp" | "call" | "distribution";
+  source: "built-in" | "library";
+}
+export interface FundDocMeta {
+  groups: { group: string; categories: string[] }[];
+  statuses: string[];
+  confidentiality: string[];
+  templates: FundDocTemplateOption[];
+  mergeRegistry: {
+    token: string;
+    label: string;
+    group: string;
+    input: string;
+  }[];
+}
+export interface FundVaultDoc {
+  _id: string;
+  fundId: string;
+  category: string;
+  group: string;
+  title: string;
+  version: string;
+  docDate: string;
+  status: string;
+  confidentiality: string;
+  commitmentId: string | null;
+  lpName: string;
+  holdingId: string | null;
+  companyName: string;
+  authority: string;
+  filedOn: string | null;
+  notes: string;
+  file: { name: string; url: string; mimeType: string; size: number } | null;
+  content?: string;
+  templateKey: string;
+  templateName: string;
+  mergeValues?: Record<string, string>;
+  callId: string | null;
+  distributionId: string | null;
+  createdBy: string;
+  createdAt: string;
+}
+export interface FundDocsPayload {
+  total: number;
+  groups: { group: string; documents: FundVaultDoc[] }[];
+}
+export const fetchFundDocMeta = async (fundId: string): Promise<FundDocMeta> =>
+  unwrap(await api.get(`/finance/funds/${fundId}/documents/meta`));
+export const fetchFundDocs = async (fundId: string): Promise<FundDocsPayload> =>
+  unwrap(await api.get(`/finance/funds/${fundId}/documents`));
+export const fetchFundDoc = async (
+  fundId: string,
+  id: string,
+): Promise<FundVaultDoc> =>
+  unwrap(await api.get(`/finance/funds/${fundId}/documents/${id}`));
+export const fetchFundDocFields = async (
+  fundId: string,
+  ctx: { commitmentId?: string; callId?: string; distributionId?: string },
+): Promise<Record<string, string>> =>
+  unwrap(
+    await api.get(`/finance/funds/${fundId}/documents/fields`, { params: ctx }),
+  );
+export const uploadFundDoc = async (
+  fundId: string,
+  dto: {
+    category: string;
+    title: string;
+    docDate: string;
+    version?: string;
+    commitmentId?: string;
+    status?: string;
+    confidentiality?: string;
+    authority?: string;
+    filedOn?: string;
+    notes?: string;
+  },
+  file: File,
+): Promise<FundVaultDoc> => {
+  const fd = new FormData();
+  for (const [k, v] of Object.entries(dto)) {
+    if (v !== undefined && v !== "") fd.append(k, String(v));
+  }
+  fd.append("file", file);
+  return unwrap(await api.post(`/finance/funds/${fundId}/documents`, fd));
+};
+export const draftFundDoc = async (
+  fundId: string,
+  dto: {
+    templateKey?: string;
+    title: string;
+    category?: string;
+    commitmentId?: string;
+    callId?: string;
+    distributionId?: string;
+    initialContent?: string;
+  },
+): Promise<FundVaultDoc> =>
+  unwrap(await api.post(`/finance/funds/${fundId}/documents/draft`, dto));
+export const updateFundDoc = async (
+  fundId: string,
+  id: string,
+  dto: {
+    title?: string;
+    category?: string;
+    version?: string;
+    status?: string;
+    confidentiality?: string;
+    notes?: string;
+    content?: string;
+    docDate?: string;
+    mergeValues?: Record<string, string>;
+  },
+): Promise<FundVaultDoc> =>
+  unwrap(await api.patch(`/finance/funds/${fundId}/documents/${id}`, dto));
+export const downloadFundDoc = (
+  fundId: string,
+  id: string,
+  name = "document",
+) =>
+  downloadFinanceFile(
+    `/finance/funds/${fundId}/documents/${id}/download`,
+    undefined,
+    name,
+  );
+export const deleteFundDoc = async (
+  fundId: string,
+  id: string,
+): Promise<{ deleted: boolean }> =>
+  unwrap(await api.delete(`/finance/funds/${fundId}/documents/${id}`));
 
 // ── Distributions & waterfall ─────────────────────────────────────
 

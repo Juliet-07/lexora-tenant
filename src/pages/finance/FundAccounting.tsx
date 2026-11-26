@@ -55,20 +55,37 @@ import {
   Globe2,
   Sliders,
   FileText,
+  Mail,
+  Trash2,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { ClientSelect } from "@/components/ClientDropdown";
+import { CommitmentDialog } from "./fund/CommitmentDialog";
+import { CapitalCallDialog } from "./fund/CapitalCallDialog";
+import { CallNoticesDialog } from "./fund/CallNoticesDialog";
+import {
+  GenerateStatementsDialog,
+  LpStatementSheet,
+} from "./fund/StatementPanel";
+import { LpReportsPanel } from "./fund/LpReportsPanel";
+import { SideLettersPanel } from "./fund/SideLettersPanel";
+import { DocumentsPanel } from "./fund/DocumentsPanel";
+import {
+  FundLpaFields,
+  cleanFundPayload,
+  emptyLpaState,
+  lpaStateFromFund,
+  type FundLpaState,
+} from "./fund/FundLpaFields";
+import { StatusPill, kycKind, subscriptionKind } from "./fund/fundShared";
 import {
   fetchFunds,
   fetchFund,
   createFund,
   updateFundTerms,
   fetchCommitments,
-  createCommitment,
   computeEqualisation,
   applyEqualisation,
   fetchCapitalCalls,
-  createCapitalCall,
   recordCallFunding,
   declareDefault,
   cureDefault,
@@ -106,13 +123,14 @@ import {
   recordFxRate,
   fetchFxExposure,
   runScenario,
-  fetchQuarterlyStatement,
-  fetchFeeExpenseDisclosure,
   fetchBankAccounts,
   type Fund,
   type WaterfallType,
   type CommitmentType,
   type CapitalCall,
+  type CapitalCommitment,
+  deleteCapitalCallDraft,
+  issueCapitalCall,
   type DistributionSource,
   type ValuationMethod,
   type IfrsLevel,
@@ -169,7 +187,7 @@ const currentPeriod = () => {
   return `${d.getFullYear()}-Q${Math.floor(d.getMonth() / 3) + 1}`;
 };
 
-interface FundFormState {
+interface FundFormState extends FundLpaState {
   name: string;
   structure: string;
   jurisdiction: string;
@@ -214,6 +232,7 @@ const emptyFundForm = (): FundFormState => ({
   orgCostsCapAmount: 0,
   recyclingPermitted: false,
   recyclingCapPct: 0,
+  ...emptyLpaState(),
 });
 
 export default function FundAccounting() {
@@ -377,12 +396,7 @@ export default function FundAccounting() {
   const [openNewFund, setOpenNewFund] = useState(false);
   const [fundForm, setFundForm] = useState(emptyFundForm());
   const createFundMut = useMutation({
-    mutationFn: () =>
-      createFund({
-        ...fundForm,
-        bankAccountId: fundForm.bankAccountId || undefined,
-        investmentPeriodEndDate: fundForm.investmentPeriodEndDate || undefined,
-      }),
+    mutationFn: () => createFund(cleanFundPayload(fundForm)),
     onSuccess: (f) => {
       invalidateFund();
       setOpenNewFund(false);
@@ -420,15 +434,13 @@ export default function FundAccounting() {
       orgCostsCapAmount: fund.orgCostsCapAmount,
       recyclingPermitted: fund.recyclingPermitted,
       recyclingCapPct: fund.recyclingCapPct,
+      ...lpaStateFromFund(fund),
     });
     setOpenEditTerms(true);
   };
   const updateTermsMut = useMutation({
     mutationFn: () =>
-      updateFundTerms(activeFundId, {
-        ...termsForm,
-        investmentPeriodEndDate: termsForm.investmentPeriodEndDate || undefined,
-      }),
+      updateFundTerms(activeFundId, cleanFundPayload(termsForm)),
     onSuccess: () => {
       invalidateFund();
       setOpenEditTerms(false);
@@ -437,41 +449,10 @@ export default function FundAccounting() {
     onError: onErr("Failed to update terms"),
   });
 
-  // ── New commitment ───────────────────────────────────────
+  // ── Commitments (add / edit LP details) ────────────────────
   const [openNewCommitment, setOpenNewCommitment] = useState(false);
-  const [commitmentForm, setCommitmentForm] = useState({
-    lpUserId: "",
-    lpName: "",
-    commitment: 0,
-    type: "Institutional" as CommitmentType,
-    closeLabel: "1st",
-    closeDate: today(),
-    isGpCommitment: false,
-    hasSideLetter: false,
-    mgmtFeePctOverride: undefined as number | undefined,
-    sideLetterNotes: "",
-  });
-  const createCommitmentMut = useMutation({
-    mutationFn: () => createCommitment(activeFundId, commitmentForm),
-    onSuccess: () => {
-      invalidateFund();
-      setOpenNewCommitment(false);
-      setCommitmentForm({
-        lpUserId: "",
-        lpName: "",
-        commitment: 0,
-        type: "Institutional",
-        closeLabel: "1st",
-        closeDate: today(),
-        isGpCommitment: false,
-        hasSideLetter: false,
-        mgmtFeePctOverride: undefined,
-        sideLetterNotes: "",
-      });
-      toast({ title: "Commitment added" });
-    },
-    onError: onErr("Failed to add commitment"),
-  });
+  const [editCommitment, setEditCommitment] =
+    useState<CapitalCommitment | null>(null);
 
   // ── Equalisation ─────────────────────────────────────────
   const [eqTarget, setEqTarget] = useState<{
@@ -493,29 +474,38 @@ export default function FundAccounting() {
     onError: onErr("Failed to apply equalisation"),
   });
 
-  // ── New capital call ─────────────────────────────────────
+  // ── Capital calls: new / draft / notices ────────────────────
   const [openNewCall, setOpenNewCall] = useState(false);
-  const [callForm, setCallForm] = useState({
-    purpose: "",
-    totalAmount: 0,
-    issuedOn: today(),
-    dueOn: today(),
-  });
-  const createCallMut = useMutation({
-    mutationFn: () => createCapitalCall(activeFundId, callForm),
+  const [draftCall, setDraftCall] = useState<CapitalCall | null>(null);
+  const [noticeCall, setNoticeCall] = useState<CapitalCall | null>(null);
+  const issueDraftMut = useMutation({
+    mutationFn: (callId: string) => issueCapitalCall(activeFundId, callId),
     onSuccess: () => {
       invalidateFund();
-      setOpenNewCall(false);
-      setCallForm({
-        purpose: "",
-        totalAmount: 0,
-        issuedOn: today(),
-        dueOn: today(),
+      toast({
+        title: "Capital call issued",
+        description: "Pro-rata shares are frozen. Review and send the notices.",
       });
-      toast({ title: "Capital call issued" });
     },
-    onError: onErr("Failed to issue capital call"),
+    onError: onErr("Failed to issue the call"),
   });
+  const deleteDraftMut = useMutation({
+    mutationFn: (callId: string) =>
+      deleteCapitalCallDraft(activeFundId, callId),
+    onSuccess: () => {
+      invalidateFund();
+      toast({ title: "Draft deleted" });
+    },
+    onError: onErr("Failed to delete the draft"),
+  });
+
+  // ── LP statements ───────────────────────────────────────────
+  const [statementLp, setStatementLp] = useState<{
+    commitmentId: string;
+    lpName: string;
+  } | null>(null);
+  const [genStatementsOpen, setGenStatementsOpen] = useState(false);
+  const [genPreselect, setGenPreselect] = useState<string | null>(null);
 
   // ── Fund allocation actions ──────────────────────────────
   const [fundingTarget, setFundingTarget] = useState<{
@@ -914,37 +904,6 @@ export default function FundAccounting() {
     onError: onErr("Failed to run scenario"),
   });
 
-  // ── LP reporting ─────────────────────────────────────────
-  const [reportingLpId, setReportingLpId] = useState<string>("");
-  const [statementRange, setStatementRange] = useState({
-    periodStart: `${new Date().getFullYear()}-01-01`,
-    periodEnd: today(),
-  });
-  const { data: quarterlyStatement } = useQuery({
-    queryKey: [
-      "quarterlyStatement",
-      activeFundId,
-      reportingLpId,
-      statementRange.periodStart,
-      statementRange.periodEnd,
-    ],
-    queryFn: () =>
-      fetchQuarterlyStatement(
-        activeFundId,
-        reportingLpId,
-        statementRange.periodStart,
-        statementRange.periodEnd,
-      ),
-    enabled: !!activeFundId && !!reportingLpId,
-  });
-  const [disclosurePeriod, setDisclosurePeriod] = useState(currentPeriod());
-  const { data: feeDisclosure } = useQuery({
-    queryKey: ["feeDisclosure", activeFundId, reportingLpId, disclosurePeriod],
-    queryFn: () =>
-      fetchFeeExpenseDisclosure(activeFundId, reportingLpId, disclosurePeriod),
-    enabled: !!activeFundId && !!reportingLpId,
-  });
-
   if (!activeFundId) {
     return (
       <div className="space-y-6">
@@ -1099,6 +1058,8 @@ export default function FundAccounting() {
               <TabsTrigger value="currency">Multi-currency</TabsTrigger>
               <TabsTrigger value="scenarios">Scenarios</TabsTrigger>
               <TabsTrigger value="lpreporting">LP reporting</TabsTrigger>
+              <TabsTrigger value="sideletters">Side letters</TabsTrigger>
+              <TabsTrigger value="documents">Documents</TabsTrigger>
             </TabsList>
 
             {/* Fund setup */}
@@ -1219,6 +1180,100 @@ export default function FundAccounting() {
                   </div>
                 </CardContent>
               </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                  <CardTitle className="text-base">
+                    LPA, wire & notice details
+                  </CardTitle>
+                  <Button size="sm" variant="outline" onClick={openEdit}>
+                    Edit
+                  </Button>
+                </CardHeader>
+                <CardContent className="grid gap-x-8 gap-y-2 md:grid-cols-3">
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-muted-foreground">
+                      LPA
+                    </p>
+                    <Field label="GP entity" value={fund.gpEntityName || "—"} />
+                    <Field
+                      label="LPA date"
+                      value={
+                        fund.lpaDate
+                          ? new Date(fund.lpaDate).toLocaleDateString()
+                          : "—"
+                      }
+                    />
+                    <Field
+                      label="First close"
+                      value={
+                        fund.firstCloseDate
+                          ? new Date(fund.firstCloseDate).toLocaleDateString()
+                          : "—"
+                      }
+                    />
+                    <Field
+                      label="Final close by"
+                      value={
+                        fund.finalCloseDeadline
+                          ? new Date(
+                              fund.finalCloseDeadline,
+                            ).toLocaleDateString()
+                          : "—"
+                      }
+                    />
+                    <Field
+                      label="Term"
+                      value={`${fund.termYears ?? 10} years`}
+                    />
+                    <Field
+                      label="GP commitment"
+                      value={`${fund.gpCommitmentPct ?? 0}%`}
+                    />
+                    <Field
+                      label="Clauses (call / interest / default)"
+                      value={`${fund.lpaCallClause || "4.1"} / ${fund.lpaDefaultInterestClause || "4.3"} / ${fund.lpaDefaultClause || "4.4"}`}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-muted-foreground">
+                      WIRE INSTRUCTIONS
+                    </p>
+                    <Field
+                      label="Beneficiary"
+                      value={fund.wireBeneficiary || fund.name}
+                    />
+                    <Field label="Bank" value={fund.wireBankName || "—"} />
+                    <Field
+                      label="Account"
+                      value={fund.wireAccountNumber || "—"}
+                    />
+                    <Field label="SWIFT / BIC" value={fund.wireSwift || "—"} />
+                    <Field label="Branch" value={fund.wireBranch || "—"} />
+                    {!(fund.wireBankName && fund.wireAccountNumber) && (
+                      <p className="text-xs text-warning">
+                        Add wire details so call notices tell LPs where to pay.
+                      </p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-muted-foreground">
+                      NOTICES
+                    </p>
+                    <Field
+                      label="Signatory"
+                      value={fund.noticeSignatory || "—"}
+                    />
+                    <Field
+                      label="Title"
+                      value={fund.noticeSignatoryTitle || "—"}
+                    />
+                    <Field
+                      label="Administrator"
+                      value={fund.administratorEmail || "—"}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
               {!fund.bankAccountId && (
                 <div className="flex items-center gap-2 rounded-lg border border-warning/40 bg-warning/5 p-3 text-sm text-warning">
                   <AlertTriangle className="h-4 w-4 shrink-0" /> No Fund-type
@@ -1230,10 +1285,29 @@ export default function FundAccounting() {
 
             {/* Capital accounts */}
             <TabsContent value="accounts" className="pt-4 space-y-4">
-              <div className="flex justify-end">
-                <Button size="sm" onClick={() => setOpenNewCommitment(true)}>
-                  <Plus className="mr-2 h-4 w-4" /> Add commitment
-                </Button>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="max-w-xl text-xs text-muted-foreground">
+                  Each investor's capital account shows how their money is
+                  flowing — commitment, calls, payments, income, fees, gains and
+                  distributions. Open an LP's statement, or generate them for
+                  everyone.
+                </p>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={!commitments.length}
+                    onClick={() => {
+                      setGenPreselect(null);
+                      setGenStatementsOpen(true);
+                    }}
+                  >
+                    <FileText className="mr-2 h-4 w-4" /> Generate statements
+                  </Button>
+                  <Button size="sm" onClick={() => setOpenNewCommitment(true)}>
+                    <Plus className="mr-2 h-4 w-4" /> Add commitment
+                  </Button>
+                </div>
               </div>
               <Card>
                 <CardContent className="p-0 overflow-x-auto">
@@ -1283,6 +1357,27 @@ export default function FundAccounting() {
                                   EQ
                                 </Badge>
                               )}
+                              {(() => {
+                                const c = commitments.find(
+                                  (x) => x._id === r.commitmentId,
+                                );
+                                return c ? (
+                                  <>
+                                    <StatusPill
+                                      label={`KYC: ${c.amlKycStatus ?? "Pending"}`}
+                                      kind={kycKind(c.amlKycStatus)}
+                                    />
+                                    <StatusPill
+                                      label={
+                                        c.subscriptionStatus ?? "Not yet sent"
+                                      }
+                                      kind={subscriptionKind(
+                                        c.subscriptionStatus,
+                                      )}
+                                    />
+                                  </>
+                                ) : null;
+                              })()}
                             </div>
                           </TableCell>
                           <TableCell className="text-sm">{r.type}</TableCell>
@@ -1306,7 +1401,32 @@ export default function FundAccounting() {
                           <TableCell className="text-right text-sm font-semibold">
                             {money(r.balance, fund.currency)}
                           </TableCell>
-                          <TableCell>
+                          <TableCell className="whitespace-nowrap text-right">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() =>
+                                setStatementLp({
+                                  commitmentId: r.commitmentId,
+                                  lpName: r.lpName,
+                                })
+                              }
+                            >
+                              Statement
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() =>
+                                setEditCommitment(
+                                  commitments.find(
+                                    (x) => x._id === r.commitmentId,
+                                  ) ?? null,
+                                )
+                              }
+                            >
+                              Details
+                            </Button>
                             {!r.equalisationApplied && !r.isGpCommitment && (
                               <Button
                                 size="sm"
@@ -1355,7 +1475,13 @@ export default function FundAccounting() {
 
             {/* Capital calls */}
             <TabsContent value="calls" className="pt-4 space-y-4">
-              <div className="flex justify-end">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="max-w-2xl text-xs text-muted-foreground">
+                  Investors commit capital up front; money moves when the fund
+                  manager issues a capital call and each LP honours their
+                  commitment. Draft the call, issue it to freeze each LP's
+                  share, then generate and send the formal notices.
+                </p>
                 <Button size="sm" onClick={() => setOpenNewCall(true)}>
                   <Plus className="mr-2 h-4 w-4" /> New capital call
                 </Button>
@@ -1364,13 +1490,95 @@ export default function FundAccounting() {
                 <Card key={call._id}>
                   <CardHeader className="pb-2">
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <CardTitle className="text-base">
-                        {call.ref} — {call.purpose}
-                      </CardTitle>
-                      <span className="text-sm text-muted-foreground">
-                        {money(call.totalAmount, fund.currency)} · due{" "}
-                        {new Date(call.dueOn).toLocaleDateString()}
-                      </span>
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <CardTitle className="text-base">
+                            {call.ref} — {call.purpose}
+                          </CardTitle>
+                          {call.status === "Draft" && (
+                            <StatusPill label="Draft" kind="amber" />
+                          )}
+                          {call.purposeCategory && (
+                            <Badge variant="outline" className="text-[10px]">
+                              {call.purposeCategory}
+                            </Badge>
+                          )}
+                          {call.dealName && (
+                            <Badge variant="outline" className="text-[10px]">
+                              {call.dealName}
+                            </Badge>
+                          )}
+                        </div>
+                        {call.narrative && (
+                          <p className="mt-1 max-w-2xl text-xs text-muted-foreground">
+                            {call.narrative}
+                          </p>
+                        )}
+                        {call.status === "Draft" && (
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            Draft — each LP's pro-rata share is calculated and
+                            frozen when you issue the call.
+                          </p>
+                        )}
+                        {call.status !== "Draft" && (
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {call.noticesSentAt
+                              ? `Notices sent ${new Date(call.noticesSentAt).toLocaleDateString()}`
+                              : call.scheduledSendAt
+                                ? `Notices scheduled for ${new Date(call.scheduledSendAt).toLocaleString()}`
+                                : "Notices not sent yet"}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-sm text-muted-foreground">
+                          {money(call.totalAmount, fund.currency)} · due{" "}
+                          {new Date(call.dueOn).toLocaleDateString()}
+                        </span>
+                        {call.status === "Draft" ? (
+                          <>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setDraftCall(call)}
+                            >
+                              Edit
+                            </Button>
+                            <Button
+                              size="sm"
+                              disabled={issueDraftMut.isPending}
+                              onClick={() => {
+                                if (
+                                  confirm(
+                                    "Issue this call? Each LP's pro-rata share is frozen at issue.",
+                                  )
+                                )
+                                  issueDraftMut.mutate(call._id);
+                              }}
+                            >
+                              Issue
+                            </Button>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => {
+                                if (confirm(`Delete draft ${call.ref}?`))
+                                  deleteDraftMut.mutate(call._id);
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setNoticeCall(call)}
+                          >
+                            <Mail className="mr-2 h-4 w-4" /> Notices
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   </CardHeader>
                   <CardContent className="p-0 overflow-x-auto">
@@ -2738,190 +2946,34 @@ export default function FundAccounting() {
             </TabsContent>
 
             {/* LP reporting */}
-            <TabsContent value="lpreporting" className="pt-4 space-y-4">
-              <div className="flex flex-wrap items-center gap-2">
-                <Label className="text-sm">LP</Label>
-                <Select value={reportingLpId} onValueChange={setReportingLpId}>
-                  <SelectTrigger className="w-56">
-                    <SelectValue placeholder="Select an LP..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {commitments.map((c) => (
-                      <SelectItem key={c._id} value={c._id}>
-                        {c.lpName}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+            <TabsContent value="lpreporting" className="pt-4">
+              <LpReportsPanel
+                fundId={activeFundId}
+                commitments={commitments}
+                capitalCalls={capitalCalls}
+                distributions={distributions}
+                invalidate={invalidateFund}
+              />
+            </TabsContent>
 
-              {reportingLpId && (
-                <>
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-base">
-                        Quarterly statement
-                      </CardTitle>
-                      <div className="flex gap-2 pt-2">
-                        <Input
-                          type="date"
-                          value={statementRange.periodStart}
-                          onChange={(e) =>
-                            setStatementRange({
-                              ...statementRange,
-                              periodStart: e.target.value,
-                            })
-                          }
-                        />
-                        <Input
-                          type="date"
-                          value={statementRange.periodEnd}
-                          onChange={(e) =>
-                            setStatementRange({
-                              ...statementRange,
-                              periodEnd: e.target.value,
-                            })
-                          }
-                        />
-                      </div>
-                    </CardHeader>
-                    {quarterlyStatement && (
-                      <CardContent className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
-                        <Field
-                          label="Commitment"
-                          value={money(
-                            quarterlyStatement.commitment,
-                            fund.currency,
-                          )}
-                        />
-                        <Field
-                          label="Uncalled"
-                          value={money(
-                            quarterlyStatement.uncalled,
-                            fund.currency,
-                          )}
-                        />
-                        <Field
-                          label="Opening balance"
-                          value={money(
-                            quarterlyStatement.openingBalance,
-                            fund.currency,
-                          )}
-                        />
-                        <Field
-                          label="Contributions in period"
-                          value={money(
-                            quarterlyStatement.contributionsInPeriod,
-                            fund.currency,
-                          )}
-                        />
-                        <Field
-                          label="Income allocated"
-                          value={money(
-                            quarterlyStatement.incomeAlloc,
-                            fund.currency,
-                          )}
-                        />
-                        <Field
-                          label="Expenses allocated"
-                          value={money(
-                            quarterlyStatement.expenseAlloc,
-                            fund.currency,
-                          )}
-                        />
-                        <Field
-                          label="Gain/(loss)"
-                          value={money(
-                            quarterlyStatement.gainLoss,
-                            fund.currency,
-                          )}
-                        />
-                        <Field
-                          label="Distributions in period"
-                          value={money(
-                            quarterlyStatement.distributionsInPeriod,
-                            fund.currency,
-                          )}
-                        />
-                        <Field
-                          label="Closing balance"
-                          value={money(
-                            quarterlyStatement.closingBalance,
-                            fund.currency,
-                          )}
-                        />
-                        <Field
-                          label="DPI / RVPI / TVPI"
-                          value={`${quarterlyStatement.dpi.toFixed(2)}x / ${quarterlyStatement.rvpi.toFixed(2)}x / ${quarterlyStatement.tvpi.toFixed(2)}x`}
-                        />
-                      </CardContent>
-                    )}
-                  </Card>
+            {/* Side letters */}
+            <TabsContent value="sideletters" className="pt-4">
+              <SideLettersPanel
+                fundId={activeFundId}
+                currency={fund.currency}
+                commitments={commitments}
+                invalidate={invalidateFund}
+              />
+            </TabsContent>
 
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-base">
-                        Fee & expense disclosure
-                      </CardTitle>
-                      <Input
-                        className="mt-2 w-32"
-                        value={disclosurePeriod}
-                        onChange={(e) => setDisclosurePeriod(e.target.value)}
-                      />
-                    </CardHeader>
-                    {feeDisclosure && (
-                      <CardContent className="space-y-2 text-sm">
-                        {feeDisclosure.managementFee ? (
-                          <div className="flex justify-between">
-                            <span>Management fee (your share)</span>
-                            <span className="font-medium">
-                              {money(
-                                feeDisclosure.managementFee.feeAmount,
-                                fund.currency,
-                              )}
-                            </span>
-                          </div>
-                        ) : (
-                          <p className="text-muted-foreground">
-                            No management fee charged for {disclosurePeriod}.
-                          </p>
-                        )}
-                        {feeDisclosure.expenses.map((e: any, i: number) => (
-                          <div
-                            key={i}
-                            className="flex justify-between text-muted-foreground"
-                          >
-                            <span>{e.category}</span>
-                            <span>{money(e.theirShare, fund.currency)}</span>
-                          </div>
-                        ))}
-                        <div className="flex justify-between border-t pt-2 font-semibold">
-                          <span>Total expense share</span>
-                          <span>
-                            {money(
-                              feeDisclosure.totalExpenseShare,
-                              fund.currency,
-                            )}
-                          </span>
-                        </div>
-                      </CardContent>
-                    )}
-                  </Card>
-                </>
-              )}
-              {!reportingLpId && (
-                <Card>
-                  <CardContent className="py-8 text-center text-sm text-muted-foreground">
-                    Select an LP to view their real reporting.
-                  </CardContent>
-                </Card>
-              )}
-
-              <p className="text-xs text-muted-foreground">
-                ESG/impact reporting and full annual financial statements aren't
-                built — ESG isn't tracked anywhere in this system, and a real
-                annual FS needs the fund run through a full chart of accounts.
-              </p>
+            {/* Documents */}
+            <TabsContent value="documents" className="pt-4">
+              <DocumentsPanel
+                fundId={activeFundId}
+                commitments={commitments}
+                capitalCalls={capitalCalls}
+                distributions={distributions}
+              />
             </TabsContent>
           </Tabs>
         </>
@@ -2949,6 +3001,10 @@ export default function FundAccounting() {
             setForm={setTermsForm}
             bankAccounts={fundAccounts}
           />
+          <FundLpaFields<FundFormState>
+            form={termsForm}
+            setForm={setTermsForm}
+          />
           <DialogFooter>
             <Button
               disabled={updateTermsMut.isPending}
@@ -2960,161 +3016,20 @@ export default function FundAccounting() {
         </DialogContent>
       </Dialog>
 
-      {/* New commitment */}
-      <Dialog open={openNewCommitment} onOpenChange={setOpenNewCommitment}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Add LP commitment</DialogTitle>
-          </DialogHeader>
-          <div className="grid gap-3">
-            <div>
-              <Label>LP</Label>
-              <ClientSelect
-                value={commitmentForm.lpUserId}
-                onValueChange={(v) =>
-                  setCommitmentForm((d) => ({ ...d, lpUserId: v }))
-                }
-                onClientChange={(c: any) =>
-                  setCommitmentForm((d) => ({
-                    ...d,
-                    lpName:
-                      [c.firstName, c.lastName].filter(Boolean).join(" ") ||
-                      c.businessName ||
-                      c.email,
-                  }))
-                }
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label>Commitment</Label>
-                <Input
-                  type="number"
-                  value={commitmentForm.commitment}
-                  onChange={(e) =>
-                    setCommitmentForm({
-                      ...commitmentForm,
-                      commitment: Number(e.target.value),
-                    })
-                  }
-                />
-              </div>
-              <div>
-                <Label>Type</Label>
-                <Select
-                  value={commitmentForm.type}
-                  onValueChange={(v) =>
-                    setCommitmentForm({
-                      ...commitmentForm,
-                      type: v as CommitmentType,
-                    })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {COMMITMENT_TYPES.map((t) => (
-                      <SelectItem key={t} value={t}>
-                        {t}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label>Close label</Label>
-                <Input
-                  value={commitmentForm.closeLabel}
-                  onChange={(e) =>
-                    setCommitmentForm({
-                      ...commitmentForm,
-                      closeLabel: e.target.value,
-                    })
-                  }
-                  placeholder="1st, 2nd, Final..."
-                />
-              </div>
-              <div>
-                <Label>Close date</Label>
-                <Input
-                  type="date"
-                  value={commitmentForm.closeDate}
-                  onChange={(e) =>
-                    setCommitmentForm({
-                      ...commitmentForm,
-                      closeDate: e.target.value,
-                    })
-                  }
-                />
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Switch
-                checked={commitmentForm.isGpCommitment}
-                onCheckedChange={(v) =>
-                  setCommitmentForm({ ...commitmentForm, isGpCommitment: v })
-                }
-              />
-              <Label>This is the GP's own commitment</Label>
-            </div>
-            <div className="flex items-center gap-2">
-              <Switch
-                checked={commitmentForm.hasSideLetter}
-                onCheckedChange={(v) =>
-                  setCommitmentForm({ ...commitmentForm, hasSideLetter: v })
-                }
-              />
-              <Label>Has a side letter</Label>
-            </div>
-            {commitmentForm.hasSideLetter && (
-              <>
-                <div>
-                  <Label>Management fee override (%)</Label>
-                  <Input
-                    type="number"
-                    value={commitmentForm.mgmtFeePctOverride ?? ""}
-                    onChange={(e) =>
-                      setCommitmentForm({
-                        ...commitmentForm,
-                        mgmtFeePctOverride: e.target.value
-                          ? Number(e.target.value)
-                          : undefined,
-                      })
-                    }
-                  />
-                </div>
-                <div>
-                  <Label>Side letter notes</Label>
-                  <Textarea
-                    value={commitmentForm.sideLetterNotes}
-                    onChange={(e) =>
-                      setCommitmentForm({
-                        ...commitmentForm,
-                        sideLetterNotes: e.target.value,
-                      })
-                    }
-                  />
-                </div>
-              </>
-            )}
-          </div>
-          <DialogFooter>
-            <Button
-              disabled={
-                !commitmentForm.lpUserId ||
-                !commitmentForm.commitment ||
-                createCommitmentMut.isPending
-              }
-              onClick={() => createCommitmentMut.mutate()}
-            >
-              Add commitment
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Add / edit LP commitment */}
+      <CommitmentDialog
+        open={openNewCommitment || !!editCommitment}
+        onOpenChange={(o) => {
+          if (!o) {
+            setOpenNewCommitment(false);
+            setEditCommitment(null);
+          }
+        }}
+        fundId={activeFundId}
+        currency={fund?.currency ?? defaultCurrency()}
+        existing={editCommitment}
+        invalidate={invalidateFund}
+      />
 
       {/* Equalisation */}
       <Dialog open={!!eqTarget} onOpenChange={(o) => !o && setEqTarget(null)}>
@@ -3163,77 +3078,61 @@ export default function FundAccounting() {
         </DialogContent>
       </Dialog>
 
-      {/* New capital call */}
-      <Dialog open={openNewCall} onOpenChange={setOpenNewCall}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>New capital call</DialogTitle>
-          </DialogHeader>
-          <div className="grid gap-3">
-            <div>
-              <Label>Purpose</Label>
-              <Input
-                value={callForm.purpose}
-                onChange={(e) =>
-                  setCallForm({ ...callForm, purpose: e.target.value })
-                }
-                placeholder="e.g. Series B investment"
-              />
-            </div>
-            <div>
-              <Label>Total amount</Label>
-              <Input
-                type="number"
-                value={callForm.totalAmount}
-                onChange={(e) =>
-                  setCallForm({
-                    ...callForm,
-                    totalAmount: Number(e.target.value),
-                  })
-                }
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label>Issued on</Label>
-                <Input
-                  type="date"
-                  value={callForm.issuedOn}
-                  onChange={(e) =>
-                    setCallForm({ ...callForm, issuedOn: e.target.value })
-                  }
-                />
-              </div>
-              <div>
-                <Label>Due on</Label>
-                <Input
-                  type="date"
-                  value={callForm.dueOn}
-                  onChange={(e) =>
-                    setCallForm({ ...callForm, dueOn: e.target.value })
-                  }
-                />
-              </div>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Allocated pro-rata across every current LP commitment, frozen at
-              issuance.
-            </p>
-          </div>
-          <DialogFooter>
-            <Button
-              disabled={
-                !callForm.purpose ||
-                !callForm.totalAmount ||
-                createCallMut.isPending
-              }
-              onClick={() => createCallMut.mutate()}
-            >
-              Issue call
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* New / edit-draft capital call */}
+      {fund && (
+        <CapitalCallDialog
+          open={openNewCall || !!draftCall}
+          onOpenChange={(o) => {
+            if (!o) {
+              setOpenNewCall(false);
+              setDraftCall(null);
+            }
+          }}
+          fund={fund}
+          commitments={commitments}
+          holdings={holdings}
+          draft={draftCall}
+          invalidate={invalidateFund}
+        />
+      )}
+
+      {/* Capital call notices: preview, download, send */}
+      <CallNoticesDialog
+        open={!!noticeCall}
+        onOpenChange={(o) => !o && setNoticeCall(null)}
+        fundId={activeFundId}
+        call={
+          noticeCall
+            ? (capitalCalls.find((c) => c._id === noticeCall._id) ?? noticeCall)
+            : null
+        }
+        invalidate={invalidateFund}
+      />
+
+      {/* LP capital account statement + generate statements */}
+      <LpStatementSheet
+        open={!!statementLp}
+        onOpenChange={(o) => !o && setStatementLp(null)}
+        fundId={activeFundId}
+        commitment={statementLp}
+        onGenerate={(id) => {
+          setGenPreselect(id);
+          setGenStatementsOpen(true);
+        }}
+      />
+      <GenerateStatementsDialog
+        open={genStatementsOpen}
+        onOpenChange={setGenStatementsOpen}
+        fundId={activeFundId}
+        commitments={commitments}
+        preselect={genPreselect}
+        invalidate={() => {
+          invalidateFund();
+          queryClient.invalidateQueries({
+            queryKey: ["fundLpReports", activeFundId],
+          });
+        }}
+      />
 
       {/* Fund allocation */}
       <Dialog
@@ -4327,6 +4226,7 @@ function NewFundDialog({
           setForm={setForm}
           bankAccounts={bankAccounts}
         />
+        <FundLpaFields<FundFormState> form={form} setForm={setForm} />
         <DialogFooter>
           <Button disabled={!form.name || creating} onClick={onCreate}>
             Create fund

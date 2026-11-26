@@ -15,9 +15,12 @@ const REGISTRY_ENDPOINT = {
   crm: "/tools/contract-templates/merge-fields",
   hr: "/hr/contracts/templates/merge-fields",
   policy: "/grc/compliance/policy-templates/merge-fields",
+  fund: "/finance/funds/merge-fields",
 } as const;
 
-export function useMergeFieldRegistry(source: "crm" | "hr" | "policy" = "crm") {
+export function useMergeFieldRegistry(
+  source: "crm" | "hr" | "policy" | "fund" = "crm",
+) {
   return useQuery({
     queryKey: ["merge-field-registry", source],
     queryFn: async () => {

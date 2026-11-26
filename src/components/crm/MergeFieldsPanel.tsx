@@ -54,7 +54,7 @@ interface Props {
   onSave: () => void;
   onDiscard: () => void;
   /** Where the field labels come from — HR contracts use their own route. */
-  registry?: "crm" | "hr" | "policy";
+  registry?: "crm" | "hr" | "policy" | "fund";
 }
 
 const sameValue = (a: string, b: string, multiline: boolean) =>
