@@ -24,14 +24,7 @@ import DealContractReviewPage from "@/pages/grc/deals/DealContractReview";
 import DealOfferReviewPage from "@/pages/grc/deals/DealOfferReview";
 import DealSignPage from "@/pages/public/DealSignPage";
 import SignToolContractPage from "@/pages/public/SignToolContractPage";
-import Intro from "@/pages/Intro";
-import Platform from "@/pages/marketing/Platform";
-import Pricing from "@/pages/marketing/Pricing";
-import Industries from "@/pages/marketing/Industries";
-import Advisory from "@/pages/marketing/Advisory";
-import MarketingInsights from "@/pages/marketing/Insights";
-import AboutPage from "@/pages/marketing/About";
-import ContactPage from "@/pages/marketing/Contact";
+import { siteRoutes } from "@/site/routes";
 import EventRegisterPage from "@/pages/public/EventRegisterPage";
 import EventFeedbackPage from "@/pages/public/EventFeedbackPage";
 import UnsubscribePage from "@/pages/public/UnsubscribePage";
@@ -202,18 +195,8 @@ export function AppRoutes() {
   if (!user) {
     return (
       <Routes>
-        <Route path="/" element={<Intro />} />
+        {siteRoutes}
         <Route path="/login" element={<Login />} />
-        <Route path="/platform" element={<Platform />} />
-        <Route path="/pricing" element={<Pricing />} />
-        <Route path="/industries" element={<Industries />} />
-        <Route path="/industries/:industryId" element={<Industries />} />
-        <Route path="/advisory" element={<Advisory />} />
-        <Route path="/advisory/:serviceId" element={<Advisory />} />
-        <Route path="/insights" element={<MarketingInsights />} />
-        <Route path="/insights/:slug" element={<MarketingInsights />} />
-        <Route path="/about" element={<AboutPage />} />
-        <Route path="/contact" element={<ContactPage />} />
       </Routes>
     );
   }
